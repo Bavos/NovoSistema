@@ -1,0 +1,6 @@
+{
+  "name": "Gestão de Pacientes",
+  "description": "Sistema de alta fidelidade para gestão de prontuários, agendamentos e escalas de pacientes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
