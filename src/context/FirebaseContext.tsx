@@ -11,6 +11,8 @@ interface FirebaseContextType {
   pacientes: Paciente[];
   plantoes: Plantao[];
   loading: boolean;
+  userRole: 'administrador' | 'colaborador';
+  setUserRole: (role: 'administrador' | 'colaborador') => void;
   addPaciente: (paciente: Omit<Paciente, 'id' | 'createdAt' | 'status'>) => Promise<Paciente>;
   updatePaciente: (paciente: Paciente) => Promise<void>;
   deactivatePaciente: (id: string, motivo: string) => Promise<void>;
@@ -18,6 +20,8 @@ interface FirebaseContextType {
   cancelPlantao: (id: string, motivo: CancelingReason) => Promise<void>;
   addPlantao: (plantao: Omit<Plantao, 'id'>) => Promise<Plantao>;
   updatePlantao: (plantao: Plantao) => Promise<void>;
+  deletePlantao: (id: string) => Promise<void>;
+  deletePlantoes: (ids: string[]) => Promise<void>;
   deletePaciente: (id: string) => Promise<void>;
 }
 
@@ -27,11 +31,17 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [pacientes, setPacientes] = useState<Paciente[]>([]);
   const [plantoes, setPlantoes] = useState<Plantao[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState<'administrador' | 'colaborador'>('administrador');
 
   // Sync with localStorage
   useEffect(() => {
     const savedPacientes = localStorage.getItem('firebase_simulated_pacientes');
     const savedPlantoes = localStorage.getItem('firebase_simulated_plantoes');
+    const savedRole = localStorage.getItem('user_role');
+
+    if (savedRole === 'administrador' || savedRole === 'colaborador') {
+      setUserRole(savedRole);
+    }
 
     if (savedPacientes && savedPlantoes) {
       setPacientes(JSON.parse(savedPacientes));
@@ -44,6 +54,11 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
     setLoading(false);
   }, []);
+
+  const handleSetUserRole = (role: 'administrador' | 'colaborador') => {
+    setUserRole(role);
+    localStorage.setItem('user_role', role);
+  };
 
   const saveToStorage = (updatedPatients: Paciente[], updatedShifts: Plantao[]) => {
     localStorage.setItem('firebase_simulated_pacientes', JSON.stringify(updatedPatients));
@@ -166,6 +181,28 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setPlantoes(updated);
         saveToStorage(pacientes, updated);
         resolve();
+      }, 305);
+    });
+  };
+
+  const deletePlantao = async (id: string) => {
+    return new Promise<void>((resolve) => {
+      setTimeout(() => {
+        const updated = plantoes.filter((pl) => pl.id !== id);
+        setPlantoes(updated);
+        saveToStorage(pacientes, updated);
+        resolve();
+      }, 300);
+    });
+  };
+
+  const deletePlantoes = async (ids: string[]) => {
+    return new Promise<void>((resolve) => {
+      setTimeout(() => {
+        const updated = plantoes.filter((pl) => !ids.includes(pl.id));
+        setPlantoes(updated);
+        saveToStorage(pacientes, updated);
+        resolve();
       }, 300);
     });
   };
@@ -173,11 +210,20 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const deletePaciente = async (id: string) => {
     return new Promise<void>((resolve) => {
       setTimeout(() => {
-        const updatedPacientes = pacientes.filter((p) => p.id !== id);
-        const updatedPlantoes = plantoes.filter((pl) => pl.pacienteId !== id);
-        setPacientes(updatedPacientes);
-        setPlantoes(updatedPlantoes);
-        saveToStorage(updatedPacientes, updatedPlantoes);
+        const todayStr = new Date().toLocaleDateString('pt-BR');
+        const updated = pacientes.map((p) => {
+          if (p.id === id) {
+            return {
+              ...p,
+              status: 'Desativado' as const,
+              desativadoEm: todayStr,
+              desativadoMotivo: 'Exclusão lógica do registro (Inativo de acordo com diretrizes de segurança)',
+            };
+          }
+          return p;
+        });
+        setPacientes(updated);
+        saveToStorage(updated, plantoes);
         resolve();
       }, 400);
     });
@@ -189,6 +235,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         pacientes,
         plantoes,
         loading,
+        userRole,
+        setUserRole: handleSetUserRole,
         addPaciente,
         updatePaciente,
         deactivatePaciente,
@@ -196,6 +244,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         cancelPlantao,
         addPlantao,
         updatePlantao,
+        deletePlantao,
+        deletePlantoes,
         deletePaciente,
       }}
     >

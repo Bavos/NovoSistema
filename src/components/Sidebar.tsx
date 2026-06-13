@@ -15,6 +15,7 @@ import {
   Menu,
   HeartPulse
 } from 'lucide-react';
+import { useFirebase } from '../context/FirebaseContext';
 
 interface SidebarProps {
   activeTab: string;
@@ -30,14 +31,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setIsSidebarExpanded,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
+  const { userRole } = useFirebase();
 
-  const menuItems = [
+  const allMenuItems = [
     { id: 'pacientes', label: 'Pacientes', icon: Users, desc: 'Gestão de Planos & Prontuários' },
     { id: 'profissionais', label: 'Profissionais', icon: Briefcase, desc: 'Cuidadores & Enfermagem' },
     { id: 'escalas', label: 'Escalas', icon: Calendar, desc: 'Alocação diária' },
     { id: 'financeiro', label: 'Financeiro', icon: DollarSign, desc: 'Honorários & Plantões' },
     { id: 'empresa', label: 'Empresa', icon: Building2, desc: 'Configurações corporativas' },
   ];
+
+  // Restrict access for 'colaborador' role to the 'empresa' tab
+  const menuItems = allMenuItems.filter(item => {
+    if (userRole === 'colaborador' && item.id === 'empresa') {
+      return false;
+    }
+    return true;
+  });
 
   const effectiveExpanded = isSidebarExpanded || isHovered;
 
@@ -128,15 +138,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Sidebar Footer info */}
       <div className="p-4 border-t border-[#1e293b] bg-[#0F172A] select-none">
         <div className="flex items-center space-x-3 overflow-hidden">
-          <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold flex-shrink-0 text-xs">
-            AD
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0 text-xs ${
+            userRole === 'administrador' ? 'bg-blue-600' : 'bg-emerald-600'
+          }`}>
+            {userRole === 'administrador' ? 'AD' : 'CO'}
           </div>
           <motion.div
             animate={{ opacity: effectiveExpanded ? 1 : 0 }}
             transition={{ duration: 0.2 }}
             className="flex flex-col whitespace-nowrap"
           >
-            <span className="text-xs font-semibold text-slate-200 leading-none">Administrador</span>
+            <span className="text-xs font-semibold text-slate-200 leading-none capitalize">
+              {userRole}
+            </span>
             <span className="text-[10px] text-slate-500 mt-1 uppercase tracking-wider">Unidade Rio</span>
           </motion.div>
         </div>

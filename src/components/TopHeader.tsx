@@ -4,7 +4,8 @@
  */
 
 import React, { useState } from 'react';
-import { Search, Bell, LogOut, Shield, Settings, User } from 'lucide-react';
+import { Search, Bell, LogOut, Shield, Settings, User, Check } from 'lucide-react';
+import { useFirebase } from '../context/FirebaseContext';
 
 interface TopHeaderProps {
   isSidebarExpanded: boolean;
@@ -20,6 +21,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   const [showDropdown, setShowDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [searchVal, setSearchVal] = useState('');
+  const { userRole, setUserRole } = useFirebase();
 
   const notifications = [
     { id: 1, text: 'Plantão do paciente João Albuquerque foi confirmado.', time: 'há 10 min' },
@@ -121,8 +123,10 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 hover:border-blue-500 hover:text-blue-500 transition-all shadow-sm focus:outline-none overflow-hidden"
             id="user-menu-btn"
           >
-            <div className="w-full h-full bg-blue-600 flex items-center justify-center font-bold text-white text-xs select-none">
-              RB
+            <div className={`w-full h-full flex items-center justify-center font-bold text-white text-xs select-none ${
+              userRole === 'administrador' ? 'bg-blue-600' : 'bg-emerald-600'
+            }`}>
+              {userRole === 'administrador' ? 'AD' : 'CO'}
             </div>
           </button>
 
@@ -130,10 +134,48 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             <div className="absolute right-0 top-11 w-52 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden py-1" id="user-menu-dropdown">
               <div className="px-4 py-2.5 border-b border-light-200 bg-slate-50">
                 <p className="text-xs font-semibold text-slate-800 line-clamp-1">Renato B. Z.</p>
-                <p className="text-[9px] text-slate-500 truncate mt-0.5">Nível: Administrador Sênior</p>
+                <p className="text-[9px] text-slate-500 truncate mt-0.5 capitalize">Nível: {userRole}</p>
               </div>
 
               <div className="p-1 space-y-0.5">
+                <div className="px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold block mb-1">
+                  Alterar Cargo
+                </div>
+                <button
+                  onClick={() => {
+                    setUserRole('administrador');
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-1.5 text-xs rounded-lg transition-colors text-left ${
+                    userRole === 'administrador'
+                      ? 'bg-blue-50 text-blue-700 font-bold'
+                      : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="flex items-center space-x-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                    <span>Administrador</span>
+                  </span>
+                  {userRole === 'administrador' && <Check size={12} className="text-blue-600" />}
+                </button>
+                <button
+                  onClick={() => {
+                    setUserRole('colaborador');
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-1.5 text-xs rounded-lg transition-colors text-left ${
+                    userRole === 'colaborador'
+                      ? 'bg-emerald-50 text-emerald-700 font-bold'
+                      : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="flex items-center space-x-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                    <span>Colaborador</span>
+                  </span>
+                  {userRole === 'colaborador' && <Check size={12} className="text-emerald-600" />}
+                </button>
+
+                <div className="border-t border-slate-100 my-1.5"></div>
+
                 <button
                   onClick={() => {
                     alert('Visualizando perfil simulado!');

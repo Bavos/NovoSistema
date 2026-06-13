@@ -80,6 +80,7 @@ export interface Plantao {
   taxaAdm?: number;
   criadoEm?: string;
   criadoPor?: string;
+  escalaCongelada?: boolean;
 }
 
 export type CancelingReason =

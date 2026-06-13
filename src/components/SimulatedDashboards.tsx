@@ -176,7 +176,7 @@ export const FinanceiroDashboard: React.FC = () => {
     const pac = pacientes.find(p => p.id === pl.pacienteId);
 
     const valorPlantaoBase = pl.valorPlantao ?? pac?.planoAtendimento?.valorSugeridoPlantao ?? 150;
-    const valorRepasseBase = pl.valorRepasse ?? (valorPlantaoBase * 0.70);
+    const valorRepasseBase = valorPlantaoBase;
     const taxaAdmBase = pl.taxaAdm ?? pac?.planoAtendimento?.taxaAdm ?? 0;
     const ajudaCustoBase = pl.ajudaCusto ?? pac?.planoAtendimento?.ajudaCusto ?? 0;
 

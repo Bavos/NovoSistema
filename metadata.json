@@ -1,6 +1,6 @@
 {
-  "name": "Gestão de Pacientes",
-  "description": "Sistema de alta fidelidade para gestão de prontuários, agendamentos e escalas de pacientes.",
+  "name": "RH Cuidado Domiciliar",
+  "description": "Sistema integrado de alta performance para controle de prontuários, alocação de escalas, agendamentos em lote e auditoria financeira de cuidadores.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

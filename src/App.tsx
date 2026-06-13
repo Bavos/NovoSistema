@@ -26,7 +26,14 @@ function DashboardContent() {
   const [isBrowsingForm, setIsBrowsingForm] = useState<boolean>(false);
   const [pacientesTitleOverride, setPacientesTitleOverride] = useState<string>('Gestão Integrada de Pacientes');
 
-  const { pacientes, loading } = useFirebase();
+  const { pacientes, loading, userRole } = useFirebase();
+
+  // Redirect away from Empresa if role is Colaborador
+  React.useEffect(() => {
+    if (userRole === 'colaborador' && activeSidebarTab === 'empresa') {
+      setActiveSidebarTab('pacientes');
+    }
+  }, [userRole, activeSidebarTab]);
 
   // Title calculation based on view level
   const getPageTitle = () => {
