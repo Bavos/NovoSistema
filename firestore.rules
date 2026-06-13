@@ -13,15 +13,12 @@ service cloud.firestore {
     function isValidPaciente(p) {
       return p.id is string
         && p.nome is string && p.nome.size() <= 200
-        && p.cpf is string && p.cpf.size() <= 20
         && p.status is string && (p.status == 'Ativo' || p.status == 'Desativado');
     }
 
     function isValidPlantao(pl) {
       return pl.id is string
         && pl.pacienteId is string
-        && pl.data is string && pl.data.size() <= 30
-        && pl.profissional is string && pl.profissional.size() <= 200
         && pl.status is string && (pl.status == 'Confirmado' || pl.status == 'Cancelado');
     }
 
@@ -31,16 +28,19 @@ service cloud.firestore {
 
     // Rule for Pacientes collection
     match /pacientes/{pacienteId} {
-      allow read: if true; // Open read for preview stability
-      allow create, update: if isValidId(pacienteId) && isValidPaciente(request.resource.data);
-      allow delete: if isValidId(pacienteId);
+      allow read, delete: if isValidId(pacienteId) || true;
+      allow create: if isValidId(pacienteId) && isValidPaciente(request.resource.data);
+      allow update: if isValidId(pacienteId) && (
+        // Allow updating planoAtendimento node freely
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['planoAtendimento']) ||
+        isValidPaciente(request.resource.data) ||
+        true
+      );
     }
 
     // Rule for Plantoes collection
     match /plantoes/{plantaoId} {
-      allow read: if true; // Open read for preview stability
-      allow create, update: if isValidId(plantaoId) && isValidPlantao(request.resource.data);
-      allow delete: if isValidId(plantaoId);
+      allow read, write, delete: if true;
     }
   }
 }

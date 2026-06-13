@@ -4,6 +4,8 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { updateDoc, doc } from 'firebase/firestore';
 import { Paciente, Plantao, CancelingReason, EscalacaoPlano } from '../types';
 import { useFirebase } from '../context/FirebaseContext';
 import { usePacienteData } from '../hooks/usePacienteData';
@@ -595,7 +597,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
       let updatedPlano;
 
       if (isPrincipal) {
-        // Clear base fields in React local state
+        // Clear base fields in React local state immediately
         setTipoEscala('');
         setHoraInicioPadrao('');
         setValorSugeridoPlantao('');
@@ -613,7 +615,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
           tiposPlantao: tiposPlantao,
         };
       } else {
-        // Additional format - remove from the array
+        // Additional format - remove from the array immediately
         const remaining = tiposPlantao.filter(t => t.id !== id);
         setTiposPlantao(remaining);
 
@@ -624,12 +626,15 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
         };
       }
 
-      const updatedPatient: Paciente = {
-        ...current,
-        planoAtendimento: updatedPlano,
-      };
-
-      await updatePaciente(updatedPatient);
+      // 4. Persistencia no Firebase (Firestore) com updateDoc
+      const docRef = doc(db, 'pacientes', paciente.id);
+      try {
+        await updateDoc(docRef, {
+          planoAtendimento: updatedPlano
+        });
+      } catch (firestoreErr) {
+        handleFirestoreError(firestoreErr, OperationType.UPDATE, `pacientes/${paciente.id}`);
+      }
       
       // Also reset editing state if the deleted additional shift was being edited
       if (!isPrincipal && editingSubId === id) {
