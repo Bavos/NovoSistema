@@ -34,6 +34,7 @@ export const PatientList: React.FC<PatientListProps> = ({
   // Deactivation confirmation modal for list bulk actions
   const [bulkDeactivateOpen, setBulkDeactivateOpen] = useState(false);
   const [bulkDeactivateReason, setBulkDeactivateReason] = useState('Desligamento corporativo');
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
   // Gather unique Bairros for filters
   const uniqueBairros = useMemo(() => {
@@ -93,12 +94,13 @@ export const PatientList: React.FC<PatientListProps> = ({
   };
 
   const handleBulkDelete = () => {
-    if (confirm(`Atenção: Tem certeza de que de deseja remover permanentemente ${selectedIds.length} paciente(s)?`)) {
-      selectedIds.forEach((id) => {
-        onDeletePatient(id);
-      });
-      setSelectedIds([]);
-    }
+    if (selectedIds.length === 0) return;
+    selectedIds.forEach((id) => {
+      onDeletePatient(id);
+    });
+    alert(`${selectedIds.length} paciente(s) excluído(s) de forma lógica com sucesso.`);
+    setSelectedIds([]);
+    setBulkDeleteOpen(false);
   };
 
   // Helper for Status color
@@ -198,7 +200,7 @@ export const PatientList: React.FC<PatientListProps> = ({
                 <span>Desativar</span>
               </button>
               <button
-                onClick={handleBulkDelete}
+                onClick={() => setBulkDeleteOpen(true)}
                 className="flex items-center space-x-1 px-2.5 py-1.5 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors"
                 title="Excluir selecionados"
               >
@@ -433,6 +435,44 @@ export const PatientList: React.FC<PatientListProps> = ({
                 className="px-3.5 py-1.5 text-xs text-white bg-red-600 hover:bg-red-700 rounded-lg"
               >
                 Confirmar Desativação Múltipla
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk delete (logical deactivation, safety standards) modal */}
+      {bulkDeleteOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-55 animate-in fade-in-40">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl p-6 max-w-md w-full mx-4 space-y-4 font-sans">
+            <div className="flex items-start space-x-3 text-red-600">
+              <AlertCircle size={22} className="text-red-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Excluir Pacientes Selecionados</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Você selecionou <strong className="text-slate-800">{selectedIds.length}</strong> paciente(s) para exclusão.
+                </p>
+              </div>
+            </div>
+            
+            <p className="text-xs text-slate-650 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-150 font-sans">
+              <strong>Diretrizes de Segurança de Dados:</strong> Conforme as regras de governança e prontuários médicos do sistema, os dados dos pacientes nunca são excluídos permanentemente de forma destrutiva. 
+              <br /><br />
+              Essa ação de exclusão realizará a <strong>desativação lógica</strong> do(s) registro(s), preservando o histórico legal de acompanhamentos domiciliares.
+            </p>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={() => setBulkDeleteOpen(false)}
+                className="px-3.5 py-1.5 text-xs text-slate-500 hover:bg-slate-100 rounded-lg cursor-pointer font-medium"
+              >
+                Voltar
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                className="px-3.5 py-1.5 text-xs text-white bg-red-600 hover:bg-red-700 rounded-lg cursor-pointer font-bold shadow-md shadow-red-100 transition-colors"
+              >
+                Confirmar Exclusão
               </button>
             </div>
           </div>

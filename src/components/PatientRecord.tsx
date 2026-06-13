@@ -575,6 +575,76 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
     }
   };
 
+  // Function to delete or clear a configuration/mode of shift (either Principal or Additional) from Plano de Atendimento
+  const handleDeletePlantao = async (id: string, isPrincipal: boolean) => {
+    if (!paciente?.id) {
+      alert('Erro: ID do paciente não localizado. Por favor, salve primeiro os dados gerais do paciente.');
+      return;
+    }
+
+    if (!window.confirm('Tem certeza que deseja excluir este plantão?')) {
+      return;
+    }
+
+    try {
+      const current = pacientes.find(p => p.id === paciente.id);
+      if (!current) {
+        throw new Error('Paciente não encontrado no Firestore.');
+      }
+
+      let updatedPlano;
+
+      if (isPrincipal) {
+        // Clear base fields in React local state
+        setTipoEscala('');
+        setHoraInicioPadrao('');
+        setValorSugeridoPlantao('');
+        setAjudaCusto('');
+        setTaxaAdm('');
+
+        // Prepare updated planoAtendimento replacing base keys with cleared/default empty values
+        updatedPlano = {
+          ...current.planoAtendimento,
+          tipoEscala: '',
+          horaInicioPadrao: '',
+          valorSugeridoPlantao: 0,
+          ajudaCusto: 0,
+          taxaAdm: 0,
+          tiposPlantao: tiposPlantao,
+        };
+      } else {
+        // Additional format - remove from the array
+        const remaining = tiposPlantao.filter(t => t.id !== id);
+        setTiposPlantao(remaining);
+
+        // Prepare updated planoAtendimento array
+        updatedPlano = {
+          ...current.planoAtendimento,
+          tiposPlantao: remaining,
+        };
+      }
+
+      const updatedPatient: Paciente = {
+        ...current,
+        planoAtendimento: updatedPlano,
+      };
+
+      await updatePaciente(updatedPatient);
+      
+      // Also reset editing state if the deleted additional shift was being edited
+      if (!isPrincipal && editingSubId === id) {
+        setEditingSubId(null);
+        setNewSubValorPlantao(150);
+        setNewSubAjudaCusto(0);
+        setNewSubTaxaAdm(0);
+      }
+
+      alert('Plantão excluído com sucesso!');
+    } catch (err: any) {
+      alert('Erro ao excluir plantão: ' + err.message);
+    }
+  };
+
   // Turn off / Deactivate patient
   const handleDeactivateConfirm = async () => {
     if (!deactivateReasonInput.trim()) {
@@ -1837,47 +1907,53 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                             <td className="p-3 text-right text-slate-500">R$ {(tp.ajudaCusto || 0).toFixed(2)}</td>
                             <td className="p-3 text-right text-slate-500">R$ {(tp.taxaAdm || 0).toFixed(2)}</td>
                             <td className="p-3 text-center">
-                              {tp.isPrincipal ? (
-                                <span className="text-[10px] text-slate-400 italic">Padrão do Contrato</span>
-                              ) : (
-                                <div className="flex items-center justify-center space-x-1.5">
-                                  <button
-                                    type="button"
-                                    disabled={isCurrentlyDeactivated}
-                                    onClick={() => {
-                                      setEditingSubId(tp.id);
-                                      setNewSubTipoEscala(tp.tipoEscala);
-                                      setNewSubHoraInicio(tp.horaInicio);
-                                      setNewSubValorPlantao(tp.valorPlantao);
-                                      setNewSubAjudaCusto(tp.ajudaCusto);
-                                      setNewSubTaxaAdm(tp.taxaAdm);
-                                    }}
-                                    className="p-1 px-1.5 border border-blue-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700 rounded-md disabled:opacity-50 transition-all font-semibold inline-flex items-center space-x-1 cursor-pointer text-[11px]"
-                                    title="Editar formato"
-                                  >
-                                    <Edit2 size={11} />
-                                    <span>Editar</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={isCurrentlyDeactivated}
-                                    onClick={() => {
-                                      setTiposPlantao(tiposPlantao.filter(t => t.id !== tp.id));
-                                      if (editingSubId === tp.id) {
-                                        setEditingSubId(null);
-                                        setNewSubValorPlantao(150);
-                                        setNewSubAjudaCusto(0);
-                                        setNewSubTaxaAdm(0);
-                                      }
-                                    }}
-                                    className="p-1 px-1.5 border border-red-200 text-red-650 hover:bg-red-50 hover:text-red-750 rounded-md disabled:opacity-50 transition-all font-semibold inline-flex items-center space-x-1 cursor-pointer text-[11px]"
-                                    title="Remover formato"
-                                  >
-                                    <Trash2 size={11} />
-                                    <span>Excluir</span>
-                                  </button>
-                                </div>
-                              )}
+                              <div className="flex items-center justify-center space-x-1.5">
+                                {tp.isPrincipal ? (
+                                  <>
+                                    <span className="text-[10px] text-slate-400 italic mr-1">Padrão</span>
+                                    <button
+                                      type="button"
+                                      disabled={isCurrentlyDeactivated}
+                                      onClick={() => handleDeletePlantao(tp.id, true)}
+                                      className="p-1 px-1.5 border border-red-200 text-red-650 hover:bg-red-50 hover:text-red-750 rounded-md disabled:opacity-50 transition-all font-semibold inline-flex items-center space-x-1 cursor-pointer text-[11px]"
+                                      title="Limpar plantão principal"
+                                    >
+                                      <Trash2 size={11} />
+                                      <span>Excluir</span>
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      disabled={isCurrentlyDeactivated}
+                                      onClick={() => {
+                                        setEditingSubId(tp.id);
+                                        setNewSubTipoEscala(tp.tipoEscala);
+                                        setNewSubHoraInicio(tp.horaInicio);
+                                        setNewSubValorPlantao(tp.valorPlantao);
+                                        setNewSubAjudaCusto(tp.ajudaCusto);
+                                        setNewSubTaxaAdm(tp.taxaAdm);
+                                      }}
+                                      className="p-1 px-1.5 border border-blue-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700 rounded-md disabled:opacity-50 transition-all font-semibold inline-flex items-center space-x-1 cursor-pointer text-[11px]"
+                                      title="Editar formato"
+                                    >
+                                      <Edit2 size={11} />
+                                      <span>Editar</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={isCurrentlyDeactivated}
+                                      onClick={() => handleDeletePlantao(tp.id, false)}
+                                      className="p-1 px-1.5 border border-red-200 text-red-650 hover:bg-red-50 hover:text-red-750 rounded-md disabled:opacity-50 transition-all font-semibold inline-flex items-center space-x-1 cursor-pointer text-[11px]"
+                                      title="Excluir plantão adicional"
+                                    >
+                                      <Trash2 size={11} />
+                                      <span>Excluir</span>
+                                    </button>
+                                  </>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))}
