@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { Paciente, Plantao, CancelingReason, EscalacaoPlano } from '../types';
 import { useFirebase } from '../context/FirebaseContext';
+import { usePacienteData } from '../hooks/usePacienteData';
 import { INITIAL_PROFESSIONALS } from '../mockData';
 import {
   Save,
@@ -122,6 +123,7 @@ interface PatientRecordProps {
 
 export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }) => {
   const {
+    pacientes,
     addPaciente,
     updatePaciente,
     deactivatePaciente,
@@ -220,13 +222,22 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
   const [grauDependencia, setGrauDependencia] = useState<'Baixo' | 'Médio' | 'Alto' | 'Muito Alto'>('Médio');
   const [observacoesClinicas, setObservacoesClinicas] = useState('');
 
-  // Plano Atendimento
-  const [tipoEscala, setTipoEscala] = useState<string>('Diurno 12h');
-  const [horaInicioPadrao, setHoraInicioPadrao] = useState('07:00');
-  const [valorSugeridoPlantao, setValorSugeridoPlantao] = useState<number>(150);
-  const [ajudaCusto, setAjudaCusto] = useState<number>(0);
-  const [taxaAdm, setTaxaAdm] = useState<number>(0);
-  const [tiposPlantao, setTiposPlantao] = useState<EscalacaoPlano[]>([]);
+  // Plano Atendimento (Sincronizado com o Firebase de forma global via custom hook)
+  const {
+    tipoEscala,
+    setTipoEscala,
+    horaInicioPadrao,
+    setHoraInicioPadrao,
+    valorSugeridoPlantao,
+    setValorSugeridoPlantao,
+    ajudaCusto,
+    setAjudaCusto,
+    taxaAdm,
+    setTaxaAdm,
+    tiposPlantao,
+    setTiposPlantao,
+    savePlanoAtendimento,
+  } = usePacienteData(paciente?.id);
 
   // New States for attached Calendar Layout & Buttons
   const [calendarMonth, setCalendarMonth] = useState<number>(5); // June 2026 as default
@@ -258,6 +269,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
   const [avulsoObs, setAvulsoObs] = useState('');
   const [avulsoSelectedDates, setAvulsoSelectedDates] = useState<string[]>([]);
   const [showAvulsoProfDropdown, setShowAvulsoProfDropdown] = useState(false);
+  const [avulsoPlantaoOptionId, setAvulsoPlantaoOptionId] = useState<string>('principal');
+  const [avulsoTipoDia, setAvulsoTipoDia] = useState<'Normal' | 'Feriado 20%' | 'Feriado 50%'>('Normal');
 
   // Modal Fields - Concluir (Dar Baixa no Período)
   const [concluirStartDate, setConcluirStartDate] = useState('2026-06-01');
@@ -279,9 +292,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
   // States for adding a new plantão type inline to the list
   const [newSubTipoEscala, setNewSubTipoEscala] = useState<string>('Diurno 12h');
   const [newSubHoraInicio, setNewSubHoraInicio] = useState<string>('07:00');
-  const [newSubValorPlantao, setNewSubValorPlantao] = useState<number>(150);
-  const [newSubAjudaCusto, setNewSubAjudaCusto] = useState<number>(0);
-  const [newSubTaxaAdm, setNewSubTaxaAdm] = useState<number>(0);
+  const [newSubValorPlantao, setNewSubValorPlantao] = useState<number | ''>(150);
+  const [newSubAjudaCusto, setNewSubAjudaCusto] = useState<number | ''>(0);
+  const [newSubTaxaAdm, setNewSubTaxaAdm] = useState<number | ''>(0);
+  const [editingSubId, setEditingSubId] = useState<string | null>(null);
 
   // Status simulation
   const [isNew, setIsNew] = useState(true);
@@ -364,6 +378,21 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
     }
   }, [paciente]);
 
+  // Carregamento Inicial (useEffect) do Firestore na montagem da sub-aba 'Plano de Atendimento'
+  useEffect(() => {
+    if (activeTab === 'plano' && paciente) {
+      const found = pacientes.find(p => p.id === paciente.id);
+      if (found && found.planoAtendimento) {
+        setTipoEscala(found.planoAtendimento.tipoEscala || 'Diurno 12h');
+        setHoraInicioPadrao(found.planoAtendimento.horaInicioPadrao || '07:00');
+        setValorSugeridoPlantao(found.planoAtendimento.valorSugeridoPlantao ?? 150);
+        setAjudaCusto(found.planoAtendimento.ajudaCusto ?? 0);
+        setTaxaAdm(found.planoAtendimento.taxaAdm ?? 0);
+        setTiposPlantao(found.planoAtendimento.tiposPlantao || []);
+      }
+    }
+  }, [activeTab, paciente, pacientes, setTipoEscala, setHoraInicioPadrao, setValorSugeridoPlantao, setAjudaCusto, setTaxaAdm, setTiposPlantao]);
+
   // Is patient currently deactivated?
   const isCurrentlyDeactivated = pStatus === 'Desativado';
 
@@ -371,6 +400,23 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
   const filteredShiftsForPatient = plantoes.filter(
     (pl) => paciente && pl.pacienteId === paciente.id
   ).sort((a, b) => b.data.localeCompare(a.data));
+
+  // Compiled rows representing the default Principal scale plus any additional formats configured
+  const allRows = [
+    {
+      id: 'principal',
+      tipoEscala: tipoEscala,
+      horaInicio: horaInicioPadrao,
+      valorPlantao: Number(valorSugeridoPlantao || 0),
+      ajudaCusto: Number(ajudaCusto || 0),
+      taxaAdm: Number(taxaAdm || 0),
+      isPrincipal: true,
+    },
+    ...tiposPlantao.map((tp) => ({
+      ...tp,
+      isPrincipal: false,
+    })),
+  ];
 
   // Handle Form Save
   const handleSave = async (e: React.FormEvent) => {
@@ -434,6 +480,44 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
       onBack();
     } catch (err: any) {
       alert('Erro ao tentar salvar o prontuário: ' + err.message);
+    }
+  };
+
+  // Local handler to compile and save Plano de Atendimento reference values to Firestore as base rates
+  const handleSavePlanoAtendimento = async () => {
+    if (isCurrentlyDeactivated) return;
+    if (!paciente?.id) {
+      alert('Erro: ID do paciente não fornecido. Por favor, salve primeiro o formulário geral do paciente.');
+      return;
+    }
+
+    if (valorSugeridoPlantao === '' || ajudaCusto === '' || taxaAdm === '') {
+      alert('Erro de Validação: Ajuste os valores do Plano de Atendimento. Os campos "Valor do Plantão", "Ajuda de Custo" e "Taxa Adm" não podem ficar vazios / em branco.');
+      return;
+    }
+
+    try {
+      const current = pacientes.find(p => p.id === paciente.id);
+      if (!current) {
+        throw new Error('Paciente não encontrado no Firestore.');
+      }
+
+      const updatedObj: Paciente = {
+        ...current,
+        planoAtendimento: {
+          tipoEscala,
+          horaInicioPadrao,
+          valorSugeridoPlantao: Number(valorSugeridoPlantao),
+          ajudaCusto: Number(ajudaCusto),
+          taxaAdm: Number(taxaAdm),
+          tiposPlantao,
+        },
+      };
+
+      await updatePaciente(updatedObj);
+      alert('Plano de Atendimento e referências base salvas com sucesso no Firestore!');
+    } catch (error: any) {
+      alert('Erro ao persistir plano de Atendimento: ' + error.message);
     }
   };
 
@@ -554,6 +638,70 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
     }
 
     try {
+      const shiftsList = [
+        {
+          id: 'principal',
+          tipoEscala: tipoEscala || 'Diurno 12h',
+          horaInicio: horaInicioPadrao || '07:00',
+          valorPlantao: Number(valorSugeridoPlantao || 0),
+          ajudaCusto: Number(ajudaCusto || 0),
+          taxaAdm: Number(taxaAdm || 0),
+        },
+        ...tiposPlantao.map((tp) => ({
+          id: tp.id,
+          tipoEscala: tp.tipoEscala,
+          horaInicio: tp.horaInicio,
+          valorPlantao: Number(tp.valorPlantao || 0),
+          ajudaCusto: Number(tp.ajudaCusto || 0),
+          taxaAdm: Number(tp.taxaAdm || 0),
+        })),
+      ];
+
+      const chosenOpt = shiftsList.find((s) => s.id === avulsoPlantaoOptionId) || shiftsList[0];
+
+      const baseRepasseValue = chosenOpt.valorPlantao;
+      const baseAjudaValue = chosenOpt.ajudaCusto;
+      const baseTaxaValue = chosenOpt.taxaAdm;
+      const chosenHoraInicio = chosenOpt.horaInicio;
+      const chosenTipoEscalaStr = chosenOpt.tipoEscala;
+
+      // Parse duration in hours
+      let durationHrs = 12;
+      const parsedMatch = chosenTipoEscalaStr.match(/(\d+)\s*h/i);
+      if (parsedMatch) {
+        durationHrs = parseInt(parsedMatch[1], 10);
+      } else if (chosenTipoEscalaStr.includes('24')) {
+        durationHrs = 24;
+      } else if (chosenTipoEscalaStr.includes('6')) {
+        durationHrs = 6;
+      }
+
+      // Holiday factor
+      let isFeriado: '20%' | '50%' | null = null;
+      let mult = 1.0;
+      if (avulsoTipoDia === 'Feriado 20%') {
+        isFeriado = '20%';
+        mult = 1.2;
+      } else if (avulsoTipoDia === 'Feriado 50%') {
+        isFeriado = '50%';
+        mult = 1.5;
+      }
+
+      const finalRepasse = baseRepasseValue * mult;
+      const finalTaxaAdm = baseTaxaValue * mult;
+      const finalAjudaCusto = baseAjudaValue;
+
+      // Helper to calculate endTime
+      const getTerminoTime = (startTime: string, duration: number): string => {
+        try {
+          const [h, m] = startTime.split(':').map(Number);
+          const endH = (h + duration) % 24;
+          return `${String(endH).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        } catch (e) {
+          return '19:00';
+        }
+      };
+
       const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
       for (const dt of avulsoSelectedDates) {
         const dateObj = new Date(dt + 'T12:00:00');
@@ -565,24 +713,35 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
           diaSemana: dW,
           profissional: avulsoProf,
           status: 'Confirmado',
-          tipoEscala: avulsoServico.includes('24') ? 24 : 12,
+          tipoEscala: durationHrs,
           dataInicio: dt,
-          horaInicio: avulsoHoraInicio,
+          horaInicio: chosenHoraInicio,
           dataTermino: dt,
-          horaTermino: avulsoHoraInicio === '08:00' ? '20:00' : '08:00',
+          horaTermino: getTerminoTime(chosenHoraInicio, durationHrs),
           observacaoAgendamento: avulsoObs || 'Agendamento Avulso',
-          valorPlantao: avulsoValorBase,
-          valorRepasse: avulsoValorBase - avulsoTaxaAdm,
-          feriado: null,
-          ajudaCusto: avulsoAjudaCusto,
-          taxaAdm: avulsoTaxaAdm,
+          valorPlantao: baseRepasseValue,
+          valorRepasse: baseRepasseValue,
+          feriado: isFeriado,
+          ajudaCusto: baseAjudaValue,
+          taxaAdm: baseTaxaValue,
           criadoEm: new Date().toISOString(),
           criadoPor: 'Gestor (Avulso)',
+          // Fields detailing final configured values for auditing
+          tipoDiaEscolhido: avulsoTipoDia,
+          valoresFinaisCalculados: {
+            repasse: finalRepasse,
+            taxaAdm: finalTaxaAdm,
+            ajudaCusto: finalAjudaCusto,
+            tipoDia: avulsoTipoDia,
+          },
         });
       }
 
       setAvulsoSelectedDates([]);
       setAvulsoProf('');
+      setAvulsoPlantaoOptionId('principal');
+      setAvulsoTipoDia('Normal');
+      setAvulsoObs('');
       setAvulsoModalOpen(false);
       alert(`${avulsoSelectedDates.length} plantões avulsos criados com sucesso!`);
     } catch (err) {
@@ -742,6 +901,45 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
     .slice(0, 2)
     .join('')
     .toUpperCase();
+
+  // Compiled options representing all configured shifts (Principal + Additionals)
+  const availableShifts = [
+    {
+      id: 'principal',
+      tipoEscala: tipoEscala || 'Diurno 12h',
+      horaInicio: horaInicioPadrao || '07:00',
+      valorPlantao: Number(valorSugeridoPlantao || 0),
+      ajudaCusto: Number(ajudaCusto || 0),
+      taxaAdm: Number(taxaAdm || 0),
+      label: `${tipoEscala || 'Diurno 12h'} (Principal)`
+    },
+    ...tiposPlantao.map(tp => ({
+      id: tp.id,
+      tipoEscala: tp.tipoEscala,
+      horaInicio: tp.horaInicio,
+      valorPlantao: Number(tp.valorPlantao || 0),
+      ajudaCusto: Number(tp.ajudaCusto || 0),
+      taxaAdm: Number(tp.taxaAdm || 0),
+      label: `${tp.tipoEscala} (Adicional)`
+    }))
+  ];
+
+  const selectedAvulsoOpt = availableShifts.find(s => s.id === avulsoPlantaoOptionId) || availableShifts[0];
+
+  const baseRepasseValue = selectedAvulsoOpt?.valorPlantao || 0;
+  const baseAjudaValue = selectedAvulsoOpt?.ajudaCusto || 0;
+  const baseTaxaValue = selectedAvulsoOpt?.taxaAdm || 0;
+
+  let multiplier = 1.0;
+  if (avulsoTipoDia === 'Feriado 20%') {
+    multiplier = 1.2;
+  } else if (avulsoTipoDia === 'Feriado 50%') {
+    multiplier = 1.5;
+  }
+
+  const computedRepasse = baseRepasseValue * multiplier;
+  const computedTaxa = baseTaxaValue * multiplier;
+  const computedAjuda = baseAjudaValue;
 
   return (
     <div className="space-y-6" id="patient-record-container">
@@ -1307,7 +1505,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       type="number"
                       disabled={isCurrentlyDeactivated}
                       value={valorSugeridoPlantao}
-                      onChange={(e) => setValorSugeridoPlantao(Number(e.target.value))}
+                      onChange={(e) => setValorSugeridoPlantao(e.target.value === '' ? '' : Number(e.target.value))}
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal text-slate-900"
                       placeholder="Valor plantão"
                     />
@@ -1319,7 +1517,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       type="number"
                       disabled={isCurrentlyDeactivated}
                       value={ajudaCusto}
-                      onChange={(e) => setAjudaCusto(Number(e.target.value))}
+                      onChange={(e) => setAjudaCusto(e.target.value === '' ? '' : Number(e.target.value))}
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed text-slate-600"
                       placeholder="Ajuda de custo"
                     />
@@ -1331,7 +1529,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       type="number"
                       disabled={isCurrentlyDeactivated}
                       value={taxaAdm}
-                      onChange={(e) => setTaxaAdm(Number(e.target.value))}
+                      onChange={(e) => setTaxaAdm(e.target.value === '' ? '' : Number(e.target.value))}
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed text-slate-600"
                       placeholder="Taxa adm"
                     />
@@ -1384,7 +1582,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                           type="number"
                           disabled={isCurrentlyDeactivated}
                           value={newSubValorPlantao}
-                          onChange={(e) => setNewSubValorPlantao(Number(e.target.value))}
+                          onChange={(e) => setNewSubValorPlantao(e.target.value === '' ? '' : Number(e.target.value))}
                           className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-white font-normal"
                         />
                       </div>
@@ -1395,7 +1593,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                           type="number"
                           disabled={isCurrentlyDeactivated}
                           value={newSubAjudaCusto}
-                          onChange={(e) => setNewSubAjudaCusto(Number(e.target.value))}
+                          onChange={(e) => setNewSubAjudaCusto(e.target.value === '' ? '' : Number(e.target.value))}
                           className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-white font-normal"
                         />
                       </div>
@@ -1406,89 +1604,155 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                           type="number"
                           disabled={isCurrentlyDeactivated}
                           value={newSubTaxaAdm}
-                          onChange={(e) => setNewSubTaxaAdm(Number(e.target.value))}
+                          onChange={(e) => setNewSubTaxaAdm(e.target.value === '' ? '' : Number(e.target.value))}
                           className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-white font-normal"
                         />
                       </div>
                     </div>
 
-                    <div className="mt-3 flex justify-end">
+                    <div className="mt-3 flex justify-end items-center">
+                      {editingSubId && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingSubId(null);
+                            setNewSubTipoEscala('Diurno 12h');
+                            setNewSubHoraInicio('07:00');
+                            setNewSubValorPlantao(150);
+                            setNewSubAjudaCusto(0);
+                            setNewSubTaxaAdm(0);
+                          }}
+                          className="mr-2 px-3 py-1.5 text-xs font-semibold text-slate-750 bg-slate-100 hover:bg-slate-200 rounded-lg shadow-xs transition-colors cursor-pointer"
+                        >
+                          Cancelar Edição
+                        </button>
+                      )}
                       <button
                         type="button"
                         disabled={isCurrentlyDeactivated}
                         onClick={() => {
-                          const newType: EscalacaoPlano = {
-                            id: `tp-${Date.now()}`,
-                            tipoEscala: newSubTipoEscala,
-                            horaInicio: newSubHoraInicio,
-                            valorPlantao: newSubValorPlantao,
-                            ajudaCusto: newSubAjudaCusto,
-                            taxaAdm: newSubTaxaAdm,
-                          };
-                          setTiposPlantao([...tiposPlantao, newType]);
-                          // Reset inputs to default value suggested
+                          if (editingSubId) {
+                            setTiposPlantao(tiposPlantao.map(t => t.id === editingSubId ? {
+                              ...t,
+                              tipoEscala: newSubTipoEscala,
+                              horaInicio: newSubHoraInicio,
+                              valorPlantao: Number(newSubValorPlantao || 0),
+                              ajudaCusto: Number(newSubAjudaCusto || 0),
+                              taxaAdm: Number(newSubTaxaAdm || 0)
+                            } : t));
+                            setEditingSubId(null);
+                          } else {
+                            const newType: EscalacaoPlano = {
+                              id: `tp-${Date.now()}`,
+                              tipoEscala: newSubTipoEscala,
+                              horaInicio: newSubHoraInicio,
+                              valorPlantao: Number(newSubValorPlantao || 0),
+                              ajudaCusto: Number(newSubAjudaCusto || 0),
+                              taxaAdm: Number(newSubTaxaAdm || 0),
+                            };
+                            setTiposPlantao([...tiposPlantao, newType]);
+                          }
+                          // Reset inputs to default values
                           setNewSubValorPlantao(150);
                           setNewSubAjudaCusto(0);
                           setNewSubTaxaAdm(0);
                         }}
-                        className="flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 rounded-lg shadow-sm transition-colors cursor-pointer"
+                        className="flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 rounded-lg shadow-xs transition-colors cursor-pointer"
                       >
                         <Plus size={14} />
-                        <span>Adicionar Modo de Plantão</span>
+                        <span>{editingSubId ? 'Salvar Edição' : 'Adicionar Modo de Plantão'}</span>
                       </button>
                     </div>
                   </div>
 
-                  {/* Table of configured shifts */}
-                  {tiposPlantao.length > 0 ? (
-                    <div className="overflow-hidden border border-slate-200 rounded-xl bg-white shadow-sm mb-4">
-                      <table className="w-full text-left border-collapse text-xs">
-                        <thead>
-                          <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-normal">
-                            <th className="p-3 font-normal">Tipo do Plantão</th>
-                            <th className="p-3 text-center font-normal">Horário de Início</th>
-                            <th className="p-3 text-right font-normal">Valor Plantão</th>
-                            <th className="p-3 text-right font-normal">Aj. de Custo</th>
-                            <th className="p-3 text-right font-normal">Taxa Adm</th>
-                            <th className="p-3 text-center w-12 font-normal">Ações</th>
+                  {/* Table of configured shifts, containing complete list (Principal + Additionals) */}
+                  <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-xs mb-4">
+                    <table className="min-w-[700px] w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-normal">
+                          <th className="p-3 font-normal">Tipo do Plantão</th>
+                          <th className="p-3 text-center font-normal">Horário de Início</th>
+                          <th className="p-3 text-right font-normal">Valor Plantão</th>
+                          <th className="p-3 text-right font-normal">Aj. de Custo</th>
+                          <th className="p-3 text-right font-normal">Taxa Adm</th>
+                          <th className="p-3 text-center w-44 font-normal">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-slate-700">
+                        {allRows.map((tp) => (
+                          <tr key={tp.id} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="p-3 font-normal text-slate-800 flex items-center space-x-2">
+                              <span>{tp.tipoEscala}</span>
+                              {tp.isPrincipal && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800 uppercase tracking-wide">
+                                  ⭐ Principal
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3 text-center font-mono bg-slate-50/35">{tp.horaInicio}</td>
+                            <td className="p-3 text-right font-normal text-slate-900">R$ {tp.valorPlantao.toFixed(2)}</td>
+                            <td className="p-3 text-right text-slate-500">R$ {(tp.ajudaCusto || 0).toFixed(2)}</td>
+                            <td className="p-3 text-right text-slate-500">R$ {(tp.taxaAdm || 0).toFixed(2)}</td>
+                            <td className="p-3 text-center">
+                              {tp.isPrincipal ? (
+                                <span className="text-[10px] text-slate-400 italic">Padrão do Contrato</span>
+                              ) : (
+                                <div className="flex items-center justify-center space-x-1.5">
+                                  <button
+                                    type="button"
+                                    disabled={isCurrentlyDeactivated}
+                                    onClick={() => {
+                                      setEditingSubId(tp.id);
+                                      setNewSubTipoEscala(tp.tipoEscala);
+                                      setNewSubHoraInicio(tp.horaInicio);
+                                      setNewSubValorPlantao(tp.valorPlantao);
+                                      setNewSubAjudaCusto(tp.ajudaCusto);
+                                      setNewSubTaxaAdm(tp.taxaAdm);
+                                    }}
+                                    className="p-1 px-1.5 border border-blue-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700 rounded-md disabled:opacity-50 transition-all font-semibold inline-flex items-center space-x-1 cursor-pointer text-[11px]"
+                                    title="Editar formato"
+                                  >
+                                    <Edit2 size={11} />
+                                    <span>Editar</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={isCurrentlyDeactivated}
+                                    onClick={() => {
+                                      setTiposPlantao(tiposPlantao.filter(t => t.id !== tp.id));
+                                      if (editingSubId === tp.id) {
+                                        setEditingSubId(null);
+                                        setNewSubValorPlantao(150);
+                                        setNewSubAjudaCusto(0);
+                                        setNewSubTaxaAdm(0);
+                                      }
+                                    }}
+                                    className="p-1 px-1.5 border border-red-200 text-red-650 hover:bg-red-50 hover:text-red-750 rounded-md disabled:opacity-50 transition-all font-semibold inline-flex items-center space-x-1 cursor-pointer text-[11px]"
+                                    title="Remover formato"
+                                  >
+                                    <Trash2 size={11} />
+                                    <span>Excluir</span>
+                                  </button>
+                                </div>
+                              )}
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 text-slate-700">
-                          {tiposPlantao.map((tp) => (
-                            <tr key={tp.id} className="hover:bg-slate-50/50 transition-colors">
-                              <td className="p-3 font-normal text-slate-800">{tp.tipoEscala}</td>
-                              <td className="p-3 text-center font-mono bg-slate-50/35">{tp.horaInicio}</td>
-                              <td className="p-3 text-right font-normal text-slate-900">R$ {tp.valorPlantao.toFixed(2)}</td>
-                              <td className="p-3 text-right text-slate-500">R$ {(tp.ajudaCusto || 0).toFixed(2)}</td>
-                              <td className="p-3 text-right text-slate-500">R$ {(tp.taxaAdm || 0).toFixed(2)}</td>
-                              <td className="p-3 text-center">
-                                <button
-                                  type="button"
-                                  disabled={isCurrentlyDeactivated}
-                                  onClick={() => setTiposPlantao(tiposPlantao.filter(t => t.id !== tp.id))}
-                                  className="p-1.5 text-slate-400 hover:text-red-650 rounded-md hover:bg-red-50 disabled:opacity-50 transition-all cursor-pointer"
-                                  title="Remover formato"
-                                >
-                                  <Trash2 size={13} />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="py-6 text-center text-slate-400 text-xs italic bg-slate-50/25 border border-dashed border-slate-200 rounded-xl mb-4">
-                      Nenhum formato de plantão complementar cadastrado.
-                    </div>
-                  )}
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
 
-                <div className="p-4 bg-blue-50 text-blue-850 border border-blue-100 rounded-xl space-y-1.5 text-xs">
-                  <p className="font-bold">Regulamento dos Plantões Domiciliares:</p>
-                  <p className="leading-relaxed">
-                    O valor acordado orienta a sugestão nos faturamentos mensais da empresa. Cuidadores em atraso superior a 30 minutos devem emitir justificativas administrativas.
-                  </p>
+                <div className="flex justify-end pt-4 border-t border-slate-100">
+                  <button
+                    type="button"
+                    disabled={isCurrentlyDeactivated}
+                    onClick={handleSavePlanoAtendimento}
+                    className="flex items-center space-x-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0"
+                    id="save-plano-atendimento"
+                  >
+                    <span>💾 Salvar Plano de Atendimento</span>
+                  </button>
                 </div>
               </div>
             )}
@@ -1530,6 +1794,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       onClick={() => {
                         setAvulsoSelectedDates([]);
                         setAvulsoProf('');
+                        setAvulsoPlantaoOptionId('principal');
+                        setAvulsoTipoDia('Normal');
+                        setAvulsoObs('');
                         setAvulsoModalOpen(true);
                       }}
                       className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white rounded-lg transition-all shadow-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer font-sans"
@@ -2638,7 +2905,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1 relative">
+                  <div className="space-y-1 relative col-span-2">
                     <label className="block text-[10px] font-bold text-slate-600">Alocar Profissional</label>
                     <input
                       type="text"
@@ -2647,7 +2914,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       onBlur={() => setTimeout(() => setShowAvulsoProfDropdown(false), 200)}
                       onChange={(e) => setAvulsoProf(e.target.value)}
                       placeholder="Pesquisar..."
-                      className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-slate-50 focus:outline-none focus:border-blue-500 font-medium"
+                      className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-slate-50 focus:outline-none focus:border-blue-500 font-medium font-sans"
                     />
                     {showAvulsoProfDropdown && (
                       <div className="absolute left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl z-25 divide-y divide-slate-100 font-sans">
@@ -2670,68 +2937,86 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                     )}
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="block text-[10px] font-bold text-slate-600">Tipo de Escala</label>
+                  <div className="space-y-1 col-span-2">
+                    <label className="block text-[10px] font-bold text-slate-600">Tipo de Escala / Plantão (Do Plano de Atendimento)</label>
                     <select
-                      value={avulsoTipoTurno}
-                      onChange={(e) => setAvulsoTipoTurno(e.target.value as any)}
-                      className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-blue-500 font-sans"
+                      value={avulsoPlantaoOptionId}
+                      onChange={(e) => setAvulsoPlantaoOptionId(e.target.value)}
+                      className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-blue-500 font-sans font-bold"
                     >
-                      <option value="Diurno">Diurno</option>
-                      <option value="Noturno">Noturno</option>
+                      {availableShifts.map((opt) => (
+                        <option key={opt.id} value={opt.id}>
+                          {opt.label} — R$ {opt.valorPlantao.toFixed(2)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1 col-span-2">
+                    <label className="block text-[10px] font-bold text-sky-800">Tipo de Dia (Modificador de Feriado)</label>
+                    <select
+                      value={avulsoTipoDia}
+                      onChange={(e) => setAvulsoTipoDia(e.target.value as any)}
+                      className="w-full text-xs p-2.5 bg-sky-50 border border-sky-200 rounded-lg text-sky-900 focus:outline-none focus:border-sky-500 font-sans font-bold"
+                    >
+                      <option value="Normal">Dia Normal (Sem Adicional)</option>
+                      <option value="Feriado 20%">Feriado (+20% em Repasse e Faturamento)</option>
+                      <option value="Feriado 50%">Feriado (+50% em Repasse e Faturamento)</option>
                     </select>
                   </div>
 
                   <div className="space-y-1">
-                    <label className="block text-[10px] font-bold text-slate-600">Horário de Início</label>
+                    <label className="block text-[10px] font-bold text-slate-500">Horário de Início (Bloqueado)</label>
                     <input
-                      type="time"
-                      value={avulsoHoraInicio}
-                      onChange={(e) => setAvulsoHoraInicio(e.target.value)}
-                      className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 text-slate-800"
+                      type="text"
+                      value={selectedAvulsoOpt?.horaInicio}
+                      readOnly
+                      disabled
+                      className="w-full text-xs p-2.5 bg-slate-100 border border-slate-200 rounded-lg text-slate-500 focus:outline-none font-sans cursor-not-allowed"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="block text-[10px] font-bold text-slate-600">Duração Escala</label>
-                    <select
-                      value={avulsoDuracao}
-                      onChange={(e) => setAvulsoDuracao(e.target.value)}
-                      className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-blue-505 font-sans"
-                    >
-                      <option value="6h">06 Horas de Turno</option>
-                      <option value="12h">12 Horas de Turno</option>
-                      <option value="24h">24 Horas de Turno</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="block text-[10px] font-bold text-slate-600">Repasse Implícito (R$)</label>
+                    <label className="block text-[10px] font-bold text-slate-500">Configuração Escala (Bloqueado)</label>
                     <input
-                      type="number"
-                      value={avulsoValorBase}
-                      onChange={(e) => setAvulsoValorBase(Number(e.target.value))}
-                      className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-slate-50 focus:outline-none font-mono"
+                      type="text"
+                      value={selectedAvulsoOpt?.tipoEscala}
+                      readOnly
+                      disabled
+                      className="w-full text-xs p-2.5 bg-slate-100 border border-slate-200 rounded-lg text-slate-500 focus:outline-none font-sans cursor-not-allowed"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="block text-[10px] font-bold text-slate-600">Ajuda de Custo (R$)</label>
+                    <label className="block text-[10px] font-bold text-slate-500">Repasse / Valor Plantão (Bloqueado)</label>
                     <input
-                      type="number"
-                      value={avulsoAjudaCusto}
-                      onChange={(e) => setAvulsoAjudaCusto(Number(e.target.value))}
-                      className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-slate-50 focus:outline-none font-mono"
+                      type="text"
+                      value={`R$ ${computedRepasse.toFixed(2)}${multiplier > 1.0 ? ` (+${Math.round((multiplier - 1) * 100)}%)` : ''}`}
+                      readOnly
+                      disabled
+                      className="w-full text-xs p-2.5 bg-slate-100 border border-slate-200 rounded-lg text-slate-700 font-mono font-bold cursor-not-allowed"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="block text-[10px] font-bold text-slate-600">Taxa Administrativa (R$)</label>
+                    <label className="block text-[10px] font-bold text-slate-500">Ajuda de Custo (Bloqueado)</label>
                     <input
-                      type="number"
-                      value={avulsoTaxaAdm}
-                      onChange={(e) => setAvulsoTaxaAdm(Number(e.target.value))}
-                      className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-slate-50 focus:outline-none font-mono"
+                      type="text"
+                      value={`R$ ${computedAjuda.toFixed(2)}`}
+                      readOnly
+                      disabled
+                      className="w-full text-xs p-2.5 bg-slate-100 border border-slate-200 rounded-lg text-slate-700 font-mono font-bold cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div className="space-y-1 col-span-2">
+                    <label className="block text-[10px] font-bold text-slate-500">Taxa Administrativa (Bloqueado)</label>
+                    <input
+                      type="text"
+                      value={`R$ ${computedTaxa.toFixed(2)}${multiplier > 1.0 ? ` (+${Math.round((multiplier - 1) * 100)}%)` : ''}`}
+                      readOnly
+                      disabled
+                      className="w-full text-xs p-2.5 bg-slate-100 border border-slate-200 rounded-lg text-slate-705 text-slate-700 font-mono font-bold cursor-not-allowed"
                     />
                   </div>
                 </div>

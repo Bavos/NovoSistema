@@ -1,0 +1,46 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global safety net (catch-all default deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidPaciente(p) {
+      return p.id is string
+        && p.nome is string && p.nome.size() <= 200
+        && p.cpf is string && p.cpf.size() <= 20
+        && p.status is string && (p.status == 'Ativo' || p.status == 'Desativado');
+    }
+
+    function isValidPlantao(pl) {
+      return pl.id is string
+        && pl.pacienteId is string
+        && pl.data is string && pl.data.size() <= 30
+        && pl.profissional is string && pl.profissional.size() <= 200
+        && pl.status is string && (pl.status == 'Confirmado' || pl.status == 'Cancelado');
+    }
+
+    match /test/{testId} {
+      allow read, write: if true;
+    }
+
+    // Rule for Pacientes collection
+    match /pacientes/{pacienteId} {
+      allow read: if true; // Open read for preview stability
+      allow create, update: if isValidId(pacienteId) && isValidPaciente(request.resource.data);
+      allow delete: if isValidId(pacienteId);
+    }
+
+    // Rule for Plantoes collection
+    match /plantoes/{plantaoId} {
+      allow read: if true; // Open read for preview stability
+      allow create, update: if isValidId(plantaoId) && isValidPlantao(request.resource.data);
+      allow delete: if isValidId(plantaoId);
+    }
+  }
+}

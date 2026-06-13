@@ -1,0 +1,66 @@
+{
+  "entities": {
+    "Paciente": {
+      "title": "Paciente",
+      "description": "Dados cadastrais, de endereço, médicos e plano de atendimento do paciente",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nome": { "type": "string" },
+        "dataNascimento": { "type": "string" },
+        "cpf": { "type": "string" },
+        "nomeResponsavel": { "type": "string" },
+        "telefoneResponsavel": { "type": "string" },
+        "email": { "type": "string" },
+        "bairro": { "type": "string" },
+        "status": { "type": "string", "enum": ["Ativo", "Desativado"] },
+        "desativadoEm": { "type": "string" },
+        "desativadoMotivo": { "type": "string" },
+        "endereco": { "type": "object" },
+        "informacoesMedicas": { "type": "object" },
+        "planoAtendimento": { "type": "object" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "nome", "cpf", "status"]
+    },
+    "Plantao": {
+      "title": "Plantão",
+      "description": "Informações dos plantões marcados e realizados",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "pacienteId": { "type": "string" },
+        "data": { "type": "string" },
+        "diaSemana": { "type": "string" },
+        "profissional": { "type": "string" },
+        "status": { "type": "string", "enum": ["Confirmado", "Cancelado"] },
+        "motivoCancelamento": { "type": "string" },
+        "tipoEscala": { "type": "number" },
+        "dataInicio": { "type": "string" },
+        "horaInicio": { "type": "string" },
+        "dataTermino": { "type": "string" },
+        "horaTermino": { "type": "string" },
+        "observacaoAgendamento": { "type": "string" },
+        "valorPlantao": { "type": "number" },
+        "valorRepasse": { "type": "number" },
+        "feriado": { "type": "string" },
+        "ajudaCusto": { "type": "number" },
+        "taxaAdm": { "type": "number" },
+        "criadoEm": { "type": "string" },
+        "criadoPor": { "type": "string" },
+        "escalaCongelada": { "type": "boolean" }
+      },
+      "required": ["id", "pacienteId", "data", "status", "profissional"]
+    }
+  },
+  "firestore": {
+    "/pacientes/{pacienteId}": {
+      "schema": "Paciente",
+      "description": "Coleção principal de pacientes"
+    },
+    "/plantoes/{plantaoId}": {
+      "schema": "Plantao",
+      "description": "Coleção de todos os plantões gerados e escalas executadas"
+    }
+  }
+}
