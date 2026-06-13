@@ -207,6 +207,14 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
   const [email, setEmail] = useState('');
   const [bairro, setBairro] = useState('');
 
+  // Dados de Faturamento e Pagamento
+  const [responsavelPagamento, setResponsavelPagamento] = useState<'O próprio Paciente' | 'Outro Responsável'>('O próprio Paciente');
+  const [nomePagador, setNomePagador] = useState('');
+  const [cpfPagador, setCpfPagador] = useState('');
+  const [opcaoEnvio, setOpcaoEnvio] = useState<'WhatsApp' | 'E-mail' | 'Ambos'>('WhatsApp');
+  const [whatsappFaturamento, setWhatsappFaturamento] = useState('');
+  const [emailFaturamento, setEmailFaturamento] = useState('');
+
   // Endereço block
   const [rua, setRua] = useState('');
   const [numero, setNumero] = useState('');
@@ -315,6 +323,14 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
       setEmail(paciente.email || '');
       setBairro(paciente.bairro || paciente.endereco.bairro);
 
+      // Dados de Faturamento e Pagamento
+      setResponsavelPagamento(paciente.dadosPagamento?.responsavelPagamento || 'O próprio Paciente');
+      setNomePagador(paciente.dadosPagamento?.nomePagador || '');
+      setCpfPagador(paciente.dadosPagamento?.cpfPagador || '');
+      setOpcaoEnvio(paciente.dadosPagamento?.opcaoEnvio || 'WhatsApp');
+      setWhatsappFaturamento(paciente.dadosPagamento?.whatsappFaturamento || '');
+      setEmailFaturamento(paciente.dadosPagamento?.emailFaturamento || '');
+
       setRua(paciente.endereco.rua);
       setNumero(paciente.endereco.numero);
       setCep(paciente.endereco.cep);
@@ -351,6 +367,14 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
       setTelefoneResponsavel('');
       setEmail('');
       setBairro('');
+
+      // Clean Dados de Faturamento e Pagamento
+      setResponsavelPagamento('O próprio Paciente');
+      setNomePagador('');
+      setCpfPagador('');
+      setOpcaoEnvio('WhatsApp');
+      setWhatsappFaturamento('');
+      setEmailFaturamento('');
 
       setRua('');
       setNumero('');
@@ -428,6 +452,28 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
       return;
     }
 
+    // Validation for Billing Details
+    if (responsavelPagamento === 'Outro Responsável') {
+      if (!nomePagador.trim() || !cpfPagador.trim()) {
+        alert('Por favor, preencha os dados obrigatórios do Responsável pelo Pagamento (Nome Completo e CPF do Pagador).');
+        return;
+      }
+    }
+
+    if (opcaoEnvio === 'WhatsApp' || opcaoEnvio === 'Ambos') {
+      if (!whatsappFaturamento.trim()) {
+        alert('Por favor, preencha o WhatsApp para Faturamento.');
+        return;
+      }
+    }
+
+    if (opcaoEnvio === 'E-mail' || opcaoEnvio === 'Ambos') {
+      if (!emailFaturamento.trim()) {
+        alert('Por favor, preencha o E-mail para Faturamento.');
+        return;
+      }
+    }
+
     const patientPayload = {
       nome,
       dataNascimento,
@@ -459,6 +505,14 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
         ajudaCusto,
         taxaAdm,
         tiposPlantao,
+      },
+      dadosPagamento: {
+        responsavelPagamento,
+        nomePagador: responsavelPagamento === 'Outro Responsável' ? nomePagador : '',
+        cpfPagador: responsavelPagamento === 'Outro Responsável' ? cpfPagador : '',
+        opcaoEnvio,
+        whatsappFaturamento: (opcaoEnvio === 'WhatsApp' || opcaoEnvio === 'Ambos') ? whatsappFaturamento : '',
+        emailFaturamento: (opcaoEnvio === 'E-mail' || opcaoEnvio === 'Ambos') ? emailFaturamento : '',
       },
     };
 
@@ -1283,6 +1337,95 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       placeholder="Ex: (21) 90000-0000"
                     />
                   </div>
+                </div>
+
+                <h4 className="text-xs font-bold text-slate-900 border-b border-slate-200 pb-2 pt-3 uppercase tracking-wider italic">DADOS DE FATURAMENTO E PAGAMENTO</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-black text-slate-900">Responsável pelo Pagamento? *</label>
+                    <select
+                      disabled={isCurrentlyDeactivated}
+                      value={responsavelPagamento}
+                      onChange={(e) => setResponsavelPagamento(e.target.value as any)}
+                      className="w-full text-xs p-2.5 border border-slate-350 rounded-lg text-slate-950 font-extrabold bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed"
+                    >
+                      <option value="O próprio Paciente">O próprio Paciente</option>
+                      <option value="Outro Responsável">Outro Responsável</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-black text-slate-900">Canal de Envio da Fatura/Boleto *</label>
+                    <select
+                      disabled={isCurrentlyDeactivated}
+                      value={opcaoEnvio}
+                      onChange={(e) => setOpcaoEnvio(e.target.value as any)}
+                      className="w-full text-xs p-2.5 border border-slate-350 rounded-lg text-slate-950 font-extrabold bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed"
+                    >
+                      <option value="WhatsApp">WhatsApp</option>
+                      <option value="E-mail">E-mail</option>
+                      <option value="Ambos">Ambos</option>
+                    </select>
+                  </div>
+
+                  {responsavelPagamento === 'Outro Responsável' && (
+                    <>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-black text-slate-900">Nome Completo do Pagador *</label>
+                        <input
+                          type="text"
+                          required
+                          disabled={isCurrentlyDeactivated}
+                          value={nomePagador}
+                          onChange={(e) => setNomePagador(e.target.value)}
+                          className="w-full text-xs p-2.5 border border-slate-350 rounded-lg text-slate-950 font-extrabold bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
+                          placeholder="Nome completo do portador da conta"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-black text-slate-900">CPF do Pagador *</label>
+                        <input
+                          type="text"
+                          required
+                          disabled={isCurrentlyDeactivated}
+                          value={cpfPagador}
+                          onChange={(e) => setCpfPagador(e.target.value)}
+                          className="w-full text-xs p-2.5 border border-slate-350 rounded-lg text-slate-950 font-extrabold bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
+                          placeholder="Ex: 000.000.000-00"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {(opcaoEnvio === 'WhatsApp' || opcaoEnvio === 'Ambos') && (
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-black text-slate-900">WhatsApp para Faturamento *</label>
+                      <input
+                        type="text"
+                        required
+                        disabled={isCurrentlyDeactivated}
+                        value={whatsappFaturamento}
+                        onChange={(e) => setWhatsappFaturamento(e.target.value)}
+                        className="w-full text-xs p-2.5 border border-slate-350 rounded-lg text-slate-950 font-extrabold bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
+                        placeholder="Ex: (21) 90000-0000"
+                      />
+                    </div>
+                  )}
+
+                  {(opcaoEnvio === 'E-mail' || opcaoEnvio === 'Ambos') && (
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-black text-slate-900">E-mail para Faturamento *</label>
+                      <input
+                        type="email"
+                        required
+                        disabled={isCurrentlyDeactivated}
+                        value={emailFaturamento}
+                        onChange={(e) => setEmailFaturamento(e.target.value)}
+                        className="w-full text-xs p-2.5 border border-slate-350 rounded-lg text-slate-950 font-extrabold bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
+                        placeholder="faturamento@exemplo.com"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             )}

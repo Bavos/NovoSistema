@@ -39,6 +39,15 @@ export interface PlanoAtendimento {
   tiposPlantao?: EscalacaoPlano[];
 }
 
+export interface DadosPagamento {
+  responsavelPagamento: 'O próprio Paciente' | 'Outro Responsável';
+  nomePagador?: string;
+  cpfPagador?: string;
+  opcaoEnvio: 'WhatsApp' | 'E-mail' | 'Ambos';
+  whatsappFaturamento?: string;
+  emailFaturamento?: string;
+}
+
 export interface Paciente {
   id: string;
   nome: string;
@@ -54,6 +63,7 @@ export interface Paciente {
   endereco: Endereco;
   informacoesMedicas: InformacoesMedicas;
   planoAtendimento: PlanoAtendimento;
+  dadosPagamento?: DadosPagamento;
   createdAt: string;
 }
 
