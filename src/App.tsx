@@ -5,6 +5,7 @@
 
 import React, { useState } from 'react';
 import { FirebaseProvider, useFirebase } from './context/FirebaseContext';
+import { LoginPage } from './pages/LoginPage';
 import { Sidebar } from './components/Sidebar';
 import { TopHeader } from './components/TopHeader';
 import { Pacientes } from './pages/Pacientes';
@@ -26,7 +27,7 @@ function DashboardContent() {
   const [isBrowsingForm, setIsBrowsingForm] = useState<boolean>(false);
   const [pacientesTitleOverride, setPacientesTitleOverride] = useState<string>('Gestão Integrada de Pacientes');
 
-  const { pacientes, loading, userRole, notification } = useFirebase();
+  const { pacientes, loading, userRole, notification, user } = useFirebase();
 
   // Redirect away from Empresa if role is Colaborador
   React.useEffect(() => {
@@ -54,6 +55,10 @@ function DashboardContent() {
         <p className="text-xs text-slate-500 font-mono tracking-widest font-bold">CARREGANDO BANCO FIRESTORE...</p>
       </div>
     );
+  }
+
+  if (!user) {
+    return <LoginPage />;
   }
 
   return (

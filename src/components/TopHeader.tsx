@@ -35,8 +35,10 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     onSearchGlobal(val);
   };
 
-  const handleSair = () => {
-    alert('Sessão encerrada com sucesso! (Simulação)');
+  const { logout } = useFirebase();
+
+  const handleSair = async () => {
+    await logout();
     setShowDropdown(false);
   };
 

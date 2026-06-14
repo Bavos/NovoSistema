@@ -4,16 +4,17 @@
  */
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Paciente, Plantao, Profissional, CancelingReason, AuditLog } from '../types';
+import { Paciente, Plantao, Profissional, CancelingReason, AuditLog, Agendamento } from '../types';
 import { INITIAL_PACIENTES, INITIAL_PLANTOES } from '../mockData';
 import { db, auth, OperationType, handleFirestoreError } from '../lib/firebase';
-import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, User } from 'firebase/auth';
 import {
   collection,
   doc,
   setDoc,
   updateDoc,
   deleteDoc,
+  addDoc,
   writeBatch,
   onSnapshot,
   getDocs,
@@ -23,11 +24,17 @@ import {
 interface FirebaseContextType {
   pacientes: Paciente[];
   plantoes: Plantao[];
+  agendamentos: Agendamento[];
   loading: boolean;
+  user: User | null;
   userRole: 'administrador' | 'colaborador';
   setUserRole: (role: 'administrador' | 'colaborador') => void;
   notification: string | null;
   setNotification: (msg: string | null) => void;
+  login: (email: string, pass: string) => Promise<void>;
+  logout: () => Promise<void>;
+  forgotPassword: (email: string) => Promise<void>;
+  profissionais: Profissional[];
   addPaciente: (paciente: Omit<Paciente, 'id' | 'createdAt' | 'status'>) => Promise<Paciente>;
   updatePaciente: (paciente: Paciente) => Promise<void>;
   deactivatePaciente: (id: string, motivo: string) => Promise<void>;
@@ -37,6 +44,9 @@ interface FirebaseContextType {
   updatePlantao: (plantao: Plantao) => Promise<void>;
   deletePlantao: (id: string) => Promise<void>;
   deletePlantoes: (ids: string[]) => Promise<void>;
+  addAgendamento: (agendamento: Omit<Agendamento, 'id'>) => Promise<Agendamento>;
+  updateAgendamento: (agendamento: Agendamento) => Promise<void>;
+  deleteAgendamento: (id: string) => Promise<void>;
   deletePaciente: (id: string) => Promise<void>;
   addProfissional: (profissional: Omit<Profissional, 'id' | 'createdAt' | 'status'>) => Promise<Profissional>;
   updateProfissional: (profissional: Profissional) => Promise<void>;
@@ -48,8 +58,23 @@ const FirebaseContext = createContext<FirebaseContextType | undefined>(undefined
 export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [pacientes, setPacientes] = useState<Paciente[]>([]);
   const [plantoes, setPlantoes] = useState<Plantao[]>([]);
+  const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [profissionais, setProfissionais] = useState<Profissional[]>([]);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Authentication State Observer
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setLoading(false);
+    });
+    return unsub;
+  }, []);
+
+  const login = async (email: string, pass: string) => { await signInWithEmailAndPassword(auth, email, pass); };
+  const logout = async () => { await signOut(auth); };
+  const forgotPassword = async (email: string) => { await sendPasswordResetEmail(auth, email); };
   const [userRole, setUserRole] = useState<'administrador' | 'colaborador'>('administrador');
   const [notification, setNotification] = useState<string | null>(null);
 
@@ -77,6 +102,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     let unsubscribePacientes: (() => void) | null = null;
     let unsubscribePlantoes: (() => void) | null = null;
+    let unsubscribeAgendamentos: (() => void) | null = null;
     let unsubscribeProfissionais: (() => void) | null = null;
 
     const initFirebaseSync = async () => {
@@ -143,27 +169,16 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
       );
 
-      const plColl = collection(db, 'plantoes');
-      unsubscribePlantoes = onSnapshot(
-        plColl,
-        (snap) => {
-          const list: Plantao[] = [];
-          snap.forEach((d) => {
-            list.push(d.data() as Plantao);
-          });
-          setPlantoes(list);
-        },
-        (error) => {
-          console.error("Plantões live sync error:", error);
-          const fallbackPl = localStorage.getItem('firebase_simulated_plantoes');
-          if (fallbackPl) {
-            setPlantoes(JSON.parse(fallbackPl));
-          } else {
-            setPlantoes(INITIAL_PLANTOES);
-          }
-          handleFirestoreError(error, OperationType.GET, 'plantoes');
-        }
-      );
+      const agColl = collection(db, 'agendamentos');
+      unsubscribeAgendamentos = onSnapshot(agColl, (snap) => {
+        const list: Agendamento[] = [];
+        snap.forEach((d) => {
+          list.push({ ...d.data(), id: d.id } as Agendamento);
+        });
+        setAgendamentos(list);
+      }, (err) => {
+        console.error('Error fetching agendamentos:', err);
+      });
 
       const profColl = collection(db, 'profissionais');
       unsubscribeProfissionais = onSnapshot(
@@ -250,11 +265,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
 
     try {
+      console.log(`[Firebase] setDoc, paciente id: ${id}`);
       await setDoc(doc(db, 'pacientes', id), fullPaciente);
       await addAuditLog('CREATE', 'pacientes', id, `Paciente criado: ${fullPaciente.nome}`);
       setNotification(`Paciente '${fullPaciente.nome}' criado com sucesso.`);
       return fullPaciente;
     } catch (err) {
+      console.error(`[Firebase] Erro setDoc: ${err}`);
       handleFirestoreError(err, OperationType.CREATE, `pacientes/${id}`);
       throw err;
     }
@@ -374,6 +391,41 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
+  const addAgendamento = async (newAg: Omit<Agendamento, 'id'>) => {
+    try {
+      const docRef = await addDoc(collection(db, 'agendamentos'), newAg);
+      const fullAgendamento: Agendamento = { ...newAg, id: docRef.id };
+      await addAuditLog('CREATE', 'agendamentos', docRef.id, `Agendamento criado: ${fullAgendamento.data}`);
+      setNotification('Agendamento criado com sucesso.');
+      return fullAgendamento;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'agendamentos');
+      throw err;
+    }
+  };
+
+  const updateAgendamento = async (ag: Agendamento) => {
+    try {
+      await setDoc(doc(db, 'agendamentos', ag.id), ag);
+      await addAuditLog('UPDATE', 'agendamentos', ag.id, `Agendamento atualizado: ${ag.id}`);
+      setNotification('Agendamento atualizado.');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `agendamentos/${ag.id}`);
+      throw err;
+    }
+  };
+
+  const deleteAgendamento = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'agendamentos', id));
+      await addAuditLog('DELETE', 'agendamentos', id, `Agendamento excluído`);
+      setNotification('Agendamento excluído.');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `agendamentos/${id}`);
+      throw err;
+    }
+  };
+
   const addProfissional = async (newProf: Omit<Profissional, 'id' | 'createdAt' | 'status'>) => {
     const id = `prof-${Date.now()}`;
     const fullProfissional: Profissional = {
@@ -435,11 +487,16 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       value={{
         pacientes,
         plantoes,
+        agendamentos,
         loading,
+        user,
         userRole,
         setUserRole: handleSetUserRole,
         notification,
         setNotification,
+        login,
+        logout,
+        forgotPassword,
         addPaciente,
         updatePaciente,
         deactivatePaciente,
@@ -449,6 +506,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         updatePlantao,
         deletePlantao,
         deletePlantoes,
+        addAgendamento,
+        updateAgendamento,
+        deleteAgendamento,
         deletePaciente,
         profissionais,
         addProfissional,

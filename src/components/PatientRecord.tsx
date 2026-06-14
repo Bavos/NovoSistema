@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { updateDoc, doc } from 'firebase/firestore';
-import { Paciente, Plantao, CancelingReason, EscalacaoPlano } from '../types';
+import { Paciente, Plantao, CancelingReason, EscalacaoPlano, Agendamento } from '../types';
 import { useFirebase } from '../context/FirebaseContext';
 import { usePacienteData } from '../hooks/usePacienteData';
 import {
@@ -135,7 +135,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
     updatePlantao,
     deletePlantao,
     deletePlantoes,
-    profissionais
+    profissionais,
+    agendamentos,
+    addAgendamento,
+    updateAgendamento,
+    deleteAgendamento
   } = useFirebase();
 
   // Basic layout tab states
@@ -361,6 +365,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
       setPDeactDate(paciente.desativadoEm || null);
       setPDeactReason(paciente.desativadoMotivo || null);
     } else {
+      console.log("[PatientRecord] isNew set to true");
       setIsNew(true);
       setNome('');
       setDataNascimento('1960-01-01');
@@ -446,6 +451,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
 
   // Handle Form Save
   const handleSave = async (e: React.FormEvent) => {
+    console.log("handleSave chamado");
     e.preventDefault();
     if (isCurrentlyDeactivated) return;
 
@@ -704,7 +710,21 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
     }
   };
 
-  // Add shift triggers
+  // Helper for strict financial calculations
+  const calculateShiftValues = (basePlantao: number, baseTaxa: number, baseAjuda: number, feriado: '20%' | '50%' | null) => {
+    let multiplier = 1.0;
+    if (feriado === '20%') {
+      multiplier = 1.2;
+    } else if (feriado === '50%') {
+      multiplier = 1.5;
+    }
+    return {
+      plantaoFinal: basePlantao * multiplier,
+      taxaAdmFinal: baseTaxa * multiplier,
+      ajudaCusto: baseAjuda
+    };
+  };
+
   const handleAddShiftInline = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isCurrentlyDeactivated) return;
@@ -719,57 +739,54 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
 
     try {
       const datesToSchedule = newShiftDatesList.length > 0 ? newShiftDatesList : [newShiftDate];
-      const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+      
+      const { plantaoFinal, taxaAdmFinal, ajudaCusto: finalAjuda } = calculateShiftValues(
+        newShiftValor,
+        taxaAdm || 0,
+        ajudaCusto || 0,
+        newShiftFeriado
+      );
 
       for (const currentDt of datesToSchedule) {
         // Check for conflicts
-        const conflict = plantoes.find(p => p.data === currentDt && p.profissional === newShiftProf && p.status === 'Confirmado');
+        const conflict = agendamentos.find(p => p.data === currentDt && p.nomeProfissional === newShiftProf && p.status === 'Confirmado');
         if (conflict) {
-          if (!window.confirm(`O profissional ${newShiftProf} já tem um plantão confirmado na data ${currentDt} (No paciente: ${conflict.pacienteId}). Deseja prosseguir com o agendamento mesmo assim?`)) {
+          if (!window.confirm(`O profissional ${newShiftProf} já tem um agendamento confirmado na data ${currentDt} (No paciente: ${conflict.idPaciente}). Deseja prosseguir?`)) {
             continue; // Skip this date if not confirmed
           }
         }
 
-        const dateStr = currentDt.includes('T') ? currentDt : `${currentDt}T12:00:00`;
-        const dateObj = new Date(dateStr);
-        const currentDayOfW = days[dateObj.getDay()] || 'Sex';
-
-        await addPlantao({
-          pacienteId: paciente.id,
+        const pickedProf = profissionais.find(p => p.nome === newShiftProf);
+        await addAgendamento({
+          idPaciente: paciente.id,
+          idProfissional: pickedProf ? pickedProf.id : 'n/a', 
+          nomeProfissional: newShiftProf,
           data: currentDt,
-          diaSemana: currentDayOfW,
-          profissional: newShiftProf,
+          horario: `${newShiftHoraInicio}-${newShiftHoraTermino}`,
+          valorPlantao: plantaoFinal,
+          valorRepasse: plantaoFinal,
+          ajudaCusto: finalAjuda,
+          taxaAdm: taxaAdmFinal,
           status: 'Confirmado',
-          tipoEscala: newShiftTipoEscala,
-          dataInicio: currentDt,
-          horaInicio: newShiftHoraInicio,
-          dataTermino: currentDt,
-          horaTermino: newShiftHoraTermino,
-          observacaoAgendamento: newShiftObservacao,
-          valorPlantao: newShiftValor,
-          valorRepasse: newShiftRepasse,
-          feriado: newShiftFeriado,
-          ajudaCusto: ajudaCusto || 0,
-          taxaAdm: taxaAdm || 0,
-          criadoEm: new Date().toISOString(),
-          criadoPor: 'Gestor de Home Care S.A. (Coordenador)',
+          observacao: newShiftObservacao,
         });
       }
 
       setNewShiftProf('');
       setNewShiftDatesList([]);
       setNewShiftFeriado(null);
-      alert(datesToSchedule.length > 1 ? `${datesToSchedule.length} plantões agendados na escala com sucesso!` : 'Plantão agendado para a escala com sucesso!');
+      alert(datesToSchedule.length > 1 ? `${datesToSchedule.length} plantões agendados com sucesso!` : 'Plantão agendado com sucesso!');
     } catch (err: any) {
       alert('Erro ao agendar plantão.');
+      console.error(err);
     }
   };
 
   // Cancel shift modal confirmation triggers
   const handleTriggerCancelClick = (shiftId: string) => {
-    const originalShift = plantoes.find((pl) => pl.id === shiftId);
-    if (originalShift && originalShift.escalaCongelada) {
-      alert('Atenção: Este plantão está CONGELADO e não pode ser cancelado ou alterado. Reabra a escala primeiro!');
+    const originalShift = agendamentos.find((pl) => pl.id === shiftId);
+    if (originalShift && originalShift.status === 'Concluido') {
+      alert('Atenção: Este agendamento está CONCLUÍDO (congelado) e não pode ser cancelado ou alterado. Reabra a escala primeiro!');
       return;
     }
     setSelectedShiftForCancel(shiftId);
@@ -779,10 +796,17 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
 
   const handleConfirmCancelShift = async () => {
     if (selectedShiftForCancel) {
-      await cancelPlantao(selectedShiftForCancel, cancelReasonValue);
+      const targetAg = agendamentos.find(a => a.id === selectedShiftForCancel);
+      if (targetAg) {
+        await updateAgendamento({
+          ...targetAg,
+          status: 'Cancelado',
+          observacao: (targetAg.observacao ? targetAg.observacao + '\n' : '') + `Motivo: ${cancelReasonValue}`
+        });
+      }
       setCancelShiftModalOpen(false);
       setSelectedShiftForCancel(null);
-      alert('Plantão cancelado com sucesso.');
+      alert('Agendamento cancelado com sucesso.');
     }
   };
 
@@ -840,18 +864,18 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
 
       // Holiday factor
       let isFeriado: '20%' | '50%' | null = null;
-      let mult = 1.0;
       if (avulsoTipoDia === 'Feriado 20%') {
         isFeriado = '20%';
-        mult = 1.2;
       } else if (avulsoTipoDia === 'Feriado 50%') {
         isFeriado = '50%';
-        mult = 1.5;
       }
 
-      const finalRepasse = baseRepasseValue * mult;
-      const finalTaxaAdm = baseTaxaValue * mult;
-      const finalAjudaCusto = baseAjudaValue;
+      const { plantaoFinal, taxaAdmFinal, ajudaCusto: finalAjuda } = calculateShiftValues(
+        baseRepasseValue,
+        baseTaxaValue,
+        baseAjudaValue,
+        isFeriado
+      );
 
       // Helper to calculate endTime
       const getTerminoTime = (startTime: string, duration: number): string => {
@@ -869,33 +893,20 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
         const dateObj = new Date(dt + 'T12:00:00');
         const dW = days[dateObj.getDay()] || 'Seg';
 
-        await addPlantao({
-          pacienteId: paciente.id,
+        const pickedProf = profissionais.find(p => p.nome === avulsoProf);
+        await addAgendamento({
+          idPaciente: paciente.id,
+          idProfissional: pickedProf ? pickedProf.id : 'n/a',
+          nomeProfissional: avulsoProf,
           data: dt,
-          diaSemana: dW,
-          profissional: avulsoProf,
+          horario: `${chosenHoraInicio}-${getTerminoTime(chosenHoraInicio, durationHrs)}`,
+          valorPlantao: plantaoFinal,
+          valorRepasse: plantaoFinal,
+          ajudaCusto: finalAjuda,
+          taxaAdm: taxaAdmFinal,
           status: 'Confirmado',
-          tipoEscala: durationHrs,
-          dataInicio: dt,
-          horaInicio: chosenHoraInicio,
-          dataTermino: dt,
-          horaTermino: getTerminoTime(chosenHoraInicio, durationHrs),
-          observacaoAgendamento: avulsoObs || 'Agendamento Avulso',
-          valorPlantao: baseRepasseValue,
-          valorRepasse: baseRepasseValue,
-          feriado: isFeriado,
-          ajudaCusto: baseAjudaValue,
-          taxaAdm: baseTaxaValue,
-          criadoEm: new Date().toISOString(),
-          criadoPor: 'Gestor (Avulso)',
-          // Fields detailing final configured values for auditing
-          tipoDiaEscolhido: avulsoTipoDia,
-          valoresFinaisCalculados: {
-            repasse: finalRepasse,
-            taxaAdm: finalTaxaAdm,
-            ajudaCusto: finalAjudaCusto,
-            tipoDia: avulsoTipoDia,
-          },
+          observacao: avulsoObs || 'Agendamento Avulso',
+          tipoDia: avulsoTipoDia as 'Normal' | 'Feriado 20%' | 'Feriado 50%'
         });
       }
 
@@ -905,7 +916,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
       setAvulsoTipoDia('Normal');
       setAvulsoObs('');
       setAvulsoModalOpen(false);
-      alert(`${avulsoSelectedDates.length} plantões avulsos criados com sucesso!`);
+      alert(`${avulsoSelectedDates.length} plantão(ões) avulso(s) criado(s) com sucesso!`);
     } catch (err) {
       alert('Erro ao criar plantões avulsos.');
     }
@@ -918,20 +929,21 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
       return;
     }
 
-    const matches = filteredShiftsForPatient.filter(
-      (s) => s.data >= concluirStartDate && s.data <= concluirEndDate
+    const agendamentosPaciente = agendamentos.filter((a) => a.idPaciente === paciente.id);
+    const matches = agendamentosPaciente.filter(
+      (s) => s.data >= concluirStartDate && s.data <= concluirEndDate && s.status !== 'Concluido' && s.status !== 'Cancelado'
     );
 
     if (matches.length === 0) {
-      alert('Nenhum plantão ativo foi encontrado neste período para ser concluído.');
+      alert('Nenhum agendamento ativo foi encontrado neste período para ser concluído.');
       return;
     }
 
     try {
       for (const s of matches) {
-        await updatePlantao({
+        await updateAgendamento({
           ...s,
-          escalaCongelada: true,
+          status: 'Concluido',
         });
       }
       setConcluirModalOpen(false);
@@ -948,20 +960,21 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
       return;
     }
 
-    const matches = filteredShiftsForPatient.filter(
-      (s) => s.data >= reabrirStartDate && s.data <= reabrirEndDate
+    const agendamentosPaciente = agendamentos.filter((a) => a.idPaciente === paciente.id);
+    const matches = agendamentosPaciente.filter(
+      (s) => s.data >= reabrirStartDate && s.data <= reabrirEndDate && s.status === 'Concluido'
     );
 
     if (matches.length === 0) {
-      alert('Nenhum plantão ativo foi encontrado neste período para ser reaberto.');
+      alert('Nenhum agendamento concluído foi encontrado neste período para ser reaberto.');
       return;
     }
 
     try {
       for (const s of matches) {
-        await updatePlantao({
+        await updateAgendamento({
           ...s,
-          escalaCongelada: false,
+          status: 'Confirmado',
         });
       }
       setReabrirModalOpen(false);
@@ -974,49 +987,46 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
   const handleConfirmExcluir = async () => {
     if (!paciente) return;
     
-    let matches: Plantao[] = [];
+    let matches: Agendamento[] = [];
+    const agendamentosPaciente = agendamentos.filter((a) => a.idPaciente === paciente.id);
+
     if (excluirPorType === 'datas') {
-      matches = filteredShiftsForPatient.filter((s) => s.data === excluirStartDate);
+      matches = agendamentosPaciente.filter((s) => s.data === excluirStartDate);
     } else if (excluirPorType === 'profissional') {
       if (!excluirProfName) {
         alert('Selecione o profissional para remover.');
         return;
       }
-      matches = filteredShiftsForPatient.filter(
-        (s) => s.data >= excluirStartDate && s.data <= excluirEndDate && s.profissional.toLowerCase().includes(excluirProfName.toLowerCase())
+      matches = agendamentosPaciente.filter(
+        (s) => s.data >= excluirStartDate && s.data <= excluirEndDate && s.nomeProfissional.toLowerCase().includes(excluirProfName.toLowerCase())
       );
     } else {
-      matches = filteredShiftsForPatient.filter(
+      matches = agendamentosPaciente.filter(
         (s) => s.data >= excluirStartDate && s.data <= excluirEndDate
       );
     }
 
     if (matches.length === 0) {
-      alert('Nenhum plantão correspondente aos filtros foi encontrado para exclusão.');
+      alert('Nenhum agendamento correspondente aos filtros foi encontrado para exclusão.');
       return;
     }
 
-    const frozenCount = matches.filter((s) => s.escalaCongelada).length;
-    const deletable = matches.filter((s) => !s.escalaCongelada);
+    const frozenCount = matches.filter((s) => s.status === 'Concluido').length;
 
-    if (frozenCount > 0 && deletable.length === 0) {
-      alert('Não foi possível excluir nenhum plantão pois todos do período selecionado estão CONGELADOS. Reabra a escala primeiro!');
-      return;
-    }
-
-    let msg = `Você realmente deseja excluir permanentemente ${deletable.length} plantão(ões)?`;
     if (frozenCount > 0) {
-      msg += `\n(Atenção: ${frozenCount} plantão(ões) congelado(s) neste período de busca serão preservados automaticamente.)`;
+      alert('Não é possível realizar a exclusão pois existem plantões CONCLUÍDOS no período selecionado. Por favor, reabra a escala para realizar alterações ou ajuste o período de exclusão.');
+      return;
     }
 
-    if (window.confirm(msg)) {
+    if (window.confirm(`Você realmente deseja excluir permanentemente ${matches.length} agendamento(s)?`)) {
       try {
-        const ids = deletable.map((d) => d.id);
-        await deletePlantoes(ids);
+        for (const m of matches) {
+          await deleteAgendamento(m.id);
+        }
         setExcluirModalOpen(false);
-        alert(`${deletable.length} plantão(ões) excluído(s) com sucesso.`);
+        alert(`${matches.length} agendamento(s) excluído(s) com sucesso.`);
       } catch (err: any) {
-        alert('Erro ao excluir plantões: ' + (err.message || String(err)));
+        alert('Erro ao excluir agendamento: ' + (err.message || String(err)));
       }
     }
   };
@@ -2018,7 +2028,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
               <div className="space-y-4 animate-in fade-in-30 slide-in-from-right-3">
                 {/* Operations Header Buttons Deck - RH Cuidado Domiciliar */}
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 shadow-xs space-y-2.5">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block font-sans">🛠️ Controles de Escala Operccional</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block font-sans">🛠️ Controles de Escala Operacional</span>
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
@@ -2115,24 +2125,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       <span>🖨️ Imprimir</span>
                     </button>
                     
-                    <span className="hidden lg:inline-block h-6 w-px bg-slate-200 mx-1"></span>
-
-                    <button
-                      type="button"
-                      onClick={() => alert('Modo Anônimo Ativado: Oculta dados sensíveis de pacientes na impressão.')}
-                      className="flex items-center space-x-1 px-2.5 py-2 text-[10px] font-bold bg-orange-50 text-orange-700 border border-orange-200 rounded-lg hover:bg-orange-100 transition-all cursor-pointer font-sans"
-                    >
-                      👤 Anônimo
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => alert('Filtro rápido profissional cadastrado em conformidade com o COREN.')}
-                      className="flex items-center space-x-1 px-2.5 py-2 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-all cursor-pointer font-sans"
-                    >
-                      👑 Profissionais
-                    </button>
                   </div>
                 </div>
+
 
                 {calendarView === 'calendario' && (
                   <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-4 animate-in fade-in-30">
@@ -2225,89 +2220,55 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                           const isToday = cell.dateStr === '2026-06-12';
                           const isSpecialHoliday = cell.holiday !== undefined;
                           
-                          // Filter pacients plants matching date
-                          const dailyShifts = filteredShiftsForPatient.filter(
-                            (s) => s.data === cell.dateStr
+                          // Filter agendamentos matching date
+                          const dailyAgendamentos = agendamentos.filter(
+                            (s) => s.data === cell.dateStr && s.idPaciente === (paciente?.id || '')
                           );
+                          // console.log(`Date: ${cell.dateStr}, Agendamentos:`, agendamentos);
 
                           return (
                             <div
                               key={idx}
-                              className={`min-h-[102px] border border-slate-200/60 p-1.5 rounded-xl flex flex-col justify-between transition-all ${
+                              className={`min-h-[102px] border border-slate-200/60 p-1 rounded-sm flex flex-col transition-all ${
                                 cell.isCurrentMonth ? 'bg-white' : 'bg-slate-50/40 opacity-40'
                               } ${
-                                isToday ? 'ring-2 ring-blue-500 bg-blue-50/10' : ''
+                                isToday ? 'ring-1 ring-blue-400 bg-blue-50/20' : ''
                               } ${
-                                isSpecialHoliday ? 'bg-rose-50/80 border-rose-100' : ''
+                                isSpecialHoliday ? 'bg-rose-50/50' : ''
                               }`}
                             >
-                              <div className="flex items-center justify-between">
-                                <span className={`text-[10px] font-extrabold select-none ${
+                              <div className="flex items-center justify-between p-0.5">
+                                <span className={`text-[9px] font-bold select-none ${
                                   isToday
-                                    ? 'bg-blue-600 text-white w-5 h-5 rounded-full flex items-center justify-center font-mono'
-                                    : cell.isCurrentMonth ? 'text-slate-800 font-mono' : 'text-slate-350 font-mono'
+                                    ? 'bg-blue-500 text-white w-4 h-4 rounded-full flex items-center justify-center'
+                                    : cell.isCurrentMonth ? 'text-slate-700' : 'text-slate-300'
                                 }`}>
                                   {cell.dayNumber}
                                 </span>
-                                {isSpecialHoliday && (
-                                  <span className="text-[7.5px] font-black uppercase text-red-700 bg-rose-150 px-1 py-0.5 rounded leading-none border border-rose-200">
-                                    Feriado
-                                  </span>
-                                )}
                               </div>
 
-                              {isSpecialHoliday && (
-                                <p className="text-[7px] font-extrabold text-red-700 uppercase tracking-tight leading-none italic mt-1">
-                                  {cell.holiday}
-                                </p>
-                              )}
-
-                              <div className="space-y-1 mt-1.5 flex-1 flex flex-col justify-end">
-                                {dailyShifts.map((shift) => {
-                                  const isShiftCancelled = shift.status === 'Cancelado';
-                                  const isNight = shift.horaInicio && (Number(shift.horaInicio.split(':')[0]) >= 18 || Number(shift.horaInicio.split(':')[0]) < 6);
-
+                              <div className="space-y-0.5 mt-0.5 flex-1 w-full">
+                                {dailyAgendamentos.map((ag) => {
+                                  
                                   return (
                                     <div
-                                      key={shift.id}
+                                      key={ag.id}
                                       onClick={() => {
-                                        setInspectedShiftJson(shift);
+                                        if (ag.status !== 'Cancelado') {
+                                          handleTriggerCancelClick(ag.id);
+                                        }
                                       }}
-                                      className={`text-[9px] p-1 border rounded-lg cursor-pointer transition-all shadow-xs flex flex-col text-left ${
-                                        isShiftCancelled
-                                          ? 'bg-slate-100 border-slate-250 text-slate-400 line-through'
-                                          : shift.escalaCongelada
-                                            ? 'bg-indigo-50 border-indigo-200 text-indigo-900 font-semibold ring-1 ring-indigo-200/50'
-                                            : shift.feriado
-                                              ? 'bg-amber-50 border-amber-250 text-amber-950 font-semibold'
-                                              : 'bg-emerald-50 border-emerald-200 text-emerald-950 hover:bg-emerald-100 font-medium'
+                                      className={`text-[9px] p-1 border rounded-md cursor-pointer flex flex-col text-left w-full ${
+                                        ag.status === 'Cancelado'
+                                          ? 'bg-slate-100 border-slate-300 text-slate-500 line-through'
+                                          : ag.status === 'Concluido'
+                                            ? 'bg-indigo-100 border-indigo-200 text-indigo-900 font-semibold'
+                                            : 'bg-emerald-100 border-emerald-200 text-emerald-900 font-medium hover:bg-emerald-200'
                                       }`}
-                                      title="Clique para auditar metadados deste plantão"
+                                      title={ag.observacao || 'Agendamento'}
                                     >
-                                      <div className="flex items-center justify-between gap-1 leading-none">
-                                        <span className="flex items-center space-x-0.5 font-bold">
-                                          {isNight ? (
-                                            <Moon size={9} className="text-indigo-600 shrink-0" />
-                                          ) : (
-                                            <Sun size={9.5} className="text-amber-500 shrink-0" />
-                                          )}
-                                          <span>{shift.horaInicio || '08:00'}-{shift.horaTermino || '20:00'}</span>
-                                        </span>
-                                        <div className="flex items-center space-x-0.5 shrink-0">
-                                          {shift.feriado && (
-                                            <span className="bg-amber-100 text-amber-800 px-0.5 rounded text-[7px] font-black leading-none">
-                                              +{shift.feriado}
-                                            </span>
-                                          )}
-                                          {shift.escalaCongelada && (
-                                            <Lock size={8} className="text-indigo-600 shrink-0" />
-                                          )}
-                                        </div>
-                                      </div>
-
-                                      <p className="truncate font-black mt-0.5 tracking-tight uppercase leading-none">
-                                        {shift.profissional}
-                                      </p>
+                                        <span className="font-bold">{ag.horario}</span>
+                                        <span className="truncate">{ag.nomeProfissional}</span>
                                     </div>
                                   );
                                 })}
@@ -2433,6 +2394,15 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       </div>
 
                       <div className="sm:col-span-12 flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-200/60 mt-1">
+                        <div className="flex items-center space-x-2">
+                          <input 
+                            type="checkbox" 
+                            checked={newShiftProf === 'CURINGA'} 
+                            onChange={(e) => setNewShiftProf(e.target.checked ? 'CURINGA' : '')}
+                            className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                          />
+                          <span className="text-[10px] font-bold text-slate-700">MARCAR COMO CURINGA</span>
+                        </div>
                         <div className="flex items-center space-x-2">
                           <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">Acréscimo Feriado:</span>
                           <div className="inline-flex rounded-md shadow-sm" role="group">

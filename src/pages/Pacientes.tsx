@@ -29,6 +29,7 @@ export const Pacientes: React.FC<PacientesProps> = ({ globalSearchQuery, onViewC
   };
 
   const handleNewPatientClick = () => {
+    console.log("[Pacientes] Novo paciente clicado");
     setSelectedPaciente(null);
     setIsNewPatient(true);
   };

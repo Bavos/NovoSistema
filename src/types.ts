@@ -121,6 +121,23 @@ export interface Plantao {
   escalaCongelada?: boolean;
 }
 
+export interface Agendamento {
+  id: string;
+  idPaciente: string;
+  idProfissional: string;
+  nomeProfissional: string;
+  data: string;
+  horario: string;
+  valorPlantao: number;
+  valorRepasse: number;
+  ajudaCusto: number;
+  taxaAdm: number;
+  status: 'Confirmado' | 'Cancelado' | 'Concluido';
+  observacao?: string;
+  escalaCongelada?: boolean;
+  tipoDia?: 'Normal' | 'Feriado 20%' | 'Feriado 50%';
+}
+
 export type CancelingReason =
   | 'Pediu para sair da escala'
   | 'Família pediu substituição'

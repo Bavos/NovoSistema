@@ -17,5 +17,9 @@ service cloud.firestore {
     match /profissionais/{profissionalId} {
       allow read, write: if true;
     }
+
+    match /agendamentos/{agendamentoId} {
+      allow read, write: if true;
+    }
   }
 }
