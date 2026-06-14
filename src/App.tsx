@@ -22,7 +22,6 @@ import { Users, Award, ShieldAlert, Heart, Activity } from 'lucide-react';
 function DashboardContent() {
   const [activeSidebarTab, setActiveSidebarTab] = useState<string>('dashboard');
   const [isSidebarExpanded, setIsSidebarExpanded] = useState<boolean>(false);
-  const [globalSearch, setGlobalSearch] = useState<string>('');
 
   // Manage Pacientes page inner state routing overrides
   const [isBrowsingForm, setIsBrowsingForm] = useState<boolean>(false);
@@ -90,7 +89,6 @@ function DashboardContent() {
           <TopHeader
             isSidebarExpanded={isSidebarExpanded}
             setIsSidebarExpanded={setIsSidebarExpanded}
-            onSearchGlobal={(query) => setGlobalSearch(query)}
           />
         </div>
         
@@ -145,7 +143,6 @@ function DashboardContent() {
                   <Dashboard setActiveTab={setActiveSidebarTab} />
                 ) : activeSidebarTab === 'pacientes' ? (
                   <Pacientes
-                    globalSearchQuery={globalSearch}
                     onViewChange={(isForm, title) => {
                       setIsBrowsingForm(isForm);
                       setPacientesTitleOverride(title);

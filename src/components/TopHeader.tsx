@@ -4,23 +4,21 @@
  */
 
 import React, { useState } from 'react';
-import { Search, Bell, LogOut, Shield, Settings, User, Check } from 'lucide-react';
+import logo from '../assets/images/rh_logo_v2_1781470281009.jpg';
+import { Bell, LogOut, Shield, Settings, User, Check } from 'lucide-react';
 import { useFirebase } from '../context/FirebaseContext';
 
 interface TopHeaderProps {
   isSidebarExpanded: boolean;
   setIsSidebarExpanded: (expanded: boolean) => void;
-  onSearchGlobal: (query: string) => void;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
   isSidebarExpanded,
   setIsSidebarExpanded,
-  onSearchGlobal,
 }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [searchVal, setSearchVal] = useState('');
   const { userRole, setUserRole } = useFirebase();
 
   const notifications = [
@@ -28,12 +26,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     { id: 2, text: 'Escala médica de final de semana atualizada.', time: 'há 1 hora' },
     { id: 3, text: 'Nova solicitação de escala para Roberto Carlos.', time: 'há 2 horas' },
   ];
-
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setSearchVal(val);
-    onSearchGlobal(val);
-  };
 
   const { logout } = useFirebase();
 
@@ -44,7 +36,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
   return (
     <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 sticky top-0 z-40" id="top-header">
-      {/* Search Bar section */}
+      {/* Brand & Menu section */}
       <div className="flex items-center space-x-4 flex-1 max-w-lg">
         <button
           onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
@@ -55,15 +47,9 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <div className="relative w-full">
-          <Search className="absolute left-3 top-2.5 text-slate-400" size={18} />
-          <input
-            type="text"
-            placeholder="Pesquisa global de pacientes, cuidadores, bairros..."
-            value={searchVal}
-            onChange={handleSearchChange}
-            className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 text-sm focus:outline-none focus:border-blue-500 focus:bg-white transition-all duration-150 shadow-inner"
-          />
+        <div className="flex items-center gap-3">
+          <img src={logo} alt="Logo" className="w-16 h-10 object-cover rounded-full" />
+          <span className="font-serif font-bold text-lg text-forest-green">RH Cuidado</span>
         </div>
       </div>
 
