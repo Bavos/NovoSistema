@@ -45,7 +45,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // Restrict access for 'colaborador' role to the 'empresa' tab
   const menuItems = allMenuItems.filter(item => {
-    if (userRole === 'colaborador' && item.id === 'empresa') {
+    if (userRole?.toLowerCase() === 'colaborador' && item.id === 'empresa') {
       return false;
     }
     return true;
@@ -141,9 +141,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="p-4 border-t border-[#1e293b] bg-[#0F172A] select-none">
         <div className="flex items-center space-x-3 overflow-hidden">
           <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0 text-xs ${
-            userRole === 'administrador' ? 'bg-blue-600' : 'bg-emerald-600'
+            userRole?.toLowerCase() === 'administrador' ? 'bg-blue-600' : 'bg-emerald-600'
           }`}>
-            {userRole === 'administrador' ? 'AD' : 'CO'}
+            {userRole?.toLowerCase() === 'administrador' ? 'AD' : 'CO'}
           </div>
           <motion.div
             animate={{ opacity: effectiveExpanded ? 1 : 0 }}

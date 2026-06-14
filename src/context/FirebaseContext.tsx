@@ -112,11 +112,46 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [notification]);
 
   useEffect(() => {
-    if (user && usuariosSistema.length > 0) {
-        const usuario = usuariosSistema.find(u => u.email === user.email);
+    if (user && user.email) {
+      const emailLower = user.email.toLowerCase();
+      
+      // 1. Maintain userRole state in sync with real-time list
+      if (usuariosSistema.length > 0) {
+        const usuario = usuariosSistema.find(u => u.email?.toLowerCase() === emailLower);
         if (usuario) {
-            setUserRole(usuario.nivelAcesso);
+          setUserRole(usuario.nivelAcesso);
+        } else {
+          // Default to Administrador for the bootstrapped developer account if not in list yet
+          if (emailLower === 'renatobz@gmail.com') {
+            setUserRole('Administrador');
+          }
         }
+      } else {
+        // Safe default on empty list for the main developer
+        if (emailLower === 'renatobz@gmail.com') {
+          setUserRole('Administrador');
+        }
+      }
+
+      // 2. Auto-bootstrap the current logged-in user in Firestore if they are 'renatobz@gmail.com'
+      if (emailLower === 'renatobz@gmail.com') {
+        const found = usuariosSistema.find(u => u.email?.toLowerCase() === emailLower);
+        if (!found && usuariosSistema.length > 0) {
+          const id = `user-${Date.now()}`;
+          setDoc(doc(db, 'usuarios_sistema', id), {
+            id,
+            nome: 'Renato B. Z. (Admin)',
+            email: 'renatobz@gmail.com',
+            nivelAcesso: 'Administrador',
+            status: 'Ativo'
+          }).catch(err => console.error("Error bootstrapping admin user in Firestore:", err));
+        } else if (found && (found.nivelAcesso !== 'Administrador' || found.status !== 'Ativo')) {
+          updateDoc(doc(db, 'usuarios_sistema', found.id), {
+            nivelAcesso: 'Administrador',
+            status: 'Ativo'
+          }).catch(err => console.error("Error correcting admin user level in Firestore:", err));
+        }
+      }
     }
   }, [user, usuariosSistema]);
 

@@ -749,7 +749,7 @@ import { GestaoAcessos } from './GestaoAcessos';
 
 export const EmpresaDashboard: React.FC = () => {
   const { userRole } = useFirebase();
-  const isAdmin = userRole === 'Administrador';
+  const isAdmin = userRole?.toLowerCase() === 'administrador';
   
   return (
     <div className="space-y-6 animate-in fade-in-30" id="empresa-dashboard">

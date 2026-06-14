@@ -33,7 +33,7 @@ function DashboardContent() {
 
   // Redirect away from Empresa if role is Colaborador
   React.useEffect(() => {
-    if (userRole === 'colaborador' && activeSidebarTab === 'empresa') {
+    if (userRole?.toLowerCase() === 'colaborador' && activeSidebarTab === 'empresa') {
       setActiveSidebarTab('pacientes');
     }
   }, [userRole, activeSidebarTab]);

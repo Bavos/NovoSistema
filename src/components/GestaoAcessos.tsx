@@ -10,7 +10,7 @@ export const GestaoAcessos: React.FC = () => {
   const [nivel, setNivel] = useState<'Administrador' | 'Colaborador'>('Colaborador');
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  if (userRole !== 'Administrador') {
+  if (userRole?.toLowerCase() !== 'administrador') {
     return <div className="p-4 text-xs text-red-500 bg-red-50 rounded-lg flex items-center gap-2">
       <AlertCircle size={16} /> Você não tem permissão para acessar esta área de gestão de acessos.
     </div>;
