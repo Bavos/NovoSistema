@@ -745,9 +745,14 @@ export const FinanceiroDashboard: React.FC = () => {
 /* ----------------------------------------------------
  * Tab 5: Empresa e Configurações Corporativas
  * ---------------------------------------------------- */
+import { GestaoAcessos } from './GestaoAcessos';
+
 export const EmpresaDashboard: React.FC = () => {
+  const { userRole } = useFirebase();
+  const isAdmin = userRole === 'Administrador';
+  
   return (
-    <div className="space-y-4 animate-in fade-in-30" id="empresa-dashboard">
+    <div className="space-y-6 animate-in fade-in-30" id="empresa-dashboard">
       <div className="bg-white p-5 border border-slate-200 rounded-2xl shadow-sm space-y-5">
         <div>
           <h2 className="text-sm font-bold text-slate-800">Configurações Empresa CuidarHome S.A.</h2>
@@ -775,7 +780,15 @@ export const EmpresaDashboard: React.FC = () => {
             </div>
           </div>
         </div>
+        
+        {isAdmin && (
+           <button className="px-4 py-2 bg-[#1A3626] text-white rounded-full text-xs font-bold shadow-md hover:bg-[#254A34]">
+             Salvar Alterações
+           </button>
+        )}
       </div>
+      
+      {isAdmin && <GestaoAcessos />}
     </div>
   );
 };

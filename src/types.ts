@@ -3,6 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+export interface UsuarioSistema {
+  id: string;
+  nome: string;
+  email: string;
+  nivelAcesso: 'Administrador' | 'Colaborador';
+  status: 'Ativo' | 'Inativo';
+}
+
 export interface DadosBancarios {
   banco: string;
   agencia: string;

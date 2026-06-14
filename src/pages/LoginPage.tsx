@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
+import logo from '../assets/images/rh_logo_v2_1781470281009.jpg';
 
 export const LoginPage: React.FC = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const { login, forgotPassword, setNotification } = useFirebase();
+    const { login, setNotification } = useFirebase();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -15,34 +16,37 @@ export const LoginPage: React.FC = () => {
         }
     };
 
-    const handleForgotPassword = async () => {
-        if (!email) {
-            setNotification('Por favor, informe seu email para recuperar a senha.');
-            return;
-        }
-        try {
-            await forgotPassword(email);
-            setNotification('Email de redefinição de senha enviado.');
-        } catch (err: any) {
-            setNotification(`Erro: ${err.message}`);
-        }
-    };
-
     return (
-    <div className="flex justify-center items-center h-screen bg-gray-100">
-            <div className="bg-white p-8 rounded-lg shadow-md w-96">
-                <h1 className="text-2xl font-bold mb-4">Login</h1>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-2 border rounded" required />
-                    <input type="password" placeholder="Senha" value={password} onChange={e => setPassword(e.target.value)} className="w-full p-2 border rounded" required />
-                    <button type="submit" className="w-full bg-blue-600 text-white p-2 rounded">Entrar</button>
-                </form>
-                <div className="mt-4 text-sm text-center">
-                    <div className="mt-2 space-y-1">
-                        <button type="button" onClick={handleForgotPassword} className="block text-gray-500 text-xs text-center w-full">Esqueci minha senha</button>
-                        <p className="text-gray-500 text-xs mt-2">Esqueceu seu login? Entre em contato com o administrador.</p>
-                    </div>
+        <div className="flex justify-center items-center h-screen bg-slate-50">
+            <div className="bg-white p-10 rounded-2xl shadow-xl w-full max-w-sm border border-slate-100">
+                <div className="flex justify-center mb-6">
+                    <img src={logo} alt="Logo" className="h-20 w-auto" />
                 </div>
+                <h1 className="text-2xl font-serif font-bold text-slate-800 mb-6 text-center">Login</h1>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <input 
+                        type="email" 
+                        placeholder="E-mail" 
+                        value={email} 
+                        onChange={e => setEmail(e.target.value)} 
+                        className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#1A3626]/20 focus:border-[#1A3626] transition-all" 
+                        required 
+                    />
+                    <input 
+                        type="password" 
+                        placeholder="Senha" 
+                        value={password} 
+                        onChange={e => setPassword(e.target.value)} 
+                        className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#1A3626]/20 focus:border-[#1A3626] transition-all" 
+                        required 
+                    />
+                    <button 
+                        type="submit" 
+                        className="w-full bg-[#1A3626] text-white p-3 rounded-xl font-semibold hover:bg-[#254A34] transition-colors shadow-lg shadow-[#1A3626]/20"
+                    >
+                        Entrar
+                    </button>
+                </form>
             </div>
         </div>
     );

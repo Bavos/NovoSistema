@@ -4,7 +4,7 @@
  */
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Paciente, Plantao, Profissional, CancelingReason, AuditLog, Agendamento } from '../types';
+import { Paciente, Plantao, Profissional, CancelingReason, AuditLog, Agendamento, UsuarioSistema } from '../types';
 import { INITIAL_PACIENTES, INITIAL_PLANTOES } from '../mockData';
 import { db, auth, OperationType, handleFirestoreError } from '../lib/firebase';
 import { signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, User } from 'firebase/auth';
@@ -27,8 +27,9 @@ interface FirebaseContextType {
   agendamentos: Agendamento[];
   loading: boolean;
   user: User | null;
-  userRole: 'administrador' | 'colaborador';
-  setUserRole: (role: 'administrador' | 'colaborador') => void;
+  userRole: 'Administrador' | 'Colaborador';
+  usuariosSistema: UsuarioSistema[];
+  setUserRole: (role: 'Administrador' | 'Colaborador') => void;
   notification: string | null;
   setNotification: (msg: string | null) => void;
   login: (email: string, pass: string) => Promise<void>;
@@ -49,6 +50,9 @@ interface FirebaseContextType {
   deleteAgendamento: (id: string) => Promise<void>;
   deletePaciente: (id: string) => Promise<void>;
   addProfissional: (profissional: Omit<Profissional, 'id' | 'createdAt' | 'status'>) => Promise<Profissional>;
+  addUsuarioSistema: (user: Omit<UsuarioSistema, 'id'>) => Promise<UsuarioSistema>;
+  deleteUsuarioSistema: (id: string) => Promise<void>;
+  updateUsuarioSistema: (user: UsuarioSistema) => Promise<void>;
   updateProfissional: (profissional: Profissional) => Promise<void>;
   deleteProfissional: (id: string) => Promise<void>;
 }
@@ -75,7 +79,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const login = async (email: string, pass: string) => { await signInWithEmailAndPassword(auth, email, pass); };
   const logout = async () => { await signOut(auth); };
   const forgotPassword = async (email: string) => { await sendPasswordResetEmail(auth, email); };
-  const [userRole, setUserRole] = useState<'administrador' | 'colaborador'>('administrador');
+  const [userRole, setUserRole] = useState<'Administrador' | 'Colaborador'>('Administrador');
+  const [usuariosSistema, setUsuariosSistema] = useState<UsuarioSistema[]>([]);
   const [notification, setNotification] = useState<string | null>(null);
 
   useEffect(() => {
@@ -85,17 +90,17 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, [notification]);
 
-  // Load Saved Admin Role Preference locally
   useEffect(() => {
-    const savedRole = localStorage.getItem('user_role');
-    if (savedRole === 'administrador' || savedRole === 'colaborador') {
-      setUserRole(savedRole);
+    if (user && usuariosSistema.length > 0) {
+        const usuario = usuariosSistema.find(u => u.email === user.email);
+        if (usuario) {
+            setUserRole(usuario.nivelAcesso);
+        }
     }
-  }, []);
+  }, [user, usuariosSistema]);
 
-  const handleSetUserRole = (role: 'administrador' | 'colaborador') => {
+  const handleSetUserRole = (role: 'Administrador' | 'Colaborador') => {
     setUserRole(role);
-    localStorage.setItem('user_role', role);
   };
 
   // Perform Background Authentication and Real-time Live Firestore Mirroring
@@ -201,6 +206,15 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           handleFirestoreError(error, OperationType.GET, 'profissionais');
         }
       );
+      
+      const usColl = collection(db, 'usuarios_sistema');
+      onSnapshot(usColl, (snap) => {
+        const list: UsuarioSistema[] = [];
+        snap.forEach((d) => {
+          list.push({ ...d.data(), id: d.id } as UsuarioSistema);
+        });
+        setUsuariosSistema(list);
+      });
     };
 
     initFirebaseSync();
@@ -445,6 +459,41 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
+  const addUsuarioSistema = async (newUser: Omit<UsuarioSistema, 'id'>) => {
+    try {
+      const docRef = await addDoc(collection(db, 'usuarios_sistema'), newUser);
+      const fullUser: UsuarioSistema = { ...newUser, id: docRef.id };
+      setNotification(`Utilizador '${newUser.nome}' adicionado com sucesso.`);
+      return fullUser;
+    } catch (err) {
+      console.error("Erro ao adicionar utilizador:", err);
+      handleFirestoreError(err, OperationType.CREATE, 'usuarios_sistema');
+      throw err;
+    }
+  };
+
+  const deleteUsuarioSistema = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'usuarios_sistema', id));
+      setNotification('Utilizador removido com sucesso.');
+    } catch (err) {
+      console.error("Erro ao remover utilizador:", err);
+      handleFirestoreError(err, OperationType.DELETE, 'usuarios_sistema');
+      throw err;
+    }
+  };
+
+  const updateUsuarioSistema = async (user: UsuarioSistema) => {
+    try {
+      await setDoc(doc(db, 'usuarios_sistema', user.id), user);
+      setNotification(`Utilizador '${user.nome}' atualizado com sucesso.`);
+    } catch (err) {
+      console.error("Erro ao atualizar utilizador:", err);
+      handleFirestoreError(err, OperationType.UPDATE, 'usuarios_sistema');
+      throw err;
+    }
+  };
+
   const updateProfissional = async (updatedProf: Profissional) => {
     try {
       await setDoc(doc(db, 'profissionais', updatedProf.id), updatedProf);
@@ -511,9 +560,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         deleteAgendamento,
         deletePaciente,
         profissionais,
+        usuariosSistema,
         addProfissional,
         updateProfissional,
         deleteProfissional,
+        addUsuarioSistema,
+        deleteUsuarioSistema,
+        updateUsuarioSistema,
       }}
     >
       {children}
