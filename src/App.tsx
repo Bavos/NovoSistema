@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { FirebaseProvider, useFirebase } from './context/FirebaseContext';
 import { LoginPage } from './pages/LoginPage';
+import { FirstAccessPage } from './pages/FirstAccessPage';
 import { Sidebar } from './components/Sidebar';
 import { TopHeader } from './components/TopHeader';
 import { Pacientes } from './pages/Pacientes';
@@ -26,6 +27,7 @@ function DashboardContent() {
   // Manage Pacientes page inner state routing overrides
   const [isBrowsingForm, setIsBrowsingForm] = useState<boolean>(false);
   const [pacientesTitleOverride, setPacientesTitleOverride] = useState<string>('Gestão Integrada de Pacientes');
+  const [showFirstAccess, setShowFirstAccess] = useState(false);
 
   const { pacientes, loading, userRole, notification, user } = useFirebase();
 
@@ -59,7 +61,8 @@ function DashboardContent() {
   }
 
   if (!user) {
-    return <LoginPage />;
+    if (showFirstAccess) return <FirstAccessPage onBackToLogin={() => setShowFirstAccess(false)} />;
+    return <LoginPage onNavigateToFirstAccess={() => setShowFirstAccess(true)} />;
   }
 
   return (

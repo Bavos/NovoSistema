@@ -19,15 +19,22 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const { userRole, setUserRole } = useFirebase();
+  const { user, userRole, usuariosSistema, logout } = useFirebase();
+
+  const currentUserProfile = (usuariosSistema || []).find(u => {
+    const uEmail = u?.email;
+    const userEmail = user?.email;
+    return typeof uEmail === 'string' && typeof userEmail === 'string' && uEmail.toLowerCase() === userEmail.toLowerCase();
+  });
+  const displayName = currentUserProfile?.nome || user?.displayName || user?.email?.split('@')[0] || 'Renato B. Z.';
+  const displayEmail = user?.email || 'renatobz@gmail.com';
+  const displayRole = currentUserProfile?.nivelAcesso || userRole || 'Colaborador';
 
   const notifications = [
     { id: 1, text: 'Plantão do paciente João Albuquerque foi confirmado.', time: 'há 10 min' },
     { id: 2, text: 'Escala médica de final de semana atualizada.', time: 'há 1 hora' },
     { id: 3, text: 'Nova solicitação de escala para Roberto Carlos.', time: 'há 2 horas' },
   ];
-
-  const { logout } = useFirebase();
 
   const handleSair = async () => {
     await logout();
@@ -99,8 +106,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         {/* User Info & Dropdown */}
         <div className="relative flex items-center space-x-1">
           <div className="hidden lg:flex flex-col text-right mr-1">
-            <span className="text-xs font-semibold text-slate-800 leading-3">Renato B. Z.</span>
-            <span className="text-[10px] text-slate-500 mt-0.5">renatobz@gmail.com</span>
+            <span className="text-xs font-semibold text-slate-800 leading-3">{displayName}</span>
+            <span className="text-[10px] text-slate-500 mt-0.5">{displayEmail}</span>
           </div>
 
           <button
@@ -112,58 +119,21 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             id="user-menu-btn"
           >
             <div className={`w-full h-full flex items-center justify-center font-bold text-white text-xs select-none ${
-              userRole === 'administrador' ? 'bg-blue-600' : 'bg-emerald-600'
+              displayRole.toLowerCase() === 'administrador' ? 'bg-blue-600' : 'bg-emerald-600'
             }`}>
-              {userRole === 'administrador' ? 'AD' : 'CO'}
+              {displayRole.slice(0, 2).toUpperCase()}
             </div>
           </button>
 
           {showDropdown && (
             <div className="absolute right-0 top-11 w-52 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden py-1" id="user-menu-dropdown">
               <div className="px-4 py-2.5 border-b border-light-200 bg-slate-50">
-                <p className="text-xs font-semibold text-slate-800 line-clamp-1">Renato B. Z.</p>
-                <p className="text-[9px] text-slate-500 truncate mt-0.5 capitalize">Nível: {userRole}</p>
+                <p className="text-xs font-semibold text-slate-800 line-clamp-1">{displayName}</p>
+                <p className="text-[9px] text-slate-500 truncate mt-0.5">{displayEmail}</p>
+                <p className="text-[9px] text-slate-600 truncate mt-0.5 font-bold capitalize">Nível: {displayRole}</p>
               </div>
 
               <div className="p-1 space-y-0.5">
-                <div className="px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold block mb-1">
-                  Alterar Cargo
-                </div>
-                <button
-                  onClick={() => {
-                    setUserRole('administrador');
-                  }}
-                  className={`w-full flex items-center justify-between px-3 py-1.5 text-xs rounded-lg transition-colors text-left ${
-                    userRole === 'administrador'
-                      ? 'bg-blue-50 text-blue-700 font-bold'
-                      : 'text-slate-600 hover:bg-slate-50'
-                  }`}
-                >
-                  <span className="flex items-center space-x-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                    <span>Administrador</span>
-                  </span>
-                  {userRole === 'administrador' && <Check size={12} className="text-blue-600" />}
-                </button>
-                <button
-                  onClick={() => {
-                    setUserRole('colaborador');
-                  }}
-                  className={`w-full flex items-center justify-between px-3 py-1.5 text-xs rounded-lg transition-colors text-left ${
-                    userRole === 'colaborador'
-                      ? 'bg-emerald-50 text-emerald-700 font-bold'
-                      : 'text-slate-600 hover:bg-slate-50'
-                  }`}
-                >
-                  <span className="flex items-center space-x-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                    <span>Colaborador</span>
-                  </span>
-                  {userRole === 'colaborador' && <Check size={12} className="text-emerald-600" />}
-                </button>
-
-                <div className="border-t border-slate-100 my-1.5"></div>
-
                 <button
                   onClick={() => {
                     alert('Visualizando perfil simulado!');

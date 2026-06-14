@@ -18,7 +18,9 @@ import {
   writeBatch,
   onSnapshot,
   getDocs,
-  getDocFromServer
+  getDocFromServer,
+  query,
+  where
 } from 'firebase/firestore';
 
 interface FirebaseContextType {
@@ -33,6 +35,7 @@ interface FirebaseContextType {
   notification: string | null;
   setNotification: (msg: string | null) => void;
   login: (email: string, pass: string) => Promise<void>;
+  activateAccount: (email: string, pass: string) => Promise<void>;
   logout: () => Promise<void>;
   forgotPassword: (email: string) => Promise<void>;
   profissionais: Profissional[];
@@ -70,13 +73,31 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Authentication State Observer
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
+      if (currentUser && !currentUser.isAnonymous) {
+        setUser(currentUser);
+      } else {
+        setUser(null);
+      }
       setLoading(false);
     });
     return unsub;
   }, []);
 
   const login = async (email: string, pass: string) => { await signInWithEmailAndPassword(auth, email, pass); };
+  const activateAccount = async (email: string, pass: string) => {
+    const usersRef = collection(db, 'usuarios_sistema');
+    // Buscamos se existe usuário cadastrado com esse email e status == 'Ativo'
+    const q = query(usersRef, where('email', '==', email), where('status', '==', 'Ativo'));
+    const querySnapshot = await getDocs(q);
+    if (querySnapshot.empty) {
+        throw new Error('⚠️ Acesso Negado: Este e-mail não está autorizado pelo administrador da empresa.');
+    }
+    // Cria credencial no Firebase Auth
+    await createUserWithEmailAndPassword(auth, email, pass);
+    // Como criar um usuário faz ele logar automaticamente na mesma hora, fazemos signOut para não pular a tela de login
+    await signOut(auth);
+    setNotification('Conta ativada com sucesso! Faça login para entrar.');
+  };
   const logout = async () => { await signOut(auth); };
   const forgotPassword = async (email: string) => { await sendPasswordResetEmail(auth, email); };
   const [userRole, setUserRole] = useState<'Administrador' | 'Colaborador'>('Administrador');
@@ -544,6 +565,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         notification,
         setNotification,
         login,
+        activateAccount,
         logout,
         forgotPassword,
         addPaciente,

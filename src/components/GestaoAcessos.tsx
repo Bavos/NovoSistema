@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
 import { Trash2, Plus, Edit, AlertCircle } from 'lucide-react';
+import { UsuarioSistema } from '../types';
 
 export const GestaoAcessos: React.FC = () => {
   const { usuariosSistema, userRole, addUsuarioSistema, deleteUsuarioSistema, updateUsuarioSistema } = useFirebase();

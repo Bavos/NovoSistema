@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
 import logo from '../assets/images/rh_logo_v2_1781470281009.jpg';
 
-export const LoginPage: React.FC = () => {
+export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ onNavigateToFirstAccess }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const { login, setNotification } = useFirebase();
@@ -45,6 +45,13 @@ export const LoginPage: React.FC = () => {
                         className="w-full bg-[#1A3626] text-white p-3 rounded-xl font-semibold hover:bg-[#254A34] transition-colors shadow-lg shadow-[#1A3626]/20"
                     >
                         Entrar
+                    </button>
+                    <button 
+                        type="button" 
+                        onClick={onNavigateToFirstAccess}
+                        className="w-full text-slate-500 hover:text-slate-800 text-xs text-center"
+                    >
+                        Primeiro Acesso? Crie sua senha
                     </button>
                 </form>
             </div>
