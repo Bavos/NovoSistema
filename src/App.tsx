@@ -8,8 +8,8 @@ import { FirebaseProvider, useFirebase } from './context/FirebaseContext';
 import { Sidebar } from './components/Sidebar';
 import { TopHeader } from './components/TopHeader';
 import { Pacientes } from './pages/Pacientes';
+import { Profissionais } from './pages/Profissionais';
 import {
-  ProfissionaisDashboard,
   EscalasDashboard,
   FinanceiroDashboard,
   EmpresaDashboard
@@ -18,7 +18,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Users, Award, ShieldAlert, Heart, Activity } from 'lucide-react';
 
 function DashboardContent() {
-  const [activeSidebarTab, setActiveSidebarTab] = useState<string>('pacientes');
+  const [activeSidebarTab, setActiveSidebarTab] = useState<string>('escalas');
   const [isSidebarExpanded, setIsSidebarExpanded] = useState<boolean>(false);
   const [globalSearch, setGlobalSearch] = useState<string>('');
 
@@ -26,7 +26,7 @@ function DashboardContent() {
   const [isBrowsingForm, setIsBrowsingForm] = useState<boolean>(false);
   const [pacientesTitleOverride, setPacientesTitleOverride] = useState<string>('Gestão Integrada de Pacientes');
 
-  const { pacientes, loading, userRole } = useFirebase();
+  const { pacientes, loading, userRole, notification } = useFirebase();
 
   // Redirect away from Empresa if role is Colaborador
   React.useEffect(() => {
@@ -59,17 +59,19 @@ function DashboardContent() {
   return (
     <div className="min-h-screen bg-[#F3F4F6] text-slate-800 font-sans flex">
       {/* 1. Collapsible/Expandable Sidebar */}
-      <Sidebar
-        activeTab={activeSidebarTab}
-        setActiveTab={(tab) => {
-          setActiveSidebarTab(tab);
-          // Auto-reset state overrides
-          setIsBrowsingForm(false);
-          setPacientesTitleOverride('Gestão Integrada de Pacientes');
-        }}
-        isSidebarExpanded={isSidebarExpanded}
-        setIsSidebarExpanded={setIsSidebarExpanded}
-      />
+      <div className="print:hidden">
+        <Sidebar
+          activeTab={activeSidebarTab}
+          setActiveTab={(tab) => {
+            setActiveSidebarTab(tab);
+            // Auto-reset state overrides
+            setIsBrowsingForm(false);
+            setPacientesTitleOverride('Gestão Integrada de Pacientes');
+          }}
+          isSidebarExpanded={isSidebarExpanded}
+          setIsSidebarExpanded={setIsSidebarExpanded}
+        />
+      </div>
 
       {/* Main viewport area */}
       <div
@@ -77,16 +79,24 @@ function DashboardContent() {
         style={{ paddingLeft: isSidebarExpanded ? 240 : 64 }}
       >
         {/* 2. Top Header with search/notifs/avatar dropdown */}
-        <TopHeader
-          isSidebarExpanded={isSidebarExpanded}
-          setIsSidebarExpanded={setIsSidebarExpanded}
-          onSearchGlobal={(query) => setGlobalSearch(query)}
-        />
+        <div className="print:hidden">
+          <TopHeader
+            isSidebarExpanded={isSidebarExpanded}
+            setIsSidebarExpanded={setIsSidebarExpanded}
+            onSearchGlobal={(query) => setGlobalSearch(query)}
+          />
+        </div>
+        
+        {notification && (
+          <div className="fixed top-24 right-6 bg-green-600 text-white p-4 rounded-xl shadow-xl z-50 animate-in slide-in-from-right-4 print:hidden">
+            {notification}
+          </div>
+        )}
 
         {/* 3. Area de Conteúdo Main Body */}
         <main className="flex-1 p-6 space-y-6 max-w-7xl w-full mx-auto">
           {/* Dashboard Page Header block */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-4 print:hidden">
             <div className="space-y-1">
               <div className="flex items-center space-x-2">
                 <span className="text-xs font-bold text-blue-600 uppercase tracking-widest font-mono">CuidarHome S.A.</span>
@@ -133,7 +143,7 @@ function DashboardContent() {
                     }}
                   />
                 ) : activeSidebarTab === 'profissionais' ? (
-                  <ProfissionaisDashboard />
+                  <Profissionais />
                 ) : activeSidebarTab === 'escalas' ? (
                   <EscalasDashboard />
                 ) : activeSidebarTab === 'financeiro' ? (
@@ -147,7 +157,7 @@ function DashboardContent() {
         </main>
 
         {/* Footer info brand */}
-        <footer className="py-4 border-t border-slate-200 text-center text-xs text-slate-400 select-none font-mono">
+        <footer className="py-4 border-t border-slate-200 text-center text-xs text-slate-400 select-none font-mono print:hidden">
           <p>© 2026 CuidarHome S.A. • Todos os direitos reservados • Auditoria Integrada Firestore</p>
         </footer>
       </div>

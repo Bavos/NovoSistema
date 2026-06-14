@@ -3,6 +3,34 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+export interface DadosBancarios {
+  banco: string;
+  agencia: string;
+  conta: string;
+  pix: string;
+}
+
+export interface Profissional {
+  id: string;
+  nome: string;
+  especialidade: string;
+  telefone: string;
+  email: string;
+  status: 'Ativo' | 'Inativo';
+  createdAt: string;
+  dadosBancarios?: DadosBancarios;
+}
+
+export interface AuditLog {
+  id: string;
+  timestamp: string;
+  userId: string;
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'LOGIN' | 'LOGOUT';
+  collection: string;
+  documentId: string;
+  description: string;
+}
+
 export interface Endereco {
   rua: string;
   numero: string;

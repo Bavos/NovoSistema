@@ -4,7 +4,7 @@
  */
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Paciente, Plantao, CancelingReason } from '../types';
+import { Paciente, Plantao, Profissional, CancelingReason, AuditLog } from '../types';
 import { INITIAL_PACIENTES, INITIAL_PLANTOES } from '../mockData';
 import { db, auth, OperationType, handleFirestoreError } from '../lib/firebase';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
@@ -14,6 +14,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  writeBatch,
   onSnapshot,
   getDocs,
   getDocFromServer
@@ -25,6 +26,8 @@ interface FirebaseContextType {
   loading: boolean;
   userRole: 'administrador' | 'colaborador';
   setUserRole: (role: 'administrador' | 'colaborador') => void;
+  notification: string | null;
+  setNotification: (msg: string | null) => void;
   addPaciente: (paciente: Omit<Paciente, 'id' | 'createdAt' | 'status'>) => Promise<Paciente>;
   updatePaciente: (paciente: Paciente) => Promise<void>;
   deactivatePaciente: (id: string, motivo: string) => Promise<void>;
@@ -35,6 +38,9 @@ interface FirebaseContextType {
   deletePlantao: (id: string) => Promise<void>;
   deletePlantoes: (ids: string[]) => Promise<void>;
   deletePaciente: (id: string) => Promise<void>;
+  addProfissional: (profissional: Omit<Profissional, 'id' | 'createdAt' | 'status'>) => Promise<Profissional>;
+  updateProfissional: (profissional: Profissional) => Promise<void>;
+  deleteProfissional: (id: string) => Promise<void>;
 }
 
 const FirebaseContext = createContext<FirebaseContextType | undefined>(undefined);
@@ -42,8 +48,17 @@ const FirebaseContext = createContext<FirebaseContextType | undefined>(undefined
 export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [pacientes, setPacientes] = useState<Paciente[]>([]);
   const [plantoes, setPlantoes] = useState<Plantao[]>([]);
+  const [profissionais, setProfissionais] = useState<Profissional[]>([]);
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<'administrador' | 'colaborador'>('administrador');
+  const [notification, setNotification] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (notification) {
+      const timer = setTimeout(() => setNotification(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [notification]);
 
   // Load Saved Admin Role Preference locally
   useEffect(() => {
@@ -62,6 +77,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     let unsubscribePacientes: (() => void) | null = null;
     let unsubscribePlantoes: (() => void) | null = null;
+    let unsubscribeProfissionais: (() => void) | null = null;
 
     const initFirebaseSync = async () => {
       try {
@@ -148,6 +164,28 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           handleFirestoreError(error, OperationType.GET, 'plantoes');
         }
       );
+
+      const profColl = collection(db, 'profissionais');
+      unsubscribeProfissionais = onSnapshot(
+        profColl,
+        (snap) => {
+          const list: Profissional[] = [];
+          snap.forEach((d) => {
+            list.push({ ...d.data(), id: d.id } as Profissional);
+          });
+          setProfissionais(list);
+        },
+        (error) => {
+          console.error("Profissionais live sync error:", error);
+          const fallbackProf = localStorage.getItem('firebase_simulated_profissionais');
+          if (fallbackProf) {
+            setProfissionais(JSON.parse(fallbackProf));
+          } else {
+            setProfissionais([]);
+          }
+          handleFirestoreError(error, OperationType.GET, 'profissionais');
+        }
+      );
     };
 
     initFirebaseSync();
@@ -155,6 +193,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return () => {
       if (unsubscribePacientes) unsubscribePacientes();
       if (unsubscribePlantoes) unsubscribePlantoes();
+      if (unsubscribeProfissionais) unsubscribeProfissionais();
     };
   }, []);
 
@@ -171,7 +210,34 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, [plantoes]);
 
-  // Firestore DB mutations
+  useEffect(() => {
+    if (profissionais.length >= 0) {
+      localStorage.setItem('firebase_simulated_profissionais', JSON.stringify(profissionais));
+    }
+  }, [profissionais]);
+
+  const addAuditLog = async (
+    action: AuditLog['action'],
+    collectionName: string,
+    documentId: string,
+    description: string
+  ) => {
+    try {
+      const log: AuditLog = {
+        id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        timestamp: new Date().toISOString(),
+        userId: auth.currentUser?.uid || 'anonymous',
+        action,
+        collection: collectionName,
+        documentId,
+        description,
+      };
+      await setDoc(doc(db, 'LogsAuditoria', log.id), log);
+    } catch (err) {
+      console.error("Erro ao registrar log de auditoria:", err);
+    }
+  };
+
   const addPaciente = async (newPac: Omit<Paciente, 'id' | 'createdAt' | 'status'>) => {
     const id = `pac-${Date.now()}`;
     const fullPaciente: Paciente = {
@@ -185,6 +251,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     try {
       await setDoc(doc(db, 'pacientes', id), fullPaciente);
+      await addAuditLog('CREATE', 'pacientes', id, `Paciente criado: ${fullPaciente.nome}`);
+      setNotification(`Paciente '${fullPaciente.nome}' criado com sucesso.`);
       return fullPaciente;
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, `pacientes/${id}`);
@@ -195,6 +263,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const updatePaciente = async (updatedPac: Paciente) => {
     try {
       await setDoc(doc(db, 'pacientes', updatedPac.id), updatedPac);
+      await addAuditLog('UPDATE', 'pacientes', updatedPac.id, `Paciente atualizado: ${updatedPac.nome}`);
+      setNotification(`Paciente '${updatedPac.nome}' atualizado com sucesso.`);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `pacientes/${updatedPac.id}`);
       throw err;
@@ -209,6 +279,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         desativadoEm: todayStr,
         desativadoMotivo: motivo,
       });
+      await addAuditLog('UPDATE', 'pacientes', id, `Paciente desativado: ${motivo}`);
+      setNotification(`Paciente desativado com sucesso.`);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `pacientes/${id}`);
       throw err;
@@ -222,6 +294,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         desativadoEm: null,
         desativadoMotivo: null,
       });
+      setNotification(`Paciente reativado com sucesso.`);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `pacientes/${id}`);
       throw err;
@@ -234,6 +307,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         status: 'Cancelado',
         motivoCancelamento: motivo,
       });
+      await addAuditLog('UPDATE', 'plantoes', id, `Plantão cancelado: ${motivo}`);
+      setNotification(`Plantão cancelado com sucesso.`);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `plantoes/${id}`);
       throw err;
@@ -248,9 +323,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
 
     try {
+      console.log(`[Firebase] Adding plantao: ${id} for patient: ${newPlantao.pacienteId}`);
       await setDoc(doc(db, 'plantoes', id), fullPlantao);
+      await addAuditLog('CREATE', 'plantoes', id, `Plantão criado para paciente: ${newPlantao.pacienteId}`);
+      setNotification(`Plantão criado com sucesso.`);
       return fullPlantao;
     } catch (err) {
+      console.error(`[Firebase] Error adding plantao: ${id}`, err);
       handleFirestoreError(err, OperationType.CREATE, `plantoes/${id}`);
       throw err;
     }
@@ -258,8 +337,12 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const updatePlantao = async (updatedPlantao: Plantao) => {
     try {
+      console.log(`[Firebase] Updating plantao: ${updatedPlantao.id}`);
       await setDoc(doc(db, 'plantoes', updatedPlantao.id), updatedPlantao);
+      await addAuditLog('UPDATE', 'plantoes', updatedPlantao.id, `Plantão atualizado`);
+      setNotification(`Plantão atualizado com sucesso.`);
     } catch (err) {
+      console.error(`[Firebase] Error updating plantao: ${updatedPlantao.id}`, err);
       handleFirestoreError(err, OperationType.UPDATE, `plantoes/${updatedPlantao.id}`);
       throw err;
     }
@@ -267,8 +350,12 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const deletePlantao = async (id: string) => {
     try {
+      console.log(`[Firebase] Deleting plantao: ${id}`);
       await deleteDoc(doc(db, 'plantoes', id));
+      await addAuditLog('DELETE', 'plantoes', id, `Plantão excluído`);
+      setNotification(`Plantão excluído com sucesso.`);
     } catch (err) {
+      console.error(`[Firebase] Error deleting plantao: ${id}`, err);
       handleFirestoreError(err, OperationType.DELETE, `plantoes/${id}`);
       throw err;
     }
@@ -276,16 +363,58 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const deletePlantoes = async (ids: string[]) => {
     try {
+      const batch = writeBatch(db);
       for (const id of ids) {
-        await deleteDoc(doc(db, 'plantoes', id));
+        batch.delete(doc(db, 'plantoes', id));
       }
+      await batch.commit();
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `plantoes/batch`);
       throw err;
     }
   };
 
+  const addProfissional = async (newProf: Omit<Profissional, 'id' | 'createdAt' | 'status'>) => {
+    const id = `prof-${Date.now()}`;
+    const fullProfissional: Profissional = {
+      ...newProf,
+      id,
+      status: 'Ativo',
+      createdAt: new Date().toISOString(),
+    };
+
+    try {
+      await setDoc(doc(db, 'profissionais', id), fullProfissional);
+      await addAuditLog('CREATE', 'profissionais', id, `Profissional criado: ${fullProfissional.nome}`);
+      return fullProfissional;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, `profissionais/${id}`);
+      throw err;
+    }
+  };
+
+  const updateProfissional = async (updatedProf: Profissional) => {
+    try {
+      await setDoc(doc(db, 'profissionais', updatedProf.id), updatedProf);
+      await addAuditLog('UPDATE', 'profissionais', updatedProf.id, `Profissional atualizado: ${updatedProf.nome}`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `profissionais/${updatedProf.id}`);
+      throw err;
+    }
+  };
+
+  const deleteProfissional = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'profissionais', id));
+      await addAuditLog('DELETE', 'profissionais', id, `Profissional excluído`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `profissionais/${id}`);
+      throw err;
+    }
+  };
+
   const deletePaciente = async (id: string) => {
+    console.log("Iniciando exclusão lógica do paciente:", id);
     const todayStr = new Date().toLocaleDateString('pt-BR');
     try {
       await updateDoc(doc(db, 'pacientes', id), {
@@ -293,7 +422,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         desativadoEm: todayStr,
         desativadoMotivo: 'Exclusão lógica do registro (Inativo de acordo com diretrizes de segurança)',
       });
+      console.log("Exclusão lógica realizada com sucesso para:", id);
     } catch (err) {
+      console.error("Erro na exclusão lógica:", err);
       handleFirestoreError(err, OperationType.UPDATE, `pacientes/${id}`);
       throw err;
     }
@@ -307,6 +438,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         loading,
         userRole,
         setUserRole: handleSetUserRole,
+        notification,
+        setNotification,
         addPaciente,
         updatePaciente,
         deactivatePaciente,
@@ -317,6 +450,10 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         deletePlantao,
         deletePlantoes,
         deletePaciente,
+        profissionais,
+        addProfissional,
+        updateProfissional,
+        deleteProfissional,
       }}
     >
       {children}

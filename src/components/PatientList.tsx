@@ -93,14 +93,17 @@ export const PatientList: React.FC<PatientListProps> = ({
     setBulkDeactivateOpen(false);
   };
 
-  const handleBulkDelete = () => {
+  const handleBulkDelete = async () => {
     if (selectedIds.length === 0) return;
-    selectedIds.forEach((id) => {
-      onDeletePatient(id);
-    });
-    alert(`${selectedIds.length} paciente(s) excluído(s) de forma lógica com sucesso.`);
-    setSelectedIds([]);
-    setBulkDeleteOpen(false);
+    try {
+      await Promise.all(selectedIds.map((id) => onDeletePatient(id)));
+      alert(`${selectedIds.length} paciente(s) excluído(s) de forma lógica com sucesso.`);
+      setSelectedIds([]);
+      setBulkDeleteOpen(false);
+    } catch (error) {
+      console.error("Erro na exclusão em lote:", error);
+      alert("Erro ao excluir pacientes. Verifique o console.");
+    }
   };
 
   // Helper for Status color
@@ -466,13 +469,13 @@ export const PatientList: React.FC<PatientListProps> = ({
                 onClick={() => setBulkDeleteOpen(false)}
                 className="px-3.5 py-1.5 text-xs text-slate-500 hover:bg-slate-100 rounded-lg cursor-pointer font-medium"
               >
-                Voltar
+                Cancelar
               </button>
               <button
                 onClick={handleBulkDelete}
                 className="px-3.5 py-1.5 text-xs text-white bg-red-600 hover:bg-red-700 rounded-lg cursor-pointer font-bold shadow-md shadow-red-100 transition-colors"
               >
-                Confirmar Exclusão
+                Excluir permanentemente
               </button>
             </div>
           </div>

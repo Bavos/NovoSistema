@@ -9,7 +9,6 @@ import { updateDoc, doc } from 'firebase/firestore';
 import { Paciente, Plantao, CancelingReason, EscalacaoPlano } from '../types';
 import { useFirebase } from '../context/FirebaseContext';
 import { usePacienteData } from '../hooks/usePacienteData';
-import { INITIAL_PROFESSIONALS } from '../mockData';
 import {
   Save,
   Lock,
@@ -135,7 +134,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
     cancelPlantao,
     updatePlantao,
     deletePlantao,
-    deletePlantoes
+    deletePlantoes,
+    profissionais
   } = useFirebase();
 
   // Basic layout tab states
@@ -577,6 +577,31 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
     }
   };
 
+  // New Handler for deleting a single shift
+  const handleDeleteAgendamento = async (id: string) => {
+    // PASSO 2: Criação da Função com Tratamento de Erro e Confirmação
+    if (!window.confirm('Tem certeza que deseja excluir permanentemente este agendamento?')) {
+      return;
+    }
+    
+    try {
+      // PASSO 3: Operação de Banco de Dados (Prioridade 1)
+      await deletePlantao(id);
+      
+      // PASSO 4: Atualização de UI (Prioridade 2)
+      // O estado é gerenciado via onSnapshot em FirebaseContext.tsx, 
+      // então o componente será atualizado automaticamente.
+      
+      // PASSO 5: Rastro de Auditoria e Feedback
+      alert('Agendamento excluído com sucesso!');
+      
+    } catch (error) {
+      // Garantir erro impresso no console conforme solicitado
+      console.error("Erro ao deletar agendamento:", error);
+      alert('Erro ao excluir agendamento. Verifique o console.');
+    }
+  };
+
   // Function to delete or clear a configuration/mode of shift (either Principal or Additional) from Plano de Atendimento
   const handleDeletePlantao = async (id: string, isPrincipal: boolean) => {
     if (!paciente?.id) {
@@ -697,6 +722,14 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
       const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
       for (const currentDt of datesToSchedule) {
+        // Check for conflicts
+        const conflict = plantoes.find(p => p.data === currentDt && p.profissional === newShiftProf && p.status === 'Confirmado');
+        if (conflict) {
+          if (!window.confirm(`O profissional ${newShiftProf} já tem um plantão confirmado na data ${currentDt} (No paciente: ${conflict.pacienteId}). Deseja prosseguir com o agendamento mesmo assim?`)) {
+            continue; // Skip this date if not confirmed
+          }
+        }
+
         const dateStr = currentDt.includes('T') ? currentDt : `${currentDt}T12:00:00`;
         const dateObj = new Date(dateStr);
         const currentDayOfW = days[dateObj.getDay()] || 'Sex';
@@ -982,8 +1015,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
         await deletePlantoes(ids);
         setExcluirModalOpen(false);
         alert(`${deletable.length} plantão(ões) excluído(s) com sucesso.`);
-      } catch (err) {
-        alert('Erro ao excluir plantões.');
+      } catch (err: any) {
+        alert('Erro ao excluir plantões: ' + (err.message || String(err)));
       }
     }
   };
@@ -2320,42 +2353,41 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                             <div className="p-1.5 text-[9px] uppercase font-mono tracking-wider text-slate-400 bg-slate-50/50">
                               Profissionais Cadastrados (Aba de Profissionais):
                             </div>
-                            {INITIAL_PROFESSIONALS.filter(p => 
-                              p.name.toLowerCase().includes(newShiftProf.toLowerCase()) ||
-                              p.role.toLowerCase().includes(newShiftProf.toLowerCase())
+                            {profissionais.filter(p =>
+                              (p.nome.toLowerCase().includes(newShiftProf.toLowerCase()) ||
+                              p.especialidade.toLowerCase().includes(newShiftProf.toLowerCase())) &&
+                              p.status === 'Ativo'
                             ).map((prof) => (
                               <button
                                 key={prof.id}
                                 type="button"
                                 onMouseDown={() => {
-                                  setNewShiftProf(prof.name);
+                                  setNewShiftProf(prof.nome);
                                   setShowProfDropdown(false);
                                 }}
                                 className="w-full text-left p-2 hover:bg-slate-50 transition-colors flex items-center justify-between cursor-pointer"
                               >
                                 <div className="flex items-center space-x-2">
                                   <div className="w-6 h-6 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-[10px]">
-                                    {prof.name.split(' ').slice(1).map(n => n[0]).join('') || prof.name[0]}
+                                    {prof.nome.split(' ').map(n => n[0]).join('').slice(0, 2)}
                                   </div>
                                   <div>
-                                    <p className="text-xs font-semibold text-slate-800 leading-none">{prof.name}</p>
-                                    <p className="text-[9px] text-slate-400 mt-0.5">{prof.role}</p>
+                                    <p className="text-xs font-semibold text-slate-800 leading-none">{prof.nome}</p>
+                                    <p className="text-[9px] text-slate-400 mt-0.5">{prof.especialidade}</p>
                                   </div>
                                 </div>
                                 <div className="text-right">
                                   <span className={`inline-block px-1.5 py-0.5 rounded-full text-[8px] font-bold ${
-                                    prof.status === 'Ativo' ? 'bg-green-50 text-emerald-700' :
-                                    prof.status === 'Em Plantão' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500'
+                                    prof.status === 'Ativo' ? 'bg-green-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
                                   }`}>
                                     {prof.status}
                                   </span>
-                                  <p className="text-[8px] text-slate-400 mt-0.5">{prof.area}</p>
                                 </div>
                               </button>
                             ))}
-                            {INITIAL_PROFESSIONALS.filter(p => 
-                              p.name.toLowerCase().includes(newShiftProf.toLowerCase()) ||
-                              p.role.toLowerCase().includes(newShiftProf.toLowerCase())
+                            {profissionais.filter(p => 
+                              p.nome.toLowerCase().includes(newShiftProf.toLowerCase()) ||
+                              p.especialidade.toLowerCase().includes(newShiftProf.toLowerCase())
                             ).length === 0 && (
                               <div className="p-3 text-center text-xs text-slate-400 italic">
                                 Nenhum profissional cadastrado com este nome.
@@ -2764,6 +2796,14 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                                   >
                                     ✏️ Editar
                                   </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteAgendamento(item.id)}
+                                    title="Excluir permanentemente"
+                                    className="px-2.5 py-1 text-[10px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200 rounded-md hover:bg-rose-100 transition-colors cursor-pointer"
+                                  >
+                                    🗑️ Excluir
+                                  </button>
                                   {item.status === 'Confirmado' && (
                                     <button
                                       type="button"
@@ -2917,41 +2957,41 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                     <div className="p-1.5 text-[9px] uppercase font-mono tracking-wider text-slate-400 bg-slate-50/50">
                       Profissionais Cadastrados (Aba de Profissionais):
                     </div>
-                    {INITIAL_PROFESSIONALS.filter(p => 
-                      p.name.toLowerCase().includes(editShiftProfName.toLowerCase()) ||
-                      p.role.toLowerCase().includes(editShiftProfName.toLowerCase())
+                    {profissionais.filter(p =>
+                      (p.nome.toLowerCase().includes(editShiftProfName.toLowerCase()) ||
+                      p.especialidade.toLowerCase().includes(editShiftProfName.toLowerCase())) &&
+                      p.status === 'Ativo'
                     ).map((prof) => (
                       <button
                         key={prof.id}
                         type="button"
                         onMouseDown={() => {
-                          setEditShiftProfName(prof.name);
+                          setEditShiftProfName(prof.nome);
                           setShowEditProfDropdown(false);
                         }}
                         className="w-full text-left p-2 hover:bg-slate-50 transition-colors flex items-center justify-between cursor-pointer"
                       >
                         <div className="flex items-center space-x-1.5">
                           <div className="w-5 h-5 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-[9px]">
-                            {prof.name.split(' ').slice(1).map(n => n[0]).join('') || prof.name[0]}
+                            {prof.nome.split(' ').map(n => n[0]).join('').slice(0, 2)}
                           </div>
                           <div>
-                            <p className="text-xs font-semibold text-slate-800 leading-none">{prof.name}</p>
-                            <p className="text-[9px] text-slate-400 mt-0.5 leading-none">{prof.role}</p>
+                            <p className="text-xs font-semibold text-slate-800 leading-none">{prof.nome}</p>
+                            <p className="text-[9px] text-slate-400 mt-0.5 leading-none">{prof.especialidade}</p>
                           </div>
                         </div>
                         <div className="text-right text-[9px]">
                           <span className={`inline-block px-1 py-0 rounded font-bold ${
-                            prof.status === 'Ativo' ? 'bg-green-50 text-emerald-700' :
-                            prof.status === 'Em Plantão' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500'
+                            prof.status === 'Ativo' ? 'bg-green-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
                           }`}>
                             {prof.status}
                           </span>
                         </div>
                       </button>
                     ))}
-                    {INITIAL_PROFESSIONALS.filter(p => 
-                      p.name.toLowerCase().includes(editShiftProfName.toLowerCase()) ||
-                      p.role.toLowerCase().includes(editShiftProfName.toLowerCase())
+                    {profissionais.filter(p =>
+                      p.nome.toLowerCase().includes(editShiftProfName.toLowerCase()) ||
+                      p.especialidade.toLowerCase().includes(editShiftProfName.toLowerCase())
                     ).length === 0 && (
                       <div className="p-3 text-center text-xs text-slate-400 italic">
                         Nenhum profissional com este nome.
@@ -3142,19 +3182,20 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                     />
                     {showAvulsoProfDropdown && (
                       <div className="absolute left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl z-25 divide-y divide-slate-100 font-sans">
-                        {INITIAL_PROFESSIONALS.filter(p => 
-                          p.name.toLowerCase().includes(avulsoProf.toLowerCase())
+                        {profissionais.filter(p =>
+                          p.nome.toLowerCase().includes(avulsoProf.toLowerCase()) &&
+                          p.status === 'Ativo'
                         ).map((prof) => (
                           <button
                             key={prof.id}
                             type="button"
                             onMouseDown={() => {
-                              setAvulsoProf(prof.name);
+                              setAvulsoProf(prof.nome);
                               setShowAvulsoProfDropdown(false);
                             }}
                             className="w-full text-left p-2 hover:bg-slate-50 transition-colors text-xs font-bold text-slate-805"
                           >
-                            {prof.name} ({prof.role})
+                            {prof.nome} ({prof.especialidade})
                           </button>
                         ))}
                       </div>
@@ -3535,19 +3576,20 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                 />
                 {showExcluirProfDropdown && (
                   <div className="absolute left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-white border border-slate-205 border-slate-200 rounded-lg shadow-xl z-25 divide-y divide-slate-100 font-sans">
-                    {INITIAL_PROFESSIONALS.filter(p => 
-                      p.name.toLowerCase().includes(excluirProfName.toLowerCase())
+                    {profissionais.filter(p =>
+                      p.nome.toLowerCase().includes(excluirProfName.toLowerCase()) &&
+                      p.status === 'Ativo'
                     ).map((prof) => (
                       <button
                         key={prof.id}
                         type="button"
                         onMouseDown={() => {
-                          setExcluirProfName(prof.name);
+                          setExcluirProfName(prof.nome);
                           setShowExcluirProfDropdown(false);
                         }}
                         className="w-full text-left p-2 hover:bg-slate-50 transition-colors text-xs font-semibold text-slate-800"
                       >
-                        {prof.name}
+                        {prof.nome}
                       </button>
                     ))}
                   </div>

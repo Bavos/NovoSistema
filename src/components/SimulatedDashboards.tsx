@@ -95,6 +95,10 @@ export const ProfissionaisDashboard: React.FC = () => {
  * Tab 3: Escalas de Plantões Consolidada
  * ---------------------------------------------------- */
 export const EscalasDashboard: React.FC = () => {
+  const handlePrint = () => {
+    window.print();
+  };
+
   return (
     <div className="space-y-4 animate-in fade-in-30" id="escalas-dashboard">
       <div className="bg-white p-5 border border-slate-200 rounded-2xl shadow-sm space-y-4">
@@ -105,6 +109,12 @@ export const EscalasDashboard: React.FC = () => {
           </div>
           <div className="flex space-x-2">
             <span className="text-xs bg-slate-100 px-3 py-1.5 rounded-lg font-bold text-slate-600">12/06/2026</span>
+            <button
+              onClick={handlePrint}
+              className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-blue-700 transition-colors print:hidden"
+            >
+              Imprimir Escala
+            </button>
           </div>
         </div>
 
