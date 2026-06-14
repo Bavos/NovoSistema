@@ -13,7 +13,8 @@ import {
   Building2,
   ChevronRight,
   Menu,
-  HeartPulse
+  HeartPulse,
+  Activity
 } from 'lucide-react';
 import { useFirebase } from '../context/FirebaseContext';
 
@@ -34,6 +35,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { userRole } = useFirebase();
 
   const allMenuItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: Activity, desc: 'Visão Executiva 360º' },
     { id: 'pacientes', label: 'Pacientes', icon: Users, desc: 'Gestão de Planos & Prontuários' },
     { id: 'profissionais', label: 'Profissionais', icon: Briefcase, desc: 'Cuidadores & Enfermagem' },
     { id: 'escalas', label: 'Escalas', icon: Calendar, desc: 'Alocação diária' },
@@ -53,7 +55,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <motion.aside
-      className="fixed top-0 left-0 h-full bg-[#0F172A] text-slate-300 z-50 flex flex-col shadow-2xl overflow-hidden border-r border-[#1e293b]"
+      className="fixed top-0 left-0 h-full bg-forest-green text-off-white z-50 flex flex-col shadow-2xl overflow-hidden border-r border-[#254A34]"
       animate={{ width: effectiveExpanded ? 240 : 64 }}
       transition={{ duration: 0.3, ease: [0.25, 0.8, 0.25, 1] }}
       onMouseEnter={() => setIsHovered(true)}
@@ -61,9 +63,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id="sidebar-main"
     >
       {/* Sidebar Header */}
-      <div className="h-16 flex items-center border-b border-[#1e293b] px-4 justify-between select-none bg-[#0F172A]">
+      <div className="h-16 flex items-center border-b border-[#254A34] px-4 justify-between select-none bg-forest-green">
         <div className="flex items-center space-x-3 overflow-hidden min-w-[150px]">
-          <div className="p-2 bg-blue-600/20 text-blue-400 rounded-lg flex-shrink-0 animate-pulse">
+          <div className="p-2 bg-hover-green text-mustard-gold rounded-full flex-shrink-0">
             <HeartPulse size={20} />
           </div>
           <motion.div
@@ -71,13 +73,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             transition={{ duration: 0.2 }}
             className="flex flex-col whitespace-nowrap"
           >
-            <span className="font-extrabold text-white text-sm tracking-wide uppercase">CuidarHome</span>
-            <span className="text-[10px] text-blue-400 font-mono tracking-widest font-medium">SISTEMA</span>
+            <span className="font-extrabold text-off-white text-sm tracking-wide uppercase">CuidarHome</span>
+            <span className="text-[10px] text-mustard-gold font-mono tracking-widest font-medium">SISTEMA</span>
           </motion.div>
         </div>
         <button
           onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
-          className="hidden md:flex p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition-colors"
+          className="hidden md:flex p-1 hover:bg-hover-green rounded-full text-slate-400 hover:text-mustard-gold transition-colors"
           title={isSidebarExpanded ? 'Recolher Menu' : 'Expandir Menu'}
         >
           <Menu size={16} />
@@ -96,8 +98,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={() => setActiveTab(item.id)}
               className={`w-full flex items-center p-3 rounded-lg transition-all duration-200 group text-left relative ${
                 isActive
-                  ? 'bg-blue-600 text-white font-medium shadow-lg shadow-blue-500/20'
-                  : 'hover:bg-[#1e293b] text-slate-400 hover:text-slate-100'
+                  ? 'bg-hover-green text-mustard-gold font-medium'
+                  : 'hover:bg-hover-green text-slate-300 hover:text-off-white'
               }`}
               id={`sidebar-item-${item.id}`}
             >
@@ -105,7 +107,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <IconComponent
                   size={20}
                   className={`transition-transform duration-200 ${
-                    isActive ? 'scale-110 text-white' : 'group-hover:scale-110 text-slate-400 group-hover:text-blue-400'
+                    isActive ? 'scale-110 text-mustard-gold' : 'group-hover:scale-110 text-slate-400 group-hover:text-mustard-gold'
                   }`}
                 />
               </div>
@@ -118,7 +120,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               >
                 <span className="text-sm font-medium">{item.label}</span>
                 {effectiveExpanded && (
-                  <span className={`text-[9px] ${isActive ? 'text-blue-100' : 'text-slate-500'}`}>
+                  <span className={`text-[9px] ${isActive ? 'text-mustard-gold/80' : 'text-slate-500'}`}>
                     {item.desc}
                   </span>
                 )}

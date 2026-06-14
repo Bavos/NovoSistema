@@ -15,11 +15,12 @@ import {
   FinanceiroDashboard,
   EmpresaDashboard
 } from './components/SimulatedDashboards';
+import { Dashboard } from './components/Dashboard';
 import { motion, AnimatePresence } from 'motion/react';
 import { Users, Award, ShieldAlert, Heart, Activity } from 'lucide-react';
 
 function DashboardContent() {
-  const [activeSidebarTab, setActiveSidebarTab] = useState<string>('escalas');
+  const [activeSidebarTab, setActiveSidebarTab] = useState<string>('dashboard');
   const [isSidebarExpanded, setIsSidebarExpanded] = useState<boolean>(false);
   const [globalSearch, setGlobalSearch] = useState<string>('');
 
@@ -38,6 +39,7 @@ function DashboardContent() {
 
   // Title calculation based on view level
   const getPageTitle = () => {
+    if (activeSidebarTab === 'dashboard') return 'Visão Executiva 360º';
     if (activeSidebarTab === 'pacientes') {
       return pacientesTitleOverride;
     }
@@ -139,7 +141,9 @@ function DashboardContent() {
                 exit={{ opacity: 0, y: -15 }}
                 transition={{ duration: 0.22 }}
               >
-                {activeSidebarTab === 'pacientes' ? (
+                {activeSidebarTab === 'dashboard' ? (
+                  <Dashboard setActiveTab={setActiveSidebarTab} />
+                ) : activeSidebarTab === 'pacientes' ? (
                   <Pacientes
                     globalSearchQuery={globalSearch}
                     onViewChange={(isForm, title) => {
