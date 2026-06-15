@@ -6,7 +6,7 @@ import { Users, UserPlus, Calendar, DollarSign, Receipt } from 'lucide-react';
 import { DebitoProfissional } from '../types';
 
 export const Dashboard: React.FC<{
-  setActiveTab: (tab: string) => void;
+  setActiveTab: (tab: string, extraOptions?: { financeiroSubTab?: 'folhas' | 'debitos' }) => void;
 }> = ({ setActiveTab }) => {
   const [debitosDoDia, setDebitosDoDia] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -76,6 +76,7 @@ export const Dashboard: React.FC<{
     { id: 'btn-dash-cadastrar-paciente', title: 'Cadastrar Paciente', icon: UserPlus, tab: 'pacientes' },
     { id: 'btn-dash-cadastrar-profissional', title: 'Cadastrar Profissional', icon: Users, tab: 'profissionais' },
     { id: 'btn-dash-novo-agendamento', title: 'Novo Agendamento', icon: Calendar, tab: 'escalas' },
+    { id: 'btn-dash-cadastrar-debito', title: 'Cadastrar Débito', icon: Receipt, tab: 'financeiro', extra: { financeiroSubTab: 'debitos' } },
     { id: 'btn-dash-gerar-faturamento', title: 'Gerar Faturamento', icon: DollarSign, tab: 'financeiro' },
   ];
 
@@ -151,7 +152,7 @@ export const Dashboard: React.FC<{
                 <button
                   id={action.id}
                   key={action.title}
-                  onClick={() => setActiveTab(action.tab)}
+                  onClick={() => setActiveTab(action.tab, (action as any).extra)}
                   className="w-full text-left p-4 rounded-xl border border-slate-100 hover:border-amber-400 bg-slate-50/30 hover:bg-amber-50/20 transition-all flex items-center space-x-4 group cursor-pointer"
                 >
                   <div className="p-3 bg-slate-100 text-slate-600 rounded-xl group-hover:bg-[#e8e4db] group-hover:text-amber-800 transition-all flex items-center justify-center">

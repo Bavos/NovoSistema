@@ -180,7 +180,7 @@ export const EscalasDashboard: React.FC = () => {
 /* ----------------------------------------------------
  * Tab 4: Financeiro, Plantões E Faturamento
  * ---------------------------------------------------- */
-export const FinanceiroDashboard: React.FC = () => {
+export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos' }> = ({ initialSubTab = 'folhas' }) => {
   const { 
     pacientes, 
     profissionais, 
@@ -192,7 +192,11 @@ export const FinanceiroDashboard: React.FC = () => {
   const activePacientes = pacientes.filter(p => p.status === 'Ativo' || p.status?.toLowerCase() === 'ativo');
   const activeProfissionais = profissionais.filter(p => p.status === 'Ativo' || p.status?.toLowerCase() === 'ativo');
   
-  const [subTab, setSubTab] = useState<'folhas' | 'debitos'>('folhas');
+  const [subTab, setSubTab] = useState<'folhas' | 'debitos'>(initialSubTab);
+
+  React.useEffect(() => {
+    setSubTab(initialSubTab);
+  }, [initialSubTab]);
   const [financeTab, setFinanceTab] = useState<'fatura' | 'pagamento'>('fatura');
   const [dataInicial, setDataInicial] = useState('2026-06-01');
   const [dataFinal, setDataFinal] = useState('2026-06-30');

@@ -22,6 +22,7 @@ import { Users, Award, ShieldAlert, Heart, Activity, AlertCircle, X } from 'luci
 
 function DashboardContent() {
   const [activeSidebarTab, setActiveSidebarTab] = useState<string>('dashboard');
+  const [financeiroSubTab, setFinanceiroSubTab] = useState<'folhas' | 'debitos'>('folhas');
   const [isSidebarExpanded, setIsSidebarExpanded] = useState<boolean>(false);
 
   // Manage Pacientes page inner state routing overrides
@@ -73,6 +74,7 @@ function DashboardContent() {
           activeTab={activeSidebarTab}
           setActiveTab={(tab) => {
             setActiveSidebarTab(tab);
+            setFinanceiroSubTab('folhas');
             // Auto-reset state overrides
             setIsBrowsingForm(false);
             setPacientesTitleOverride('Gestão Integrada de Pacientes');
@@ -153,7 +155,14 @@ function DashboardContent() {
                 transition={{ duration: 0.22 }}
               >
                 {activeSidebarTab === 'dashboard' ? (
-                  <Dashboard setActiveTab={setActiveSidebarTab} />
+                  <Dashboard setActiveTab={(tab, extra) => {
+                    setActiveSidebarTab(tab);
+                    if (extra?.financeiroSubTab) {
+                      setFinanceiroSubTab(extra.financeiroSubTab);
+                    } else {
+                      setFinanceiroSubTab('folhas');
+                    }
+                  }} />
                 ) : activeSidebarTab === 'pacientes' ? (
                   <Pacientes
                     onViewChange={(isForm, title) => {
@@ -166,7 +175,7 @@ function DashboardContent() {
                 ) : activeSidebarTab === 'escalas' ? (
                   <EscalasDashboard />
                 ) : activeSidebarTab === 'financeiro' ? (
-                  <FinanceiroDashboard />
+                  <FinanceiroDashboard initialSubTab={financeiroSubTab} />
                 ) : activeSidebarTab === 'empresa' ? (
                   <EmpresaDashboard />
                 ) : null}
