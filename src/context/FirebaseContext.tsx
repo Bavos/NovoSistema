@@ -4,7 +4,7 @@
  */
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Paciente, Plantao, Profissional, CancelingReason, AuditLog, Agendamento, UsuarioSistema } from '../types';
+import { Paciente, Plantao, Profissional, CancelingReason, AuditLog, Agendamento, UsuarioSistema, DebitoProfissional } from '../types';
 import { INITIAL_PACIENTES, INITIAL_PLANTOES } from '../mockData';
 import { db, auth, OperationType, handleFirestoreError } from '../lib/firebase';
 import { signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, User } from 'firebase/auth';
@@ -58,6 +58,9 @@ interface FirebaseContextType {
   updateUsuarioSistema: (user: UsuarioSistema) => Promise<void>;
   updateProfissional: (profissional: Profissional) => Promise<void>;
   deleteProfissional: (id: string) => Promise<void>;
+  debitosProfissionais: DebitoProfissional[];
+  addDebitoProfissional: (debito: Omit<DebitoProfissional, 'id'>) => Promise<DebitoProfissional>;
+  deleteDebitoProfissional: (id: string) => Promise<void>;
 }
 
 const FirebaseContext = createContext<FirebaseContextType | undefined>(undefined);
@@ -67,6 +70,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [plantoes, setPlantoes] = useState<Plantao[]>([]);
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [profissionais, setProfissionais] = useState<Profissional[]>([]);
+  const [debitosProfissionais, setDebitosProfissionais] = useState<DebitoProfissional[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -119,7 +123,12 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (usuariosSistema.length > 0) {
         const usuario = usuariosSistema.find(u => u.email?.toLowerCase() === emailLower);
         if (usuario) {
-          setUserRole(usuario.nivelAcesso);
+          const rawRole = usuario.nivelAcesso?.toLowerCase();
+          if (rawRole === 'colaborador') {
+            setUserRole('Colaborador');
+          } else {
+            setUserRole('Administrador');
+          }
         } else {
           // Default to Administrador for the bootstrapped developer account if not in list yet
           if (emailLower === 'renatobz@gmail.com') {
@@ -165,20 +174,25 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     let unsubscribePlantoes: (() => void) | null = null;
     let unsubscribeAgendamentos: (() => void) | null = null;
     let unsubscribeProfissionais: (() => void) | null = null;
+    let unsubscribeUsuariosSistema: (() => void) | null = null;
+    let unsubscribeDebitosProfissionais: (() => void) | null = null;
 
     const initFirebaseSync = async () => {
-      try {
-        // 1. Silent anonymous auth to set credentials & bypass rules gate nicely
-        await signInAnonymously(auth);
-      } catch (authErr) {
-        console.warn("Auth silent fallback (offline format assumed):", authErr);
-      }
+      // 1. Let the onAuthStateChanged observer handle the email credentials.
+      // We removed signInAnonymously to ensure that existing user login sessions are not disrupted on reload/refresh.
 
       // 2. Validate connection on initial boot
       try {
         await getDocFromServer(doc(db, 'test', 'connection'));
       } catch (connErr) {
-        if (connErr instanceof Error && connErr.message.includes('the client is offline')) {
+        const errorMsg = connErr instanceof Error ? connErr.message : String(connErr);
+        if (
+          errorMsg.toLowerCase().includes('offline') ||
+          errorMsg.toLowerCase().includes('could not reach') ||
+          errorMsg.toLowerCase().includes('unavailable') ||
+          errorMsg.toLowerCase().includes('network') ||
+          errorMsg.toLowerCase().includes('timeout')
+        ) {
           console.error("Please check your Firebase configuration.");
         }
       }
@@ -230,16 +244,43 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
       );
 
+      const plColl = collection(db, 'plantoes');
+      unsubscribePlantoes = onSnapshot(
+        plColl,
+        (snap) => {
+          const list: Plantao[] = [];
+          snap.forEach((d) => {
+            list.push(d.data() as Plantao);
+          });
+          setPlantoes(list);
+        },
+        (error) => {
+          console.error("Plantoes live sync error:", error);
+          const fallbackPl = localStorage.getItem('firebase_simulated_plantoes');
+          if (fallbackPl) {
+            setPlantoes(JSON.parse(fallbackPl));
+          } else {
+            setPlantoes(INITIAL_PLANTOES);
+          }
+          handleFirestoreError(error, OperationType.GET, 'plantoes');
+        }
+      );
+
       const agColl = collection(db, 'agendamentos');
-      unsubscribeAgendamentos = onSnapshot(agColl, (snap) => {
-        const list: Agendamento[] = [];
-        snap.forEach((d) => {
-          list.push({ ...d.data(), id: d.id } as Agendamento);
-        });
-        setAgendamentos(list);
-      }, (err) => {
-        console.error('Error fetching agendamentos:', err);
-      });
+      unsubscribeAgendamentos = onSnapshot(
+        agColl,
+        (snap) => {
+          const list: Agendamento[] = [];
+          snap.forEach((d) => {
+            list.push({ ...d.data(), id: d.id } as Agendamento);
+          });
+          setAgendamentos(list);
+        },
+        (error) => {
+          console.error('Error fetching agendamentos:', error);
+          handleFirestoreError(error, OperationType.GET, 'agendamentos');
+        }
+      );
 
       const profColl = collection(db, 'profissionais');
       unsubscribeProfissionais = onSnapshot(
@@ -264,13 +305,36 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       );
       
       const usColl = collection(db, 'usuarios_sistema');
-      onSnapshot(usColl, (snap) => {
-        const list: UsuarioSistema[] = [];
-        snap.forEach((d) => {
-          list.push({ ...d.data(), id: d.id } as UsuarioSistema);
-        });
-        setUsuariosSistema(list);
-      });
+      unsubscribeUsuariosSistema = onSnapshot(
+        usColl,
+        (snap) => {
+          const list: UsuarioSistema[] = [];
+          snap.forEach((d) => {
+            list.push({ ...d.data(), id: d.id } as UsuarioSistema);
+          });
+          setUsuariosSistema(list);
+        },
+        (error) => {
+          console.error("UsuariosSistema live sync error:", error);
+          handleFirestoreError(error, OperationType.GET, 'usuarios_sistema');
+        }
+      );
+
+      const debColl = collection(db, 'debitos_profissionais');
+      unsubscribeDebitosProfissionais = onSnapshot(
+        debColl,
+        (snap) => {
+          const list: DebitoProfissional[] = [];
+          snap.forEach((d) => {
+            list.push({ ...d.data(), id: d.id } as DebitoProfissional);
+          });
+          setDebitosProfissionais(list);
+        },
+        (error) => {
+          console.error("DebitosProfissionais live sync error:", error);
+          handleFirestoreError(error, OperationType.GET, 'debitos_profissionais');
+        }
+      );
     };
 
     initFirebaseSync();
@@ -278,7 +342,10 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return () => {
       if (unsubscribePacientes) unsubscribePacientes();
       if (unsubscribePlantoes) unsubscribePlantoes();
+      if (unsubscribeAgendamentos) unsubscribeAgendamentos();
       if (unsubscribeProfissionais) unsubscribeProfissionais();
+      if (unsubscribeUsuariosSistema) unsubscribeUsuariosSistema();
+      if (unsubscribeDebitosProfissionais) unsubscribeDebitosProfissionais();
     };
   }, []);
 
@@ -508,6 +575,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     try {
       await setDoc(doc(db, 'profissionais', id), fullProfissional);
       await addAuditLog('CREATE', 'profissionais', id, `Profissional criado: ${fullProfissional.nome}`);
+      setNotification(`Cuidador '${fullProfissional.nome}' cadastrado com sucesso.`);
       return fullProfissional;
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, `profissionais/${id}`);
@@ -530,11 +598,11 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const deleteUsuarioSistema = async (id: string) => {
     try {
-      await deleteDoc(doc(db, 'usuarios_sistema', id));
-      setNotification('Utilizador removido com sucesso.');
+      await updateDoc(doc(db, 'usuarios_sistema', id), { status: 'Inativo' });
+      setNotification('Utilizador inativado com sucesso.');
     } catch (err) {
-      console.error("Erro ao remover utilizador:", err);
-      handleFirestoreError(err, OperationType.DELETE, 'usuarios_sistema');
+      console.error("Erro ao inativar utilizador:", err);
+      handleFirestoreError(err, OperationType.UPDATE, 'usuarios_sistema');
       throw err;
     }
   };
@@ -554,6 +622,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     try {
       await setDoc(doc(db, 'profissionais', updatedProf.id), updatedProf);
       await addAuditLog('UPDATE', 'profissionais', updatedProf.id, `Profissional atualizado: ${updatedProf.nome}`);
+      setNotification(`Cuidador '${updatedProf.nome}' atualizado com sucesso.`);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `profissionais/${updatedProf.id}`);
       throw err;
@@ -564,6 +633,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     try {
       await deleteDoc(doc(db, 'profissionais', id));
       await addAuditLog('DELETE', 'profissionais', id, `Profissional excluído`);
+      setNotification('Cuidador excluído com sucesso.');
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `profissionais/${id}`);
       throw err;
@@ -580,9 +650,35 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         desativadoMotivo: 'Exclusão lógica do registro (Inativo de acordo com diretrizes de segurança)',
       });
       console.log("Exclusão lógica realizada com sucesso para:", id);
+      setNotification('Paciente desativado logicamente com sucesso.');
     } catch (err) {
       console.error("Erro na exclusão lógica:", err);
       handleFirestoreError(err, OperationType.UPDATE, `pacientes/${id}`);
+      throw err;
+    }
+  };
+
+  const addDebitoProfissional = async (debito: Omit<DebitoProfissional, 'id'>) => {
+    try {
+      const docRef = await addDoc(collection(db, 'debitos_profissionais'), debito);
+      await addAuditLog('CREATE', 'debitos_profissionais', docRef.id, `Débito adicionado para o profissional ${debito.nomeProfissional}: R$ ${debito.valor}`);
+      setNotification(`Débito de R$ ${debito.valor} registrado com sucesso para ${debito.nomeProfissional}.`);
+      return { id: docRef.id, ...debito } as DebitoProfissional;
+    } catch (err) {
+      console.error("Erro ao adicionar débito:", err);
+      handleFirestoreError(err, OperationType.CREATE, 'debitos_profissionais');
+      throw err;
+    }
+  };
+
+  const deleteDebitoProfissional = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'debitos_profissionais', id));
+      await addAuditLog('DELETE', 'debitos_profissionais', id, `Débito excluído`);
+      setNotification('Débito removido com sucesso.');
+    } catch (err) {
+      console.error("Erro ao remover débito:", err);
+      handleFirestoreError(err, OperationType.DELETE, `debitos_profissionais/${id}`);
       throw err;
     }
   };
@@ -624,6 +720,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         addUsuarioSistema,
         deleteUsuarioSistema,
         updateUsuarioSistema,
+        debitosProfissionais,
+        addDebitoProfissional,
+        deleteDebitoProfissional,
       }}
     >
       {children}

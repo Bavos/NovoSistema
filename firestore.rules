@@ -21,5 +21,9 @@ service cloud.firestore {
     match /agendamentos/{agendamentoId} {
       allow read, write: if true;
     }
+
+    match /debitos_profissionais/{debitoId} {
+      allow read, write: if true;
+    }
   }
 }

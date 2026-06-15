@@ -51,6 +51,20 @@
         "escalaCongelada": { "type": "boolean" }
       },
       "required": ["id", "pacienteId", "data", "status", "profissional"]
+    },
+    "DebitoProfissional": {
+      "title": "Débito Profissional",
+      "description": "Débitos e deduções financeiras lançadas para os profissionais/cuidadores",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "idProfissional": { "type": "string" },
+        "nomeProfissional": { "type": "string" },
+        "data": { "type": "object", "description": "Objeto Timestamp do Firestore" },
+        "valor": { "type": "number" },
+        "motivo": { "type": "string", "enum": ["Curinga", "Passagem", "Outros"] }
+      },
+      "required": ["idProfissional", "nomeProfissional", "data", "valor", "motivo"]
     }
   },
   "firestore": {
@@ -61,6 +75,10 @@
     "/plantoes/{plantaoId}": {
       "schema": "Plantao",
       "description": "Coleção de todos os plantões gerados e escalas executadas"
+    },
+    "/debitos_profissionais/{debitoId}": {
+      "schema": "DebitoProfissional",
+      "description": "Lista de ocorrências de débitos e deduções registradas para profissionais"
     }
   }
 }

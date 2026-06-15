@@ -119,7 +119,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             id="user-menu-btn"
           >
             <div className={`w-full h-full flex items-center justify-center font-bold text-white text-xs select-none ${
-              displayRole.toLowerCase() === 'administrador' ? 'bg-blue-600' : 'bg-emerald-600'
+              (displayRole || '').toLowerCase() === 'administrador' ? 'bg-blue-600' : 'bg-emerald-600'
             }`}>
               {displayRole.slice(0, 2).toUpperCase()}
             </div>

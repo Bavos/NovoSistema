@@ -46,12 +46,12 @@ export const PatientList: React.FC<PatientListProps> = ({
   const filteredPacientes = useMemo(() => {
     return pacientes.filter((p) => {
       // Search logic (localSearch or globalSearchQuery)
-      const query = (localSearch || globalSearchQuery).toLowerCase();
+      const query = (localSearch || globalSearchQuery || '').toLowerCase();
       const matchSearch =
-        p.nome.toLowerCase().includes(query) ||
-        p.cpf.toLowerCase().includes(query) ||
-        p.bairro.toLowerCase().includes(query) ||
-        p.nomeResponsavel.toLowerCase().includes(query);
+        (p.nome || '').toLowerCase().includes(query) ||
+        (p.cpf || '').toLowerCase().includes(query) ||
+        (p.bairro || '').toLowerCase().includes(query) ||
+        (p.nomeResponsavel || '').toLowerCase().includes(query);
 
       // Filter logic
       const matchStatus = filterStatus === 'todos' ? true : p.status === filterStatus;

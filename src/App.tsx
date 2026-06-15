@@ -18,7 +18,7 @@ import {
 } from './components/SimulatedDashboards';
 import { Dashboard } from './components/Dashboard';
 import { motion, AnimatePresence } from 'motion/react';
-import { Users, Award, ShieldAlert, Heart, Activity } from 'lucide-react';
+import { Users, Award, ShieldAlert, Heart, Activity, AlertCircle, X } from 'lucide-react';
 
 function DashboardContent() {
   const [activeSidebarTab, setActiveSidebarTab] = useState<string>('dashboard');
@@ -29,7 +29,7 @@ function DashboardContent() {
   const [pacientesTitleOverride, setPacientesTitleOverride] = useState<string>('Gestão Integrada de Pacientes');
   const [showFirstAccess, setShowFirstAccess] = useState(false);
 
-  const { pacientes, loading, userRole, notification, user } = useFirebase();
+  const { pacientes, loading, userRole, notification, setNotification, user } = useFirebase();
 
   // Redirect away from Empresa if role is Colaborador
   React.useEffect(() => {
@@ -96,8 +96,18 @@ function DashboardContent() {
         </div>
         
         {notification && (
-          <div className="fixed top-24 right-6 bg-green-600 text-white p-4 rounded-xl shadow-xl z-50 animate-in slide-in-from-right-4 print:hidden">
-            {notification}
+          <div className="fixed top-24 right-6 bg-[#FEF3C7] border-l-4 border-amber-600 text-amber-900 p-4 rounded-xl shadow-xl z-50 animate-in slide-in-from-right-4 max-w-sm flex items-start gap-3 print:hidden border border-amber-200">
+            <AlertCircle className="text-amber-600 shrink-0 mt-0.5" size={18} />
+            <div className="flex-1 space-y-1">
+              <p className="text-[10px] uppercase font-bold tracking-wider text-amber-800">Aviso do Sistema</p>
+              <p className="text-xs font-semibold leading-relaxed">{notification}</p>
+            </div>
+            <button 
+              onClick={() => setNotification(null)}
+              className="text-amber-500 hover:text-amber-700 transition-colors p-0.5 rounded hover:bg-amber-100 cursor-pointer"
+            >
+              <X size={16} />
+            </button>
           </div>
         )}
 

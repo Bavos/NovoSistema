@@ -154,3 +154,13 @@ export type CancelingReason =
   | 'Tiro'
   | 'Sem condução'
   | 'Cansaço';
+
+export interface DebitoProfissional {
+  id: string;
+  idProfissional: string;
+  nomeProfissional: string;
+  data: any; // Saved in full format / Timestamp
+  valor: number;
+  motivo: 'Curinga' | 'Passagem' | 'Outros';
+}
+
