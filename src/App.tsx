@@ -37,7 +37,8 @@ function DashboardContent() {
     const userEmail = user?.email;
     return typeof uEmail === 'string' && typeof userEmail === 'string' && uEmail.toLowerCase() === userEmail.toLowerCase();
   });
-  const displayName = currentUserProfile?.nome || user?.displayName || user?.email?.split('@')[0] || 'Renato B. Z.';
+  const rawName = currentUserProfile?.nome || user?.displayName || user?.email?.split('@')[0] || 'Renato B. Z.';
+  const displayName = rawName.replace(/\s?\((Admin|Colaborador)\)/g, '');
 
   // Redirect away from Empresa if role is Colaborador
   React.useEffect(() => {
@@ -74,7 +75,7 @@ function DashboardContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F3F4F6] text-slate-800 font-sans flex">
+    <div className="min-h-screen bg-off-white text-forest-green font-sans flex">
       {/* 1. Collapsible/Expandable Sidebar */}
       <div className="print:hidden">
         <Sidebar

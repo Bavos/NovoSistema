@@ -138,10 +138,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </nav>
 
       {/* Sidebar Footer info */}
-      <div className="p-4 border-t border-[#1e293b] bg-[#0F172A] select-none">
+      <div className="p-4 border-t border-[#254A34] bg-[#162d20] select-none">
         <div className="flex items-center space-x-3 overflow-hidden">
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0 text-xs ${
-            userRole?.toLowerCase() === 'administrador' ? 'bg-blue-600' : 'bg-emerald-600'
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-off-white font-bold flex-shrink-0 text-xs ${
+            userRole?.toLowerCase() === 'administrador' ? 'bg-mustard-gold' : 'bg-[#e2b888]'
           }`}>
             {userRole?.toLowerCase() === 'administrador' ? 'AD' : 'CO'}
           </div>
@@ -150,10 +150,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             transition={{ duration: 0.2 }}
             className="flex flex-col whitespace-nowrap"
           >
-            <span className="text-xs font-semibold text-slate-200 leading-none capitalize">
+            <span className="text-xs font-semibold text-off-white leading-none capitalize">
               {userRole}
             </span>
-            <span className="text-[10px] text-slate-500 mt-1 uppercase tracking-wider">Unidade Rio</span>
+            <span className="text-[10px] text-mustard-gold mt-1 uppercase tracking-wider">Unidade Rio</span>
           </motion.div>
         </div>
       </div>

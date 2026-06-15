@@ -223,6 +223,14 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
   const [selectedShiftForDetails, setSelectedShiftForDetails] = useState<any>(null);
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [deleteRecordDialog, setDeleteRecordDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void | Promise<void>;
+    confirmText?: string;
+    cancelText?: string;
+  } | null>(null);
 
   // Editable details form fields (synchronized when we enter edit mode):
   const [detailsProfName, setDetailsProfName] = useState('');
@@ -615,101 +623,100 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
   };
 
   // New Handler for deleting a single shift
-  const handleDeleteAgendamento = async (id: string) => {
-    // PASSO 2: Criação da Função com Tratamento de Erro e Confirmação
-    if (!window.confirm('Tem certeza que deseja excluir permanentemente este agendamento?')) {
-      return;
-    }
-    
-    try {
-      // PASSO 3: Operação de Banco de Dados (Prioridade 1)
-      await deletePlantao(id);
-      
-      // PASSO 4: Atualização de UI (Prioridade 2)
-      // O estado é gerenciado via onSnapshot em FirebaseContext.tsx, 
-      // então o componente será atualizado automaticamente.
-      
-      // PASSO 5: Rastro de Auditoria e Feedback
-      alert('Agendamento excluído com sucesso!');
-      
-    } catch (error) {
-      // Garantir erro impresso no console conforme solicitado
-      console.error("Erro ao deletar agendamento:", error);
-      alert('Erro ao excluir agendamento. Verifique o console.');
-    }
+  const handleDeleteAgendamento = (id: string) => {
+    setDeleteRecordDialog({
+      isOpen: true,
+      title: 'Confirmar Exclusão',
+      message: 'Tem certeza que deseja excluir permanentemente este agendamento? Esta ação removerá o plantão de forma definitiva.',
+      confirmText: 'Confirmar e Excluir',
+      cancelText: 'Voltar',
+      onConfirm: async () => {
+        try {
+          await deletePlantao(id);
+          alert('Agendamento excluído com sucesso!');
+        } catch (error) {
+          console.error("Erro ao deletar agendamento:", error);
+          alert('Erro ao excluir agendamento. Verifique o console.');
+        }
+      }
+    });
   };
 
   // Function to delete or clear a configuration/mode of shift (either Principal or Additional) from Plano de Atendimento
-  const handleDeletePlantao = async (id: string, isPrincipal: boolean) => {
+  const handleDeletePlantao = (id: string, isPrincipal: boolean) => {
     if (!paciente?.id) {
       alert('Erro: ID do paciente não localizado. Por favor, salve primeiro os dados gerais do paciente.');
       return;
     }
 
-    if (!window.confirm('Tem certeza que deseja excluir este plantão?')) {
-      return;
-    }
+    setDeleteRecordDialog({
+      isOpen: true,
+      title: 'Remover Configuração de Plantão',
+      message: 'Tem certeza que deseja excluir as configurações deste tipo de plantão? Esta ação também salvará as alterações no banco de dados.',
+      confirmText: 'Confirmar e Remover',
+      cancelText: 'Cancelar',
+      onConfirm: async () => {
+        try {
+          const current = pacientes.find(p => p.id === paciente.id);
+          if (!current) {
+            throw new Error('Paciente não encontrado no Firestore.');
+          }
 
-    try {
-      const current = pacientes.find(p => p.id === paciente.id);
-      if (!current) {
-        throw new Error('Paciente não encontrado no Firestore.');
+          let updatedPlano;
+
+          if (isPrincipal) {
+            // Clear base fields in React local state immediately
+            setTipoEscala('');
+            setHoraInicioPadrao('');
+            setValorSugeridoPlantao('');
+            setAjudaCusto('');
+            setTaxaAdm('');
+
+            // Prepare updated planoAtendimento replacing base keys with cleared/default empty values
+            updatedPlano = {
+              ...current.planoAtendimento,
+              tipoEscala: '',
+              horaInicioPadrao: '',
+              valorSugeridoPlantao: 0,
+              ajudaCusto: 0,
+              taxaAdm: 0,
+              tiposPlantao: tiposPlantao,
+            };
+          } else {
+            // Additional format - remove from the array immediately
+            const remaining = tiposPlantao.filter(t => t.id !== id);
+            setTiposPlantao(remaining);
+
+            // Prepare updated planoAtendimento array
+            updatedPlano = {
+              ...current.planoAtendimento,
+              tiposPlantao: remaining,
+            };
+          }
+
+          // 4. Persistencia no Firebase (Firestore) com updateDoc
+          const docRef = doc(db, 'pacientes', paciente.id);
+          try {
+            await updateDoc(docRef, {
+              planoAtendimento: updatedPlano
+            });
+          } catch (firestoreErr) {
+            handleFirestoreError(firestoreErr, OperationType.UPDATE, `pacientes/${paciente.id}`);
+          }
+          
+          // Also reset editing state if the deleted additional shift was being edited
+          if (!isPrincipal && editingSubId === id) {
+            setEditingSubId(null);
+            setNewSubValorPlantao(150);
+            setNewSubAjudaCusto(0);
+            setNewSubTaxaAdm(0);
+          }
+        } catch (error: any) {
+          console.error("Erro ao deletar configuracao:", error);
+          alert('Erro ao excluir: ' + error.message);
+        }
       }
-
-      let updatedPlano;
-
-      if (isPrincipal) {
-        // Clear base fields in React local state immediately
-        setTipoEscala('');
-        setHoraInicioPadrao('');
-        setValorSugeridoPlantao('');
-        setAjudaCusto('');
-        setTaxaAdm('');
-
-        // Prepare updated planoAtendimento replacing base keys with cleared/default empty values
-        updatedPlano = {
-          ...current.planoAtendimento,
-          tipoEscala: '',
-          horaInicioPadrao: '',
-          valorSugeridoPlantao: 0,
-          ajudaCusto: 0,
-          taxaAdm: 0,
-          tiposPlantao: tiposPlantao,
-        };
-      } else {
-        // Additional format - remove from the array immediately
-        const remaining = tiposPlantao.filter(t => t.id !== id);
-        setTiposPlantao(remaining);
-
-        // Prepare updated planoAtendimento array
-        updatedPlano = {
-          ...current.planoAtendimento,
-          tiposPlantao: remaining,
-        };
-      }
-
-      // 4. Persistencia no Firebase (Firestore) com updateDoc
-      const docRef = doc(db, 'pacientes', paciente.id);
-      try {
-        await updateDoc(docRef, {
-          planoAtendimento: updatedPlano
-        });
-      } catch (firestoreErr) {
-        handleFirestoreError(firestoreErr, OperationType.UPDATE, `pacientes/${paciente.id}`);
-      }
-      
-      // Also reset editing state if the deleted additional shift was being edited
-      if (!isPrincipal && editingSubId === id) {
-        setEditingSubId(null);
-        setNewSubValorPlantao(150);
-        setNewSubAjudaCusto(0);
-        setNewSubTaxaAdm(0);
-      }
-
-      alert('Plantão excluído com sucesso!');
-    } catch (err: any) {
-      alert('Erro ao excluir plantão: ' + err.message);
-    }
+    });
   };
 
   // Turn off / Deactivate patient
@@ -777,7 +784,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
         // Check for conflicts
         const conflict = agendamentos.find(p => p.data === currentDt && p.nomeProfissional === newShiftProf && p.status === 'Confirmado');
         if (conflict) {
-          if (!window.confirm(`O profissional ${newShiftProf} já tem um agendamento confirmado na data ${currentDt} (No paciente: ${conflict.idPaciente}). Deseja prosseguir?`)) {
+          if (!window.confirm(`⚠️ Atenção: ${newShiftProf} já está escalado em outro plantão nesta data (${currentDt}). Tem certeza que deseja confirmar este agendamento simultâneo?`)) {
             continue; // Skip this date if not confirmed
           }
         }
@@ -966,6 +973,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
         await updateAgendamento({
           ...s,
           status: 'Concluido',
+          escalaCongelada: true,
         });
       }
       setConcluirModalOpen(false);
@@ -996,7 +1004,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
       for (const s of matches) {
         await updateAgendamento({
           ...s,
-          status: 'Confirmado',
+          status: 'Aberta',
+          escalaCongelada: false,
         });
       }
       setReabrirModalOpen(false);
@@ -1040,17 +1049,24 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
       return;
     }
 
-    if (window.confirm(`Você realmente deseja excluir permanentemente ${matches.length} agendamento(s)?`)) {
-      try {
-        for (const m of matches) {
-          await deleteAgendamento(m.id);
+    setDeleteRecordDialog({
+      isOpen: true,
+      title: 'Confirmar Exclusão em Lote',
+      message: `Você realmente deseja excluir permanentemente ${matches.length} agendamento(s) selecionados? Esta ação não pode ser desfeita.`,
+      confirmText: 'Confirmar e Excluir',
+      cancelText: 'Voltar',
+      onConfirm: async () => {
+        try {
+          for (const m of matches) {
+            await deleteAgendamento(m.id);
+          }
+          setExcluirModalOpen(false);
+          alert(`${matches.length} agendamento(s) excluído(s) com sucesso.`);
+        } catch (err: any) {
+          alert('Erro ao excluir agendamento: ' + (err.message || String(err)));
         }
-        setExcluirModalOpen(false);
-        alert(`${matches.length} agendamento(s) excluído(s) com sucesso.`);
-      } catch (err: any) {
-        alert('Erro ao excluir agendamento: ' + (err.message || String(err)));
       }
-    }
+    });
   };
 
   // Shift Edit trigger
@@ -2303,7 +2319,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                                       title={ag.observacao || 'Inspecionar Plantão'}
                                     >
                                         <div className="flex justify-between items-center w-full gap-1">
-                                          <span className="font-extrabold text-slate-800 shrink-0">{ag.horario}</span>
+                                          <span className="font-extrabold text-slate-800 shrink-0">
+                                            {ag.horario}
+                                            {ag.status === 'Concluido' && ' 🔒'}
+                                          </span>
                                           {(ag.isCuringa || ag.observacao?.includes('CURINGA')) && (
                                             <span className="px-1 py-[1px] text-[7px] font-black uppercase tracking-wider bg-amber-200 text-amber-900 rounded-sm">Curinga</span>
                                           )}
@@ -4449,6 +4468,48 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {deleteRecordDialog?.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 z-[120] backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200 font-sans">
+          <div className="bg-[#F8F5F0] w-full max-w-sm rounded-2xl border border-slate-200 shadow-2xl p-6 relative animate-in zoom-in-95 duration-200 text-center space-y-4">
+            <div className="mx-auto w-12 h-12 bg-red-50 rounded-full flex items-center justify-center text-red-600 border border-red-100">
+              <span className="text-xl">⚠️</span>
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-lg font-bold text-[#1A3626] font-serif tracking-tight">
+                {deleteRecordDialog.title}
+              </h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                {deleteRecordDialog.message}
+              </p>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteRecordDialog(null)}
+                className="flex-1 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 rounded-full transition-all text-center cursor-pointer shadow-xs"
+              >
+                {deleteRecordDialog.cancelText || 'Cancelar'}
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await deleteRecordDialog.onConfirm();
+                  } catch (e) {
+                    console.error(e);
+                  } finally {
+                    setDeleteRecordDialog(null);
+                  }
+                }}
+                className="flex-1 py-2 text-xs font-black text-white bg-red-600 hover:bg-red-700 rounded-full transition-all text-center cursor-pointer shadow-md"
+              >
+                {deleteRecordDialog.confirmText || 'Confirmar e Excluir'}
+              </button>
+            </div>
           </div>
         </div>
       )}

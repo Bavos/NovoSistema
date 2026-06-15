@@ -140,7 +140,7 @@ export interface Agendamento {
   valorRepasse: number;
   ajudaCusto: number;
   taxaAdm: number;
-  status: 'Confirmado' | 'Cancelado' | 'Concluido';
+  status: 'Aberta' | 'Concluido' | 'Cancelado';
   observacao?: string;
   escalaCongelada?: boolean;
   tipoDia?: 'Normal' | 'Feriado 20%' | 'Feriado 50%';
@@ -163,5 +163,30 @@ export interface DebitoProfissional {
   data: any; // Saved in full format / Timestamp
   valor: number;
   motivo: 'Curinga' | 'Passagem' | 'Outros';
+}
+
+export interface FaturaPaciente {
+  id: string;
+  idPaciente: string;
+  nomePaciente: string;
+  numeroFatura: string;
+  dataEmissao: string;
+  periodoApurado: { inicio: string; fim: string };
+  valorTotal: number;
+  status: 'Aberta' | 'Fechada';
+  plantoesCongelados: any[];
+}
+
+export interface FolhaPagamento {
+  id: string;
+  idProfissional: string;
+  nomeProfissional: string;
+  dataEmissao: string;
+  periodoApurado: { inicio: string; fim: string };
+  valorTotalPlantoes: number;
+  valorTotalDebitos: number;
+  valorLiquidoReceber: number;
+  status: 'Pendente' | 'Fechada';
+  historicoDebitos: any[];
 }
 

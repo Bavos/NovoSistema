@@ -4,10 +4,11 @@
  */
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Paciente, Plantao, Profissional, CancelingReason, AuditLog, Agendamento, UsuarioSistema, DebitoProfissional } from '../types';
+import { Paciente, Plantao, Profissional, CancelingReason, AuditLog, Agendamento, UsuarioSistema, DebitoProfissional, FaturaPaciente, FolhaPagamento } from '../types';
 import { INITIAL_PACIENTES, INITIAL_PLANTOES } from '../mockData';
-import { db, auth, OperationType, handleFirestoreError } from '../lib/firebase';
+import { db, auth, storage, OperationType, handleFirestoreError } from '../lib/firebase';
 import { signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, User } from 'firebase/auth';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import {
   collection,
   doc,
@@ -20,7 +21,8 @@ import {
   getDocs,
   getDocFromServer,
   query,
-  where
+  where,
+  orderBy
 } from 'firebase/firestore';
 
 interface FirebaseContextType {
@@ -61,6 +63,14 @@ interface FirebaseContextType {
   debitosProfissionais: DebitoProfissional[];
   addDebitoProfissional: (debito: Omit<DebitoProfissional, 'id'>) => Promise<DebitoProfissional>;
   deleteDebitoProfissional: (id: string) => Promise<void>;
+  faturasPacientes: FaturaPaciente[];
+  addFaturaPaciente: (fatura: Omit<FaturaPaciente, 'id'>) => Promise<FaturaPaciente>;
+  folhasPagamento: FolhaPagamento[];
+  addFolhaPagamento: (folha: Omit<FolhaPagamento, 'id'>) => Promise<FolhaPagamento>;
+  deleteFaturaPaciente: (id: string) => Promise<void>;
+  deleteFolhaPagamento: (id: string) => Promise<void>;
+  uploadLogo: (file: File) => Promise<string>;
+  uploadPdf: (file: File, path: string) => Promise<string>;
 }
 
 const FirebaseContext = createContext<FirebaseContextType | undefined>(undefined);
@@ -71,6 +81,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [profissionais, setProfissionais] = useState<Profissional[]>([]);
   const [debitosProfissionais, setDebitosProfissionais] = useState<DebitoProfissional[]>([]);
+  const [faturasPacientes, setFaturasPacientes] = useState<FaturaPaciente[]>([]);
+  const [folhasPagamento, setFolhasPagamento] = useState<FolhaPagamento[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -149,7 +161,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           const id = `user-${Date.now()}`;
           setDoc(doc(db, 'usuarios_sistema', id), {
             id,
-            nome: 'Renato B. Z. (Admin)',
+            nome: 'Renato B. Z.',
             email: 'renatobz@gmail.com',
             nivelAcesso: 'Administrador',
             status: 'Ativo'
@@ -176,6 +188,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     let unsubscribeProfissionais: (() => void) | null = null;
     let unsubscribeUsuariosSistema: (() => void) | null = null;
     let unsubscribeDebitosProfissionais: (() => void) | null = null;
+    let unsubscribeFaturasPacientes: (() => void) | null = null;
+    let unsubscribeFolhasPagamento: (() => void) | null = null;
 
     const initFirebaseSync = async () => {
       // 1. Let the onAuthStateChanged observer handle the email credentials.
@@ -335,6 +349,38 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           handleFirestoreError(error, OperationType.GET, 'debitos_profissionais');
         }
       );
+
+      const fatColl = collection(db, 'faturas_pacientes');
+      unsubscribeFaturasPacientes = onSnapshot(
+        fatColl,
+        (snap) => {
+          const list: FaturaPaciente[] = [];
+          snap.forEach((d) => {
+            list.push({ ...d.data(), id: d.id } as FaturaPaciente);
+          });
+          setFaturasPacientes(list);
+        },
+        (error) => {
+          console.error("FaturasPacientes live sync error:", error);
+          handleFirestoreError(error, OperationType.GET, 'faturas_pacientes');
+        }
+      );
+
+      const folColl = collection(db, 'folhas_pagamento');
+      unsubscribeFolhasPagamento = onSnapshot(
+        folColl,
+        (snap) => {
+          const list: FolhaPagamento[] = [];
+          snap.forEach((d) => {
+            list.push({ ...d.data(), id: d.id } as FolhaPagamento);
+          });
+          setFolhasPagamento(list);
+        },
+        (error) => {
+          console.error("FolhasPagamento live sync error:", error);
+          handleFirestoreError(error, OperationType.GET, 'folhas_pagamento');
+        }
+      );
     };
 
     initFirebaseSync();
@@ -346,6 +392,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (unsubscribeProfissionais) unsubscribeProfissionais();
       if (unsubscribeUsuariosSistema) unsubscribeUsuariosSistema();
       if (unsubscribeDebitosProfissionais) unsubscribeDebitosProfissionais();
+      if (unsubscribeFaturasPacientes) unsubscribeFaturasPacientes();
+      if (unsubscribeFolhasPagamento) unsubscribeFolhasPagamento();
     };
   }, []);
 
@@ -530,8 +578,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const addAgendamento = async (newAg: Omit<Agendamento, 'id'>) => {
     try {
-      const docRef = await addDoc(collection(db, 'agendamentos'), newAg);
-      const fullAgendamento: Agendamento = { ...newAg, id: docRef.id };
+      const fullAgToSave = { ...newAg, status: 'Aberta' as const };
+      const docRef = await addDoc(collection(db, 'agendamentos'), fullAgToSave);
+      const fullAgendamento: Agendamento = { ...fullAgToSave, id: docRef.id };
       await addAuditLog('CREATE', 'agendamentos', docRef.id, `Agendamento criado: ${fullAgendamento.data}`);
       setNotification('Agendamento criado com sucesso.');
       return fullAgendamento;
@@ -683,6 +732,70 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
+  const addFaturaPaciente = async (fatura: Omit<FaturaPaciente, 'id'>) => {
+    try {
+      const docRef = await addDoc(collection(db, 'faturas_pacientes'), fatura);
+      await addAuditLog('CREATE', 'faturas_pacientes', docRef.id, `Fatura criada para paciente ${fatura.nomePaciente}: ${fatura.numeroFatura}`);
+      setNotification('Fatura salva com sucesso.');
+      return { id: docRef.id, ...fatura } as FaturaPaciente;
+    } catch (err) {
+      console.error("Erro ao salvar fatura:", err);
+      handleFirestoreError(err, OperationType.CREATE, 'faturas_pacientes');
+      throw err;
+    }
+  };
+
+  const deleteFaturaPaciente = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'faturas_pacientes', id));
+      await addAuditLog('DELETE', 'faturas_pacientes', id, `Fatura excluída`);
+      setNotification('Fatura removida com sucesso.');
+    } catch (err) {
+      console.error("Erro ao remover fatura:", err);
+      handleFirestoreError(err, OperationType.DELETE, `faturas_pacientes/${id}`);
+      throw err;
+    }
+  };
+
+  const deleteFolhaPagamento = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'folhas_pagamento', id));
+      await addAuditLog('DELETE', 'folhas_pagamento', id, `Folha excluída`);
+      setNotification('Folha removida com sucesso.');
+    } catch (err) {
+      console.error("Erro ao remover folha:", err);
+      handleFirestoreError(err, OperationType.DELETE, `folhas_pagamento/${id}`);
+      throw err;
+    }
+  };
+
+  const uploadLogo = async (file: File): Promise<string> => {
+    const storageRef = ref(storage, `logos/${file.name}`);
+    await uploadBytes(storageRef, file);
+    const url = await getDownloadURL(storageRef);
+    await setDoc(doc(db, 'configuracoes', 'empresa'), { logoUrl: url }, { merge: true });
+    return url;
+  };
+
+  const uploadPdf = async (file: File, path: string): Promise<string> => {
+    const storageRef = ref(storage, path);
+    await uploadBytes(storageRef, file);
+    return await getDownloadURL(storageRef);
+  };
+
+  const addFolhaPagamento = async (folha: Omit<FolhaPagamento, 'id'>) => {
+    try {
+      const docRef = await addDoc(collection(db, 'folhas_pagamento'), folha);
+      await addAuditLog('CREATE', 'folhas_pagamento', docRef.id, `Folha fechada para profissional ${folha.nomeProfissional}`);
+      setNotification('Folha fechada com sucesso.');
+      return { id: docRef.id, ...folha } as FolhaPagamento;
+    } catch (err) {
+      console.error("Erro ao fechar folha:", err);
+      handleFirestoreError(err, OperationType.CREATE, 'folhas_pagamento');
+      throw err;
+    }
+  };
+
   return (
     <FirebaseContext.Provider
       value={{
@@ -723,6 +836,14 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         debitosProfissionais,
         addDebitoProfissional,
         deleteDebitoProfissional,
+        faturasPacientes,
+        deleteFaturaPaciente,
+        deleteFolhaPagamento,
+        uploadLogo,
+        uploadPdf,
+        addFaturaPaciente,
+        folhasPagamento,
+        addFolhaPagamento,
       }}
     >
       {children}

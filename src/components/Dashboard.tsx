@@ -142,34 +142,34 @@ export const Dashboard: React.FC<{
   ];
 
   return (
-    <div className="space-y-6" id="dashboard-container">
+    <div className="space-y-6 font-sans" id="dashboard-container">
       {/* 🎂 Section: Aniversariantes do Dia */}
-      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4" id="section-aniversariantes">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-pink-50 text-pink-600 rounded-lg shrink-0">
-            <Gift size={20} />
+      <div className="bg-white p-6 rounded-2xl border border-forest-green/10 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4" id="section-aniversariantes">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-[#e8e4db] text-mustard-gold rounded-2xl shrink-0">
+            <Gift size={24} />
           </div>
           <div>
-            <h4 className="text-sm font-bold text-slate-800" id="title-aniversariantes">Aniversariantes do Dia</h4>
-            <p className="text-xs text-slate-600">Parabenize hoje os nossos assistidos e colaboradores!</p>
+            <h4 className="text-sm font-serif font-bold text-forest-green" id="title-aniversariantes">Aniversariantes do Dia</h4>
+            <p className="text-xs text-forest-green/70">Parabenize hoje os nossos assistidos e colaboradores!</p>
           </div>
         </div>
         <div className="flex-1 max-w-xl">
           {aniversariantes.length === 0 ? (
-            <p className="text-xs text-slate-600 italic font-medium" id="txt-no-birthday-today">Nenhum aniversariante no dia de hoje.</p>
+            <p className="text-xs text-forest-green/60 italic font-medium" id="txt-no-birthday-today">Nenhum aniversariante no dia de hoje.</p>
           ) : (
             <div className="flex flex-wrap gap-2" id="birthday-list">
               {aniversariantes.map((aniv, idx) => (
                 <span
                   key={idx}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
+                  className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[11px] font-bold border ${
                     aniv.type === 'Paciente'
-                      ? 'bg-purple-50 text-purple-800 border-purple-200'
-                      : 'bg-teal-50 text-teal-800 border-teal-200'
+                      ? 'bg-off-white text-forest-green border-mustard-gold/20'
+                      : 'bg-off-white text-forest-green border-mustard-gold/20'
                   }`}
                   id={`birthday-${aniv.type.toLowerCase()}-${idx}`}
                 >
-                  {aniv.type === 'Paciente' ? '🎂 Paciente' : '🎉 Profissional'}: {aniv.nome}
+                  <span className="text-mustard-gold">{aniv.type === 'Paciente' ? '🎂' : '🎉'}</span> {aniv.nome}
                 </span>
               ))}
             </div>
@@ -179,54 +179,54 @@ export const Dashboard: React.FC<{
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Débitos do Dia Section */}
-        <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200 shadow-md flex flex-col h-full" id="section-debitos-dia">
-          <div className="flex items-center gap-3 border-b border-slate-100 pb-4 mb-5">
-            <div className="p-2 bg-red-50 text-red-600 rounded-lg">
+        <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-forest-green/10 shadow-sm flex flex-col h-full" id="section-debitos-dia">
+          <div className="flex items-center gap-4 border-b border-forest-green/5 pb-5 mb-5">
+            <div className="p-3 bg-[#e8e4db] text-mustard-gold rounded-2xl">
               <Receipt size={24} />
             </div>
             <div>
-              <h3 className="text-lg font-serif font-bold text-slate-800" id="title-debitos-dia">Débitos do Dia</h3>
-              <p className="text-xs text-slate-600">Monitoramento e validação operacional dos débitos programados para hoje</p>
+              <h3 className="text-lg font-serif font-bold text-forest-green" id="title-debitos-dia">Débitos do Dia</h3>
+              <p className="text-xs text-forest-green/70">Monitoramento e validação operacional dos débitos programados para hoje</p>
             </div>
           </div>
 
           <div className="flex-1">
             {loading ? (
-              <div className="py-12 text-center text-slate-500 font-medium animate-pulse" id="debitos-loading">
+              <div className="py-12 text-center text-forest-green/50 font-medium animate-pulse" id="debitos-loading">
                 Carregando lançamentos...
               </div>
             ) : debitosDoDia.length === 0 ? (
-              <div className="py-12 px-4 text-center rounded-lg border-2 border-dashed border-slate-100 bg-slate-50/50 flex flex-col items-center justify-center space-y-2 h-full" id="debitos-empty-state">
+              <div className="py-12 px-4 text-center rounded-2xl border-2 border-dashed border-forest-green/5 bg-off-white flex flex-col items-center justify-center space-y-2 h-full" id="debitos-empty-state">
                 <p className="text-xl">✅</p>
-                <p className="text-slate-700 font-bold text-sm">Nenhum débito programado para o dia de hoje</p>
-                <p className="text-xs text-slate-500">Excelente! Toda a escala de hoje está operando em conformidade.</p>
+                <p className="text-forest-green font-bold text-sm">Nenhum débito programado para o dia de hoje</p>
+                <p className="text-xs text-forest-green/60">Excelente! Toda a escala de hoje está operando em conformidade.</p>
               </div>
             ) : (
-              <div className="overflow-x-auto border border-slate-100 rounded-lg" id="table-debitos-container">
+              <div className="overflow-x-auto border border-forest-green/5 rounded-2xl" id="table-debitos-container">
                 <table className="w-full border-collapse" id="table-debitos-hoje">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100 text-slate-700 text-xs font-semibold uppercase tracking-wider" id="table-debitos-header-row">
-                      <th className="py-3 px-4 text-left">Nome do Profissional</th>
-                      <th className="py-3 px-4 text-right">Data</th>
-                      <th className="py-3 px-4 text-center">Motivo</th>
-                      <th className="py-3 px-4 text-right">Valor</th>
+                    <tr className="bg-[#e8e4db] text-forest-green text-xs font-semibold uppercase tracking-wider" id="table-debitos-header-row">
+                      <th className="py-4 px-5 text-left">Nome do Profissional</th>
+                      <th className="py-4 px-5 text-right">Data</th>
+                      <th className="py-4 px-5 text-center">Motivo</th>
+                      <th className="py-4 px-5 text-right">Valor</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-700 text-xs">
+                  <tbody className="divide-y divide-forest-green/5 text-forest-green text-xs">
                     {debitosDoDia.map((d) => (
-                      <tr key={d.id} className="hover:bg-slate-50 transition-all duration-150" id={`row-debito-${d.id}`}>
-                        <td className="py-3.5 px-4 text-left font-semibold text-slate-800">{d.nomeProfissional}</td>
-                        <td className="py-3.5 px-4 text-right text-slate-600 font-mono">{formatDebitDateDisplay(d.data)}</td>
-                        <td className="py-3.5 px-4 text-center">
-                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                            d.motivo === 'Curinga' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
-                            d.motivo === 'Passagem' ? 'bg-sky-100 text-sky-800 border border-sky-200' :
-                            'bg-slate-100 text-slate-700 border border-slate-200'
+                      <tr key={d.id} className="hover:bg-off-white transition-all duration-150" id={`row-debito-${d.id}`}>
+                        <td className="py-4 px-5 text-left font-semibold">{d.nomeProfissional}</td>
+                        <td className="py-4 px-5 text-right text-forest-green/70 font-mono">{formatDebitDateDisplay(d.data)}</td>
+                        <td className="py-4 px-5 text-center">
+                          <span className={`inline-block px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                            d.motivo === 'Curinga' ? 'bg-mustard-gold/10 text-mustard-gold' :
+                            d.motivo === 'Passagem' ? 'bg-[#e8e4db] text-forest-green' :
+                            'bg-off-white text-forest-green'
                           }`}>
                             {d.motivo}
                           </span>
                         </td>
-                        <td className="py-3.5 px-4 text-right font-black text-red-600 text-sm font-mono">
+                        <td className="py-4 px-5 text-right font-black text-red-800 text-sm font-mono">
                           R$ {Number(d.valor).toFixed(2)}
                         </td>
                       </tr>
@@ -240,20 +240,20 @@ export const Dashboard: React.FC<{
 
         {/* Shortcuts / Quick Actions Section */}
         <div className="lg:col-span-1 flex flex-col space-y-4" id="section-quick-actions">
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-md flex flex-col h-full">
-            <h3 className="text-md font-serif font-bold text-slate-800 mb-4 border-b border-slate-100 pb-3" id="title-quick-actions">Ações Rápidas</h3>
-            <div className="grid grid-cols-1 gap-3.5 flex-1 justify-center align-middle">
+          <div className="bg-white p-6 rounded-2xl border border-forest-green/10 shadow-sm flex flex-col h-full">
+            <h3 className="text-md font-serif font-bold text-forest-green mb-5 border-b border-forest-green/5 pb-4" id="title-quick-actions">Ações Rápidas</h3>
+            <div className="grid grid-cols-1 gap-4 flex-1">
               {quickActions.map(action => (
                 <button
                   id={action.id}
                   key={action.title}
                   onClick={() => setActiveTab(action.tab, (action as any).extra)}
-                  className="w-full text-left py-5 px-4 rounded-xl border border-slate-100 hover:border-amber-400 bg-slate-50/40 hover:bg-amber-50/25 hover:shadow-md transition-all duration-200 flex items-center space-x-4 group cursor-pointer"
+                  className="w-full text-left py-4 px-5 rounded-full border border-mustard-gold/20 hover:border-mustard-gold bg-white hover:bg-[#e8e4db] hover:shadow-md transition-all duration-300 flex items-center space-x-4 group cursor-pointer"
                 >
-                  <div className="p-3 bg-white border border-slate-100 text-slate-600 rounded-xl group-hover:bg-[#e8e4db] group-hover:text-amber-800 transition-all flex items-center justify-center shadow-sm shrink-0">
-                    <action.icon size={20} />
+                  <div className="p-2.5 bg-[#e8e4db] text-mustard-gold rounded-full transition-all flex items-center justify-center shrink-0">
+                    <action.icon size={18} />
                   </div>
-                  <span className="font-bold text-xs uppercase tracking-wider text-slate-700 group-hover:text-amber-950 transition-all">{action.title}</span>
+                  <span className="font-bold text-xs uppercase tracking-wider text-forest-green transition-all">{action.title}</span>
                 </button>
               ))}
             </div>

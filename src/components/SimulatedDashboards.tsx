@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell } from 'docx';
+import React, { useState, useRef } from 'react';
 import {
   Briefcase,
   Calendar,
@@ -186,16 +187,20 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
     profissionais, 
     debitosProfissionais, 
     addDebitoProfissional, 
-    deleteDebitoProfissional 
+    deleteDebitoProfissional,
+    faturasPacientes,
+    addFaturaPaciente,
+    folhasPagamento,
+    addFolhaPagamento
   } = useFirebase();
 
   const activePacientes = pacientes.filter(p => p.status === 'Ativo' || p.status?.toLowerCase() === 'ativo');
   const activeProfissionais = profissionais.filter(p => p.status === 'Ativo' || p.status?.toLowerCase() === 'ativo');
   
-  const [subTab, setSubTab] = useState<'folhas' | 'debitos'>(initialSubTab);
+  const [subTab, setSubTab] = useState<'folhas' | 'debitos' | 'historico'>(initialSubTab as any);
 
   React.useEffect(() => {
-    setSubTab(initialSubTab);
+    setSubTab(initialSubTab as any);
   }, [initialSubTab]);
   const [financeTab, setFinanceTab] = useState<'fatura' | 'pagamento'>('fatura');
   const [dataInicial, setDataInicial] = useState('2026-06-01');
@@ -205,10 +210,34 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
 
   const [hasGenerated, setHasGenerated] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [agendamentosGerados, setAgendamentosGerados] = useState<Agendamento[]>([]);
   const [debitosNoPeriodo, setDebitosNoPeriodo] = useState<DebitoProfissional[]>([]);
+  const [empresa, setEmpresa] = useState<any>(null);
 
-  // Insert Debit Form State
+  React.useEffect(() => {
+    const fetchEmpresa = async () => {
+        const docRef = doc(db, 'configuracoes', 'empresa');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            setEmpresa(docSnap.data());
+        }
+    };
+    fetchEmpresa();
+  }, []);
+
+  const getNextFaturaNumber = async () => {
+    const counterRef = doc(db, 'contadores', 'faturas');
+    const counterSnap = await getDoc(counterRef);
+    let nextNum = 1;
+    if (counterSnap.exists()) {
+        nextNum = counterSnap.data().ultimoNumero + 1;
+        await setDoc(counterRef, { ultimoNumero: nextNum });
+    } else {
+        await setDoc(counterRef, { ultimoNumero: 1 });
+    }
+    return String(nextNum).padStart(5, '0');
+  };
   const [showDebitModal, setShowDebitModal] = useState(false);
   const [newDebitProfId, setNewDebitProfId] = useState('');
   const [newDebitDate, setNewDebitDate] = useState(() => {
@@ -221,6 +250,12 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   const [newDebitValor, setNewDebitValor] = useState('');
   const [newDebitMotivo, setNewDebitMotivo] = useState<'Curinga' | 'Passagem' | 'Outros'>('Curinga');
   const [isInsertingDebit, setIsInsertingDebit] = useState(false);
+  const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void | Promise<void>;
+  } | null>(null);
 
   const parseInputDateToDateObject = (dateStr: string): Date => {
     const [year, month, day] = dateStr.split('-').map(Number);
@@ -311,7 +346,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       snapshot.forEach(doc => {
         const data = doc.data() as Agendamento;
         if (data.status !== 'Cancelado') {
-          if (!data.escalaCongelada) {
+          if (!data.escalaCongelada && data.status !== 'Concluido') {
             todasFechadas = false;
           }
           docs.push({ ...data, id: doc.id });
@@ -378,6 +413,69 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleSalvarFaturaDefinitiva = async (pacId: string, agends: Agendamento[]) => {
+    setIsSaving(true);
+    try {
+      const pac = pacientes.find(p => p.id === pacId);
+      const totalFatura = agends.reduce((acc, ag) => acc + getAgendamentoCalculatedValues(ag).cobradoDia, 0);
+      const numero = await getNextFaturaNumber();
+
+      await addFaturaPaciente({
+        idPaciente: pacId,
+        nomePaciente: pac?.nome || 'Paciente Desconhecido',
+        numeroFatura: numero,
+        dataEmissao: new Date().toISOString(),
+        periodoApurado: { inicio: dataInicial, fim: dataFinal },
+        valorTotal: totalFatura,
+        status: 'Fechada',
+        plantoesCongelados: agends
+      });
+      alert(`Fatura Nº ${numero} salva com sucesso!`);
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao salvar fatura.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleFecharFolhaProfissional = async (profName: string, agends: Agendamento[]) => {
+      setIsSaving(true);
+      try {
+        let somaRepasses = 0; let somaAjudas = 0;
+        agends.forEach(ag => {
+            const vals = getAgendamentoCalculatedValues(ag);
+            somaRepasses += vals.valorRepasseFinal;
+            somaAjudas += vals.ajudaCusto;
+        });
+
+        const profId = profissionais.find(p => p.nome === profName)?.id;
+        const debDocsForProf = debitosNoPeriodo.filter(d => 
+            (profId && d.idProfissional === profId) || 
+            d.nomeProfissional.toLowerCase() === profName.toLowerCase()
+        );
+        const totalDebitos = debDocsForProf.reduce((sum, d) => sum + d.valor, 0);
+        const valorLiquidoReceber = (somaRepasses + somaAjudas) - totalDebitos;
+
+        await addFolhaPagamento({
+            idProfissional: profId || 'prof-desconhecido',
+            nomeProfissional: profName,
+            dataEmissao: new Date().toISOString(),
+            periodoApurado: { inicio: dataInicial, fim: dataFinal },
+            valorTotalPlantoes: somaRepasses + somaAjudas,
+            valorTotalDebitos: totalDebitos,
+            valorLiquidoReceber: valorLiquidoReceber,
+            status: 'Fechada',
+            historicoDebitos: debDocsForProf
+        });
+      } catch (err) {
+        console.error(err);
+        alert('Erro ao fechar folha.');
+      } finally {
+        setIsSaving(false);
+      }
   };
 
   // Folha de Fatura (Por Paciente)
@@ -672,6 +770,17 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
         >
           💸 Gestão de Débitos dos Profissionais
         </button>
+        <button
+          id="subtab-historico"
+          onClick={() => setSubTab('historico')}
+          className={`px-5 py-3 text-xs font-black uppercase tracking-wider transition-all border-b-2 cursor-pointer ${
+            subTab === 'historico'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          📜 Histórico Financeiro
+        </button>
       </div>
 
       {subTab === 'folhas' ? (
@@ -778,28 +887,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                   </button>
                 </div>
                 
-                {hasGenerated && (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handlePrint}
-                      className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer flex items-center gap-2"
-                    >
-                      🖨️ Imprimir / PDF
-                    </button>
-                    <button
-                      onClick={exportExcel}
-                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer flex items-center gap-2"
-                    >
-                      📊 Exportar Excel
-                    </button>
-                    <button
-                      onClick={exportWord}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer flex items-center gap-2"
-                    >
-                      📄 Exportar Word
-                    </button>
-                  </div>
-                )}
+                {/* Buttons removed as requested */}
               </div>
             </div>
           </div>
@@ -819,9 +907,18 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
               <>
                 {financeTab === 'fatura' && (
                   <div className="space-y-6">
-                    <div className="border-b border-slate-200 pb-2 mb-4">
-                      <h2 className="text-xl font-black text-slate-800">Folha de Fatura (Cobrança Clientes)</h2>
-                      <p className="text-sm text-slate-500">Período Apurado: {dataInicial.split('-').reverse().join('/')} a {dataFinal.split('-').reverse().join('/')}</p>
+                    <div className="border-b border-slate-200 pb-4 mb-4 flex justify-between">
+                      <div>
+                        <h2 className="text-xl font-black text-slate-800">Folha de Fatura (Cobrança Clientes)</h2>
+                        <p className="text-sm text-slate-500">Período Apurado: {dataInicial.split('-').reverse().join('/')} a {dataFinal.split('-').reverse().join('/')}</p>
+                      </div>
+                      {empresa && (
+                        <div className="text-right text-xs text-slate-600">
+                          <p className="font-bold">{empresa.razaoSocial}</p>
+                          <p>CNPJ: {empresa.cnpj}</p>
+                          <p>{empresa.endereco}</p>
+                        </div>
+                      )}
                     </div>
 
                     {Object.keys(agendamentosPorPaciente).length === 0 ? (
@@ -836,9 +933,21 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
 
                         return (
                           <div key={pacId} className="border border-slate-200 rounded-xl overflow-hidden print:border-slate-300 print:mb-8">
-                            <div className="bg-slate-50 px-4 py-3 border-b border-slate-200">
-                              <h3 className="font-bold text-slate-800">{pacNome}</h3>
-                              <p className="text-xs text-slate-500">Total de Plantões: {agends.length}</p>
+                            <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center">
+                              <div>
+                                <h3 className="font-bold text-slate-800">{pacNome}</h3>
+                                <p className="text-xs text-slate-500">Total de Plantões: {agends.length}</p>
+                              </div>
+                              <div className="flex gap-4 items-center">
+                                <p className="text-xs font-black text-blue-700 bg-blue-50 px-2 py-1 rounded">Fatura Nº (Gerada ao salvar)</p>
+                                <button
+                                  onClick={() => handleSalvarFaturaDefinitiva(pacId, agends)}
+                                  disabled={isSaving}
+                                  className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
+                                >
+                                  {isSaving ? 'Salvando...' : '💾 Salvar Fatura Definitiva'}
+                                </button>
+                              </div>
                             </div>
                             <table className="w-full text-left text-xs">
                               <thead className="bg-white border-b border-slate-100 text-slate-500 uppercase tracking-wider text-[10px]">
@@ -920,6 +1029,13 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                                   <h3 className="font-bold text-indigo-900">{profName}</h3>
                                   <p className="text-xs text-indigo-700">Total de Plantões Relacionados: {agends.length}</p>
                                 </div>
+                                <button
+                                  onClick={() => handleFecharFolhaProfissional(profName, agends)}
+                                  disabled={isSaving}
+                                  className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 disabled:opacity-50 cursor-pointer"
+                                >
+                                  {isSaving ? 'Salvando...' : '💾 Fechar Folha'}
+                                </button>
                               </div>
                               
                               <div className="bg-white">
@@ -1002,7 +1118,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
             )}
           </div>
         </>
-      ) : (
+      ) : subTab === 'debitos' ? (
         <div className="space-y-5 animate-in fade-in-30">
           
           {/* Header Action Card */}
@@ -1068,15 +1184,20 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                         <td className="py-3.5 px-5 text-right font-black text-red-600 text-sm font-mono">R$ {d.valor.toFixed(2)}</td>
                         <td className="py-3.5 px-5 text-right">
                           <button
-                            onClick={async () => {
-                              if (window.confirm(`Tem certeza que deseja excluir o débito de R$ ${d.valor.toFixed(2)} de ${d.nomeProfissional}?`)) {
-                                try {
-                                  await deleteDebitoProfissional(d.id);
-                                } catch (err) {
-                                  console.error("Erro ao deletar debito:", err);
-                                  alert("Erro ao excluir o débito.");
+                            onClick={() => {
+                              setDeleteConfirmDialog({
+                                isOpen: true,
+                                title: 'Excluir Registro de Débito',
+                                message: `Tem certeza que deseja excluir o débito de R$ ${d.valor.toFixed(2)} de ${d.nomeProfissional}? Esta ação reajustará o balanço da folha de pagamento do profissional.`,
+                                onConfirm: async () => {
+                                  try {
+                                    await deleteDebitoProfissional(d.id);
+                                  } catch (err) {
+                                    console.error("Erro ao deletar debito:", err);
+                                    alert("Erro ao excluir o débito.");
+                                  }
                                 }
-                              }
+                              });
                             }}
                             className="p-1 text-slate-400 hover:text-red-600 transition-colors cursor-pointer inline-flex items-center justify-center hover:bg-slate-100 rounded"
                             title="Remover débito"
@@ -1092,6 +1213,8 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
             </div>
           </div>
         </div>
+      ) : (
+        <HistoricoFinanceiroDashboard />
       )}
 
       {/* Insert Debit Modal */}
@@ -1195,19 +1318,237 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
 };
 
 
+export const HistoricoFinanceiroDashboard: React.FC = () => {
+    const { faturasPacientes, folhasPagamento, deleteFaturaPaciente, deleteFolhaPagamento } = useFirebase();
+    const [deleteConfirm, setDeleteConfirm] = useState<{isOpen: boolean, id: string, type: 'fatura' | 'folha' } | null>(null);
+    const [viewDoc, setViewDoc] = useState<{data: any, type: 'fatura' | 'folha' } | null>(null);
+    const [empresa, setEmpresa] = useState<any>(null);
+
+    React.useEffect(() => {
+        const fetchEmpresa = async () => {
+            const docRef = doc(db, 'configuracoes', 'empresa');
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                setEmpresa(docSnap.data());
+            }
+        };
+        fetchEmpresa();
+    }, []);
+
+    return (
+      <div className="space-y-6 animate-in fade-in-30">
+        <div className="bg-white p-6 border border-slate-200 rounded-2xl shadow-sm">
+          <h2 className="text-md font-black text-slate-800 mb-4">📜 Histórico de Faturas</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left">
+                <thead className="text-slate-500 uppercase border-b border-slate-100">
+                    <tr>
+                        <th className="p-3">Número</th>
+                        <th className="p-3">Paciente</th>
+                        <th className="p-3">Emissão</th>
+                        <th className="p-3 text-right font-bold">Valor</th>
+                        <th className="p-3 text-center">Status</th>
+                        <th className="p-3 text-center">Ações</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                    {faturasPacientes.map(f => (
+                        <tr key={f.id}>
+                            <td className="p-3 font-mono">{f.numeroFatura}</td>
+                            <td className="p-3">{f.nomePaciente}</td>
+                            <td className="p-3">{new Date(f.dataEmissao).toLocaleDateString('pt-BR')}</td>
+                            <td className="p-3 text-right font-bold text-slate-700">R$ {f.valorTotal.toFixed(2)}</td>
+                            <td className="p-3 text-center"><span className="px-2 py-1 rounded-full text-[10px] bg-green-100 text-green-700 font-bold">{f.status}</span></td>
+                            <td className="p-3 text-center flex gap-2">
+                                <button className="text-blue-600 hover:text-blue-800 cursor-pointer" onClick={() => setViewDoc({ data: f, type: 'fatura' })}>👁️</button>
+                                <button className="text-red-600 hover:text-red-800" onClick={() => setDeleteConfirm({ isOpen: true, id: f.id, type: 'fatura' })}>🗑️</button>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+          </div>
+        </div>
+        <div className="bg-white p-6 border border-slate-200 rounded-2xl shadow-sm">
+            <h2 className="text-md font-black text-slate-800 mb-4">📜 Histórico de Folhas de Pagamento</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                  <thead className="text-slate-500 uppercase border-b border-slate-100">
+                      <tr>
+                          <th className="p-3">Profissional</th>
+                          <th className="p-3">Emissão</th>
+                          <th className="p-3 text-right">Valor Líquido</th>
+                          <th className="p-3 text-center">Status</th>
+                          <th className="p-3 text-center">Ações</th>
+                      </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                      {folhasPagamento.map(f => (
+                          <tr key={f.id}>
+                              <td className="p-3">{f.nomeProfissional}</td>
+                              <td className="p-3">{new Date(f.dataEmissao).toLocaleDateString('pt-BR')}</td>
+                              <td className="p-3 text-right font-bold text-slate-700">R$ {f.valorLiquidoReceber.toFixed(2)}</td>
+                              <td className="p-3 text-center"><span className="px-2 py-1 rounded-full text-[10px] bg-blue-100 text-blue-700 font-bold">{f.status}</span></td>
+                              <td className="p-3 text-center flex gap-2">
+                                  <button className="text-blue-600 hover:text-blue-800 cursor-pointer" onClick={() => setViewDoc({ data: f, type: 'folha' })}>👁️</button>
+                                  <button className="text-red-600 hover:text-red-800" onClick={() => setDeleteConfirm({ isOpen: true, id: f.id, type: 'folha' })}>🗑️</button>
+                              </td>
+                          </tr>
+                      ))}
+                  </tbody>
+              </table>
+            </div>
+        </div>
+
+        {/* View Document Modal */}
+        {viewDoc && (
+          <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 print:hidden">
+              <div className="bg-white p-6 rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-black text-lg text-slate-800">Visualização de {viewDoc.type === 'fatura' ? 'Fatura' : 'Folha'}</h3>
+                    <div className="flex gap-2">
+                        <button onClick={() => window.print()} className="px-4 py-2 bg-slate-800 text-white rounded-lg text-xs font-bold cursor-pointer">Imprimir PDF</button>
+                        <button 
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold cursor-pointer"
+                            onClick={async () => {
+                                const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell } = await import('docx');
+                                const tableRows = viewDoc.data.plantoesCongelados.map((p: any) => new TableRow({
+                                    children: [
+                                        new TableCell({ children: [new Paragraph(p.data)] }),
+                                        new TableCell({ children: [new Paragraph(viewDoc.type === 'fatura' ? p.nomeProfissional : p.nomePaciente)] }),
+                                        new TableCell({ children: [new Paragraph(p.tipoDia || 'Plantão Normal')] }),
+                                        new TableCell({ children: [new Paragraph((p.valorPlantao || p.valorRepasse || 0).toFixed(2))] }),
+                                    ]
+                                }));
+                                const doc = new Document({
+                                    sections: [{
+                                        children: [
+                                            new Paragraph({ text: viewDoc.type === 'fatura' ? 'FATURA' : 'FOLHA DE PAGAMENTO', heading: 'Heading1' }),
+                                            new Paragraph({ children: [new TextRun(`Nome: ${viewDoc.type === 'fatura' ? viewDoc.data.nomePaciente : viewDoc.data.nomeProfissional}`)] }),
+                                            new Table({ rows: [
+                                                new TableRow({ children: ["Data", "Paciente/Profissional", "Serviço", "Valor"].map(h => new TableCell({ children: [new Paragraph({ text: h })] })) }),
+                                                ...tableRows
+                                            ] })
+                                        ]
+                                    }]
+                                });
+                                const blob = await Packer.toBlob(doc);
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `${viewDoc.type}.docx`;
+                                a.click();
+                            }}
+                        >Exportar DOCX</button>
+                        <button 
+                             className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold cursor-pointer"
+                             onClick={() => {
+                                 import('xlsx').then(XLSX => {
+                                     const ws = XLSX.utils.json_to_sheet(viewDoc.data.plantoesCongelados.map((p: any) => ({
+                                         Data: p.data,
+                                         Nome: viewDoc.type === 'fatura' ? p.nomeProfissional : p.nomePaciente,
+                                         Tipo: p.tipoDia || 'Plantão Normal',
+                                         Valor: p.valorPlantao || p.valorRepasse || 0
+                                     })));
+                                     const wb = XLSX.utils.book_new();
+                                     XLSX.utils.book_append_sheet(wb, ws, "Documento");
+                                     XLSX.writeFile(wb, `${viewDoc.type}_${viewDoc.data.id}.xlsx`);
+                                 });
+                             }}
+                        >Exportar XLSX</button>
+                        <button onClick={() => setViewDoc(null)} className="px-4 py-2 bg-slate-200 rounded-lg text-xs font-bold">Fechar</button>
+                    </div>
+                  </div>
+                  <div id="print-area" className="w-[210mm] p-[10mm] bg-white text-black border border-slate-300 mx-auto">
+                    {/* Header with Company Logo etc */}
+                    <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4 mb-6">
+                        <div>
+                             {empresa?.logoUrl ? (
+                               <img src={empresa.logoUrl} alt="Logo" className="w-24 h-12 object-contain" />
+                             ) : (
+                               <div className="w-24 h-12 bg-slate-200 border-2 border-slate-800 flex items-center justify-center font-bold text-slate-700">LOGO</div>
+                             )}
+                             <h2 className="text-xl font-black">{empresa?.razaoSocial || 'EMPRESA PADRÃO'}</h2>
+                             <p className="text-[10px]">{empresa?.cnpj || '00.000.000/0000-00'} • {empresa?.endereco || 'Endereço Indisponível'}</p>
+                        </div>
+                        <div className="text-right">
+                             <h2 className="text-lg font-black">{viewDoc.type === 'fatura' ? 'FATURA' : 'FOLHA DE PAGAMENTO'}</h2>
+                             <p className="text-xs font-mono">Nº: {viewDoc.data.numeroFatura || (viewDoc.type === 'folha' ? 'FOLHA-' + viewDoc.data.id.substring(0,6) : 'XXXX')}</p>
+                        </div>
+                    </div>
+                    {/* Data Grid */}
+                    <div className="grid grid-cols-2 gap-4 mb-6 text-[10px]">
+                        <div><span className="font-bold">Emissão:</span> {new Date(viewDoc.data.dataEmissao).toLocaleDateString('pt-BR')}</div>
+                        <div><span className="font-bold">Status:</span> {viewDoc.data.status}</div>
+                        <div><span className="font-bold">{viewDoc.type === 'fatura' ? 'Paciente:' : 'Profissional:'}</span> {viewDoc.type === 'fatura' ? viewDoc.data.nomePaciente : viewDoc.data.nomeProfissional}</div>
+                        <div><span className="font-bold">Valor Total:</span> R$ {viewDoc.type === 'fatura' ? (viewDoc.data.valorTotal || 0).toFixed(2) : (viewDoc.data.valorLiquidoReceber || 0).toFixed(2)}</div>
+                    </div>
+                    {/* Plantões Table */}
+                    <table className="w-full text-[10px] border-collapse mb-6">
+                      <thead>
+                        <tr className="bg-slate-100 border-b border-slate-300">
+                          <th className="p-2 text-left">Data</th>
+                          <th className="p-2 text-left">{viewDoc.type === 'fatura' ? 'Profissional' : 'Paciente'}</th>
+                          <th className="p-2 text-left">Serviço</th>
+                          <th className="p-2 text-right">Valor</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {viewDoc.data.plantoesCongelados && viewDoc.data.plantoesCongelados.map((p: any, i: number) => (
+                          <tr key={i} className="border-b border-slate-200">
+                            <td className="p-2">{p.data}</td>
+                            <td className="p-2">{viewDoc.type === 'fatura' ? p.nomeProfissional : p.nomePaciente}</td>
+                            <td className="p-2">{p.tipoDia || 'Plantão Normal'}</td>
+                            <td className="p-2 text-right">R$ {(p.valorPlantao || p.valorRepasse || 0).toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="font-bold bg-slate-50">
+                          <td colSpan={3} className="p-2 text-right">TOTAL</td>
+                          <td className="p-2 text-right">R$ {viewDoc.type === 'fatura' ? (viewDoc.data.valorTotal || 0).toFixed(2) : (viewDoc.data.valorLiquidoReceber || 0).toFixed(2)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+              </div>
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {deleteConfirm && (
+            <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4">
+                <div className="bg-white p-6 rounded-2xl max-w-sm w-full">
+                    <p className="text-sm font-bold text-slate-800">⚠️ Tem certeza que deseja excluir esta Fatura/Folha do histórico? Esta ação não pode ser desfeita.</p>
+                    <div className="flex justify-end gap-3 mt-4">
+                        <button onClick={() => setDeleteConfirm(null)} className="px-4 py-2 bg-slate-200 rounded-lg text-xs font-bold">Não</button>
+                        <button onClick={async () => {
+                            if(deleteConfirm.type === 'fatura') await deleteFaturaPaciente(deleteConfirm.id);
+                            else await deleteFolhaPagamento(deleteConfirm.id);
+                            setDeleteConfirm(null);
+                        }} className="px-4 py-2 bg-red-600 text-white rounded-lg text-xs font-bold">Sim, Excluir</button>
+                    </div>
+                </div>
+            </div>
+        )}
+      </div>
+    )
+  }
+
 /* ----------------------------------------------------
  * Tab 5: Empresa e Configurações Corporativas
  * ---------------------------------------------------- */
 import { GestaoAcessos } from './GestaoAcessos';
 
 export const EmpresaDashboard: React.FC = () => {
-  const { userRole, setNotification } = useFirebase();
+  const { userRole, setNotification, uploadLogo } = useFirebase();
   const isAdmin = userRole?.toLowerCase() === 'administrador';
 
   const [razaoSocial, setRazaoSocial] = useState('CuidarHome Prestadora de Serviços Médicos S.A.');
   const [cnpj, setCnpj] = useState('12.345.678/0001-99');
   const [unidadeOperacao, setUnidadeOperacao] = useState('Rio de Janeiro - RJ (Zona Sul & Barra)');
   const [direcaoGeral, setDirecaoGeral] = useState('Renato B. Z.');
+  const [logoUrl, setLogoUrl] = useState('');
   const [isEditingMatriz, setIsEditingMatriz] = useState(false);
   const [loadingConfig, setLoadingConfig] = useState(true);
 
@@ -1216,18 +1557,19 @@ export const EmpresaDashboard: React.FC = () => {
   const [tempCnpj, setTempCnpj] = useState('');
   const [tempUnidade, setTempUnidade] = useState('');
   const [tempDirecao, setTempDirecao] = useState('');
+  const [tempLogo, setTempLogo] = useState<File | null>(null);
 
   React.useEffect(() => {
     const fetchMatrizConfig = async () => {
       try {
-        const docRef = doc(db, 'empresa_config', 'matriz');
+        const docRef = doc(db, 'configuracoes', 'empresa');
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data();
           if (data.razaoSocial) setRazaoSocial(data.razaoSocial);
           if (data.cnpj) setCnpj(data.cnpj);
-          if (data.unidadeOperacao) setUnidadeOperacao(data.unidadeOperacao);
-          if (data.direcaoGeral) setDirecaoGeral(data.direcaoGeral);
+          if (data.endereco) setUnidadeOperacao(data.endereco);
+          if (data.logoUrl) setLogoUrl(data.logoUrl);
         }
       } catch (err) {
         console.error("Erro ao carregar dados da matriz:", err);
@@ -1243,6 +1585,7 @@ export const EmpresaDashboard: React.FC = () => {
     setTempCnpj(cnpj);
     setTempUnidade(unidadeOperacao);
     setTempDirecao(direcaoGeral);
+    setTempLogo(null);
     setIsEditingMatriz(true);
   };
 
@@ -1252,18 +1595,24 @@ export const EmpresaDashboard: React.FC = () => {
       return;
     }
     try {
-      const docRef = doc(db, 'empresa_config', 'matriz');
+      let finalLogoUrl = logoUrl;
+      if (tempLogo) {
+          finalLogoUrl = await uploadLogo(tempLogo);
+      }
+      
+      const docRef = doc(db, 'configuracoes', 'empresa');
       await setDoc(docRef, {
         razaoSocial: tempRazao,
         cnpj: tempCnpj,
-        unidadeOperacao: tempUnidade,
-        direcaoGeral: tempDirecao,
+        endereco: tempUnidade,
+        logoUrl: finalLogoUrl,
         updatedAt: new Date().toISOString()
-      });
+      }, { merge: true });
+      
       setRazaoSocial(tempRazao);
       setCnpj(tempCnpj);
       setUnidadeOperacao(tempUnidade);
-      setDirecaoGeral(tempDirecao);
+      setLogoUrl(finalLogoUrl);
       setIsEditingMatriz(false);
       setNotification('Dados organizacionais da Unidade Matriz alterados e salvos com sucesso.');
     } catch (err) {
@@ -1298,6 +1647,19 @@ export const EmpresaDashboard: React.FC = () => {
               
               {isEditingMatriz ? (
                 <div className="space-y-2">
+                  <div className="space-y-1">
+                    <label className="text-[9px] uppercase font-bold text-slate-400">Logotipo da Empresa</label>
+                    <div className="flex items-center gap-4">
+                      {logoUrl && !tempLogo && <img src={logoUrl} alt="Logo" className="w-16 h-12 object-contain border rounded" />}
+                      {tempLogo && <img src={URL.createObjectURL(tempLogo)} alt="Novo Logo" className="w-16 h-12 object-contain border rounded" />}
+                      <input 
+                        type="file" 
+                        onChange={e => setTempLogo(e.target.files?.[0] || null)} 
+                        accept="image/*" 
+                        className="text-xs"
+                      />
+                    </div>
+                  </div>
                   <div className="space-y-0.5">
                     <label className="text-[9px] uppercase font-bold text-slate-400">Razão Social</label>
                     <input 
@@ -1336,7 +1698,8 @@ export const EmpresaDashboard: React.FC = () => {
                   </div>
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-4">
+                  {logoUrl && <img src={logoUrl} alt="Logo" className="w-24 h-16 object-contain border rounded" />}
                   <p>Razão Social: <strong className="text-slate-700">{razaoSocial}</strong></p>
                   <p>CNPJ: <strong className="text-slate-700">{cnpj}</strong></p>
                   <p>Unidade de Operação: <strong className="text-slate-700 text-blue-600">{unidadeOperacao}</strong></p>
