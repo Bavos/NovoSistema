@@ -84,33 +84,35 @@ export const Profissionais: React.FC = () => {
         </button>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-        <table className="w-full text-xs text-left">
-          <thead className="bg-slate-50 border-b border-slate-200">
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-md">
+        <table className="w-full text-xs">
+          <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 text-[10px] font-semibold uppercase tracking-wider">
             <tr>
-              <th className="p-3">Nome</th>
-              <th className="p-3">Especialidade</th>
-              <th className="p-3">Telefone</th>
-              <th className="p-3">Email</th>
-              <th className="p-3">Status</th>
-              <th className="p-3">Ações</th>
+              <th className="p-3 text-left">Nome</th>
+              <th className="p-3 text-left">Especialidade</th>
+              <th className="p-3 text-left">Telefone</th>
+              <th className="p-3 text-left">Email</th>
+              <th className="p-3 text-center">Status</th>
+              <th className="p-3 text-center">Ações</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-slate-100">
             {(profissionais || []).map(prof => (
-              <tr key={prof.id} className="border-b border-slate-100 hover:bg-slate-50">
-                <td className="p-3 font-medium">{prof.nome}</td>
-                <td className="p-3">{prof.especialidade}</td>
-                <td className="p-3">{prof.telefone}</td>
-                <td className="p-3">{prof.email}</td>
-                <td className="p-3">
-                    <span className={`px-2 py-1 rounded-full text-[10px] ${prof.status === 'Ativo' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+              <tr key={prof.id} className="hover:bg-slate-50 transition-colors duration-150">
+                <td className="p-3 font-medium text-slate-800 text-left">{prof.nome}</td>
+                <td className="p-3 text-slate-600 text-left">{prof.especialidade}</td>
+                <td className="p-3 text-slate-600 text-left">{prof.telefone}</td>
+                <td className="p-3 text-slate-600 text-left">{prof.email}</td>
+                <td className="p-3 text-center">
+                    <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold ${prof.status === 'Ativo' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'}`}>
                         {prof.status}
                     </span>
                 </td>
-                <td className="p-3 flex gap-2">
-                  <button onClick={() => handleOpenModal(prof)} className="text-blue-600 hover:text-blue-800"><Edit2 size={14} /></button>
-                  <button onClick={() => deleteProfissional(prof.id)} className="text-red-600 hover:text-red-800"><Trash2 size={14} /></button>
+                <td className="p-3">
+                  <div className="flex gap-2.5 justify-center">
+                    <button onClick={() => handleOpenModal(prof)} className="text-blue-600 hover:text-blue-850 transition-colors p-1" title="Editar"><Edit2 size={14} /></button>
+                    <button onClick={() => deleteProfissional(prof.id)} className="text-red-600 hover:text-red-850 transition-colors p-1" title="Deletar"><Trash2 size={14} /></button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -159,23 +161,31 @@ export const Profissionais: React.FC = () => {
                   </div>
                 ) : (
                   <div className="max-h-64 overflow-y-auto border rounded-xl border-slate-200 bg-white">
-                      <table className="w-full text-left text-xs align-middle">
-                         <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 shadow-sm z-10">
-                           <tr className="text-slate-600 font-semibold">
-                             <th className="p-3">Data</th>
-                             <th className="p-3">Paciente</th>
-                             <th className="p-3">Horário</th>
-                             <th className="p-3">Tipo de Plantão</th>
-                             <th className="p-3">Valor a Receber</th>
-                             <th className="p-3">Status</th>
+                      <table className="w-full text-xs align-middle">
+                         <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 shadow-sm z-10 text-slate-700 text-[10px] font-semibold uppercase tracking-wider">
+                           <tr>
+                             <th className="p-3 text-right">Data</th>
+                             <th className="p-3 text-left">Paciente</th>
+                             <th className="p-3 text-center">Horário</th>
+                             <th className="p-3 text-left">Tipo de Plantão</th>
+                             <th className="p-3 text-right">Valor a Receber</th>
+                             <th className="p-3 text-center">Status</th>
                            </tr>
                          </thead>
                          <tbody className="divide-y divide-slate-100">
                            {agendamentosProf.map(ag => {
                               const pacienteNome = pacientes.find(p => p.id === ag.idPaciente)?.nome || 'Paciente não encontrado';
-                              const valorRepasse = Number(ag.valorRepasse || 0);
+                              const baseRepasse = Number(ag.valorRepasse || 0);
                               const ajudaCusto = Number(ag.ajudaCusto || 0);
-                              const totalReceber = valorRepasse + ajudaCusto;
+                              
+                              let multiplier = 1.0;
+                              if (ag.tipoDia === 'Feriado 20%') {
+                                multiplier = 1.2;
+                              } else if (ag.tipoDia === 'Feriado 50%') {
+                                multiplier = 1.5;
+                              }
+                              
+                              const totalReceber = (baseRepasse * multiplier) + ajudaCusto;
                               return (
                                 <tr key={ag.id} className="hover:bg-slate-50 transition-colors">
                                   <td className="p-3 font-medium text-slate-800">{ag.data.split('-').reverse().join('/')}</td>

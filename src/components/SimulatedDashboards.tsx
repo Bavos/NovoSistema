@@ -395,6 +395,40 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
     return acc;
   }, {});
 
+  const getAgendamentoCalculatedValues = (ag: Agendamento) => {
+    const basePlantao = ag.valorPlantao || 0;
+    const baseRepasse = ag.valorRepasse || 0;
+    const baseTaxaAdm = ag.taxaAdm || 0;
+    const ajudaCusto = ag.ajudaCusto || 0;
+
+    let multiplier = 1.0;
+    if (ag.tipoDia === 'Feriado 20%') {
+      multiplier = 1.2;
+    } else if (ag.tipoDia === 'Feriado 50%') {
+      multiplier = 1.5;
+    }
+
+    // Rule 1: % de acréscimo calculated and added exclusively to 'Valor Base do Plantão' and 'Taxa de Adm'.
+    // Rule 2: 'Ajuda de Custo' is immutable (0% acréscimo).
+    // Rule 3: Total do Plantão (Faturamento Paciente) = (Valor Base do Plantão + % de Acréscimo) + (Taxa de Administração + % de Acréscimo) + Ajuda de Custo Original
+    const valorPlantaoFinal = basePlantao * multiplier;
+    const taxaAdmFinal = baseTaxaAdm * multiplier;
+    const cobradoDia = valorPlantaoFinal + taxaAdmFinal + ajudaCusto;
+
+    // Rule 4: Total a Receber (Pagamento Profissional) = (Valor Base do Plantão + % de Acréscimo) + Ajuda de Custo Original
+    const valorRepasseFinal = baseRepasse * multiplier;
+    const totalReceber = valorRepasseFinal + ajudaCusto;
+
+    return {
+      valorPlantaoFinal,
+      taxaAdmFinal,
+      cobradoDia,
+      valorRepasseFinal,
+      totalReceber,
+      ajudaCusto,
+    };
+  };
+
   const handlePrint = () => {
     window.print();
   };
@@ -409,8 +443,8 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       pData.forEach(([pacId, agends]) => {
         const pacNome = pacientes.find(p => p.id === pacId)?.nome || 'Paciente Desconhecido';
         agends.forEach(ag => {
-          const cobradoDia = ag.valorPlantao + ag.taxaAdm + ag.ajudaCusto;
-          csvContent += `"${pacNome}";"${ag.data.split('-').reverse().join('/')}";"${ag.nomeProfissional}";"${ag.horario}";"${ag.tipoDia || 'Normal'}";${ag.valorPlantao.toFixed(2).replace('.', ',')};${ag.taxaAdm.toFixed(2).replace('.', ',')};${ag.ajudaCusto.toFixed(2).replace('.', ',')};${cobradoDia.toFixed(2).replace('.', ',')}\n`;
+          const vals = getAgendamentoCalculatedValues(ag);
+          csvContent += `"${pacNome}";"${ag.data.split('-').reverse().join('/')}";"${ag.nomeProfissional}";"${ag.horario}";"${ag.tipoDia || 'Normal'}";${vals.valorPlantaoFinal.toFixed(2).replace('.', ',')};${vals.taxaAdmFinal.toFixed(2).replace('.', ',')};${vals.ajudaCusto.toFixed(2).replace('.', ',')};${vals.cobradoDia.toFixed(2).replace('.', ',')}\n`;
         });
       });
     } else {
@@ -422,11 +456,18 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
           const pacId = ag.idPaciente;
           const paciente = pacientes.find((p) => p.id === pacId);
           const nomePac = paciente ? paciente.nome : 'Paciente Desconhecido';
-          csvContent += `"${profName}";"${ag.data.split('-').reverse().join('/')}";"${nomePac}";${ag.valorRepasse.toFixed(2).replace('.', ',')};${ag.ajudaCusto.toFixed(2).replace('.', ',')};"${ag.tipoDia && ag.tipoDia !== 'Normal' ? ag.tipoDia : '-'}"\n`;
+          const vals = getAgendamentoCalculatedValues(ag);
+          csvContent += `"${profName}";"${ag.data.split('-').reverse().join('/')}";"${nomePac}";${vals.valorRepasseFinal.toFixed(2).replace('.', ',')};${vals.ajudaCusto.toFixed(2).replace('.', ',')};"${ag.tipoDia && ag.tipoDia !== 'Normal' ? ag.tipoDia : '-'}"\n`;
         });
         
-        const somaRepasses = agends.reduce((acc, ag) => acc + ag.valorRepasse, 0);
-        const somaAjudas = agends.reduce((acc, ag) => acc + ag.ajudaCusto, 0);
+        let somaRepasses = 0;
+        let somaAjudas = 0;
+        agends.forEach(ag => {
+          const vals = getAgendamentoCalculatedValues(ag);
+          somaRepasses += vals.valorRepasseFinal;
+          somaAjudas += vals.ajudaCusto;
+        });
+
         const profId = profissionais.find(p => p.nome === profName)?.id;
         const debDocsForProf = debitosNoPeriodo.filter(d => 
           (profId && d.idProfissional === profId) || 
@@ -462,7 +503,10 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       const pData = Object.entries(agendamentosPorPaciente) as [string, Agendamento[]][];
       pData.forEach(([pacId, agends]) => {
         const pacNome = pacientes.find(p => p.id === pacId)?.nome || 'Paciente Desconhecido';
-        const totalFatura = agends.reduce((acc, ag) => acc + ag.valorPlantao + ag.taxaAdm + ag.ajudaCusto, 0);
+        const totalFatura = agends.reduce((acc, ag) => {
+          const vals = getAgendamentoCalculatedValues(ag);
+          return acc + vals.cobradoDia;
+        }, 0);
         htmlContent += `
           <h2>Paciente: ${pacNome}</h2>
           <table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%; font-size: 12px; font-family: sans-serif;">
@@ -471,17 +515,17 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
             </tr>
         `;
         agends.sort((a,b) => a.data.localeCompare(b.data)).forEach(ag => {
-          const cobradoDia = ag.valorPlantao + ag.taxaAdm + ag.ajudaCusto;
+          const vals = getAgendamentoCalculatedValues(ag);
           htmlContent += `
             <tr>
               <td>${ag.data.split('-').reverse().join('/')}</td>
               <td>${ag.nomeProfissional}</td>
               <td>${ag.horario}</td>
               <td>${ag.tipoDia || 'Normal'}</td>
-              <td>R$ ${ag.valorPlantao.toFixed(2)}</td>
-              <td>R$ ${ag.taxaAdm.toFixed(2)}</td>
-              <td>R$ ${ag.ajudaCusto.toFixed(2)}</td>
-              <td><strong>R$ ${cobradoDia.toFixed(2)}</strong></td>
+              <td>R$ ${vals.valorPlantaoFinal.toFixed(2)}</td>
+              <td>R$ ${vals.taxaAdmFinal.toFixed(2)}</td>
+              <td>R$ ${vals.ajudaCusto.toFixed(2)}</td>
+              <td><strong>R$ ${vals.cobradoDia.toFixed(2)}</strong></td>
             </tr>
           `;
         });
@@ -496,8 +540,14 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
     } else {
       const pData = Object.entries(agendamentosPorProfissional) as [string, Agendamento[]][];
       pData.forEach(([profName, agends]) => {
-        const somaRepasses = agends.reduce((acc, ag) => acc + ag.valorRepasse, 0);
-        const somaAjudas = agends.reduce((acc, ag) => acc + ag.ajudaCusto, 0);
+        let somaRepasses = 0;
+        let somaAjudas = 0;
+        agends.forEach(ag => {
+          const vals = getAgendamentoCalculatedValues(ag);
+          somaRepasses += vals.valorRepasseFinal;
+          somaAjudas += vals.ajudaCusto;
+        });
+
         const profId = profissionais.find(p => p.nome === profName)?.id;
         const debDocsForProf = debitosNoPeriodo.filter(d => 
           (profId && d.idProfissional === profId) || 
@@ -520,12 +570,13 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
           const pacId = ag.idPaciente;
           const paciente = pacientes.find((p) => p.id === pacId);
           const nomePac = paciente ? paciente.nome : 'Paciente Desconhecido';
+          const vals = getAgendamentoCalculatedValues(ag);
           htmlContent += `
             <tr>
               <td>${ag.data.split('-').reverse().join('/')}</td>
               <td>${nomePac}</td>
-              <td>R$ ${ag.valorRepasse.toFixed(2)}</td>
-              <td>R$ ${ag.ajudaCusto.toFixed(2)}</td>
+              <td>R$ ${vals.valorRepasseFinal.toFixed(2)}</td>
+              <td>R$ ${vals.ajudaCusto.toFixed(2)}</td>
               <td>${ag.tipoDia && ag.tipoDia !== 'Normal' ? ag.tipoDia : '-'}</td>
             </tr>
           `;
@@ -778,7 +829,10 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                     ) : (
                       (Object.entries(agendamentosPorPaciente) as [string, Agendamento[]][]).map(([pacId, agends]) => {
                         const pacNome = pacientes.find(p => p.id === pacId)?.nome || 'Paciente Desconhecido';
-                        const totalFatura = agends.reduce((acc, ag) => acc + ag.valorPlantao + ag.ajudaCusto + ag.taxaAdm, 0);
+                        const totalFatura = agends.reduce((acc, ag) => {
+                          const vals = getAgendamentoCalculatedValues(ag);
+                          return acc + vals.cobradoDia;
+                        }, 0);
 
                         return (
                           <div key={pacId} className="border border-slate-200 rounded-xl overflow-hidden print:border-slate-300 print:mb-8">
@@ -801,17 +855,17 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                               </thead>
                               <tbody className="divide-y divide-slate-50">
                                 {agends.sort((a,b) => a.data.localeCompare(b.data)).map(ag => {
-                                  const cobradoDia = ag.valorPlantao + ag.taxaAdm + ag.ajudaCusto;
+                                  const vals = getAgendamentoCalculatedValues(ag);
                                   return (
                                     <tr key={ag.id} className="hover:bg-slate-50/50">
                                       <td className="py-2.5 px-4">{ag.data.split('-').reverse().join('/')}</td>
                                       <td className="py-2.5 px-4">{ag.nomeProfissional}</td>
                                       <td className="py-2.5 px-4 font-mono text-[10px]">{ag.horario}</td>
                                       <td className="py-2.5 px-4">{ag.tipoDia || 'Normal'}</td>
-                                      <td className="py-2.5 px-4 text-right">R$ {ag.valorPlantao.toFixed(2)}</td>
-                                      <td className="py-2.5 px-4 text-right">R$ {ag.taxaAdm.toFixed(2)}</td>
-                                      <td className="py-2.5 px-4 text-right">R$ {ag.ajudaCusto.toFixed(2)}</td>
-                                      <td className="py-2.5 px-4 text-right font-bold text-slate-700">R$ {cobradoDia.toFixed(2)}</td>
+                                      <td className="py-2.5 px-4 text-right">R$ {vals.valorPlantaoFinal.toFixed(2)}</td>
+                                      <td className="py-2.5 px-4 text-right">R$ {vals.taxaAdmFinal.toFixed(2)}</td>
+                                      <td className="py-2.5 px-4 text-right">R$ {vals.ajudaCusto.toFixed(2)}</td>
+                                      <td className="py-2.5 px-4 text-right font-bold text-slate-700">R$ {vals.cobradoDia.toFixed(2)}</td>
                                     </tr>
                                   );
                                 })}
@@ -842,8 +896,13 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {(Object.entries(agendamentosPorProfissional) as [string, Agendamento[]][]).map(([profName, agends]) => {
-                          const somaRepasses = agends.reduce((acc, ag) => acc + ag.valorRepasse, 0);
-                          const somaAjudas = agends.reduce((acc, ag) => acc + ag.ajudaCusto, 0);
+                          let somaRepasses = 0;
+                          let somaAjudas = 0;
+                          agends.forEach(ag => {
+                            const vals = getAgendamentoCalculatedValues(ag);
+                            somaRepasses += vals.valorRepasseFinal;
+                            somaAjudas += vals.ajudaCusto;
+                          });
                           
                           // Look up the professional and compute automatic deductions
                           const profId = profissionais.find(p => p.nome === profName)?.id;
@@ -878,12 +937,13 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                                     {agends.sort((a,b) => a.data.localeCompare(b.data)).map(ag => {
                                       const paciente = pacientes.find(p => p.id === ag.idPaciente);
                                       const nomePac = paciente ? paciente.nome : 'Paciente Desconhecido';
+                                      const vals = getAgendamentoCalculatedValues(ag);
                                       return (
                                         <tr key={ag.id} className="hover:bg-slate-50/50">
                                           <td className="py-2.5 px-4">{ag.data.split('-').reverse().join('/')}</td>
                                           <td className="py-2.5 px-4">{nomePac}</td>
-                                          <td className="py-2.5 px-4 text-right">R$ {ag.valorRepasse.toFixed(2)}</td>
-                                          <td className="py-2.5 px-4 text-right">R$ {ag.ajudaCusto.toFixed(2)}</td>
+                                          <td className="py-2.5 px-4 text-right">R$ {vals.valorRepasseFinal.toFixed(2)}</td>
+                                          <td className="py-2.5 px-4 text-right">R$ {vals.ajudaCusto.toFixed(2)}</td>
                                           <td className="py-2.5 px-4 text-right text-slate-500">{ag.tipoDia && ag.tipoDia !== 'Normal' ? ag.tipoDia : '-'}</td>
                                         </tr>
                                       );

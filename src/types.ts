@@ -144,6 +144,7 @@ export interface Agendamento {
   observacao?: string;
   escalaCongelada?: boolean;
   tipoDia?: 'Normal' | 'Feriado 20%' | 'Feriado 50%';
+  isCuringa?: boolean;
 }
 
 export type CancelingReason =

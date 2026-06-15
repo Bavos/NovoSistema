@@ -278,7 +278,7 @@ export const PatientList: React.FC<PatientListProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50/50 border-b border-slate-150 text-[10px] tracking-widest uppercase font-normal text-slate-400">
+              <tr className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase font-semibold text-slate-700 tracking-wider">
                 <th className="py-4 px-4 w-12 text-center">
                   <input
                     type="checkbox"
@@ -287,11 +287,11 @@ export const PatientList: React.FC<PatientListProps> = ({
                     className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                   />
                 </th>
-                <th className="py-4 px-4 font-normal text-slate-600">Nome Completo</th>
-                <th className="py-4 px-4 font-normal text-slate-600">Bairro</th>
-                <th className="py-4 px-4 font-normal text-slate-600">Grau Dependência</th>
-                <th className="py-4 px-4 font-normal text-slate-600 text-center">Plano de Escala</th>
-                <th className="py-4 px-4 font-normal text-slate-600">Status</th>
+                <th className="py-4 px-4 text-left">Nome Completo</th>
+                <th className="p-3 text-left">Bairro</th>
+                <th className="p-3 text-left">Grau Dependência</th>
+                <th className="p-3 text-center">Plano de Escala</th>
+                <th className="p-3 text-center">Status</th>
               </tr>
             </thead>
             <tbody className="text-slate-600 text-sm divide-y divide-slate-100">

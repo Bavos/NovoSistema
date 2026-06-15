@@ -125,9 +125,6 @@ function DashboardContent() {
           {/* Dashboard Page Header block */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-4 print:hidden">
             <div className="space-y-1">
-              <div className="flex items-center space-x-2">
-                <span className="text-xs font-bold text-blue-600 uppercase tracking-widest font-mono">RH Cuidado Domiciliar</span>
-              </div>
               <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight flex items-center space-x-2">
                 <span>{getPageTitle()}</span>
               </h1>
@@ -190,7 +187,7 @@ function DashboardContent() {
         </main>
 
         {/* Footer info brand */}
-        <footer className="py-4 border-t border-slate-200 text-center text-xs text-slate-400 select-none font-mono print:hidden">
+        <footer className="py-4 border-t border-slate-200 text-center text-xs text-slate-500 select-none font-mono print:hidden">
           <p>© 2026 CuidarHome S.A. • Todos os direitos reservados • Auditoria Integrada Firestore</p>
         </footer>
       </div>

@@ -34,7 +34,8 @@ import {
   ChevronRight,
   Sun,
   Moon,
-  Crown
+  Crown,
+  Info
 } from 'lucide-react';
 
 // Helper to compute calendar positions matching the layout provided
@@ -161,7 +162,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
 
   // Add Shift inline inputs state
   const [newShiftProf, setNewShiftProf] = useState('');
-  const [newShiftDate, setNewShiftDate] = useState('2026-06-12');
+  const [newShiftDate, setNewShiftDate] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  });
   const [newShiftDay, setNewShiftDay] = useState('Sex');
   const [newShiftTipoEscala, setNewShiftTipoEscala] = useState<number>(12);
   const [newShiftHoraInicio, setNewShiftHoraInicio] = useState('07:00');
@@ -178,8 +182,15 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
   const [newShiftDatesList, setNewShiftDatesList] = useState<string[]>([]);
   const [newShiftFeriado, setNewShiftFeriado] = useState<'20%' | '50%' | null>(null);
   const [showBatchScheduling, setShowBatchScheduling] = useState(false);
-  const [batchStartDate, setBatchStartDate] = useState('2026-06-12');
-  const [batchEndDate, setBatchEndDate] = useState('2026-06-19');
+  const [batchStartDate, setBatchStartDate] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  });
+  const [batchEndDate, setBatchEndDate] = useState(() => {
+    const today = new Date();
+    today.setDate(today.getDate() + 7);
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  });
   const [batchWeekdays, setBatchWeekdays] = useState<string[]>(['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']);
 
   // Automatically calculate weekday from dates
@@ -200,6 +211,26 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
       setEditShiftDay(days[dateObj.getDay()] || 'Sex');
     }
   }, [editShiftDate]);
+
+  // Single date state and curinga for Novo Agendamento
+  const [avulsoSingleDate, setAvulsoSingleDate] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  });
+
+  // Detailed Shift Details / Edit / Delete Modal State
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+  const [selectedShiftForDetails, setSelectedShiftForDetails] = useState<any>(null);
+  const [isEditingDetails, setIsEditingDetails] = useState(false);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+
+  // Editable details form fields (synchronized when we enter edit mode):
+  const [detailsProfName, setDetailsProfName] = useState('');
+  const [detailsDate, setDetailsDate] = useState('');
+  const [detailsPlantaoOptionId, setDetailsPlantaoOptionId] = useState<string>('principal');
+  const [detailsCuringa, setDetailsCuringa] = useState(false);
+  const [detailsTipoDia, setDetailsTipoDia] = useState<'Normal' | 'Feriado 20%' | 'Feriado 50%'>('Normal');
+  const [showDetailsProfDropdown, setShowDetailsProfDropdown] = useState(false);
 
   // Shift Audit Inspector Modal state
   const [inspectedShiftJson, setInspectedShiftJson] = useState<any>(null);
@@ -254,8 +285,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
   } = usePacienteData(paciente?.id);
 
   // New States for attached Calendar Layout & Buttons
-  const [calendarMonth, setCalendarMonth] = useState<number>(5); // June 2026 as default
-  const [calendarYear, setCalendarYear] = useState<number>(2026);
+  const [calendarMonth, setCalendarMonth] = useState<number>(new Date().getMonth());
+  const [calendarYear, setCalendarYear] = useState<number>(new Date().getFullYear());
   const [calendarView, setCalendarView] = useState<'lista' | 'calendario'>('calendario'); // default to visual calendar view
   
   // Modals
@@ -712,15 +743,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
 
   // Helper for strict financial calculations
   const calculateShiftValues = (basePlantao: number, baseTaxa: number, baseAjuda: number, feriado: '20%' | '50%' | null) => {
-    let multiplier = 1.0;
-    if (feriado === '20%') {
-      multiplier = 1.2;
-    } else if (feriado === '50%') {
-      multiplier = 1.5;
-    }
+    // Return base values. Acréscimo percent will be applied dynamically in reports and displays.
     return {
-      plantaoFinal: basePlantao * multiplier,
-      taxaAdmFinal: baseTaxa * multiplier,
+      plantaoFinal: basePlantao,
+      taxaAdmFinal: baseTaxa,
       ajudaCusto: baseAjuda
     };
   };
@@ -769,6 +795,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
           taxaAdm: taxaAdmFinal,
           status: 'Confirmado',
           observacao: newShiftObservacao,
+          tipoDia: newShiftFeriado ? (`Feriado ${newShiftFeriado}` as any) : 'Normal'
         });
       }
 
@@ -814,8 +841,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
 
   const handleConfirmAvulso = async () => {
     if (!paciente) return;
-    if (avulsoSelectedDates.length === 0) {
-      alert('Selecione pelo menos uma data no calendário de agendamento avulso.');
+    if (!avulsoSingleDate) {
+      alert('Selecione uma data para o agendamento.');
       return;
     }
     if (!avulsoProf.trim()) {
@@ -888,37 +915,32 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
         }
       };
 
-      const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-      for (const dt of avulsoSelectedDates) {
-        const dateObj = new Date(dt + 'T12:00:00');
-        const dW = days[dateObj.getDay()] || 'Seg';
+      const pickedProf = profissionais.find(p => p.nome === avulsoProf);
+      await addAgendamento({
+        idPaciente: paciente.id,
+        idProfissional: pickedProf ? pickedProf.id : 'n/a',
+        nomeProfissional: avulsoProf,
+        data: avulsoSingleDate,
+        horario: `${chosenHoraInicio}-${getTerminoTime(chosenHoraInicio, durationHrs)}`,
+        valorPlantao: plantaoFinal,
+        valorRepasse: plantaoFinal,
+        ajudaCusto: finalAjuda,
+        taxaAdm: taxaAdmFinal,
+        status: 'Confirmado',
+        observacao: avulsoObs || (avulsoCuringa ? 'CURINGA' : ''),
+        tipoDia: avulsoTipoDia as 'Normal' | 'Feriado 20%' | 'Feriado 50%',
+        isCuringa: avulsoCuringa
+      });
 
-        const pickedProf = profissionais.find(p => p.nome === avulsoProf);
-        await addAgendamento({
-          idPaciente: paciente.id,
-          idProfissional: pickedProf ? pickedProf.id : 'n/a',
-          nomeProfissional: avulsoProf,
-          data: dt,
-          horario: `${chosenHoraInicio}-${getTerminoTime(chosenHoraInicio, durationHrs)}`,
-          valorPlantao: plantaoFinal,
-          valorRepasse: plantaoFinal,
-          ajudaCusto: finalAjuda,
-          taxaAdm: taxaAdmFinal,
-          status: 'Confirmado',
-          observacao: avulsoObs || 'Agendamento Avulso',
-          tipoDia: avulsoTipoDia as 'Normal' | 'Feriado 20%' | 'Feriado 50%'
-        });
-      }
-
-      setAvulsoSelectedDates([]);
       setAvulsoProf('');
       setAvulsoPlantaoOptionId('principal');
       setAvulsoTipoDia('Normal');
       setAvulsoObs('');
+      setAvulsoCuringa(false);
       setAvulsoModalOpen(false);
-      alert(`${avulsoSelectedDates.length} plantão(ões) avulso(s) criado(s) com sucesso!`);
+      alert('Novo agendamento criado com sucesso!');
     } catch (err) {
-      alert('Erro ao criar plantões avulsos.');
+      alert('Erro ao criar novo agendamento.');
     }
   };
 
@@ -2059,17 +2081,20 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       type="button"
                       disabled={isCurrentlyDeactivated}
                       onClick={() => {
-                        setAvulsoSelectedDates([]);
+                        const today = new Date();
+                        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                        setAvulsoSingleDate(todayStr);
                         setAvulsoProf('');
                         setAvulsoPlantaoOptionId('principal');
                         setAvulsoTipoDia('Normal');
                         setAvulsoObs('');
+                        setAvulsoCuringa(false);
                         setAvulsoModalOpen(true);
                       }}
                       className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white rounded-lg transition-all shadow-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer font-sans"
                     >
                       <Plus size={13.5} />
-                      <span>📅 Avulso</span>
+                      <span>➕ Agendar</span>
                     </button>
 
                     <button
@@ -2214,10 +2239,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                         </div>
                       ))}
 
-                      {(() => {
+                       {(() => {
                         const gridDays = getDaysInMonthGrid(calendarMonth, calendarYear);
                         return gridDays.map((cell, idx) => {
-                          const isToday = cell.dateStr === '2026-06-12';
+                          const today = new Date();
+                          const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                          const isToday = cell.dateStr === todayStr;
                           const isSpecialHoliday = cell.holiday !== undefined;
                           
                           // Filter agendamentos matching date
@@ -2229,46 +2256,59 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                           return (
                             <div
                               key={idx}
-                              className={`min-h-[102px] border border-slate-200/60 p-1 rounded-sm flex flex-col transition-all ${
-                                cell.isCurrentMonth ? 'bg-white' : 'bg-slate-50/40 opacity-40'
+                              className={`min-h-[102px] border p-1 rounded-lg flex flex-col transition-all duration-150 ${
+                                isToday 
+                                  ? 'bg-[#fefcf4] border-amber-300 ring-1 ring-amber-100 shadow-xs' 
+                                  : cell.isCurrentMonth
+                                    ? 'bg-white border-slate-200/60'
+                                    : 'bg-slate-50/40 opacity-40 border-slate-200/30'
                               } ${
-                                isToday ? 'ring-1 ring-blue-400 bg-blue-50/20' : ''
-                              } ${
-                                isSpecialHoliday ? 'bg-rose-50/50' : ''
+                                isSpecialHoliday && !isToday ? 'bg-rose-50/50 border-rose-100' : ''
                               }`}
                             >
                               <div className="flex items-center justify-between p-0.5">
-                                <span className={`text-[9px] font-bold select-none ${
+                                <span className={`text-[9px] font-bold select-none px-1.5 py-0.5 rounded-full ${
                                   isToday
-                                    ? 'bg-blue-500 text-white w-4 h-4 rounded-full flex items-center justify-center'
+                                    ? 'bg-amber-600 text-white font-extrabold flex items-center justify-center'
                                     : cell.isCurrentMonth ? 'text-slate-700' : 'text-slate-300'
                                 }`}>
-                                  {cell.dayNumber}
+                                  {cell.dayNumber} {isToday && 'Hoje'}
                                 </span>
                               </div>
 
-                              <div className="space-y-0.5 mt-0.5 flex-1 w-full">
+                              <div className="space-y-1 mt-1 flex-1 w-full">
                                 {dailyAgendamentos.map((ag) => {
                                   
                                   return (
                                     <div
                                       key={ag.id}
                                       onClick={() => {
-                                        if (ag.status !== 'Cancelado') {
-                                          handleTriggerCancelClick(ag.id);
-                                        }
+                                        setSelectedShiftForDetails(ag);
+                                        setDetailsPlantaoOptionId('principal');
+                                        setDetailsTipoDia(ag.tipoDia || 'Normal');
+                                        setDetailsCuringa(!!ag.isCuringa || ag.observacao === 'CURINGA');
+                                        setDetailsProfName(ag.nomeProfissional);
+                                        setDetailsDate(ag.data);
+                                        setIsEditingDetails(false);
+                                        setIsConfirmingDelete(false);
+                                        setDetailsModalOpen(true);
                                       }}
-                                      className={`text-[9px] p-1 border rounded-md cursor-pointer flex flex-col text-left w-full ${
+                                      className={`text-[9.5px] p-1.5 border rounded-lg cursor-pointer flex flex-col text-left w-full transition-all duration-150 relative space-y-0.5 hover:-translate-y-0.5 hover:shadow-xs ${
                                         ag.status === 'Cancelado'
                                           ? 'bg-slate-100 border-slate-300 text-slate-500 line-through'
                                           : ag.status === 'Concluido'
-                                            ? 'bg-indigo-100 border-indigo-200 text-indigo-900 font-semibold'
-                                            : 'bg-emerald-100 border-emerald-200 text-emerald-900 font-medium hover:bg-emerald-200'
+                                            ? 'bg-indigo-55 bg-indigo-100 border-indigo-200 text-indigo-900 font-bold'
+                                            : 'bg-emerald-55 bg-emerald-50 border-emerald-250 text-emerald-900 font-extrabold hover:bg-emerald-100 hover:border-emerald-300'
                                       }`}
-                                      title={ag.observacao || 'Agendamento'}
+                                      title={ag.observacao || 'Inspecionar Plantão'}
                                     >
-                                        <span className="font-bold">{ag.horario}</span>
-                                        <span className="truncate">{ag.nomeProfissional}</span>
+                                        <div className="flex justify-between items-center w-full gap-1">
+                                          <span className="font-extrabold text-slate-800 shrink-0">{ag.horario}</span>
+                                          {(ag.isCuringa || ag.observacao?.includes('CURINGA')) && (
+                                            <span className="px-1 py-[1px] text-[7px] font-black uppercase tracking-wider bg-amber-200 text-amber-900 rounded-sm">Curinga</span>
+                                          )}
+                                        </div>
+                                        <span className="truncate block font-medium opacity-90">{ag.nomeProfissional}</span>
                                     </div>
                                   );
                                 })}
@@ -2291,7 +2331,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                 )}
  
                  {/* Quick Add block for scales, ONLY displayed if patient exists and is Ativo */}
-                {!isNew && !isCurrentlyDeactivated ? (
+                {false && !isNew && !isCurrentlyDeactivated ? (
                   <div className="bg-slate-50 border border-slate-200/90 p-3.5 rounded-xl space-y-3">
                     <p className="text-xs font-bold text-slate-800 flex items-center space-x-1.5">
                       <Plus size={14} className="text-blue-600" />
@@ -2629,7 +2669,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       )}
                     </div>
                   </div>
-                ) : isNew ? (
+                ) : false && isNew ? (
                   <div className="p-4 bg-orange-50 border border-orange-100 rounded-xl text-orange-850 text-xs italic">
                     Para agendar plantões, você deve primeiro preencher e salvar o prontuário deste novo paciente.
                   </div>
@@ -3045,8 +3085,553 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
         </div>
       )}
 
-      {/* 1. MODELO / MODAL: AGENDAMENTO AVULSO */}
+      {/* 1. MODELO / MODAL: NOVO AGENDAMENTO */}
       {avulsoModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in-30 p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full flex flex-col p-6 space-y-4 font-sans">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                <Calendar size={15} className="text-sky-600" />
+                <span>Novo Agendamento</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setAvulsoModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 transition-colors p-1"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-3.5">
+              {/* Professional Autocomplete Search Field */}
+              <div className="space-y-1 relative">
+                <label className="block text-xs font-bold text-slate-700">Alocar Profissional</label>
+                <input
+                  type="text"
+                  value={avulsoProf}
+                  onFocus={() => setShowAvulsoProfDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowAvulsoProfDropdown(false), 200)}
+                  onChange={(e) => setAvulsoProf(e.target.value)}
+                  placeholder="Pesquise o nome do profissional..."
+                  className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/50 focus:outline-none focus:border-blue-500 font-sans"
+                />
+                {showAvulsoProfDropdown && (
+                  <div className="absolute left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl z-55 divide-y divide-slate-100">
+                    {profissionais
+                      .filter(p =>
+                        (p.nome || '').toLowerCase().includes((avulsoProf || '').toLowerCase()) &&
+                        p.status === 'Ativo'
+                      )
+                      .map((prof) => (
+                        <button
+                          key={prof.id}
+                          type="button"
+                          onMouseDown={() => {
+                            setAvulsoProf(prof.nome);
+                            setShowAvulsoProfDropdown(false);
+                          }}
+                          className="w-full text-left p-2.5 hover:bg-slate-50 transition-colors text-xs font-semibold text-slate-850"
+                        >
+                          {prof.nome} ({prof.especialidade})
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Single Date Picker Input */}
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-700">Data do Plantão </label>
+                <input
+                  type="date"
+                  value={avulsoSingleDate}
+                  onChange={(e) => setAvulsoSingleDate(e.target.value)}
+                  className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/50 focus:outline-none focus:border-blue-500 font-sans"
+                />
+              </div>
+
+              {/* Horário / Plantão Option Select Dropdown */}
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-700">Horário / Turno</label>
+                <select
+                  value={avulsoPlantaoOptionId}
+                  onChange={(e) => setAvulsoPlantaoOptionId(e.target.value)}
+                  className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-blue-500 font-sans"
+                >
+                  {availableShifts.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {opt.label} — {opt.horaInicio}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Financial modifier with 20% and 50% */}
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-700">Acréscimo Feriado (Faturamento/Repasse)</label>
+                <select
+                  value={avulsoTipoDia}
+                  onChange={(e) => setAvulsoTipoDia(e.target.value as any)}
+                  className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-blue-500 font-sans"
+                >
+                  <option value="Normal">Dia Regular (Sem Acréscimo)</option>
+                  <option value="Feriado 20%">Feriado (+20%)</option>
+                  <option value="Feriado 50%">Feriado (+50%)</option>
+                </select>
+              </div>
+
+              {/* Curinga toggle checkbox */}
+              <div className="flex items-center space-x-2.5 py-1">
+                <input
+                  type="checkbox"
+                  id="avulso-curinga-chk"
+                  checked={avulsoCuringa}
+                  onChange={(e) => setAvulsoCuringa(e.target.checked)}
+                  className="w-4 h-4 text-sky-600 rounded border-slate-300 focus:ring-sky-500 cursor-pointer"
+                />
+                <label htmlFor="avulso-curinga-chk" className="text-xs font-bold text-slate-700 select-none cursor-pointer">
+                  MARCAR ESSE PLANTÃO COMO CURINGA
+                </label>
+              </div>
+
+              {/* Financial preview card box */}
+              <div className="bg-slate-50 border border-slate-150 rounded-xl p-3.5 space-y-2 mt-1">
+                <div className="text-[10px] font-black text-slate-450 uppercase tracking-wider block border-b border-slate-100 pb-1">
+                  Resumo Financeiro Estimado
+                </div>
+                <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 text-xs text-slate-650 font-sans">
+                  <span>Valor Líquido Repasse:</span>
+                  <span className="font-semibold text-slate-800 text-right font-mono">R$ {computedRepasse.toFixed(2)}</span>
+                  <span>Ajuda de Custo:</span>
+                  <span className="font-semibold text-slate-800 text-right font-mono">R$ {computedAjuda.toFixed(2)}</span>
+                  <span>Taxa Adm / Faturamento:</span>
+                  <span className="font-semibold text-slate-800 text-right font-mono">R$ {computedTaxa.toFixed(2)}</span>
+                  <div className="col-span-2 border-t border-slate-150 pt-1 flex justify-between font-bold text-sky-700">
+                    <span>Faturamento Total Paciente:</span>
+                    <span>R$ {(computedRepasse + computedTaxa + computedAjuda).toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-700">Observações adicionais</label>
+                <input
+                  type="text"
+                  value={avulsoObs}
+                  onChange={(e) => setAvulsoObs(e.target.value)}
+                  placeholder="Ex: Conduta específica ou substituição..."
+                  className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/50 focus:outline-none focus:border-blue-500 font-sans"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setAvulsoModalOpen(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-550 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  await handleConfirmAvulso();
+                  setAvulsoModalOpen(false);
+                }}
+                className="px-4.5 py-2 text-xs font-extrabold bg-sky-600 hover:bg-sky-700 text-white rounded-lg transition-all shadow-sm cursor-pointer"
+              >
+                Confirmar e Agendar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODELO / MODAL: DETALHES DO PLANTÃO */}
+      {detailsModalOpen && selectedShiftForDetails && (() => {
+        const dChosenOpt = availableShifts.find((s) => s.id === detailsPlantaoOptionId) || availableShifts[0];
+        const dBaseRepasseValue = dChosenOpt?.valorPlantao || 0;
+        const dBaseAjudaValue = dChosenOpt?.ajudaCusto || 0;
+        const dBaseTaxaValue = dChosenOpt?.taxaAdm || 0;
+
+        let dMultiplier = 1.0;
+        if (detailsTipoDia === 'Feriado 20%') {
+          dMultiplier = 1.2;
+        } else if (detailsTipoDia === 'Feriado 50%') {
+          dMultiplier = 1.5;
+        }
+
+        const dComputedRepasseValue = dBaseRepasseValue * dMultiplier;
+        const dComputedTaxaValue = dBaseTaxaValue * dMultiplier;
+        const dComputedAjudaValue = dBaseAjudaValue;
+
+        return (
+          <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in-30 p-4 overflow-y-auto">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full flex flex-col p-6 space-y-4 font-sans">
+              
+              <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <Info size={15} className="text-blue-600" />
+                  <span>{isEditingDetails ? '✏️ Editar Plantão' : '📋 Detalhes do Plantão'}</span>
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setDetailsModalOpen(false)}
+                  className="text-slate-400 hover:text-slate-600 transition-colors p-1"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {!isEditingDetails ? (
+                // View Mode
+                (() => {
+                  let viewMultiplier = 1.0;
+                  if (selectedShiftForDetails.tipoDia === 'Feriado 20%') {
+                    viewMultiplier = 1.2;
+                  } else if (selectedShiftForDetails.tipoDia === 'Feriado 50%') {
+                    viewMultiplier = 1.5;
+                  }
+
+                  const viewRepasseValue = (selectedShiftForDetails.valorRepasse || 0) * viewMultiplier;
+                  const viewTaxaValue = (selectedShiftForDetails.taxaAdm || 0) * viewMultiplier;
+                  const viewAjudaValue = selectedShiftForDetails.ajudaCusto || 0;
+                  const viewTotalValue = viewRepasseValue + viewTaxaValue + viewAjudaValue;
+
+                  return (
+                    <div className="space-y-3">
+                      <div className="space-y-1">
+                        <span className="text-[10px] uppercase font-bold text-slate-400">Profissional Cuidador</span>
+                        <p className="text-sm font-bold text-slate-850 flex items-center gap-1.5">
+                          <span>{selectedShiftForDetails.nomeProfissional}</span>
+                          {(selectedShiftForDetails.isCuringa || selectedShiftForDetails.observacao?.includes('CURINGA')) && (
+                            <span className="px-1.5 py-0.2 text-[8px] font-black uppercase tracking-wide bg-amber-100 text-amber-800 border border-amber-200 rounded">Curinga</span>
+                          )}
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 pb-1 border-b border-slate-100">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Data</span>
+                          <span className="text-xs font-semibold text-slate-700">{selectedShiftForDetails.data.split('-').reverse().join('/')}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Horário</span>
+                          <span className="text-xs font-semibold text-slate-700">{selectedShiftForDetails.horario}</span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Tipo de Dia</span>
+                        <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-extrabold ${
+                          selectedShiftForDetails.tipoDia === 'Feriado 50%'
+                            ? 'bg-rose-50 text-rose-700 border border-rose-100'
+                            : selectedShiftForDetails.tipoDia === 'Feriado 20%'
+                              ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                              : 'bg-slate-50 text-slate-600 border border-slate-100'
+                        }`}>
+                          {selectedShiftForDetails.tipoDia || 'Dia Normal (Sem Adicional)'}
+                        </span>
+                      </div>
+
+                      <div className="bg-slate-50 p-3.5 border border-slate-150 rounded-xl space-y-1.5">
+                        <span className="text-[9px] uppercase font-black text-slate-400 tracking-wider">Detalhamento Financeiro</span>
+                        <div className="grid grid-cols-2 text-xs text-slate-600 space-y-1 font-sans">
+                          <span className="pt-1">Valor do Repasse:</span>
+                          <span className="text-right font-semibold text-slate-800 font-mono">R$ {viewRepasseValue.toFixed(2)}</span>
+                          <span>Ajuda de Custo:</span>
+                          <span className="text-right font-semibold text-slate-800 font-mono">R$ {viewAjudaValue.toFixed(2)}</span>
+                          <span>Taxa faturamento:</span>
+                          <span className="text-right font-semibold text-slate-800 font-mono">R$ {viewTaxaValue.toFixed(2)}</span>
+                          <div className="col-span-2 border-t border-slate-200 mt-1.5 pt-1.5 flex justify-between font-bold text-sky-850">
+                            <span>Faturamento total:</span>
+                            <span className="font-mono">R$ {viewTotalValue.toFixed(2)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {selectedShiftForDetails.observacao && (
+                        <div className="p-3 bg-slate-50 rounded-lg text-xs leading-relaxed text-slate-600">
+                          <strong>Observações:</strong> {selectedShiftForDetails.observacao}
+                        </div>
+                      )}
+
+                      {isConfirmingDelete ? (
+                        <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 space-y-3 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                          <p className="text-xs text-rose-850 font-black leading-relaxed text-center">
+                            Tem certeza de que deseja CANCELAR e EXCLUIR permanentemente este plantão?
+                          </p>
+                          <p className="text-[10px] text-rose-600 leading-normal text-center font-medium">
+                            O plantão será removido da escala e excluído de forma definitiva do banco de dados.
+                          </p>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setIsConfirmingDelete(false)}
+                              className="flex-1 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg transition-all text-center cursor-pointer"
+                            >
+                              Voltar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  await deleteAgendamento(selectedShiftForDetails.id);
+                                  setDetailsModalOpen(false);
+                                  setSelectedShiftForDetails(null);
+                                  setIsConfirmingDelete(false);
+                                } catch (err) {
+                                  alert("Erro ao excluir o plantão.");
+                                }
+                              }}
+                              className="flex-1 py-1.5 text-xs font-extrabold bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-all text-center shadow-sm cursor-pointer"
+                            >
+                              Confirmar e Excluir
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2 pt-3 border-t border-slate-100 font-sans">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // Initialize edit forms
+                              setDetailsProfName(selectedShiftForDetails.nomeProfissional);
+                              setDetailsDate(selectedShiftForDetails.data);
+                              setDetailsCuringa(!!selectedShiftForDetails.isCuringa || selectedShiftForDetails.observacao === 'CURINGA');
+                              setDetailsTipoDia(selectedShiftForDetails.tipoDia || 'Normal');
+                              
+                              // Infer the best shift template matching first hour block or default
+                              const matchOpt = availableShifts.find(opt => selectedShiftForDetails.horario?.startsWith(opt.horaInicio)) || availableShifts[0];
+                              setDetailsPlantaoOptionId(matchOpt.id);
+                              
+                              setIsEditingDetails(true);
+                            }}
+                            className="flex-1 py-2 text-xs font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 rounded-lg border border-sky-200 transition-all text-center flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            <span>✏️ Editar</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsConfirmingDelete(true);
+                            }}
+                            className="flex-1 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-all text-center flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            <span>🗑️ Cancelar Plantão</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()
+              ) : (
+                // Edit Mode (interactive Form)
+                <div className="space-y-3.5">
+                  <div className="space-y-1 relative">
+                    <label className="block text-xs font-bold text-slate-700">Profissional Cuidador</label>
+                    <input
+                      type="text"
+                      value={detailsProfName}
+                      onFocus={() => setShowDetailsProfDropdown(true)}
+                      onBlur={() => setTimeout(() => setShowDetailsProfDropdown(false), 200)}
+                      onChange={(e) => setDetailsProfName(e.target.value)}
+                      placeholder="Pesquise o nome do profissional..."
+                      className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-705 text-slate-700 bg-slate-50 focus:outline-none focus:border-blue-500 font-sans font-medium"
+                    />
+                    {showDetailsProfDropdown && (
+                      <div className="absolute left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl z-25 divide-y divide-slate-100">
+                        {profissionais
+                          .filter(p =>
+                            (p.nome || '').toLowerCase().includes((detailsProfName || '').toLowerCase()) &&
+                            p.status === 'Ativo'
+                          )
+                          .map((prof) => (
+                            <button
+                              key={prof.id}
+                              type="button"
+                              onMouseDown={() => {
+                                setDetailsProfName(prof.nome);
+                                setShowDetailsProfDropdown(false);
+                              }}
+                              className="w-full text-left p-2.5 hover:bg-slate-50 transition-colors text-xs font-semibold text-slate-800"
+                            >
+                              {prof.nome} ({prof.especialidade})
+                            </button>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-xs font-bold text-slate-700">Data do Plantão </label>
+                    <input
+                      type="date"
+                      value={detailsDate}
+                      onChange={(e) => setDetailsDate(e.target.value)}
+                      className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50 focus:outline-none focus:border-blue-500 font-sans"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-xs font-bold text-slate-700">Horário / Turno</label>
+                    <select
+                      value={detailsPlantaoOptionId}
+                      onChange={(e) => setDetailsPlantaoOptionId(e.target.value)}
+                      className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none"
+                    >
+                      {availableShifts.map((opt) => (
+                        <option key={opt.id} value={opt.id}>
+                          {opt.label} — {opt.horaInicio}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-xs font-bold text-slate-700">Acréscimo Feriado (Faturamento/Repasse)</label>
+                    <select
+                      value={detailsTipoDia}
+                      onChange={(e) => setDetailsTipoDia(e.target.value as any)}
+                      className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none"
+                    >
+                      <option value="Normal">Dia Regular (Sem Acréscimo)</option>
+                      <option value="Feriado 20%">Feriado (+20%)</option>
+                      <option value="Feriado 50%">Feriado (+50%)</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center space-x-2 py-1">
+                    <input
+                      type="checkbox"
+                      id="details-curinga-chk"
+                      checked={detailsCuringa}
+                      onChange={(e) => setDetailsCuringa(e.target.checked)}
+                      className="w-4 h-4 text-sky-600 rounded border-slate-300 focus:ring-sky-500 cursor-pointer"
+                    />
+                    <label htmlFor="details-curinga-chk" className="text-xs font-bold text-slate-700 select-none cursor-pointer">
+                      MARCAR ESSE PLANTÃO COMO CURINGA
+                    </label>
+                  </div>
+
+                  {/* Financial update preview box */}
+                  <div className="bg-slate-50 border border-slate-150 rounded-xl p-3.5 space-y-1.5">
+                    <div className="text-[9px] font-black text-slate-450 uppercase tracking-widest block border-b border-slate-100 pb-0.5">
+                      Atualização de Custos (Novos Valores)
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-xs text-slate-650 font-sans">
+                      <span>Novo Repasse:</span>
+                      <span className="font-semibold text-slate-800 text-right font-mono">R$ {dComputedRepasseValue.toFixed(2)}</span>
+                      <span>Nova Ajuda:</span>
+                      <span className="font-semibold text-slate-800 text-right font-mono">R$ {dComputedAjudaValue.toFixed(2)}</span>
+                      <span>Nova Taxa Adm:</span>
+                      <span className="font-semibold text-slate-800 text-right font-mono">R$ {dComputedTaxaValue.toFixed(2)}</span>
+                      <div className="col-span-2 border-t border-slate-150 pt-1 flex justify-between font-bold text-emerald-700">
+                        <span>Nova Fatura Paciente:</span>
+                        <span className="font-mono">R$ {(dComputedRepasseValue + dComputedTaxaValue + dComputedAjudaValue).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 pt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingDetails(false)}
+                      className="flex-1 py-1.5 text-xs font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all"
+                    >
+                      Voltar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!detailsProfName.trim()) {
+                          alert('Por favor, informe um profissional.');
+                          return;
+                        }
+                        
+                        try {
+                          const chosenOpt = availableShifts.find((s) => s.id === detailsPlantaoOptionId) || availableShifts[0];
+                          const baseRepasseValue = chosenOpt.valorPlantao;
+                          const baseAjudaValue = chosenOpt.ajudaCusto;
+                          const baseTaxaValue = chosenOpt.taxaAdm;
+                          const chosenHoraInicio = chosenOpt.horaInicio;
+                          const chosenTipoEscalaStr = chosenOpt.tipoEscala;
+
+                          let durationHrs = 12;
+                          const parsedMatch = chosenTipoEscalaStr.match(/(\d+)\s*h/i);
+                          if (parsedMatch) {
+                            durationHrs = parseInt(parsedMatch[1], 10);
+                          } else if (chosenTipoEscalaStr.includes('24')) {
+                            durationHrs = 24;
+                          } else if (chosenTipoEscalaStr.includes('6')) {
+                            durationHrs = 6;
+                          }
+
+                          let isFeriado: '20%' | '50%' | null = null;
+                          if (detailsTipoDia === 'Feriado 20%') {
+                            isFeriado = '20%';
+                          } else if (detailsTipoDia === 'Feriado 50%') {
+                            isFeriado = '50%';
+                          }
+
+                          const { plantaoFinal, taxaAdmFinal, ajudaCusto: finalAjuda } = calculateShiftValues(
+                            baseRepasseValue,
+                            baseTaxaValue,
+                            baseAjudaValue,
+                            isFeriado
+                          );
+
+                          const getTerminoTime = (startTime: string, duration: number): string => {
+                            try {
+                              const [h, m] = startTime.split(':').map(Number);
+                              const endH = (h + duration) % 24;
+                              return `${String(endH).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                            } catch (e) {
+                              return '19:00';
+                            }
+                          };
+
+                          const pickedProf = profissionais.find(p => p.nome === detailsProfName);
+
+                          const updatedAg: any = {
+                            ...selectedShiftForDetails,
+                            idProfissional: pickedProf ? pickedProf.id : 'n/a',
+                            nomeProfissional: detailsProfName,
+                            data: detailsDate,
+                            horario: `${chosenHoraInicio}-${getTerminoTime(chosenHoraInicio, durationHrs)}`,
+                            valorPlantao: plantaoFinal,
+                            valorRepasse: plantaoFinal,
+                            ajudaCusto: finalAjuda,
+                            taxaAdm: taxaAdmFinal,
+                            tipoDia: detailsTipoDia,
+                            isCuringa: detailsCuringa,
+                            observacao: detailsCuringa ? 'CURINGA' : (selectedShiftForDetails.observacao === 'CURINGA' ? '' : selectedShiftForDetails.observacao)
+                          };
+
+                          await updateAgendamento(updatedAg);
+                          setSelectedShiftForDetails(updatedAg);
+                          setIsEditingDetails(false);
+                          alert('Plantão atualizado com sucesso!');
+                        } catch (err) {
+                          alert('Erro ao atualizar plantão.');
+                        }
+                      }}
+                      className="flex-1 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-all"
+                    >
+                      Salvar Mudanças
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Bypass logic for previous modal elements */}
+      {false && avulsoModalOpen && (
         <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in-30 p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-4xl w-full flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-slate-150 overflow-hidden max-h-[90vh]">
             {/* Lados Esquerdo: Calendário Inline de Seleção */}
