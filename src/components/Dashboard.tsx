@@ -2,14 +2,75 @@ import React, { useState, useEffect } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
 import { db } from '../lib/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { Users, UserPlus, Calendar, DollarSign, Receipt } from 'lucide-react';
+import { Users, UserPlus, Calendar, DollarSign, Receipt, Gift } from 'lucide-react';
 import { DebitoProfissional } from '../types';
 
 export const Dashboard: React.FC<{
   setActiveTab: (tab: string, extraOptions?: { financeiroSubTab?: 'folhas' | 'debitos' }) => void;
 }> = ({ setActiveTab }) => {
+  const { pacientes, profissionais } = useFirebase();
   const [debitosDoDia, setDebitosDoDia] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const isBirthdayToday = (birthVal: any): boolean => {
+    if (!birthVal) return false;
+    try {
+      let date: Date;
+      if (typeof birthVal.toDate === 'function') {
+        date = birthVal.toDate();
+      } else if (birthVal instanceof Date) {
+        date = birthVal;
+      } else if (birthVal.seconds) {
+        date = new Date(birthVal.seconds * 1000);
+      } else if (typeof birthVal === 'string') {
+        // support YYYY-MM-DD
+        const ymdMatch = birthVal.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (ymdMatch) {
+          const [, , month, day] = ymdMatch;
+          const today = new Date();
+          const currentMonth = String(today.getMonth() + 1).padStart(2, '0');
+          const currentDay = String(today.getDate()).padStart(2, '0');
+          return month === currentMonth && day === currentDay;
+        }
+        // support DD/MM/YYYY
+        const dmyMatch = birthVal.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+        if (dmyMatch) {
+          const [, day, month] = dmyMatch;
+          const today = new Date();
+          const currentMonth = String(today.getMonth() + 1).padStart(2, '0');
+          const currentDay = String(today.getDate()).padStart(2, '0');
+          return month === currentMonth && day === currentDay;
+        }
+        date = new Date(birthVal);
+      } else {
+        return false;
+      }
+
+      if (isNaN(date.getTime())) return false;
+      const today = new Date();
+      return date.getDate() === today.getDate() && date.getMonth() === today.getMonth();
+    } catch {
+      return false;
+    }
+  };
+
+  const activePacientes = (pacientes || []).filter(
+    (p) => p.status === 'Ativo' || p.status?.toLowerCase() === 'ativo'
+  );
+  
+  const activeProfissionais = (profissionais || []).filter(
+    (p) => p.status === 'Ativo' || p.status?.toLowerCase() === 'ativo'
+  );
+
+  const pacBirthdayList = activePacientes
+    .filter((p) => isBirthdayToday(p.dataNascimento))
+    .map((p) => ({ nome: p.nome, type: 'Paciente' }));
+
+  const profBirthdayList = activeProfissionais
+    .filter((p) => isBirthdayToday((p as any).dataNascimento || (p as any).nascimento))
+    .map((p) => ({ nome: p.nome, type: 'Profissional' }));
+
+  const aniversariantes = [...pacBirthdayList, ...profBirthdayList];
 
   const formatDebitDateDisplay = (val: any): string => {
     if (!val) return '';
@@ -82,6 +143,40 @@ export const Dashboard: React.FC<{
 
   return (
     <div className="space-y-6" id="dashboard-container">
+      {/* 🎂 Section: Aniversariantes do Dia */}
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4" id="section-aniversariantes">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-pink-50 text-pink-600 rounded-lg">
+            <Gift size={20} />
+          </div>
+          <div>
+            <h4 className="text-sm font-bold text-slate-800" id="title-aniversariantes">Aniversariantes do Dia</h4>
+            <p className="text-xs text-slate-500">Parabenize hoje os nossos assistidos e colaboradores!</p>
+          </div>
+        </div>
+        <div className="flex-1 max-w-xl">
+          {aniversariantes.length === 0 ? (
+            <p className="text-xs text-slate-500 italic font-medium" id="txt-no-birthday-today">Nenhum aniversariante no dia de hoje.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2" id="birthday-list">
+              {aniversariantes.map((aniv, idx) => (
+                <span
+                  key={idx}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
+                    aniv.type === 'Paciente'
+                      ? 'bg-purple-50 text-purple-800 border-purple-200'
+                      : 'bg-teal-50 text-teal-800 border-teal-200'
+                  }`}
+                  id={`birthday-${aniv.type.toLowerCase()}-${idx}`}
+                >
+                  {aniv.type === 'Paciente' ? '🎂 Paciente' : '🎉 Profissional'}: {aniv.nome}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Débitos do Dia Section */}
         <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col h-full" id="section-debitos-dia">

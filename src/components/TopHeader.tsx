@@ -56,7 +56,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         </button>
         <div className="flex items-center gap-3">
           <img src={logo} alt="Logo" className="w-16 h-10 object-cover rounded-full" />
-          <span className="font-serif font-bold text-lg text-forest-green">RH Cuidado</span>
         </div>
       </div>
 

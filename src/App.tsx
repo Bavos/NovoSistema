@@ -30,7 +30,14 @@ function DashboardContent() {
   const [pacientesTitleOverride, setPacientesTitleOverride] = useState<string>('Gestão Integrada de Pacientes');
   const [showFirstAccess, setShowFirstAccess] = useState(false);
 
-  const { pacientes, loading, userRole, notification, setNotification, user } = useFirebase();
+  const { pacientes, loading, userRole, notification, setNotification, user, usuariosSistema } = useFirebase();
+
+  const currentUserProfile = (usuariosSistema || []).find(u => {
+    const uEmail = u?.email;
+    const userEmail = user?.email;
+    return typeof uEmail === 'string' && typeof userEmail === 'string' && uEmail.toLowerCase() === userEmail.toLowerCase();
+  });
+  const displayName = currentUserProfile?.nome || user?.displayName || user?.email?.split('@')[0] || 'Renato B. Z.';
 
   // Redirect away from Empresa if role is Colaborador
   React.useEffect(() => {
@@ -41,7 +48,7 @@ function DashboardContent() {
 
   // Title calculation based on view level
   const getPageTitle = () => {
-    if (activeSidebarTab === 'dashboard') return 'Visão Executiva 360º';
+    if (activeSidebarTab === 'dashboard') return `Bem-vindo, ${displayName}`;
     if (activeSidebarTab === 'pacientes') {
       return pacientesTitleOverride;
     }
@@ -119,9 +126,7 @@ function DashboardContent() {
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-4 print:hidden">
             <div className="space-y-1">
               <div className="flex items-center space-x-2">
-                <span className="text-xs font-bold text-blue-600 uppercase tracking-widest font-mono">CuidarHome S.A.</span>
-                <span className="text-slate-300">•</span>
-                <span className="text-xs text-slate-400 font-mono">Rio de Janeiro</span>
+                <span className="text-xs font-bold text-blue-600 uppercase tracking-widest font-mono">RH Cuidado Domiciliar</span>
               </div>
               <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight flex items-center space-x-2">
                 <span>{getPageTitle()}</span>
