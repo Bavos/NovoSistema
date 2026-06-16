@@ -1,16 +1,15 @@
-# Lógica de Negócio: Plantões e Financeiro
+# Regras de Negócio
 
-## 1. Calendário e Escala
-- O calendário deve abrir no dia atual, com o quadrado de "hoje" levemente destacado com um fundo suave.
-- Os plantões renderizados no calendário devem mostrar Horário, Nome e a tag "Curinga" (se aplicável).
-- O fluxo de agendamento é feito via **Modal** (janelas sobrepostas para "➕ Agendar", "✏️ Editar" ou "🗑️ Cancelar"), removendo formulários fixos na tela.
+Este documento descreve as regras críticas do sistema.
 
-## 2. Acréscimos de Feriado (20% ou 50%)
-- **Cálculo Fatura Paciente:** (Valor Base Plantão + %) + (Taxa Administração + %) + Ajuda de Custo.
-- **Cálculo Folha Profissional:** (Valor Base Plantão + %) + Ajuda de Custo.
-- **Regra de Ouro:** A Ajuda de Custo é blindada/imutável. Nunca sofre incidência de percentuais de acréscimo.
+## Módulo: Cadastro de Profissionais
 
-## 3. Gestão de Débitos (Folha de Pagamento)
-- Módulo localizado na sub-aba de Faturamento.
-- Salvo na coleção `debitos_profissionais` contendo data (dd/mm/aaaa), valor, profissional e motivo.
-- Ao gerar a Folha de Pagamento, o sistema DEVE subtrair automaticamente a soma dos débitos do período do total a receber do profissional.
+*   **Inicialização**: O formulário de "Novo Profissional" deve abrir obrigatoriamente vazio (sem dados fictícios).
+*   **CPF/RG**: Campos de texto de entrada de dados, sem máscaras automáticas que impedem edição.
+*   **Lógica MEI**: Quando `temMei` for verdadeiro, o campo CNPJ é habilitado.
+*   **Idade**: Deve ser calculada automaticamente com base na Data de Nascimento.
+
+## Módulo: Gestão de Documentos (Anexos)
+
+*   **Dynamic Rows**: A interface de documentos inicia vazia.
+*   **Bloqueio de Edição**: Após um arquivo ser anexado a uma linha, o campo "Tipo de Documento" deve ficar desabilitado (`disabled`) para garantir a integridade da relação tipo-arquivo.
