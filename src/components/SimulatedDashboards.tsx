@@ -2135,6 +2135,86 @@ export const EmpresaDashboard: React.FC = () => {
     setIsEditingMatriz(true);
   };
 
+  const handleLogoUpload = async (file: File) => {
+    if (!isAdmin) {
+      alert("Apenas administradores podem alterar as informações.");
+      return;
+    }
+    setUploadDiagnostics([]);
+    setDiagnosticError(null);
+    setIsUploading(true);
+    setUploadDiagnostics(prev => [...prev, `[LOG 1/4] Preparando arquivo "${file.name}" (Tamanho original: ${(file.size / 1024).toFixed(1)} KB)...`]);
+
+    try {
+      setUploadDiagnostics(prev => [...prev, `[LOG 1.5/4] Otimizando imagem para melhor desempenho...`]);
+      const maxW = 180; // super optimized to keep the Firestore doc extremely light (<10KB) under any fallback
+      const compressedBlob = await new Promise<Blob>((resolve, reject) => {
+        const img = new Image();
+        img.src = URL.createObjectURL(file);
+        img.onload = () => {
+          URL.revokeObjectURL(img.src);
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          if (width > maxW) {
+            height = (height * maxW) / width;
+            width = maxW;
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          canvas.toBlob(blob => {
+            if (blob) resolve(blob);
+            else reject(new Error('Erro na compressão do canvas'));
+          }, 'image/png', 0.85);
+        };
+        img.onerror = () => reject(new Error('Erro ao carregar imagem para compressão'));
+      });
+
+      setUploadDiagnostics(prev => [...prev, `[LOG 2/4] Enviando bytes comprimidos para o Firebase Storage (${(compressedBlob.size / 1024).toFixed(1)} KB)...`]);
+      
+      let finalUrl = '';
+      try {
+        const compressedFile = new File([compressedBlob], `logo_${Date.now()}_${file.name}`, { type: 'image/png' });
+        finalUrl = await uploadLogo(compressedFile);
+        setUploadDiagnostics(prev => [...prev, `[LOG 3/4] Canal principal (Storage) concluído com sucesso.`]);
+      } catch (storageErr: any) {
+        console.warn("[Diagnóstico] Erro no Firebase Storage. Ativando contingência Base64...", storageErr);
+        setUploadDiagnostics(prev => [
+          ...prev, 
+          `[LOG 2.5/4] ⚠️ Erro no Firebase Storage ou Storage não configurado no console.`,
+          `[LOG 3/4] ✅ Ativando contingência Base64 de alta eficiência (imagem super compacta < 10KB)...`
+        ]);
+        
+        const base64Url = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(compressedBlob);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (err) => reject(new Error('Falha na conversão de Base64: ' + String(err)));
+        });
+        finalUrl = base64Url;
+      }
+
+      setUploadDiagnostics(prev => [...prev, `[LOG 4/4] Gravando URL da nova logotipo no Firestore...`]);
+      const docRef = doc(db, 'configuracoes_empresa', 'empresa');
+      await setDoc(docRef, { logoUrl: finalUrl, updatedAt: new Date().toISOString() }, { merge: true });
+
+      setLogoUrl(finalUrl);
+      setTempLogo(null);
+      setShouldClearLogo(false);
+      setUploadDiagnostics(prev => [...prev, `[LOG SUCESSO] Logo gravada e renderizada imediatamente na tela!`]);
+      setNotification('Logo da empresa atualizada e salva com sucesso.');
+    } catch (err: any) {
+      console.error("[Diagnóstico de Erro] Erro retornado no uploadLogo ou Firestore:", err);
+      const errMsg = err.message || String(err);
+      setDiagnosticError(`Falha ao salvar logo: ${errMsg}`);
+      alert(`Erro ao fazer upload da logo da empresa: ${errMsg}`);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const handleSaveMatriz = async () => {
     if (!isAdmin) {
       alert("Apenas administradores podem alterar as informações.");
@@ -2145,50 +2225,19 @@ export const EmpresaDashboard: React.FC = () => {
     setIsUploading(true);
 
     try {
-      let finalLogoUrl = shouldClearLogo ? '' : logoUrl;
-      
-      if (tempLogo && !shouldClearLogo) {
-        setUploadDiagnostics(prev => [...prev, `[LOG 1/4] Preparando arquivo "${tempLogo.name}" (Tamanho: ${(tempLogo.size / 1024).toFixed(1)} KB)...`]);
-        try {
-          setUploadDiagnostics(prev => [...prev, `[LOG 2/4] Enviando bytes para o storage na pasta /logos no Firebase Storage...`]);
-          finalLogoUrl = await uploadLogo(tempLogo);
-          if (finalLogoUrl.startsWith('data:')) {
-            setUploadDiagnostics(prev => [
-              ...prev,
-              `[LOG 2.5/4] ⚡ Limite de tempo excedido ou permissão negada no canal Storage.`,
-              `[LOG 3/4] ✅ Ativando contingência Base64: Codificado em tempo real com sucesso.`
-            ]);
-          } else {
-            setUploadDiagnostics(prev => [...prev, `[LOG 3/4] Sucesso! Logo carregado e salvo no Storage.`]);
-          }
-        } catch (uploadErr: any) {
-          console.error("[Diagnóstico de Erro] Erro retornado no uploadLogo:", uploadErr);
-          let parsed;
-          try {
-            parsed = JSON.parse(uploadErr.message);
-          } catch {
-            parsed = { message: uploadErr.message || String(uploadErr), stage: "Firebase Storage - Envio ou Obtenção de URL" };
-          }
-          setDiagnosticError(`Falha na fase: ${parsed.stage || "Storage"}. Detalhes: ${parsed.message || uploadErr.message}`);
-          setIsUploading(false);
-          return;
-        }
-      }
-
       setUploadDiagnostics(prev => [...prev, `[LOG 4/4] Atualizando dados cadastrais no Firestore: coleção "configuracoes_empresa"...`]);
       const docRef = doc(db, 'configuracoes_empresa', 'empresa');
       await setDoc(docRef, {
         razaoSocial: tempRazao,
         cnpj: tempCnpj,
         endereco: tempUnidade,
-        logoUrl: finalLogoUrl,
+        logoUrl: logoUrl,
         updatedAt: new Date().toISOString()
       }, { merge: true });
 
       setRazaoSocial(tempRazao);
       setCnpj(tempCnpj);
       setUnidadeOperacao(tempUnidade);
-      setLogoUrl(finalLogoUrl);
       setIsEditingMatriz(false);
       setUploadDiagnostics([]);
       setShouldClearLogo(false);
@@ -2231,14 +2280,7 @@ export const EmpresaDashboard: React.FC = () => {
                     <label className="text-[9px] uppercase font-bold text-slate-400">Logotipo da Empresa</label>
                     <div className="flex flex-col gap-3 p-3 bg-white border border-slate-200 rounded-xl">
                       <div className="flex items-center gap-4">
-                        {shouldClearLogo ? (
-                          <div className="w-16 h-12 border-2 border-dashed border-slate-200 flex items-center justify-center text-[10px] text-slate-400 bg-slate-50 font-bold rounded">SEM LOGO</div>
-                        ) : tempLogo ? (
-                          <div className="relative">
-                            <img src={URL.createObjectURL(tempLogo)} alt="Novo Logo" className="w-16 h-12 object-contain border rounded bg-slate-50" />
-                            <span className="absolute -top-1 -right-1 bg-blue-600 text-[8px] text-white px-1 rounded-full font-black">NOVO</span>
-                          </div>
-                        ) : logoUrl ? (
+                        {logoUrl ? (
                           <img src={logoUrl} alt="Logo" className="w-16 h-12 object-contain border rounded bg-slate-50" />
                         ) : (
                           <div className="w-16 h-12 border-2 border-dashed border-slate-200 flex items-center justify-center text-[10px] text-slate-400 bg-slate-50 font-bold rounded">SEM LOGO</div>
@@ -2247,22 +2289,36 @@ export const EmpresaDashboard: React.FC = () => {
                           <input 
                             type="file" 
                             onChange={e => {
-                              setTempLogo(e.target.files?.[0] || null);
-                              setShouldClearLogo(false);
-                              setDiagnosticError(null);
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                handleLogoUpload(file);
+                              }
                             }} 
                             accept="image/*" 
                             className="text-xs file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-[10px] file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
                             disabled={isUploading}
                           />
-                          <p className="text-[10px] text-slate-400">Tamanho sugerido: máximo 1MB, formato PNG ou JPG.</p>
+                          <p className="text-[10px] text-slate-400">O logotipo selecionado é otimizado e salvo imediatamente.</p>
                         </div>
-                        {((logoUrl && !shouldClearLogo) || tempLogo) && (
+                        {logoUrl && (
                           <button
                             type="button"
-                            onClick={() => {
-                              setTempLogo(null);
-                              setShouldClearLogo(true);
+                            onClick={async () => {
+                              if (window.confirm("Deseja realmente excluir o logotipo da empresa?")) {
+                                try {
+                                  setIsUploading(true);
+                                  const docRef = doc(db, 'configuracoes_empresa', 'empresa');
+                                  await setDoc(docRef, { logoUrl: '', updatedAt: new Date().toISOString() }, { merge: true });
+                                  setLogoUrl('');
+                                  setTempLogo(null);
+                                  setShouldClearLogo(true);
+                                  setNotification('Logotipo removido com sucesso.');
+                                } catch (err: any) {
+                                  alert(`Erro ao excluir logotipo: ${err.message || String(err)}`);
+                                } finally {
+                                  setIsUploading(false);
+                                }
+                              }
                             }}
                             className="px-2 py-1 text-[10px] font-bold text-red-600 hover:text-red-800 transition-colors bg-red-50 hover:bg-red-100 rounded border border-red-200 cursor-pointer"
                             disabled={isUploading}
@@ -2364,16 +2420,6 @@ export const EmpresaDashboard: React.FC = () => {
             )}
           </div>
 
-          {/* Parâmetros de Auditoria de Plantões */}
-          <div className="space-y-3 p-4 bg-slate-50/30 border border-slate-150 border-slate-200/90 rounded-xl">
-            <h4 className="font-bold text-slate-700">Parâmetros de Auditoria de Plantões</h4>
-            <div className="space-y-2">
-              <p>Motivos Cancelamento Homologados: <strong className="text-emerald-700 block mt-1">7 motivos cadastrados sob SLA institucional</strong></p>
-              <p>Multa familiar por substituição tardia: <strong className="text-slate-700">15% do valor sugerido de plantão</strong></p>
-              <p>Prazo padrão de contestação técnica: <strong className="text-slate-700">5 dias úteis</strong></p>
-              <p>Integrador Firebase Estado: <strong className="text-slate-700 text-emerald-600 font-semibold font-mono">ATIVO (Simulação Offline-first)</strong></p>
-            </div>
-          </div>
         </div>
       </div>
       

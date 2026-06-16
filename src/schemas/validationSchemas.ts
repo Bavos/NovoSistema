@@ -1,0 +1,15 @@
+import { z } from 'zod';
+
+export const pacienteSchema = z.object({
+  nome: z.string().min(3, "Nome é obrigatório e deve ter no mínimo 3 caracteres"),
+  cpf: z.string().regex(/^\d{11}$/, "CPF deve conter 11 dígitos numéricos"),
+  nomeResponsavel: z.string().min(3, "Nome do responsável é obrigatório"),
+  telefoneResponsavel: z.string().min(10, "Telefone do responsável é obrigatório"),
+});
+
+export const profissionalSchema = z.object({
+  nome: z.string().min(3, "Nome é obrigatório"),
+  cpf: z.string().regex(/^\d{11}$/, "CPF deve conter 11 dígitos numéricos"),
+  profissao: z.string().min(3, "Profissão é obrigatória"),
+  telefone: z.string().min(10, "Telefone é obrigatório"),
+});

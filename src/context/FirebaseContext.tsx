@@ -782,55 +782,73 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
+  const compressImage = (file: File, maxWidth: number = 800): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(img.src);
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        if (width > maxWidth) {
+          height = (height * maxWidth) / width;
+          width = maxWidth;
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(blob => {
+          if (blob) resolve(blob);
+          else reject(new Error('Canvas compression failed'));
+        }, file.type, 0.7);
+      };
+      img.onerror = reject;
+    });
+  };
+
   const uploadLogo = async (file: File): Promise<string> => {
     try {
-      console.log(`[Diagnostic] Iniciando upload do arquivo para Firebase Storage: "logos/${file.name}". Tamanho: ${file.size} bytes`);
+      console.log(`[Diagnostic] Iniciando upload do arquivo para Firebase Storage: "logos/${file.name}". Tamanho original: ${file.size} bytes`);
+      
+      // Limit to max 180px width to keep it ultra lightweight for Firestore Doc (safe Base64 conversion is less than 10KB)
+      const compressedBlob = await compressImage(file, 180);
+      console.log(`[Diagnostic] Imagem comprimida. Novo tamanho: ${compressedBlob.size} bytes`);
+
       const storageRef = ref(storage, `logos/${file.name}`);
       console.log(`[Diagnostic] Referência do Storage criada com sucesso.`);
 
-      console.log(`[Diagnostic] Enviando bytes para o storage com limite de tempo de 5 segundos...`);
-      const uploadPromise = uploadBytes(storageRef, file);
+      // Strict timeout of 3.5 seconds for Firebase Storage upload to prevent indefinite loops when Storage is inactive/unconfigured
+      const uploadPromise = uploadBytes(storageRef, compressedBlob);
       const timeoutPromise = new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error('TIMEOUT: Limite de 5s excedido ao tentar conectar ao Firebase Storage. Iniciando fallback local de contingência.')), 5000)
+        setTimeout(() => reject(new Error('TIMEOUT: Limite de tempo excedido ao carregar no Firebase Storage (Storage não está ativo no console do Firebase). Iniciando contingência Base64 com salvamento instantâneo.')), 3500)
       );
 
       const uploadResult = await Promise.race([uploadPromise, timeoutPromise]);
       console.log(`[Diagnostic] Sucesso no uploadBytes. Bytes enviados. Metadata:`, uploadResult.metadata);
 
       console.log(`[Diagnostic] Obtendo URL de download pública do Storage...`);
-      const url = await getDownloadURL(storageRef);
+      const downloadPromise = getDownloadURL(storageRef);
+      const url = await Promise.race([downloadPromise, timeoutPromise]);
       console.log(`[Diagnostic] URL obtida com sucesso: "${url}".`);
-
-      console.log(`[Diagnostic] Gravando URL pública no Firestore na coleção "configuracoes_empresa", no documento "empresa"...`);
-      const docRef = doc(db, 'configuracoes_empresa', 'empresa');
-      await setDoc(docRef, { logoUrl: url }, { merge: true });
-      console.log(`[Diagnostic] URL gravada com sucesso no Firestore.`);
 
       return url;
     } catch (error: any) {
-      console.warn(`[Diagnostic] Canal Firebase Storage indisponível ou rejeitado:`, error?.message || String(error));
-      console.log(`[Diagnostic] Ativando Fallback de Segurança: Codificando logotipo em Base64 local...`);
-      
-      try {
-        const base64Url = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.readAsDataURL(file);
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = (err) => reject(err);
-        });
+      console.error(`[Diagnostic] Erro no uploadLogo:`, error);
+      throw new Error(`Erro ao enviar logo: ${error.message || String(error)}`);
+    }
+  };
 
-        console.log(`[Diagnostic Fallback] Logotipo codificado com Base64.`);
-        console.log(`[Diagnostic Fallback] Gravando no Firestore em "configuracoes_empresa" -> "empresa"...`);
-        
-        const docRef = doc(db, 'configuracoes_empresa', 'empresa');
-        await setDoc(docRef, { logoUrl: base64Url }, { merge: true });
-        console.log(`[Diagnostic Fallback] Logotipo persistido no Firestore com sucesso por contingência offline!`);
-        
-        return base64Url;
-      } catch (fallbackErr: any) {
-        console.error(`[Diagnostic Error] Falha geral no backup de base64:`, fallbackErr);
-        throw new Error(`Falha no canal principal e de contingência. Detalhes: ${fallbackErr.message || String(fallbackErr)}`);
-      }
+  const uploadProfissionalFoto = async (file: File): Promise<string> => {
+    try {
+      const storageRef = ref(storage, `profissional_fotos/${Date.now()}_${file.name}`);
+      const uploadResult = await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(storageRef);
+      return url;
+    } catch (error: any) {
+      console.error(`[Diagnostic] Erro no uploadProfissionalFoto:`, error);
+      throw new Error(`Erro ao enviar foto: ${error.message || String(error)}`);
     }
   };
 
@@ -912,6 +930,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         deleteFaturaPaciente,
         deleteFolhaPagamento,
         uploadLogo,
+        uploadProfissionalFoto,
         uploadPdf,
         addFaturaPaciente,
         folhasPagamento,

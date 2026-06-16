@@ -9,6 +9,7 @@ import { updateDoc, doc } from 'firebase/firestore';
 import { Paciente, Plantao, CancelingReason, EscalacaoPlano, Agendamento } from '../types';
 import { useFirebase } from '../context/FirebaseContext';
 import { usePacienteData } from '../hooks/usePacienteData';
+import { pacienteSchema } from '../schemas/validationSchemas';
 import {
   Save,
   Lock,
@@ -495,8 +496,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
     e.preventDefault();
     if (isCurrentlyDeactivated) return;
 
-    if (!nome || !cpf || !nomeResponsavel || !telefoneResponsavel) {
-      alert('Por favor, preencha todos os campos obrigatórios (Nome, CPF, Nome Responsável e Telefone).');
+    const validation = pacienteSchema.safeParse({ nome, cpf, nomeResponsavel, telefoneResponsavel });
+    
+    if (!validation.success) {
+      alert(validation.error.issues[0].message);
       return;
     }
 
