@@ -19,13 +19,14 @@ import {
   Trash2,
   X,
   Plus,
-  Info
+  Info,
+  Pencil
 } from 'lucide-react';
 import { INITIAL_PROFESSIONALS } from '../mockData';
 import { useFirebase } from '../context/FirebaseContext';
 import { Agendamento, DebitoProfissional } from '../types';
 import { db } from '../lib/firebase';
-import { collection, query, where, getDocs, doc, getDoc, setDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 
 /* ----------------------------------------------------
  * Tab 2: Profissionais Co-curators
@@ -187,6 +188,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
     profissionais, 
     debitosProfissionais, 
     addDebitoProfissional, 
+    updateDebitoProfissional,
     deleteDebitoProfissional,
     faturasPacientes,
     addFaturaPaciente,
@@ -250,12 +252,43 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   const [newDebitValor, setNewDebitValor] = useState('');
   const [newDebitMotivo, setNewDebitMotivo] = useState<'Curinga' | 'Passagem' | 'Outros'>('Curinga');
   const [isInsertingDebit, setIsInsertingDebit] = useState(false);
+  const [editingDebitId, setEditingDebitId] = useState<string | null>(null);
+  const [newDebitPacienteId, setNewDebitPacienteId] = useState('');
   const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<{
     isOpen: boolean;
     title: string;
     message: string;
     onConfirm: () => void | Promise<void>;
   } | null>(null);
+
+  const [isClearingDebits, setIsClearingDebits] = useState(false);
+
+  const handleClearAllDebitos = async () => {
+    setDeleteConfirmDialog({
+      isOpen: true,
+      title: 'Zerar Todos os Débitos (Testes)',
+      message: 'ATENÇÃO: Você está prestes a excluir TODOS os registros de débitos de profissionais já lançados. Esta ação deletará todos os documentos do Firestore permanentemente e não poderá ser desfeita.',
+      onConfirm: async () => {
+        setIsClearingDebits(true);
+        try {
+          const q = collection(db, 'debitos_profissionais');
+          const snap = await getDocs(q);
+          
+          if (snap.empty) {
+            return;
+          }
+
+          const promises = snap.docs.map(docRef => deleteDoc(doc(db, 'debitos_profissionais', docRef.id)));
+          await Promise.all(promises);
+        } catch (err) {
+          console.error("Erro ao zerar débitos:", err);
+          alert("Erro ao zerar os débitos no Firestore.");
+        } finally {
+          setIsClearingDebits(false);
+        }
+      }
+    });
+  };
 
   const parseInputDateToDateObject = (dateStr: string): Date => {
     const [year, month, day] = dateStr.split('-').map(Number);
@@ -721,25 +754,44 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       return;
     }
 
+    const patientSelected = activePacientes.find(p => p.id === newDebitPacienteId);
+    const idPaciente = patientSelected ? patientSelected.id : '';
+    const nomePaciente = patientSelected ? patientSelected.nome : '';
+
     setIsInsertingDebit(true);
     try {
       const dateObj = parseInputDateToDateObject(newDebitDate);
-      await addDebitoProfissional({
+      
+      const debitData: any = {
         idProfissional: newDebitProfId,
         nomeProfissional: profSelected.nome,
         data: dateObj,
         valor: valNumber,
         motivo: newDebitMotivo
-      });
+      };
+
+      if (idPaciente) {
+        debitData.idPaciente = idPaciente;
+        debitData.nomePaciente = nomePaciente;
+      }
+
+      if (editingDebitId) {
+        debitData.id = editingDebitId;
+        await updateDebitoProfissional(debitData);
+      } else {
+        await addDebitoProfissional(debitData);
+      }
       
       // Reset and Close
+      setEditingDebitId(null);
       setNewDebitProfId('');
       setNewDebitValor('');
       setNewDebitMotivo('Curinga');
+      setNewDebitPacienteId('');
       setShowDebitModal(false);
     } catch (err) {
       console.error(err);
-      alert('Erro ao registrar débito.');
+      alert('Erro ao gravar débito.');
     } finally {
       setIsInsertingDebit(false);
     }
@@ -1129,17 +1181,29 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
               <h2 className="text-base font-bold text-slate-800">Lançamento & Gestão de Débitos</h2>
               <p className="text-xs text-slate-500">Registre adiantamentos, vales de passagem, descontos ou despesas extras no perfil dos cuidadores para abatimento automático em folha.</p>
             </div>
-            <button
-              onClick={() => {
-                setNewDebitProfId('');
-                setNewDebitValor('');
-                setNewDebitMotivo('Curinga');
-                setShowDebitModal(true);
-              }}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer flex items-center justify-center gap-1.5 self-start"
-            >
-              <Plus size={15} /> Lançar Débito
-            </button>
+            <div className="flex flex-wrap gap-2 self-start">
+              <button
+                onClick={handleClearAllDebitos}
+                disabled={isClearingDebits}
+                className="px-4 py-2 border border-orange-200 hover:bg-orange-50 text-orange-700 rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer flex items-center justify-center gap-1.5"
+                title="Apagar todos os débitos da base para começar do zero"
+              >
+                {isClearingDebits ? 'Limpando...' : 'Zerar Dados (Testes)'}
+              </button>
+              <button
+                onClick={() => {
+                  setEditingDebitId(null);
+                  setNewDebitProfId('');
+                  setNewDebitValor('');
+                  setNewDebitMotivo('Curinga');
+                  setNewDebitPacienteId('');
+                  setShowDebitModal(true);
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Plus size={15} /> Lançar Débito
+              </button>
+            </div>
           </div>
 
           {/* Debits Table */}
@@ -1172,7 +1236,12 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                       return dateB - dateA;
                     }).map((d) => (
                       <tr key={d.id} className="hover:bg-slate-50/40">
-                        <td className="py-3.5 px-5 font-semibold text-slate-800">{d.nomeProfissional}</td>
+                        <td className="py-3.5 px-5 font-semibold text-slate-800">
+                          <div>{d.nomeProfissional}</div>
+                          {d.nomePaciente && (
+                            <div className="text-[10px] text-slate-400 font-normal">Paciente: {d.nomePaciente}</div>
+                          )}
+                        </td>
                         <td className="py-3.5 px-5 text-slate-500">{formatDebitDateDisplay(d.data)}</td>
                         <td className="py-3.5 px-5">
                           <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
@@ -1187,21 +1256,50 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                         <td className="py-3.5 px-5 text-right">
                           <button
                             onClick={() => {
+                              setEditingDebitId(d.id);
+                              setNewDebitProfId(d.idProfissional);
+                              setNewDebitValor(d.valor.toString());
+                              setNewDebitMotivo(d.motivo);
+                              setNewDebitPacienteId(d.idPaciente || '');
+                              
+                              if (d.data) {
+                                let dObj: Date;
+                                if (typeof d.data.toDate === 'function') {
+                                  dObj = d.data.toDate();
+                                } else if (d.data.seconds) {
+                                  dObj = new Date(d.data.seconds * 1000);
+                                } else {
+                                  dObj = new Date(d.data);
+                                }
+                                const yr = dObj.getFullYear();
+                                const mo = String(dObj.getMonth() + 1).padStart(2, '0');
+                                const dy = String(dObj.getDate()).padStart(2, '0');
+                                setNewDebitDate(`${yr}-${mo}-${dy}`);
+                              }
+                              
+                              setShowDebitModal(true);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-blue-650 transition-colors cursor-pointer inline-flex items-center justify-center hover:bg-slate-100 rounded mr-2"
+                            title="Editar débito"
+                          >
+                            <Pencil size={15} />
+                          </button>
+                          <button
+                            onClick={() => {
                               setDeleteConfirmDialog({
                                 isOpen: true,
-                                title: 'Excluir Registro de Débito',
+                                title: 'Excluir Débito de Profissional',
                                 message: `Tem certeza que deseja excluir o débito de R$ ${d.valor.toFixed(2)} de ${d.nomeProfissional}? Esta ação reajustará o balanço da folha de pagamento do profissional.`,
                                 onConfirm: async () => {
                                   try {
                                     await deleteDebitoProfissional(d.id);
                                   } catch (err) {
                                     console.error("Erro ao deletar debito:", err);
-                                    alert("Erro ao excluir o débito.");
                                   }
                                 }
                               });
                             }}
-                            className="p-1 text-slate-400 hover:text-red-600 transition-colors cursor-pointer inline-flex items-center justify-center hover:bg-slate-100 rounded"
+                            className="p-1.5 text-slate-400 hover:text-red-600 transition-colors cursor-pointer inline-flex items-center justify-center hover:bg-slate-100 rounded"
                             title="Remover débito"
                           >
                             <Trash2 size={15} />
@@ -1224,15 +1322,22 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
         <div className="fixed inset-0 bg-slate-900/60 z-[100] backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-md rounded-2xl border border-slate-200 shadow-2xl p-6 relative animate-in zoom-in-95 duration-200">
             <button
-              onClick={() => setShowDebitModal(false)}
+              onClick={() => {
+                setEditingDebitId(null);
+                setShowDebitModal(false);
+              }}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer p-1 rounded-lg hover:bg-slate-100"
             >
               <X size={18} />
             </button>
 
             <div className="mb-4">
-              <h2 className="text-base font-black text-slate-900">Inserir Débito de Profissional</h2>
-              <p className="text-xs text-slate-400 mt-1">Lançamento de desconto pontual para abatimento automático na folha apurada.</p>
+              <h2 className="text-base font-black text-slate-900">
+                {editingDebitId ? 'Editar Débito de Profissional' : 'Inserir Débito de Profissional'}
+              </h2>
+              <p className="text-xs text-slate-400 mt-1">
+                {editingDebitId ? 'Atualize as informações do lançamento de débito do perfil do cuidador.' : 'Lançamento de desconto pontual para abatimento automático na folha apurada.'}
+              </p>
             </div>
 
             <div className="space-y-4">
@@ -1246,6 +1351,20 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                 >
                   <option value="">Selecione o profissional...</option>
                   {activeProfissionais.map(p => (
+                    <option key={p.id} value={p.id}>{p.nome}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Paciente (Opcional)</label>
+                <select
+                  value={newDebitPacienteId}
+                  onChange={(e) => setNewDebitPacienteId(e.target.value)}
+                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm bg-white"
+                >
+                  <option value="">Nenhum paciente selecionado</option>
+                  {activePacientes.map(p => (
                     <option key={p.id} value={p.id}>{p.nome}</option>
                   ))}
                 </select>
@@ -1296,7 +1415,10 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
               <div className="flex gap-3 pt-3 border-t border-slate-100 justify-end transition-all">
                 <button
                   type="button"
-                  onClick={() => setShowDebitModal(false)}
+                  onClick={() => {
+                    setEditingDebitId(null);
+                    setShowDebitModal(false);
+                  }}
                   className="px-4 py-2 border border-slate-200 text-slate-500 rounded-lg text-xs font-bold hover:bg-slate-50 cursor-pointer"
                 >
                   Cancelar
@@ -1307,9 +1429,40 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                   disabled={isInsertingDebit}
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold disabled:opacity-50 cursor-pointer"
                 >
-                  {isInsertingDebit ? 'Gravando...' : 'Confirmar Lançamento'}
+                  {isInsertingDebit ? 'Gravando...' : (editingDebitId ? 'Salvar Alterações' : 'Confirmar Lançamento')}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteConfirmDialog && deleteConfirmDialog.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 z-[110] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white p-6 rounded-2xl max-w-sm w-full border border-slate-200 shadow-2xl animate-in zoom-in-95 duration-200">
+            <h3 className="text-base font-black text-slate-900 mb-2">{deleteConfirmDialog.title}</h3>
+            <p className="text-xs text-slate-500 mb-6 leading-relaxed">{deleteConfirmDialog.message}</p>
+            <div className="flex justify-end gap-3 mt-4">
+              <button
+                onClick={() => setDeleteConfirmDialog(null)}
+                className="px-4 py-2 border border-slate-200 text-slate-500 rounded-lg text-xs font-bold hover:bg-slate-50 cursor-pointer"
+              >
+                Não, Cancelar
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    await deleteConfirmDialog.onConfirm();
+                  } catch (e) {
+                    console.error("Erro na confirmação:", e);
+                  } finally {
+                    setDeleteConfirmDialog(null);
+                  }
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold cursor-pointer"
+              >
+                Sim, Confirmar
+              </button>
             </div>
           </div>
         </div>
@@ -1321,12 +1474,44 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
 
 
 export const HistoricoFinanceiroDashboard: React.FC = () => {
-    const { faturasPacientes, folhasPagamento, deleteFaturaPaciente, deleteFolhaPagamento } = useFirebase();
+    const { faturasPacientes, folhasPagamento, deleteFaturaPaciente, deleteFolhaPagamento, pacientes } = useFirebase();
     const [deleteConfirm, setDeleteConfirm] = useState<{isOpen: boolean, id: string, type: 'fatura' | 'folha' } | null>(null);
     const [viewDoc, setViewDoc] = useState<{data: any, type: 'fatura' | 'folha' } | null>(null);
     const [empresa, setEmpresa] = useState<any>(null);
 
+    // Filter states
+    const [searchFaturaPaciente, setSearchFaturaPaciente] = useState('');
+    const [searchFaturaData, setSearchFaturaData] = useState('');
+    const [searchFolhaProfissional, setSearchFolhaProfissional] = useState('');
+    const [searchFolhaData, setSearchFolhaData] = useState('');
+
+    // Dynamic Lists from Firestore
+    const [dropdownPacientes, setDropdownPacientes] = useState<{ id: string; nome: string }[]>([]);
+    const [dropdownProfissionais, setDropdownProfissionais] = useState<{ id: string; nome: string }[]>([]);
+
     React.useEffect(() => {
+        const fetchFiltersData = async () => {
+            try {
+                // Fetch patients map from 'pacientes' collection
+                const pacSnap = await getDocs(collection(db, 'pacientes'));
+                const pacs = pacSnap.docs.map(doc => ({
+                    id: doc.id,
+                    nome: doc.data().nome || ''
+                })).filter(p => !!p.nome).sort((a, b) => a.nome.localeCompare(b.nome));
+                setDropdownPacientes(pacs);
+
+                // Fetch professionals map from 'profissionais' collection
+                const profSnap = await getDocs(collection(db, 'profissionais'));
+                const profs = profSnap.docs.map(doc => ({
+                    id: doc.id,
+                    nome: doc.data().nome || ''
+                })).filter(p => !!p.nome).sort((a, b) => a.nome.localeCompare(b.nome));
+                setDropdownProfissionais(profs);
+            } catch (err) {
+                console.error("Erro ao carregar dados dos selects:", err);
+            }
+        };
+
         const fetchEmpresa = async () => {
             const docRef = doc(db, 'configuracoes_empresa', 'empresa');
             const docSnap = await getDoc(docRef);
@@ -1334,13 +1519,76 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                 setEmpresa(docSnap.data());
             }
         };
+
+        fetchFiltersData();
         fetchEmpresa();
     }, []);
+
+    const filteredFaturas = faturasPacientes.filter(f => {
+        const matchesPaciente = !searchFaturaPaciente || searchFaturaPaciente === 'all' || f.nomePaciente === searchFaturaPaciente;
+
+        let matchesDate = true;
+        if (searchFaturaData) {
+            try {
+                const docDate = new Date(f.dataEmissao);
+                const yr = docDate.getFullYear();
+                const mo = String(docDate.getMonth() + 1).padStart(2, '0');
+                const dy = String(docDate.getDate()).padStart(2, '0');
+                const docFormatted = `${yr}-${mo}-${dy}`;
+                matchesDate = docFormatted === searchFaturaData;
+            } catch (e) {
+                matchesDate = false;
+            }
+        }
+
+        return matchesPaciente && matchesDate;
+    });
+
+    const filteredFolhas = folhasPagamento.filter(f => {
+        const matchesProfissional = !searchFolhaProfissional || searchFolhaProfissional === 'all' || f.nomeProfissional === searchFolhaProfissional;
+
+        let matchesDate = true;
+        if (searchFolhaData) {
+            try {
+                const docDate = new Date(f.dataEmissao);
+                const yr = docDate.getFullYear();
+                const mo = String(docDate.getMonth() + 1).padStart(2, '0');
+                const dy = String(docDate.getDate()).padStart(2, '0');
+                const docFormatted = `${yr}-${mo}-${dy}`;
+                matchesDate = docFormatted === searchFolhaData;
+            } catch (e) {
+                matchesDate = false;
+            }
+        }
+
+        return matchesProfissional && matchesDate;
+    });
 
     return (
       <div className="space-y-6 animate-in fade-in-30">
         <div className="bg-white p-6 border border-slate-200 rounded-2xl shadow-sm">
-          <h2 className="text-md font-black text-slate-800 mb-4">📜 Histórico de Faturas</h2>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+            <h2 className="text-md font-black text-slate-800">📜 Histórico de Faturas</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={searchFaturaPaciente}
+                onChange={(e) => setSearchFaturaPaciente(e.target.value)}
+                className="border border-slate-200 rounded-md px-3 py-1 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 w-48 cursor-pointer"
+              >
+                <option value="all">Todos os Pacientes</option>
+                {dropdownPacientes.map(p => (
+                  <option key={p.id} value={p.nome}>{p.nome}</option>
+                ))}
+              </select>
+              <input
+                type="date"
+                value={searchFaturaData}
+                onChange={(e) => setSearchFaturaData(e.target.value)}
+                className="border border-slate-200 rounded-md px-3 py-1 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+          
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-left">
                 <thead className="text-slate-500 uppercase border-b border-slate-100">
@@ -1354,25 +1602,54 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                    {faturasPacientes.map(f => (
-                        <tr key={f.id}>
-                            <td className="p-3 font-mono">{f.numeroFatura}</td>
-                            <td className="p-3">{f.nomePaciente}</td>
-                            <td className="p-3">{new Date(f.dataEmissao).toLocaleDateString('pt-BR')}</td>
-                            <td className="p-3 text-right font-bold text-slate-700">R$ {f.valorTotal.toFixed(2)}</td>
-                            <td className="p-3 text-center"><span className="px-2 py-1 rounded-full text-[10px] bg-green-100 text-green-700 font-bold">{f.status}</span></td>
-                            <td className="p-3 text-center flex gap-2">
-                                <button className="text-blue-600 hover:text-blue-800 cursor-pointer" onClick={() => setViewDoc({ data: f, type: 'fatura' })}>👁️</button>
-                                <button className="text-red-600 hover:text-red-800" onClick={() => setDeleteConfirm({ isOpen: true, id: f.id, type: 'fatura' })}>🗑️</button>
+                    {filteredFaturas.length === 0 ? (
+                        <tr>
+                            <td colSpan={6} className="p-8 text-center text-slate-400 font-semibold bg-slate-50/20">
+                                Nenhum registro encontrado para estes filtros.
                             </td>
                         </tr>
-                    ))}
+                    ) : (
+                        filteredFaturas.map(f => (
+                            <tr key={f.id}>
+                                <td className="p-3 font-mono">{f.numeroFatura}</td>
+                                <td className="p-3">{f.nomePaciente}</td>
+                                <td className="p-3">{new Date(f.dataEmissao).toLocaleDateString('pt-BR')}</td>
+                                <td className="p-3 text-right font-bold text-slate-700">R$ {f.valorTotal.toFixed(2)}</td>
+                                <td className="p-3 text-center"><span className="px-2 py-1 rounded-full text-[10px] bg-green-100 text-green-700 font-bold">{f.status}</span></td>
+                                <td className="p-3 text-center flex gap-2">
+                                    <button className="text-blue-600 hover:text-blue-800 cursor-pointer" onClick={() => setViewDoc({ data: f, type: 'fatura' })}>👁️</button>
+                                    <button className="text-red-600 hover:text-red-800" onClick={() => setDeleteConfirm({ isOpen: true, id: f.id, type: 'fatura' })}>🗑️</button>
+                                </td>
+                            </tr>
+                        ))
+                    )}
                 </tbody>
             </table>
           </div>
         </div>
         <div className="bg-white p-6 border border-slate-200 rounded-2xl shadow-sm">
-            <h2 className="text-md font-black text-slate-800 mb-4">📜 Histórico de Folhas de Pagamento</h2>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+              <h2 className="text-md font-black text-slate-800">📜 Histórico de Folhas de Pagamento</h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={searchFolhaProfissional}
+                  onChange={(e) => setSearchFolhaProfissional(e.target.value)}
+                  className="border border-slate-200 rounded-md px-3 py-1 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 w-48 cursor-pointer"
+                >
+                  <option value="all">Todos os Profissionais</option>
+                  {dropdownProfissionais.map(p => (
+                    <option key={p.id} value={p.nome}>{p.nome}</option>
+                  ))}
+                </select>
+                <input
+                  type="date"
+                  value={searchFolhaData}
+                  onChange={(e) => setSearchFolhaData(e.target.value)}
+                  className="border border-slate-200 rounded-md px-3 py-1 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">
                   <thead className="text-slate-500 uppercase border-b border-slate-100">
@@ -1385,18 +1662,26 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                       </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                      {folhasPagamento.map(f => (
-                          <tr key={f.id}>
-                              <td className="p-3">{f.nomeProfissional}</td>
-                              <td className="p-3">{new Date(f.dataEmissao).toLocaleDateString('pt-BR')}</td>
-                              <td className="p-3 text-right font-bold text-slate-700">R$ {f.valorLiquidoReceber.toFixed(2)}</td>
-                              <td className="p-3 text-center"><span className="px-2 py-1 rounded-full text-[10px] bg-blue-100 text-blue-700 font-bold">{f.status}</span></td>
-                              <td className="p-3 text-center flex gap-2">
-                                  <button className="text-blue-600 hover:text-blue-800 cursor-pointer" onClick={() => setViewDoc({ data: f, type: 'folha' })}>👁️</button>
-                                  <button className="text-red-600 hover:text-red-800" onClick={() => setDeleteConfirm({ isOpen: true, id: f.id, type: 'folha' })}>🗑️</button>
+                      {filteredFolhas.length === 0 ? (
+                          <tr>
+                              <td colSpan={5} className="p-8 text-center text-slate-400 font-semibold bg-slate-50/20">
+                                  Nenhum registro encontrado para estes filtros.
                               </td>
                           </tr>
-                      ))}
+                      ) : (
+                          filteredFolhas.map(f => (
+                              <tr key={f.id}>
+                                  <td className="p-3">{f.nomeProfissional}</td>
+                                  <td className="p-3">{new Date(f.dataEmissao).toLocaleDateString('pt-BR')}</td>
+                                  <td className="p-3 text-right font-bold text-slate-700">R$ {f.valorLiquidoReceber.toFixed(2)}</td>
+                                  <td className="p-3 text-center"><span className="px-2 py-1 rounded-full text-[10px] bg-blue-100 text-blue-700 font-bold">{f.status}</span></td>
+                                  <td className="p-3 text-center flex gap-2">
+                                      <button className="text-blue-600 hover:text-blue-800 cursor-pointer" onClick={() => setViewDoc({ data: f, type: 'folha' })}>👁️</button>
+                                      <button className="text-red-600 hover:text-red-800" onClick={() => setDeleteConfirm({ isOpen: true, id: f.id, type: 'folha' })}>🗑️</button>
+                                  </td>
+                              </tr>
+                          ))
+                      )}
                   </tbody>
               </table>
             </div>

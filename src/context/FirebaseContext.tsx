@@ -62,6 +62,7 @@ interface FirebaseContextType {
   deleteProfissional: (id: string) => Promise<void>;
   debitosProfissionais: DebitoProfissional[];
   addDebitoProfissional: (debito: Omit<DebitoProfissional, 'id'>) => Promise<DebitoProfissional>;
+  updateDebitoProfissional: (debito: DebitoProfissional) => Promise<void>;
   deleteDebitoProfissional: (id: string) => Promise<void>;
   faturasPacientes: FaturaPaciente[];
   addFaturaPaciente: (fatura: Omit<FaturaPaciente, 'id'>) => Promise<FaturaPaciente>;
@@ -732,6 +733,18 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
+  const updateDebitoProfissional = async (debito: DebitoProfissional) => {
+    try {
+      await setDoc(doc(db, 'debitos_profissionais', debito.id), debito);
+      await addAuditLog('UPDATE', 'debitos_profissionais', debito.id, `Débito atualizado para o profissional ${debito.nomeProfissional}: R$ ${debito.valor}`);
+      setNotification(`Débito de R$ ${debito.valor} atualizado com sucesso.`);
+    } catch (err) {
+      console.error("Erro ao atualizar débito:", err);
+      handleFirestoreError(err, OperationType.UPDATE, `debitos_profissionais/${debito.id}`);
+      throw err;
+    }
+  };
+
   const addFaturaPaciente = async (fatura: Omit<FaturaPaciente, 'id'>) => {
     try {
       const docRef = await addDoc(collection(db, 'faturas_pacientes'), fatura);
@@ -893,6 +906,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         updateUsuarioSistema,
         debitosProfissionais,
         addDebitoProfissional,
+        updateDebitoProfissional,
         deleteDebitoProfissional,
         faturasPacientes,
         deleteFaturaPaciente,

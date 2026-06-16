@@ -23,10 +23,37 @@ export interface Profissional {
   nome: string;
   especialidade: string;
   telefone: string;
-  email: string;
+  email?: string;
   status: 'Ativo' | 'Inativo';
   createdAt: string;
   dadosBancarios?: DadosBancarios;
+  foto?: string;
+  temMei?: boolean;
+  cnpj?: string;
+  sexo?: 'Masculino' | 'Feminino' | 'Outro';
+  dataNascimento?: string;
+  idade?: number;
+  profissao?: 'Cuidadora(o)' | 'Téc. Enfermagem' | 'Enfermeira(o)' | 'Fisioterapeuta' | 'Médica(o)';
+  rg?: string;
+  cpf?: string;
+  conselho?: string;
+  endereco?: Endereco;
+  ativo?: boolean;
+  documentos?: {
+    cracha?: string;
+    certificados?: string;
+    comprovanteResidencia?: string;
+    vacinas?: string;
+    outros?: string;
+  };
+  documentosAnexos?: DocumentoAnexo[];
+}
+
+export interface DocumentoAnexo {
+  id: string | number;
+  tipo: string;
+  arquivo: string | null;
+  nomeArquivo?: string;
 }
 
 export interface AuditLog {
@@ -163,6 +190,8 @@ export interface DebitoProfissional {
   data: any; // Saved in full format / Timestamp
   valor: number;
   motivo: 'Curinga' | 'Passagem' | 'Outros';
+  idPaciente?: string;
+  nomePaciente?: string;
 }
 
 export interface FaturaPaciente {
