@@ -217,7 +217,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
 
   React.useEffect(() => {
     const fetchEmpresa = async () => {
-        const docRef = doc(db, 'configuracoes', 'empresa');
+        const docRef = doc(db, 'configuracoes_empresa', 'empresa');
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
             setEmpresa(docSnap.data());
@@ -1326,7 +1326,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
 
     React.useEffect(() => {
         const fetchEmpresa = async () => {
-            const docRef = doc(db, 'configuracoes', 'empresa');
+            const docRef = doc(db, 'configuracoes_empresa', 'empresa');
             const docSnap = await getDoc(docRef);
             if (docSnap.exists()) {
                 setEmpresa(docSnap.data());
@@ -1463,10 +1463,8 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                     {/* Header with Company Logo etc */}
                     <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4 mb-6">
                         <div>
-                             {empresa?.logoUrl ? (
-                               <img src={empresa.logoUrl} alt="Logo" className="w-24 h-12 object-contain" />
-                             ) : (
-                               <div className="w-24 h-12 bg-slate-200 border-2 border-slate-800 flex items-center justify-center font-bold text-slate-700">LOGO</div>
+                             {empresa?.logoUrl && (
+                               <img src={empresa.logoUrl} alt="Logo" className="w-24 h-12 object-contain mb-2" />
                              )}
                              <h2 className="text-xl font-black">{empresa?.razaoSocial || 'EMPRESA PADRÃO'}</h2>
                              <p className="text-[10px]">{empresa?.cnpj || '00.000.000/0000-00'} • {empresa?.endereco || 'Endereço Indisponível'}</p>
@@ -1558,11 +1556,17 @@ export const EmpresaDashboard: React.FC = () => {
   const [tempUnidade, setTempUnidade] = useState('');
   const [tempDirecao, setTempDirecao] = useState('');
   const [tempLogo, setTempLogo] = useState<File | null>(null);
+  const [shouldClearLogo, setShouldClearLogo] = useState(false);
+
+  // Diagnostic states
+  const [uploadDiagnostics, setUploadDiagnostics] = useState<string[]>([]);
+  const [diagnosticError, setDiagnosticError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   React.useEffect(() => {
     const fetchMatrizConfig = async () => {
       try {
-        const docRef = doc(db, 'configuracoes', 'empresa');
+        const docRef = doc(db, 'configuracoes_empresa', 'empresa');
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data();
@@ -1586,6 +1590,9 @@ export const EmpresaDashboard: React.FC = () => {
     setTempUnidade(unidadeOperacao);
     setTempDirecao(direcaoGeral);
     setTempLogo(null);
+    setShouldClearLogo(false);
+    setUploadDiagnostics([]);
+    setDiagnosticError(null);
     setIsEditingMatriz(true);
   };
 
@@ -1594,13 +1601,43 @@ export const EmpresaDashboard: React.FC = () => {
       alert("Apenas administradores podem alterar as informações.");
       return;
     }
+    setUploadDiagnostics([]);
+    setDiagnosticError(null);
+    setIsUploading(true);
+
     try {
-      let finalLogoUrl = logoUrl;
-      if (tempLogo) {
-          finalLogoUrl = await uploadLogo(tempLogo);
-      }
+      let finalLogoUrl = shouldClearLogo ? '' : logoUrl;
       
-      const docRef = doc(db, 'configuracoes', 'empresa');
+      if (tempLogo && !shouldClearLogo) {
+        setUploadDiagnostics(prev => [...prev, `[LOG 1/4] Preparando arquivo "${tempLogo.name}" (Tamanho: ${(tempLogo.size / 1024).toFixed(1)} KB)...`]);
+        try {
+          setUploadDiagnostics(prev => [...prev, `[LOG 2/4] Enviando bytes para o storage na pasta /logos no Firebase Storage...`]);
+          finalLogoUrl = await uploadLogo(tempLogo);
+          if (finalLogoUrl.startsWith('data:')) {
+            setUploadDiagnostics(prev => [
+              ...prev,
+              `[LOG 2.5/4] ⚡ Limite de tempo excedido ou permissão negada no canal Storage.`,
+              `[LOG 3/4] ✅ Ativando contingência Base64: Codificado em tempo real com sucesso.`
+            ]);
+          } else {
+            setUploadDiagnostics(prev => [...prev, `[LOG 3/4] Sucesso! Logo carregado e salvo no Storage.`]);
+          }
+        } catch (uploadErr: any) {
+          console.error("[Diagnóstico de Erro] Erro retornado no uploadLogo:", uploadErr);
+          let parsed;
+          try {
+            parsed = JSON.parse(uploadErr.message);
+          } catch {
+            parsed = { message: uploadErr.message || String(uploadErr), stage: "Firebase Storage - Envio ou Obtenção de URL" };
+          }
+          setDiagnosticError(`Falha na fase: ${parsed.stage || "Storage"}. Detalhes: ${parsed.message || uploadErr.message}`);
+          setIsUploading(false);
+          return;
+        }
+      }
+
+      setUploadDiagnostics(prev => [...prev, `[LOG 4/4] Atualizando dados cadastrais no Firestore: coleção "configuracoes_empresa"...`]);
+      const docRef = doc(db, 'configuracoes_empresa', 'empresa');
       await setDoc(docRef, {
         razaoSocial: tempRazao,
         cnpj: tempCnpj,
@@ -1608,16 +1645,20 @@ export const EmpresaDashboard: React.FC = () => {
         logoUrl: finalLogoUrl,
         updatedAt: new Date().toISOString()
       }, { merge: true });
-      
+
       setRazaoSocial(tempRazao);
       setCnpj(tempCnpj);
       setUnidadeOperacao(tempUnidade);
       setLogoUrl(finalLogoUrl);
       setIsEditingMatriz(false);
-      setNotification('Dados organizacionais da Unidade Matriz alterados e salvos com sucesso.');
-    } catch (err) {
-      console.error("Erro ao salvar dados da matriz:", err);
-      alert("Não foi possível salvar as alterações. Verifique sua conexão.");
+      setUploadDiagnostics([]);
+      setShouldClearLogo(false);
+      setNotification('Dados organizacionais salvos com sucesso.');
+    } catch (err: any) {
+      console.error("[Diagnóstico de Erro] Erro geral ao salvar dados da matriz:", err);
+      setDiagnosticError(`Falha ao gravar no Firestore: ${err.message || String(err)}`);
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -1649,15 +1690,71 @@ export const EmpresaDashboard: React.FC = () => {
                 <div className="space-y-2">
                   <div className="space-y-1">
                     <label className="text-[9px] uppercase font-bold text-slate-400">Logotipo da Empresa</label>
-                    <div className="flex items-center gap-4">
-                      {logoUrl && !tempLogo && <img src={logoUrl} alt="Logo" className="w-16 h-12 object-contain border rounded" />}
-                      {tempLogo && <img src={URL.createObjectURL(tempLogo)} alt="Novo Logo" className="w-16 h-12 object-contain border rounded" />}
-                      <input 
-                        type="file" 
-                        onChange={e => setTempLogo(e.target.files?.[0] || null)} 
-                        accept="image/*" 
-                        className="text-xs"
-                      />
+                    <div className="flex flex-col gap-3 p-3 bg-white border border-slate-200 rounded-xl">
+                      <div className="flex items-center gap-4">
+                        {shouldClearLogo ? (
+                          <div className="w-16 h-12 border-2 border-dashed border-slate-200 flex items-center justify-center text-[10px] text-slate-400 bg-slate-50 font-bold rounded">SEM LOGO</div>
+                        ) : tempLogo ? (
+                          <div className="relative">
+                            <img src={URL.createObjectURL(tempLogo)} alt="Novo Logo" className="w-16 h-12 object-contain border rounded bg-slate-50" />
+                            <span className="absolute -top-1 -right-1 bg-blue-600 text-[8px] text-white px-1 rounded-full font-black">NOVO</span>
+                          </div>
+                        ) : logoUrl ? (
+                          <img src={logoUrl} alt="Logo" className="w-16 h-12 object-contain border rounded bg-slate-50" />
+                        ) : (
+                          <div className="w-16 h-12 border-2 border-dashed border-slate-200 flex items-center justify-center text-[10px] text-slate-400 bg-slate-50 font-bold rounded">SEM LOGO</div>
+                        )}
+                        <div className="flex-1 flex flex-col gap-1">
+                          <input 
+                            type="file" 
+                            onChange={e => {
+                              setTempLogo(e.target.files?.[0] || null);
+                              setShouldClearLogo(false);
+                              setDiagnosticError(null);
+                            }} 
+                            accept="image/*" 
+                            className="text-xs file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-[10px] file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                            disabled={isUploading}
+                          />
+                          <p className="text-[10px] text-slate-400">Tamanho sugerido: máximo 1MB, formato PNG ou JPG.</p>
+                        </div>
+                        {((logoUrl && !shouldClearLogo) || tempLogo) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTempLogo(null);
+                              setShouldClearLogo(true);
+                            }}
+                            className="px-2 py-1 text-[10px] font-bold text-red-600 hover:text-red-800 transition-colors bg-red-50 hover:bg-red-100 rounded border border-red-200 cursor-pointer"
+                            disabled={isUploading}
+                          >
+                            Excluir Logo
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Diagnostic Log Panel */}
+                      {(uploadDiagnostics.length > 0 || isUploading || diagnosticError) && (
+                        <div className="mt-2 p-3 bg-slate-900 border border-slate-700 rounded-lg text-[10px] font-mono space-y-1">
+                          <div className="flex justify-between items-center text-slate-400 border-b border-slate-850 pb-1 mb-1 font-bold">
+                            <span>📡 DIAGNÓSTICO DE UPLOAD EM TEMPO REAL</span>
+                            <span className={isUploading ? "animate-pulse text-yellow-500 font-bold" : diagnosticError ? "text-red-500 font-bold" : "text-green-500 font-bold"}>
+                              {isUploading ? "PROCESSANDO..." : diagnosticError ? "FALHA" : "SUCESSO"}
+                            </span>
+                          </div>
+                          
+                          <div className="max-h-[120px] overflow-y-auto space-y-1">
+                            {uploadDiagnostics.map((line, idx) => (
+                              <div key={idx} className="text-emerald-400 py-0.5">{line}</div>
+                            ))}
+                            {diagnosticError && (
+                              <div className="text-red-400 font-bold border border-red-900/50 p-1 rounded bg-red-950/40 mt-1 whitespace-pre-wrap">
+                                🚫 {diagnosticError}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="space-y-0.5">
@@ -1699,7 +1796,7 @@ export const EmpresaDashboard: React.FC = () => {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {logoUrl && <img src={logoUrl} alt="Logo" className="w-24 h-16 object-contain border rounded" />}
+                  {logoUrl && <img src={logoUrl} alt="Logo" className="w-24 h-16 object-contain border rounded bg-white shadow-sm" />}
                   <p>Razão Social: <strong className="text-slate-700">{razaoSocial}</strong></p>
                   <p>CNPJ: <strong className="text-slate-700">{cnpj}</strong></p>
                   <p>Unidade de Operação: <strong className="text-slate-700 text-blue-600">{unidadeOperacao}</strong></p>
@@ -1713,14 +1810,16 @@ export const EmpresaDashboard: React.FC = () => {
                 <button 
                   onClick={() => setIsEditingMatriz(false)}
                   className="px-3 py-1.5 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-full text-[11px] font-semibold transition-colors cursor-pointer bg-white"
+                  disabled={isUploading}
                 >
                   Cancelar
                 </button>
                 <button 
                   onClick={handleSaveMatriz}
                   className="px-3 py-1.5 bg-[#1a3626] hover:bg-[#254a34] text-white rounded-full text-[11px] font-semibold shadow-sm transition-colors cursor-pointer"
+                  disabled={isUploading}
                 >
-                  Salvar
+                  {isUploading ? "Salvando..." : "Salvar"}
                 </button>
               </div>
             )}

@@ -1,0 +1,11 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /logos/{allPaths=**} {
+      // General, authenticated users can read logos format
+      allow read: if true;
+      // Writing, updating, or deleting requires write privileges
+      allow write: if request.auth != null;
+    }
+  }
+}

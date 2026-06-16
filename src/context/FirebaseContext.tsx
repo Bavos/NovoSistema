@@ -770,17 +770,75 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const uploadLogo = async (file: File): Promise<string> => {
-    const storageRef = ref(storage, `logos/${file.name}`);
-    await uploadBytes(storageRef, file);
-    const url = await getDownloadURL(storageRef);
-    await setDoc(doc(db, 'configuracoes', 'empresa'), { logoUrl: url }, { merge: true });
-    return url;
+    try {
+      console.log(`[Diagnostic] Iniciando upload do arquivo para Firebase Storage: "logos/${file.name}". Tamanho: ${file.size} bytes`);
+      const storageRef = ref(storage, `logos/${file.name}`);
+      console.log(`[Diagnostic] Referência do Storage criada com sucesso.`);
+
+      console.log(`[Diagnostic] Enviando bytes para o storage com limite de tempo de 5 segundos...`);
+      const uploadPromise = uploadBytes(storageRef, file);
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('TIMEOUT: Limite de 5s excedido ao tentar conectar ao Firebase Storage. Iniciando fallback local de contingência.')), 5000)
+      );
+
+      const uploadResult = await Promise.race([uploadPromise, timeoutPromise]);
+      console.log(`[Diagnostic] Sucesso no uploadBytes. Bytes enviados. Metadata:`, uploadResult.metadata);
+
+      console.log(`[Diagnostic] Obtendo URL de download pública do Storage...`);
+      const url = await getDownloadURL(storageRef);
+      console.log(`[Diagnostic] URL obtida com sucesso: "${url}".`);
+
+      console.log(`[Diagnostic] Gravando URL pública no Firestore na coleção "configuracoes_empresa", no documento "empresa"...`);
+      const docRef = doc(db, 'configuracoes_empresa', 'empresa');
+      await setDoc(docRef, { logoUrl: url }, { merge: true });
+      console.log(`[Diagnostic] URL gravada com sucesso no Firestore.`);
+
+      return url;
+    } catch (error: any) {
+      console.warn(`[Diagnostic] Canal Firebase Storage indisponível ou rejeitado:`, error?.message || String(error));
+      console.log(`[Diagnostic] Ativando Fallback de Segurança: Codificando logotipo em Base64 local...`);
+      
+      try {
+        const base64Url = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(file);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (err) => reject(err);
+        });
+
+        console.log(`[Diagnostic Fallback] Logotipo codificado com Base64.`);
+        console.log(`[Diagnostic Fallback] Gravando no Firestore em "configuracoes_empresa" -> "empresa"...`);
+        
+        const docRef = doc(db, 'configuracoes_empresa', 'empresa');
+        await setDoc(docRef, { logoUrl: base64Url }, { merge: true });
+        console.log(`[Diagnostic Fallback] Logotipo persistido no Firestore com sucesso por contingência offline!`);
+        
+        return base64Url;
+      } catch (fallbackErr: any) {
+        console.error(`[Diagnostic Error] Falha geral no backup de base64:`, fallbackErr);
+        throw new Error(`Falha no canal principal e de contingência. Detalhes: ${fallbackErr.message || String(fallbackErr)}`);
+      }
+    }
   };
 
   const uploadPdf = async (file: File, path: string): Promise<string> => {
-    const storageRef = ref(storage, path);
-    await uploadBytes(storageRef, file);
-    return await getDownloadURL(storageRef);
+    try {
+      const storageRef = ref(storage, path);
+      const uploadPromise = uploadBytes(storageRef, file);
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('TIMEOUT: Limite de 5s excedido no upload do PDF.')), 5000)
+      );
+      await Promise.race([uploadPromise, timeoutPromise]);
+      return await getDownloadURL(storageRef);
+    } catch (err: any) {
+      console.warn("Firebase Storage PDF upload failed, converting to Base64 fallback:", err);
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = (e) => reject(e);
+      });
+    }
   };
 
   const addFolhaPagamento = async (folha: Omit<FolhaPagamento, 'id'>) => {
