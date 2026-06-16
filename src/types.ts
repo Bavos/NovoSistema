@@ -188,5 +188,6 @@ export interface FolhaPagamento {
   valorLiquidoReceber: number;
   status: 'Pendente' | 'Fechada';
   historicoDebitos: any[];
+  plantoesCongelados?: any[];
 }
 

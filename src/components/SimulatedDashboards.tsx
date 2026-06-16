@@ -468,8 +468,10 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
             valorTotalDebitos: totalDebitos,
             valorLiquidoReceber: valorLiquidoReceber,
             status: 'Fechada',
-            historicoDebitos: debDocsForProf
+            historicoDebitos: debDocsForProf,
+            plantoesCongelados: agends
         });
+        alert(`Folha para ${profName} fechada com sucesso!`);
       } catch (err) {
         console.error(err);
         alert('Erro ao fechar folha.');
@@ -1401,117 +1403,369 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
         </div>
 
         {/* View Document Modal */}
-        {viewDoc && (
-          <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 print:hidden">
-              <div className="bg-white p-6 rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-black text-lg text-slate-800">Visualização de {viewDoc.type === 'fatura' ? 'Fatura' : 'Folha'}</h3>
-                    <div className="flex gap-2">
-                        <button onClick={() => window.print()} className="px-4 py-2 bg-slate-800 text-white rounded-lg text-xs font-bold cursor-pointer">Imprimir PDF</button>
-                        <button 
-                            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold cursor-pointer"
-                            onClick={async () => {
-                                const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell } = await import('docx');
-                                const tableRows = viewDoc.data.plantoesCongelados.map((p: any) => new TableRow({
-                                    children: [
-                                        new TableCell({ children: [new Paragraph(p.data)] }),
-                                        new TableCell({ children: [new Paragraph(viewDoc.type === 'fatura' ? p.nomeProfissional : p.nomePaciente)] }),
-                                        new TableCell({ children: [new Paragraph(p.tipoDia || 'Plantão Normal')] }),
-                                        new TableCell({ children: [new Paragraph((p.valorPlantao || p.valorRepasse || 0).toFixed(2))] }),
-                                    ]
-                                }));
-                                const doc = new Document({
-                                    sections: [{
+        {viewDoc && (() => {
+            const calculateRowValue = (p: any, type: 'fatura' | 'folha') => {
+                const base = type === 'fatura' ? (p.valorPlantao || 0) : (p.valorRepasse || 0);
+                const adm = type === 'fatura' ? (p.taxaAdm || 0) : 0;
+                const ajuda = p.ajudaCusto || 0;
+                let mult = 1.0;
+                if (p.tipoDia === 'Feriado 20%') mult = 1.2;
+                else if (p.tipoDia === 'Feriado 50%') mult = 1.5;
+                return (base * mult) + (adm * mult) + ajuda;
+            };
+            const formatDateBR = (dateStr: string) => {
+                if (!dateStr) return '';
+                if (dateStr.includes('-')) {
+                    return dateStr.split('-').reverse().join('/');
+                }
+                return dateStr;
+            };
+
+            return (
+              <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 print:absolute print:inset-0 print:p-0 print:h-auto print:overflow-visible print:bg-white print:z-[999999]">
+                  <div className="bg-white p-6 rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto print:p-0 print:max-h-none print:max-w-none print:w-full print:bg-white print:static print:shadow-none print:rounded-none print:overflow-visible">
+                      <div className="flex justify-between items-center mb-4 print:hidden">
+                        <h3 className="font-black text-lg text-slate-800">Visualização de {viewDoc.type === 'fatura' ? 'Fatura' : 'Folha'}</h3>
+                        <div className="flex gap-2">
+                            <button onClick={() => window.print()} className="px-4 py-2 bg-slate-800 text-white rounded-lg text-xs font-bold cursor-pointer hover:bg-slate-700 transition-colors">Imprimir PDF</button>
+                            <button 
+                                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold cursor-pointer hover:bg-blue-700 transition-colors"
+                                onClick={async () => {
+                                    const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell } = await import('docx');
+                                    
+                                    const empName = empresa?.razaoSocial || 'RH CUIDADO DOMICILIAR';
+                                    const empCnpj = empresa?.cnpj || '00.000.000/0000-00';
+                                    const empEnd = empresa?.endereco || 'Endereço Comercial';
+                                    const docTypeTitle = viewDoc.type === 'fatura' ? 'FATURA COMERCIAL' : 'FOLHA DE PAGAMENTO';
+                                    const docNumber = viewDoc.data.numeroFatura || (viewDoc.type === 'folha' ? 'FOLHA-' + viewDoc.data.id.substring(0,6) : 'XXXX');
+                                    
+                                    const formattedEmission = new Date(viewDoc.data.dataEmissao).toLocaleDateString('pt-BR');
+                                    const isFatura = viewDoc.type === 'fatura';
+                                    
+                                    // 1. Cabeçalho Corporativo
+                                    const cmpHeader = new Paragraph({
                                         children: [
-                                            new Paragraph({ text: viewDoc.type === 'fatura' ? 'FATURA' : 'FOLHA DE PAGAMENTO', heading: 'Heading1' }),
-                                            new Paragraph({ children: [new TextRun(`Nome: ${viewDoc.type === 'fatura' ? viewDoc.data.nomePaciente : viewDoc.data.nomeProfissional}`)] }),
-                                            new Table({ rows: [
-                                                new TableRow({ children: ["Data", "Paciente/Profissional", "Serviço", "Valor"].map(h => new TableCell({ children: [new Paragraph({ text: h })] })) }),
-                                                ...tableRows
-                                            ] })
+                                            new TextRun({ text: empName.toUpperCase(), bold: true, size: 28, color: "1A3C2E" }),
+                                        ],
+                                        spacing: { after: 60 }
+                                    });
+                                    const cmpDetails = new Paragraph({
+                                        children: [
+                                            new TextRun({ text: `CNPJ: ${empCnpj}  |  ${empEnd}`, size: 18, color: "666666" })
+                                        ],
+                                        spacing: { after: 200 }
+                                    });
+                                    
+                                    // Divisor Dourado (B8860B)
+                                    const goldDivider = new Paragraph({
+                                        children: [
+                                            new TextRun({ text: "=========================================================================", bold: true, color: "B8860B" })
+                                        ],
+                                        spacing: { after: 200 }
+                                    });
+                                    
+                                    // 2. Metadados do Prontuário / Faturamento
+                                    const docTitlePara = new Paragraph({
+                                        children: [
+                                            new TextRun({ text: docTypeTitle, bold: true, size: 24, color: "1A3C2E" }),
+                                            new TextRun({ text: `  (Nº: ${docNumber})`, bold: true, size: 20, color: "B8860B" })
+                                        ],
+                                        spacing: { after: 120 }
+                                    });
+                                    
+                                    const metaInfo = new Paragraph({
+                                        children: [
+                                            new TextRun({ text: `Emissão: `, bold: true, size: 18, color: "333333" }),
+                                            new TextRun({ text: `${formattedEmission}    |    `, size: 18, color: "333333" }),
+                                            new TextRun({ text: `Status: `, bold: true, size: 18, color: "333333" }),
+                                            new TextRun({ text: `${viewDoc.data.status}    |    `, size: 18, color: "333333" }),
+                                            new TextRun({ text: `${isFatura ? 'Paciente' : 'Profissional'}: `, bold: true, size: 18, color: "333333" }),
+                                            new TextRun({ text: `${isFatura ? viewDoc.data.nomePaciente : viewDoc.data.nomeProfissional}`, bold: true, size: 18, color: "1A3C2E" })
+                                        ],
+                                        spacing: { after: 300 }
+                                    });
+                                    
+                                    // 3. Tabela de Composição de Plantões
+                                    const tableHeader = new TableRow({
+                                        children: [
+                                            new TableCell({
+                                                children: [new Paragraph({ children: [new TextRun({ text: "Data", bold: true, color: "FFFFFF", size: 18 })] })],
+                                                shading: { fill: "1A3C2E" }
+                                            }),
+                                            new TableCell({
+                                                children: [new Paragraph({ children: [new TextRun({ text: isFatura ? "Profissional" : "Paciente", bold: true, color: "FFFFFF", size: 18 })] })],
+                                                shading: { fill: "1A3C2E" }
+                                            }),
+                                            new TableCell({
+                                                children: [new Paragraph({ children: [new TextRun({ text: "Serviço", bold: true, color: "FFFFFF", size: 18 })] })],
+                                                shading: { fill: "1A3C2E" }
+                                            }),
+                                            new TableCell({
+                                                children: [new Paragraph({ children: [new TextRun({ text: "Valor", bold: true, color: "FFFFFF", size: 18 })] })],
+                                                shading: { fill: "1A3C2E" }
+                                            })
                                         ]
-                                    }]
-                                });
-                                const blob = await Packer.toBlob(doc);
-                                const url = URL.createObjectURL(blob);
-                                const a = document.createElement('a');
-                                a.href = url;
-                                a.download = `${viewDoc.type}.docx`;
-                                a.click();
-                            }}
-                        >Exportar DOCX</button>
-                        <button 
-                             className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold cursor-pointer"
-                             onClick={() => {
-                                 import('xlsx').then(XLSX => {
-                                     const ws = XLSX.utils.json_to_sheet(viewDoc.data.plantoesCongelados.map((p: any) => ({
-                                         Data: p.data,
-                                         Nome: viewDoc.type === 'fatura' ? p.nomeProfissional : p.nomePaciente,
-                                         Tipo: p.tipoDia || 'Plantão Normal',
-                                         Valor: p.valorPlantao || p.valorRepasse || 0
-                                     })));
-                                     const wb = XLSX.utils.book_new();
-                                     XLSX.utils.book_append_sheet(wb, ws, "Documento");
-                                     XLSX.writeFile(wb, `${viewDoc.type}_${viewDoc.data.id}.xlsx`);
-                                 });
-                             }}
-                        >Exportar XLSX</button>
-                        <button onClick={() => setViewDoc(null)} className="px-4 py-2 bg-slate-200 rounded-lg text-xs font-bold">Fechar</button>
-                    </div>
-                  </div>
-                  <div id="print-area" className="w-[210mm] p-[10mm] bg-white text-black border border-slate-300 mx-auto">
-                    {/* Header with Company Logo etc */}
-                    <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4 mb-6">
-                        <div>
-                             {empresa?.logoUrl && (
-                               <img src={empresa.logoUrl} alt="Logo" className="w-24 h-12 object-contain mb-2" />
-                             )}
-                             <h2 className="text-xl font-black">{empresa?.razaoSocial || 'EMPRESA PADRÃO'}</h2>
-                             <p className="text-[10px]">{empresa?.cnpj || '00.000.000/0000-00'} • {empresa?.endereco || 'Endereço Indisponível'}</p>
+                                    });
+                                    
+                                    const tableRows = (viewDoc.data.plantoesCongelados || []).map((p: any) => {
+                                        const valorLinha = calculateRowValue(p, viewDoc.type);
+                                        return new TableRow({
+                                            children: [
+                                                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: formatDateBR(p.data), size: 18 })] })] }),
+                                                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: isFatura ? p.nomeProfissional : p.nomePaciente, size: 18 })] })] }),
+                                                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: p.tipoDia || 'Plantão Normal', size: 18 })] })] }),
+                                                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: `R$ ${valorLinha.toFixed(2)}`, size: 18 })] })] })
+                                            ]
+                                        });
+                                    });
+                                    
+                                    const tableFooterRows: any[] = [];
+                                    const totalGlobal = isFatura
+                                        ? (viewDoc.data.valorTotal || 0)
+                                        : (viewDoc.data.valorLiquidoReceber || 0);
+                                        
+                                    if (!isFatura && viewDoc.data.valorTotalDebitos > 0) {
+                                        tableFooterRows.push(new TableRow({
+                                            children: [
+                                                new TableCell({ children: [new Paragraph("")] }),
+                                                new TableCell({ children: [new Paragraph("")] }),
+                                                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "SOMA DOS PLANTÕES:", bold: true, size: 18 })] })] }),
+                                                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: `R$ ${viewDoc.data.valorTotalPlantoes.toFixed(2)}`, size: 18 })] })] })
+                                            ]
+                                        }));
+                                        tableFooterRows.push(new TableRow({
+                                            children: [
+                                                new TableCell({ children: [new Paragraph("")] }),
+                                                new TableCell({ children: [new Paragraph("")] }),
+                                                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "DESCONTOS (DÉBITOS):", bold: true, color: "FF0505", size: 18 })] })] }),
+                                                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: `- R$ ${viewDoc.data.valorTotalDebitos.toFixed(2)}`, color: "FF0505", size: 18 })] })] })
+                                            ]
+                                        }));
+                                    }
+                                    
+                                    tableFooterRows.push(new TableRow({
+                                        children: [
+                                            new TableCell({ children: [new Paragraph("")] }),
+                                            new TableCell({ children: [new Paragraph("")] }),
+                                            new TableCell({
+                                                children: [new Paragraph({ children: [new TextRun({ text: isFatura ? "TOTAL DA FATURA:" : "VALOR LÍQUIDO A RECEBER:", bold: true, color: "1A3C2E", size: 18 })] })],
+                                                shading: { fill: "F0F9F4" }
+                                            }),
+                                            new TableCell({
+                                                children: [new Paragraph({ children: [new TextRun({ text: `R$ ${totalGlobal.toFixed(2)}`, bold: true, color: "1A3C2E", size: 18 })] })],
+                                                shading: { fill: "F0F9F4" }
+                                            })
+                                        ]
+                                    }));
+                                    
+                                    const plantoesTable = new Table({
+                                        rows: [
+                                            tableHeader,
+                                            ...tableRows,
+                                            ...tableFooterRows
+                                        ],
+                                        width: {
+                                            size: 100,
+                                            type: "pct" as any
+                                        }
+                                    });
+                                    
+                                    // 4. Termo de Veracidade e Assinaturas
+                                    const spacer = new Paragraph({ children: [new TextRun({ text: "" })], spacing: { after: 400 } });
+                                    
+                                    const lgpdNotice = new Paragraph({
+                                        children: [
+                                            new TextRun({
+                                                text: "O documento acima compreende dados confidenciais e de uso restrito da coordenadoria do RH Cuidado Domiciliar em conformidade com as diretivas do CFM, COFEN e a Lei Geral de Proteção de Dados (LGPD). É de inteira obrigação das partes a confidencialidade.",
+                                                italics: true,
+                                                size: 16,
+                                                color: "777777"
+                                            })
+                                        ],
+                                        spacing: { after: 600 }
+                                    });
+                                    
+                                    const signatureLinePara = new Paragraph({
+                                        children: [
+                                            new TextRun({ text: "___________________________                       ___________________________", bold: true, color: "999999" })
+                                        ],
+                                        spacing: { after: 100 }
+                                    });
+                                    
+                                    const signatureLabelsPara = new Paragraph({
+                                        children: [
+                                            new TextRun({ text: "      Responsável Clínico / Direção                               Responsável de Enfermagem / Prestador", size: 16, color: "555555" })
+                                        ]
+                                    });
+                                    
+                                    const doc = new Document({
+                                        sections: [{
+                                            children: [
+                                                cmpHeader,
+                                                cmpDetails,
+                                                goldDivider,
+                                                docTitlePara,
+                                                metaInfo,
+                                                plantoesTable,
+                                                spacer,
+                                                lgpdNotice,
+                                                signatureLinePara,
+                                                signatureLabelsPara
+                                            ]
+                                        }]
+                                    });
+                                    
+                                    const blob = await Packer.toBlob(doc);
+                                    const url = URL.createObjectURL(blob);
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = `${viewDoc.type === 'fatura' ? 'fatura' : 'folha_pagamento'}_${viewDoc.data.id.substring(0, 8)}.docx`;
+                                    a.click();
+                                }}
+                            >Exportar DOCX</button>
+                            <button 
+                                 className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold cursor-pointer hover:bg-emerald-700 transition-colors"
+                                 onClick={() => {
+                                     import('xlsx').then(XLSX => {
+                                         const plantoes = viewDoc.data.plantoesCongelados || [];
+                                         const rows = plantoes.map((p: any) => {
+                                             const valorLinha = calculateRowValue(p, viewDoc.type);
+                                             return {
+                                                 'Data Início': formatDateBR(p.data),
+                                                 'Paciente': p.nomePaciente || (viewDoc.type === 'fatura' ? viewDoc.data.nomePaciente : '---'),
+                                                 'Profissional': p.nomeProfissional || (viewDoc.type === 'folha' ? viewDoc.data.nomeProfissional : '---'),
+                                                 'Serviço': p.tipoDia || 'Plantão Normal',
+                                                 'Valor': Number(valorLinha.toFixed(2))
+                                             };
+                                         });
+
+                                         // Mapeamento e consolidação de rodapés
+                                         const totalGlobal = viewDoc.type === 'fatura' 
+                                             ? (viewDoc.data.valorTotal || 0) 
+                                             : (viewDoc.data.valorLiquidoReceber || 0);
+
+                                         if (viewDoc.type === 'folha' && viewDoc.data.valorTotalDebitos > 0) {
+                                             rows.push({
+                                                 'Data Início': '',
+                                                 'Paciente': '',
+                                                 'Profissional': '',
+                                                 'Serviço': 'SOMA DOS PLANTÕES',
+                                                 'Valor': Number((viewDoc.data.valorTotalPlantoes || 0).toFixed(2))
+                                             });
+                                             rows.push({
+                                                 'Data Início': '',
+                                                 'Paciente': '',
+                                                 'Profissional': '',
+                                                 'Serviço': 'DESCONTOS (DÉBITOS)',
+                                                 'Valor': -Number((viewDoc.data.valorTotalDebitos || 0).toFixed(2))
+                                             });
+                                         }
+
+                                         const labelTotal = viewDoc.type === 'fatura' ? 'TOTAL DA FATURA' : 'TOTAL DA FOLHA';
+                                         rows.push({
+                                             'Data Início': '',
+                                             'Paciente': '',
+                                             'Profissional': '',
+                                             'Serviço': labelTotal,
+                                             'Valor': Number(totalGlobal.toFixed(2))
+                                         });
+
+                                         const ws = XLSX.utils.json_to_sheet(rows);
+                                         
+                                         // Configuração de largura de colunas para melhor legibilidade
+                                         ws['!cols'] = [
+                                             { wch: 15 }, // Data Início
+                                             { wch: 25 }, // Paciente
+                                             { wch: 25 }, // Profissional
+                                             { wch: 25 }, // Serviço
+                                             { wch: 15 }  // Valor
+                                         ];
+
+                                         const wb = XLSX.utils.book_new();
+                                         XLSX.utils.book_append_sheet(wb, ws, "Documento");
+                                         XLSX.writeFile(wb, `${viewDoc.type}_${viewDoc.data.id.substring(0, 8)}.xlsx`);
+                                     });
+                                 }}
+                            >Exportar XLSX</button>
+                            <button onClick={() => setViewDoc(null)} className="px-4 py-2 bg-slate-200 rounded-lg text-xs font-bold hover:bg-slate-300 transition-colors">Fechar</button>
                         </div>
-                        <div className="text-right">
-                             <h2 className="text-lg font-black">{viewDoc.type === 'fatura' ? 'FATURA' : 'FOLHA DE PAGAMENTO'}</h2>
-                             <p className="text-xs font-mono">Nº: {viewDoc.data.numeroFatura || (viewDoc.type === 'folha' ? 'FOLHA-' + viewDoc.data.id.substring(0,6) : 'XXXX')}</p>
+                      </div>
+                      <div id="print-area" className="w-[210mm] p-[10mm] bg-white text-black border border-slate-300 mx-auto print:w-full print:p-0 print:border-none print:shadow-none print:m-0">
+                        {/* Header with Company Logo etc */}
+                        <div className="flex justify-between items-start border-b-2 border-[#b8860b] pb-4 mb-6">
+                            <div className="flex items-center gap-4">
+                                 {empresa?.logoUrl && (
+                                   <img src={empresa.logoUrl} alt="Logo" className="w-24 h-12 object-contain" />
+                                 )}
+                                 <div className="text-[#1a3c2e]">
+                                   <h2 className="text-xl font-black">{empresa?.razaoSocial || 'EMPRESA PADRÃO'}</h2>
+                                   <p className="text-[10px] font-bold">{empresa?.cnpj || '00.000.000/0000-00'} • {empresa?.endereco || 'Endereço Indisponível'}</p>
+                                 </div>
+                            </div>
+                            <div className="text-right text-[#1a3c2e]">
+                                 <h2 className="text-lg font-black">{viewDoc.type === 'fatura' ? 'FATURA' : 'FOLHA DE PAGAMENTO'}</h2>
+                                 <p className="text-xs font-mono">Nº: {viewDoc.data.numeroFatura || (viewDoc.type === 'folha' ? 'FOLHA-' + viewDoc.data.id.substring(0,6) : 'XXXX')}</p>
+                            </div>
                         </div>
-                    </div>
-                    {/* Data Grid */}
-                    <div className="grid grid-cols-2 gap-4 mb-6 text-[10px]">
-                        <div><span className="font-bold">Emissão:</span> {new Date(viewDoc.data.dataEmissao).toLocaleDateString('pt-BR')}</div>
-                        <div><span className="font-bold">Status:</span> {viewDoc.data.status}</div>
-                        <div><span className="font-bold">{viewDoc.type === 'fatura' ? 'Paciente:' : 'Profissional:'}</span> {viewDoc.type === 'fatura' ? viewDoc.data.nomePaciente : viewDoc.data.nomeProfissional}</div>
-                        <div><span className="font-bold">Valor Total:</span> R$ {viewDoc.type === 'fatura' ? (viewDoc.data.valorTotal || 0).toFixed(2) : (viewDoc.data.valorLiquidoReceber || 0).toFixed(2)}</div>
-                    </div>
-                    {/* Plantões Table */}
-                    <table className="w-full text-[10px] border-collapse mb-6">
-                      <thead>
-                        <tr className="bg-slate-100 border-b border-slate-300">
-                          <th className="p-2 text-left">Data</th>
-                          <th className="p-2 text-left">{viewDoc.type === 'fatura' ? 'Profissional' : 'Paciente'}</th>
-                          <th className="p-2 text-left">Serviço</th>
-                          <th className="p-2 text-right">Valor</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {viewDoc.data.plantoesCongelados && viewDoc.data.plantoesCongelados.map((p: any, i: number) => (
-                          <tr key={i} className="border-b border-slate-200">
-                            <td className="p-2">{p.data}</td>
-                            <td className="p-2">{viewDoc.type === 'fatura' ? p.nomeProfissional : p.nomePaciente}</td>
-                            <td className="p-2">{p.tipoDia || 'Plantão Normal'}</td>
-                            <td className="p-2 text-right">R$ {(p.valorPlantao || p.valorRepasse || 0).toFixed(2)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot>
-                        <tr className="font-bold bg-slate-50">
-                          <td colSpan={3} className="p-2 text-right">TOTAL</td>
-                          <td className="p-2 text-right">R$ {viewDoc.type === 'fatura' ? (viewDoc.data.valorTotal || 0).toFixed(2) : (viewDoc.data.valorLiquidoReceber || 0).toFixed(2)}</td>
-                        </tr>
-                      </tfoot>
-                    </table>
+                        {/* Data Grid */}
+                        <div className="grid grid-cols-2 gap-4 mb-6 text-[10px]">
+                            <div><span className="font-bold">Emissão:</span> {new Date(viewDoc.data.dataEmissao).toLocaleDateString('pt-BR')}</div>
+                            <div><span className="font-bold">Status:</span> {viewDoc.data.status}</div>
+                            <div><span className="font-bold">{viewDoc.type === 'fatura' ? 'Paciente:' : 'Profissional:'}</span> {viewDoc.type === 'fatura' ? viewDoc.data.nomePaciente : viewDoc.data.nomeProfissional}</div>
+                            <div><span className="font-bold">Valor Total:</span> R$ {viewDoc.type === 'fatura' ? (viewDoc.data.valorTotal || 0).toFixed(2) : (viewDoc.data.valorLiquidoReceber || 0).toFixed(2)}</div>
+                        </div>
+                        {/* Plantões Table */}
+                        <table className="w-full text-[10px] border-collapse mb-6">
+                          <thead>
+                            <tr className="bg-[#1a3c2e] text-white border-b-2 border-[#b8860b]">
+                              <th className="p-2 text-left">Data</th>
+                              <th className="p-2 text-left">{viewDoc.type === 'fatura' ? 'Profissional' : 'Paciente'}</th>
+                              <th className="p-2 text-left">Serviço</th>
+                              <th className="p-2 text-right">Valor</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {viewDoc.data.plantoesCongelados && viewDoc.data.plantoesCongelados.map((p: any, i: number) => {
+                              const valorLinha = calculateRowValue(p, viewDoc.type);
+                              return (
+                                <tr key={i} className="border-b border-[#b8860b]/30">
+                                  <td className="p-2">{formatDateBR(p.data)}</td>
+                                  <td className="p-2">{viewDoc.type === 'fatura' ? p.nomeProfissional : p.nomePaciente}</td>
+                                  <td className="p-2">{p.tipoDia || 'Plantão Normal'}</td>
+                                  <td className="p-2 text-right text-[#1a3c2e] font-bold font-mono">R$ {valorLinha.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                          <tfoot>
+                            {viewDoc.type === 'folha' && viewDoc.data.valorTotalDebitos > 0 && (
+                              <>
+                                <tr className="font-bold bg-slate-50 text-slate-600">
+                                  <td colSpan={3} className="p-2 text-right uppercase text-[9px]">Soma dos Plantões:</td>
+                                  <td className="p-2 text-right text-slate-700 font-mono">R$ {viewDoc.data.valorTotalPlantoes.toFixed(2)}</td>
+                                </tr>
+                                <tr className="font-bold bg-red-50 text-red-600">
+                                  <td colSpan={3} className="p-2 text-right uppercase text-[9px]">Descontos (Débitos):</td>
+                                  <td className="p-2 text-right font-mono">- R$ {viewDoc.data.valorTotalDebitos.toFixed(2)}</td>
+                                </tr>
+                              </>
+                            )}
+                            <tr className="font-bold bg-emerald-50 text-[#1a3c2e] text-xs">
+                              <td colSpan={3} className="p-2 text-right uppercase">TOTAL</td>
+                              <td className="p-2 text-right text-[#1a3c2e] font-black font-mono">
+                                R$ {viewDoc.type === 'fatura' 
+                                  ? (viewDoc.data.valorTotal || 0).toFixed(2) 
+                                  : (viewDoc.data.valorLiquidoReceber || 0).toFixed(2)
+                                }
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
                   </div>
               </div>
-          </div>
-        )}
+            );
+        })()}
 
         {/* Delete Confirmation Modal */}
         {deleteConfirm && (

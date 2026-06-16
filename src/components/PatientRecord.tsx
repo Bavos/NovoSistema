@@ -303,6 +303,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
   const [reabrirModalOpen, setReabrirModalOpen] = useState(false);
   const [excluirModalOpen, setExcluirModalOpen] = useState(false);
   const [imprimirModalOpen, setImprimirModalOpen] = useState(false);
+  const [imprimirProntuarioModalOpen, setImprimirProntuarioModalOpen] = useState(false);
 
   // Modal Fields - Avulso
   const [avulsoAtendimento, setAvulsoAtendimento] = useState('Plantão');
@@ -1228,6 +1229,17 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
             <ArrowLeft size={15} />
             <span>Voltar</span>
           </button>
+          {!isNew && (
+            <button
+              type="button"
+              onClick={() => setImprimirProntuarioModalOpen(true)}
+              className="bg-teal-600 hover:bg-teal-700 text-white border border-teal-700 px-4 py-2 rounded-md text-xs font-semibold transition-colors flex items-center space-x-1.5 cursor-pointer shadow-sm"
+              id="btn-imprimir-prontuario-global"
+            >
+              <Printer size={15} />
+              <span>📄 Exportar Prontuário (PDF)</span>
+            </button>
+          )}
           {!isCurrentlyDeactivated ? (
             <>
               {!isNew && (
@@ -4462,6 +4474,354 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
               <button
                 type="button"
                 onClick={() => setImprimirModalOpen(false)}
+                className="px-5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-705 text-slate-700 text-xs font-bold rounded-lg transition-all cursor-pointer font-sans"
+              >
+                Retornar ao Prontuário
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EXPORTAR/IMPRIMIR PRONTUÁRIO CLÍNICO (PDF) */}
+      {imprimirProntuarioModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in-30 p-4 overflow-y-auto print:absolute print:inset-0 print:p-0 print:h-auto print:overflow-visible print:bg-white print:z-[999999]">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-4xl w-full flex flex-col overflow-hidden max-h-[92vh] print:p-0 print:max-h-none print:max-w-none print:w-full print:bg-white print:static print:shadow-none print:rounded-none print:overflow-visible">
+            
+            {/* Header com botões do Modal */}
+            <div className="bg-slate-100 p-4 border-b border-slate-200 flex items-center justify-between font-sans shadow-sm print:hidden">
+              <div className="flex items-center space-x-2">
+                <Printer size={16} className="text-teal-600" />
+                <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                  Exportar / Imprimir Prontuário Clínico Integrado
+                </span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-extrabold rounded-lg shadow-sm flex items-center space-x-1 transition-all cursor-pointer"
+                >
+                  <Printer size={13} className="mr-1" />
+                  <span>Imprimir PDF</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setImprimirProntuarioModalOpen(false)}
+                  className="px-3.5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-lg transition-all cursor-pointer"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+
+            {/* O Papel Simulado para Assinatura (Imprimível) */}
+            <div className="p-8 bg-white overflow-y-auto flex-1 font-sans print:p-0 print:overflow-visible" id="print-prontuario-area">
+              <style>{`
+                @media print {
+                  * {
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                    color-adjust: exact !important;
+                  }
+                  body * {
+                    visibility: hidden !important;
+                  }
+                  #print-prontuario-area, #print-prontuario-area * {
+                    visibility: visible !important;
+                  }
+                  #print-prontuario-area {
+                    position: absolute !important;
+                    left: 0 !important;
+                    top: 0 !important;
+                    width: 210mm !important;
+                    max-width: 210mm !important;
+                    min-height: 297mm !important;
+                    margin: 0 !important;
+                    padding: 15mm 15mm !important;
+                    border: none !important;
+                    box-shadow: none !important;
+                    background: white !important;
+                    color: black !important;
+                    z-index: 9999999 !important;
+                    box-sizing: border-box !important;
+                  }
+                  .print\\:hidden {
+                    display: none !important;
+                  }
+                }
+              `}</style>
+              
+              <div className="border-[3px] border-double border-[#b8860b]/60 p-6 space-y-6 text-slate-800 text-left">
+                {/* Cabeçalho de Identidade Visual da Empresa */}
+                <div className="flex justify-between items-start border-b-2 border-[#b8860b] pb-4">
+                  <div>
+                    <h1 className="text-xl font-black text-[#1a3c2e] tracking-tight uppercase leading-none">RH CUIDADO DOMICILIAR</h1>
+                    <p className="text-[10px] text-slate-500 font-mono mt-1">SISTEMA INTEGRADO DE GESTÃO DE SAÚDE & HOME CARE</p>
+                    <p className="text-[9px] text-slate-400 mt-0.5">Gestão de Escalas, Prontuários Médicos e Repasses Financeiros</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[9px] font-mono block text-slate-500 font-bold uppercase">PRONTUÁRIO INTEGRADO</span>
+                    <span className="text-xs bg-[#1a3c2e] text-white font-extrabold px-3 py-1 rounded-md mt-1 inline-block uppercase tracking-wider">
+                      CÓD: {paciente?.id ? paciente.id.substring(0, 8).toUpperCase() : 'NOVO'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Status do Paciente */}
+                <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl text-left">
+                  <div>
+                    <span className="text-[9px] font-bold text-slate-450 uppercase block">Status do Prontuário:</span>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className={`inline-block w-2.5 h-2.5 rounded-full ${pStatus === 'Ativo' ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                      <p className="text-xs font-black uppercase text-slate-800">
+                        {pStatus === 'Ativo' ? 'ATIVADO - EM OPERAÇÃO' : 'INATIVO / DESATIVADO'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[9px] font-bold text-slate-450 block uppercase">Impresso em:</span>
+                    <span className="text-xs font-mono font-bold text-slate-750">{new Date().toLocaleString('pt-BR')}</span>
+                  </div>
+                </div>
+
+                {/* Se inativo, exibir a justificativa do cancelamento de forma isolada e bem explicada */}
+                {pStatus !== 'Ativo' && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-left">
+                    <h4 className="text-xs font-black text-red-900 uppercase">MOTIVO DA DESATIVAÇÃO DO PRONTUÁRIO</h4>
+                    <p className="text-xs mt-1 text-red-800 font-mono">
+                      <strong>Data de Desativação:</strong> {pDeactDate || 'Não disponível'}
+                    </p>
+                    <p className="text-xs mt-0.5 text-red-850 text-red-800">
+                      <strong>Justificativa:</strong> {pDeactReason || 'Nenhuma justificativa formal e de segurança fornecida no sistema.'}
+                    </p>
+                  </div>
+                )}
+
+                {/* 1. DADOS DE IDENTIFICAÇÃO DO PACIENTE */}
+                <div className="text-left">
+                  <h3 className="text-xs font-black text-[#1a3c2e] uppercase border-b border-[#b8860b]/35 pb-1 mb-2 tracking-wider">1. Dados do Paciente e Identificação</h3>
+                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-y-3 gap-x-4 text-xs">
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Nome Completo:</span>
+                      <p className="font-extrabold text-slate-850 text-slate-800 mt-1">{nome || paciente?.nome || '---'}</p>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">CPF:</span>
+                      <p className="font-mono font-bold text-slate-750 mt-1">{cpf || '---'}</p>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Data de Nascimento (Idade):</span>
+                      <p className="font-semibold text-slate-750 mt-1">
+                        {dataNascimento ? new Date(dataNascimento + 'T12:00:00').toLocaleDateString('pt-BR') : '---'} (
+                        {(() => {
+                          if (!dataNascimento) return '---';
+                          try {
+                            const today = new Date();
+                            const birth = new Date(dataNascimento);
+                            let age = today.getFullYear() - birth.getFullYear();
+                            const m = today.getMonth() - birth.getMonth();
+                            if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+                              age--;
+                            }
+                            return age + ' anos';
+                          } catch (e) {
+                            return '---';
+                          }
+                        })()})
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">E-mail de Contato:</span>
+                      <p className="font-medium text-slate-750 mt-1 truncate">{email || '---'}</p>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Logística de Chegada ao Domicílio:</span>
+                      <p className="font-medium text-slate-705 mt-1 leading-tight">{logisticaChegada || 'Nenhuma informada'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. DADOS DO RESPONSÁVEL & FATURAMENTO */}
+                <div className="text-left">
+                  <h3 className="text-xs font-black text-[#1a3c2e] uppercase border-b border-[#b8860b]/35 pb-1 mb-2 tracking-wider">2. Responsável e Dados de Faturamento</h3>
+                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-y-3 gap-x-4 text-xs">
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Nome do Representante Responsável:</span>
+                      <p className="font-bold text-slate-800 mt-1">{nomeResponsavel || '---'}</p>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Telefone de Contato do Representante:</span>
+                      <p className="font-mono text-slate-756 text-slate-700 mt-1">{telefoneResponsavel || '---'}</p>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none text-blue-700 font-extrabold">Responsável pelo Pagamento / Faturas:</span>
+                      <p className="font-semibold text-slate-750 text-slate-800 mt-1">{responsavelPagamento}</p>
+                    </div>
+                    {responsavelPagamento === 'Outro Responsável' && (
+                      <>
+                        <div>
+                          <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Nome Completo do Pagante:</span>
+                          <p className="font-bold text-slate-800 mt-1">{nomePagador || '---'}</p>
+                        </div>
+                        <div>
+                          <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">CPF do Pagante:</span>
+                          <p className="font-mono text-slate-750 mt-1">{cpfPagador || '---'}</p>
+                        </div>
+                      </>
+                    )}
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Via para Recebimento de Cobranças:</span>
+                      <p className="font-semibold text-slate-750 mt-1">{opcaoEnvio}</p>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">WhatsApp p/ Faturamento:</span>
+                      <p className="font-mono text-slate-750 mt-1">{whatsappFaturamento || '---'}</p>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">E-mail p/ Faturamento:</span>
+                      <p className="font-medium text-slate-750 mt-1 truncate">{emailFaturamento || '---'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. ENDEREÇO RESIDENCIAL */}
+                <div className="text-left">
+                  <h3 className="text-xs font-black text-[#1a3c2e] uppercase border-b border-[#b8860b]/35 pb-1 mb-2 tracking-wider">3. Endereço Residencial do Paciente</h3>
+                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-y-3 gap-x-4 text-xs">
+                    <div className="col-span-2">
+                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Logradouro / Número / Complemento:</span>
+                      <p className="font-bold text-slate-850 text-slate-800 mt-1">
+                        {rua || '---'}{numero ? `, Nº ${numero}` : ''}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">CEP:</span>
+                      <p className="font-mono font-bold text-slate-750 mt-1">{cep || '---'}</p>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Bairro:</span>
+                      <p className="font-black text-slate-750 mt-1">{bairro || '---'}</p>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Cidade / Estado:</span>
+                      <p className="font-bold text-slate-750 mt-1">
+                        {cidade || '---'}{estado ? ` / ${estado}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. DADOS MÉDICOS & PRONTUÁRIO CLÍNICO */}
+                <div className="text-left">
+                  <h3 className="text-xs font-black text-[#1a3c2e] uppercase border-b border-[#b8860b]/35 pb-1 mb-2 tracking-wider">4. Prontuário Clínico & Informações de Saúde</h3>
+                  <div className="space-y-3 text-xs">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Grau de Dependência Informada:</span>
+                        <p className="font-black text-slate-800 mt-1 bg-slate-100 px-2.5 py-1 border border-slate-200 rounded inline-block">
+                          {grauDependencia || 'Médio'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-[9px] font-bold text-red-600 block uppercase leading-none font-black">🚨 Alergias Relatadas:</span>
+                        <p className={`font-black mt-1 px-2.5 py-1 rounded border inline-block ${alergias ? 'bg-red-50 text-red-700 border-red-200/60' : 'bg-green-50 text-green-800 border-green-200/60'}`}>
+                          {alergias ? alergias.toUpperCase() : 'NENHUMA ALERGIA GRAVADA OU DETECTADA'}
+                        </p>
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Anamnese / Diagnóstico Principal:</span>
+                      <p className="font-semibold text-slate-800 mt-1 whitespace-pre-wrap rounded-lg bg-slate-50/50 p-2.5 border border-slate-200/60 leading-relaxed font-sans min-h-[35px]">
+                        {diagnosticoPrincipal || 'Nenhum diagnóstico principal inserido.'}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Comorbidades Associadas:</span>
+                      <p className="font-medium text-slate-700 mt-1 whitespace-pre-wrap rounded-lg bg-slate-50/50 p-2.5 border border-slate-200/60 leading-relaxed min-h-[35px]">
+                        {comorbidades || 'Nenhuma comorbidade relatada no sistema.'}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Diretrizes / Cuidados Especiais:</span>
+                      <p className="font-medium text-slate-700 mt-1 whitespace-pre-wrap rounded-lg bg-slate-50/50 p-2.5 border border-slate-200/60 leading-relaxed min-h-[35px]">
+                        {observacoesClinicas || 'Nenhum cuidado especial extra relatado.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 5. PLANO EXTRA DE ATENDIMENTO (ADMINISTRATIVO E HOME CARE) */}
+                <div className="text-left">
+                  <h3 className="text-xs font-black text-[#1a3c2e] uppercase border-b border-[#b8860b]/35 pb-1 mb-2 tracking-wider">5. Plano de Atendimento & Parâmetros Financeiros</h3>
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-y-3 gap-x-4 text-xs">
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Convênio Médico / Operadora:</span>
+                      <p className="font-bold text-slate-800 mt-1">{paciente?.planoAtendimento?.convenio || 'Particular / Parceria Direta'}</p>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Matrícula do Beneficiário:</span>
+                      <p className="font-mono font-bold text-slate-700 mt-1">{paciente?.planoAtendimento?.matricula || '---'}</p>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Tipo da Escala Contratada:</span>
+                      <p className="font-black text-slate-805 text-slate-800 mt-1">{tipoEscala || 12} Horas</p>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Hora de Início Padrão do Plantão:</span>
+                      <p className="font-mono font-bold text-slate-705 text-slate-700 mt-1">{horaInicioPadrao || '07:00'}</p>
+                    </div>
+                    <div className="p-2 border border-slate-200 rounded-lg bg-slate-50/50">
+                      <span className="text-[8.5px] font-bold text-slate-450 block uppercase leading-none">Valor Negociado p/ Plantão:</span>
+                      <p className="font-bold text-slate-800 font-mono mt-0.5">R$ {valorSugeridoPlantao.toFixed(2)}</p>
+                    </div>
+                    <div className="p-2 border border-slate-200 rounded-lg bg-slate-50/50">
+                      <span className="text-[8.5px] font-bold text-slate-450 block uppercase leading-none">Ajuda de Custo Profissional:</span>
+                      <p className="font-bold text-slate-800 font-mono mt-0.5">R$ {ajudaCusto.toFixed(2)}</p>
+                    </div>
+                    <div className="p-2 border border-slate-200 rounded-lg bg-slate-50/50">
+                      <span className="text-[8.5px] font-bold text-slate-450 block uppercase leading-none">Taxa Adm do Fechamento:</span>
+                      <p className="font-bold text-[#1a3c2e] font-mono mt-0.5">R$ {taxaAdm.toFixed(2)}</p>
+                    </div>
+                    <div className="p-2 border border-emerald-200 rounded-lg bg-emerald-50/20">
+                      <span className="text-[8.5px] font-black text-[#1a3c2e] block uppercase leading-none">Consolidado Total por Turno:</span>
+                      <p className="font-extrabold text-[#1a3c2e] font-mono mt-0.5">R$ {(valorSugeridoPlantao + taxaAdm + ajudaCusto).toFixed(2)}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Termo de Veracidade / Encerramento */}
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[9px] text-slate-400 leading-relaxed font-sans text-left mt-4">
+                  O prontuário acima compreende dados confidenciais e de uso clínico estrito da coordenadoria do RH Cuidado Domiciliar Ltda. em conformidade com as diretivas do CFM (Conselho Federal de Medicina), COFEN e a Lei Geral de Proteção de Dados (LGPD). É de inteira obrigação das partes a confidencialidade e zelo no arquivamento deste registro impresso.
+                </div>
+
+                {/* Bloco de Assinaturas */}
+                <div className="grid grid-cols-2 gap-8 pt-6 text-[10px]">
+                  <div className="space-y-4 text-center">
+                    <p className="border-t border-slate-400 pt-1.5 font-bold uppercase font-sans text-slate-800">
+                      Responsável Clínico / Direção Médica
+                    </p>
+                    <p className="text-[8.5px] text-slate-400 leading-none font-mono">Conselho Profissional Ativo Autorizado</p>
+                  </div>
+                  <div className="space-y-4 text-center">
+                    <p className="border-t border-slate-400 pt-1.5 font-bold uppercase font-sans text-slate-800">
+                      Responsável pelo Paciente / Família
+                    </p>
+                    <p className="text-[9px] text-slate-500 leading-none">
+                      {nomeResponsavel || '---'} (CPF: {cpf || '---'})
+                    </p>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            {/* Footer do dialog */}
+            <div className="bg-slate-50 p-3.5 border-t border-slate-200 text-right print:hidden">
+              <button
+                type="button"
+                onClick={() => setImprimirProntuarioModalOpen(false)}
                 className="px-5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-705 text-slate-700 text-xs font-bold rounded-lg transition-all cursor-pointer font-sans"
               >
                 Retornar ao Prontuário
