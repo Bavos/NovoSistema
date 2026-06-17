@@ -28,6 +28,8 @@ export const Profissionais: React.FC = () => {
   const [ocBloquear, setOcBloquear] = useState(false);
   const [editingOcorrenciaId, setEditingOcorrenciaId] = useState<string | null>(null);
   const [savingOcorrencia, setSavingOcorrencia] = useState(false);
+  const [deleteConfirmOc, setDeleteConfirmOc] = useState<Ocorrencia | null>(null);
+  const occurrenceFormRef = useRef<HTMLDivElement>(null);
 
   // Estados para documentos anexos reais (Storage + Firestore)
   const [tipoDocumentoAnexo, setTipoDocumentoAnexo] = useState<string>('');
@@ -307,11 +309,11 @@ export const Profissionais: React.FC = () => {
       if (editingOcorrenciaId) {
         const docRef = doc(db, 'profissionais', editingProf.id, 'ocorrencias', editingOcorrenciaId);
         await updateDoc(docRef, payload);
-        alert('Ocorrência atualizada com sucesso.');
+        setSuccessMessage('Ocorrência atualizada com sucesso.');
       } else {
         const colRef = collection(db, 'profissionais', editingProf.id, 'ocorrencias');
         await addDoc(colRef, payload);
-        alert('Ocorrência registrada com sucesso.');
+        setSuccessMessage('Ocorrência registrada com sucesso.');
       }
 
       // Atualiza a trava 'pacientesBloqueados' no documento base do profissional
@@ -325,7 +327,7 @@ export const Profissionais: React.FC = () => {
       setEditingOcorrenciaId(null);
     } catch (err) {
       console.error('Erro ao salvar ocorrencia:', err);
-      alert('Erro ao salvar ocorrência.');
+      setSuccessMessage('Erro ao salvar ocorrência.');
     } finally {
       setSavingOcorrencia(false);
     }
@@ -338,22 +340,32 @@ export const Profissionais: React.FC = () => {
     setOcPacienteId(oc.pacienteId);
     setOcDescricao(oc.descricao);
     setOcBloquear(oc.bloquearEscala);
+
+    // Form smooth scroll to view
+    setTimeout(() => {
+      occurrenceFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 50);
   };
 
-  const handleDeleteOcorrencia = async (ocId: string) => {
-    if (!editingProf) return;
-    if (!window.confirm('Tem certeza de que deseja excluir permanentemente esta ocorrência?')) return;
+  const handleDeleteOcorrencia = async (oc: Ocorrencia) => {
+    setDeleteConfirmOc(oc);
+  };
+
+  const handleConfirmDeleteOcorrencia = async () => {
+    if (!editingProf || !deleteConfirmOc || !deleteConfirmOc.id) return;
 
     try {
-      const docRef = doc(db, 'profissionais', editingProf.id, 'ocorrencias', ocId);
+      const docRef = doc(db, 'profissionais', editingProf.id, 'ocorrencias', deleteConfirmOc.id);
       await deleteDoc(docRef);
-      alert('Ocorrência excluída com sucesso.');
+      setSuccessMessage('Ocorrência excluída com sucesso.');
 
       // Recalcula bloqueios
       await updateBlockedPatients(editingProf.id);
     } catch (err) {
       console.error('Erro ao excluir ocorrencia:', err);
-      alert('Erro ao excluir ocorrência.');
+      setSuccessMessage('Erro ao excluir ocorrência.');
+    } finally {
+      setDeleteConfirmOc(null);
     }
   };
 
@@ -977,7 +989,7 @@ export const Profissionais: React.FC = () => {
                 case 'ocorrencias': return (
                   <div className="space-y-6">
                     {/* Form de Ocorrências */}
-                    <div className="p-4 border border-slate-100 rounded-xl bg-slate-50/50 space-y-4">
+                    <div ref={occurrenceFormRef} className="p-4 border border-slate-100 rounded-xl bg-slate-50/50 space-y-4">
                       <h4 className="text-xs font-black text-[#1a3c2e] uppercase tracking-wider block border-b pb-1">
                         {editingOcorrenciaId ? 'Editar Ocorrência' : 'Registrar Nova Ocorrência'}
                       </h4>
@@ -1115,7 +1127,7 @@ export const Profissionais: React.FC = () => {
                                       </button>
                                       <button
                                         type="button"
-                                        onClick={() => oc.id && handleDeleteOcorrencia(oc.id)}
+                                        onClick={() => handleDeleteOcorrencia(oc)}
                                         className="text-red-600 hover:text-red-800 px-2 py-1 hover:bg-red-50 rounded transition font-semibold"
                                       >
                                         Excluir
@@ -1129,6 +1141,39 @@ export const Profissionais: React.FC = () => {
                         </div>
                       )}
                     </div>
+
+                    {/* Dialog de confirmação de exclusão para ocorrência */}
+                    {deleteConfirmOc && (
+                      <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in-30">
+                        <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl p-6 max-w-md w-full mx-4 space-y-4 font-sans">
+                          <div className="flex items-start space-x-3 text-red-600">
+                            <AlertCircle size={24} className="mt-0.5 flex-shrink-0 text-red-600" />
+                            <div>
+                              <h3 className="font-bold text-sm text-slate-800">Confirmar Exclusão</h3>
+                              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                                Tem certeza que deseja excluir permanentemente a ocorrência de data {deleteConfirmOc.data.split('-').reverse().join('/')} relacionada ao paciente <strong>{deleteConfirmOc.pacienteNome}</strong>? Esta ação não pode ser desfeita.
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex justify-end space-x-2 pt-2">
+                            <button
+                              type="button"
+                              onClick={() => setDeleteConfirmOc(null)}
+                              className="px-4 py-2 hover:bg-slate-100 font-medium text-xs text-slate-600 rounded-lg transition-colors cursor-pointer"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleConfirmDeleteOcorrencia}
+                              className="px-4 py-2 bg-red-600 hover:bg-red-700 font-extrabold text-xs text-white rounded-lg transition-colors shadow-sm cursor-pointer"
+                            >
+                              Excluir Ocorrência
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
                 case 'cracha': return <BadgeGerador profData={formData as any} />;

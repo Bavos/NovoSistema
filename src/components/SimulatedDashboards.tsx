@@ -258,7 +258,8 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
     faturasPacientes,
     addFaturaPaciente,
     folhasPagamento,
-    addFolhaPagamento
+    addFolhaPagamento,
+    setNotification
   } = useFirebase();
 
   const activePacientes = pacientes.filter(p => p.status === 'Ativo' || p.status?.toLowerCase() === 'ativo');
@@ -269,13 +270,25 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   React.useEffect(() => {
     setSubTab(initialSubTab as any);
   }, [initialSubTab]);
-  const [financeTab, setFinanceTab] = useState<'fatura' | 'pagamento' | 'mei'>('fatura');
+  const [financeTab, setFinanceTab] = useState<'fatura' | 'pagamento' | 'mei' | 'valor_mei'>('fatura');
   const [meiProfissionaisSelecionados, setMeiProfissionaisSelecionados] = useState<string[]>([]);
   const [referenciaMes, setReferenciaMes] = useState<number>(() => new Date().getMonth() + 1);
   const [referenciaAno, setReferenciaAno] = useState<number>(() => new Date().getFullYear());
   const [meiResult, setMeiResult] = useState<{ profissionalId: string; nome: string; cnpj: string }[]>([]);
   const [showMeiDropdown, setShowMeiDropdown] = useState(false);
   const [meiSearch, setMeiSearch] = useState('');
+
+  // States for Valor MEI configuration
+  const [valorMei, setValorMei] = useState<number>(0);
+  const [isEditingValorMei, setIsEditingValorMei] = useState(false);
+  const [tempValorMei, setTempValorMei] = useState<string>('0');
+  const [loadingValorMei, setLoadingValorMei] = useState(false);
+
+  // States for Bulk Payroll Processing (Fechamento em Lote)
+  const [selectedProfissionais, setSelectedProfissionais] = useState<string[]>([]);
+  const [expandedProfissionais, setExpandedProfissionais] = useState<string[]>([]);
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [isBatchProcessing, setIsBatchProcessing] = useState(false);
 
   const meiProfissionais = activeProfissionais.filter(p => p.temMei && p.cnpj && p.cnpj.trim() !== '');
 
@@ -285,6 +298,37 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
     ];
     return list[m - 1] || '';
+  };
+
+  const isEscalaFechada = async (id: string, type: 'paciente' | 'profissional', start: string, end: string): Promise<boolean> => {
+    const agQuery = query(
+      collection(db, 'agendamentos'),
+      where(type === 'paciente' ? 'idPaciente' : 'idProfissional', '==', id),
+      where('data', '>=', start),
+      where('data', '<=', end)
+    );
+    const agSnap = await getDocs(agQuery);
+    let closed = true;
+    agSnap.forEach(d => {
+      const agObj = d.data() as Agendamento;
+      if (agObj.status !== 'Cancelado') {
+        if (!agObj.escalaCongelada && agObj.status !== 'Concluido') {
+          closed = false;
+        }
+      }
+    });
+    return closed;
+  };
+
+  const getMonthYearString = (dateStr: string): string => {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    if (parts.length >= 2) {
+      const year = parts[0];
+      const month = String(parseInt(parts[1], 10)).padStart(2, '0');
+      return `${month}/${year}`;
+    }
+    return '';
   };
 
   const [dataInicial, setDataInicial] = useState('2026-06-01');
@@ -307,8 +351,46 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
             setEmpresa(docSnap.data());
         }
     };
+    const fetchValorMei = async () => {
+        setLoadingValorMei(true);
+        try {
+            const docRef = doc(db, 'configs', 'valor_mei');
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                setValorMei(data.valor || 0);
+                setTempValorMei(String(data.valor || 0));
+            }
+        } catch (err) {
+            console.error("Error loading valor_mei: ", err);
+        } finally {
+            setLoadingValorMei(false);
+        }
+    };
     fetchEmpresa();
+    fetchValorMei();
   }, []);
+
+  const handleSaveValorMei = async () => {
+    const numericValue = parseFloat(tempValorMei || '0');
+    if (isNaN(numericValue) || numericValue < 0) {
+      alert("Por favor, digite um valor numérico válido maior ou igual a zero.");
+      return;
+    }
+    setLoadingValorMei(true);
+    try {
+      const docRef = doc(db, 'configs', 'valor_mei');
+      await setDoc(docRef, { valor: numericValue }, { merge: true });
+      setValorMei(numericValue);
+      setIsEditingValorMei(false);
+      alert("Valor MEI salvo com sucesso!");
+    } catch (err: any) {
+      console.error("Error saving valor_mei: ", err);
+      alert("Erro ao salvar o Valor MEI: " + err.message);
+    } finally {
+      setLoadingValorMei(false);
+    }
+  };
 
   const getNextFaturaNumber = async () => {
     const counterRef = doc(db, 'contadores', 'faturas');
@@ -332,7 +414,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
     return `${yr}-${mo}-${dy}`;
   });
   const [newDebitValor, setNewDebitValor] = useState('');
-  const [newDebitMotivo, setNewDebitMotivo] = useState<'Curinga' | 'Passagem' | 'Outros'>('Curinga');
+  const [newDebitMotivo, setNewDebitMotivo] = useState<string>('Curinga');
   const [isInsertingDebit, setIsInsertingDebit] = useState(false);
   const [editingDebitId, setEditingDebitId] = useState<string | null>(null);
   const [newDebitPacienteId, setNewDebitPacienteId] = useState('');
@@ -555,6 +637,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       
       setDebitosNoPeriodo(activeDebs);
       setAgendamentosGerados(docs);
+      setSelectedProfissionais([]);
       setHasGenerated(true);
     } catch (error) {
       console.error('Erro ao gerar relatórios:', error);
@@ -567,8 +650,47 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   const handleSalvarFaturaDefinitiva = async (pacId: string, agends: Agendamento[]) => {
     setIsSaving(true);
     try {
+      // 1. Validação de Escala Fechada (Pré-requisito)
+      const closed = await isEscalaFechada(pacId, 'paciente', dataInicial, dataFinal);
+      if (!closed) {
+        alert('Ação negada: A escala do período selecionado ainda não foi fechada pela coordenação.');
+        setIsSaving(false);
+        return;
+      }
+
+      // 2. Trava Anti-Duplicidade no Histórico
+      const targetMonthYear = getMonthYearString(dataInicial);
+      const faturasQuery = query(
+        collection(db, 'faturas_pacientes'),
+        where('idPaciente', '==', pacId)
+      );
+      const faturasSnap = await getDocs(faturasQuery);
+      let faturaExists = false;
+      faturasSnap.forEach(doc => {
+        const fatObj = doc.data();
+        if (fatObj.periodoApurado && fatObj.periodoApurado.inicio) {
+          const existingMonthYear = getMonthYearString(fatObj.periodoApurado.inicio);
+          if (existingMonthYear === targetMonthYear) {
+            faturaExists = true;
+          }
+        }
+      });
+      if (faturaExists) {
+        alert('Aviso: A fatura/folha para este período já foi emitida. Para gerar novamente, é necessário excluir o registro atual no Histórico Financeiro.');
+        setIsSaving(false);
+        return;
+      }
+
       const pac = pacientes.find(p => p.id === pacId);
       const totalFatura = agends.reduce((acc, ag) => acc + getAgendamentoCalculatedValues(ag).cobradoDia, 0);
+
+      // 3. Bloqueio de Emissão Zerada / Negativa
+      if (totalFatura <= 0) {
+        alert('Não é possível gerar uma fatura com valor zerado ou negativo.');
+        setIsSaving(false);
+        return;
+      }
+
       const numero = await getNextFaturaNumber();
 
       await addFaturaPaciente({
@@ -593,6 +715,40 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   const handleFecharFolhaProfissional = async (profName: string, agends: Agendamento[]) => {
       setIsSaving(true);
       try {
+        const profId = profissionais.find(p => p.nome === profName)?.id;
+        const pId = profId || 'prof-desconhecido';
+
+        // 1. Validação de Escala Fechada (Pré-requisito)
+        const closed = await isEscalaFechada(pId, 'profissional', dataInicial, dataFinal);
+        if (!closed) {
+          alert('Ação negada: A escala do período selecionado ainda não foi fechada pela coordenação.');
+          setIsSaving(false);
+          return;
+        }
+
+        // 2. Trava Anti-Duplicidade no Histórico
+        const targetMonthYear = getMonthYearString(dataInicial);
+        const folhasQuery = query(
+          collection(db, 'folhas_pagamento'),
+          where('idProfissional', '==', pId)
+        );
+        const folhasSnap = await getDocs(folhasQuery);
+        let folhaExists = false;
+        folhasSnap.forEach(doc => {
+          const folObj = doc.data();
+          if (folObj.periodoApurado && folObj.periodoApurado.inicio) {
+            const existingMonthYear = getMonthYearString(folObj.periodoApurado.inicio);
+            if (existingMonthYear === targetMonthYear) {
+              folhaExists = true;
+            }
+          }
+        });
+        if (folhaExists) {
+          alert('Aviso: A fatura/folha para este período já foi emitida. Para gerar novamente, é necessário excluir o registro atual no Histórico Financeiro.');
+          setIsSaving(false);
+          return;
+        }
+
         let somaRepasses = 0; let somaAjudas = 0;
         agends.forEach(ag => {
             const vals = getAgendamentoCalculatedValues(ag);
@@ -600,26 +756,95 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
             somaAjudas += vals.ajudaCusto;
         });
 
-        const profId = profissionais.find(p => p.nome === profName)?.id;
+        const profissional = profissionais.find(p => p.nome === profName || (profId && p.id === profId));
+        
         const debDocsForProf = debitosNoPeriodo.filter(d => 
-            (profId && d.idProfissional === profId) || 
-            d.nomeProfissional.toLowerCase() === profName.toLowerCase()
+            ((profId && d.idProfissional === profId) || 
+            d.nomeProfissional.toLowerCase() === profName.toLowerCase()) &&
+            (d.status === 'pendente' || d.status === undefined)
         );
-        const totalDebitos = debDocsForProf.reduce((sum, d) => sum + d.valor, 0);
-        const valorLiquidoReceber = (somaRepasses + somaAjudas) - totalDebitos;
 
-        await addFolhaPagamento({
+        let totalPlantoes = somaRepasses;
+        let totalAjudaCusto = somaAjudas;
+        let totalDebitos = debDocsForProf.reduce((sum, d) => sum + d.valor, 0);
+
+        let valorLiquido = totalPlantoes + totalAjudaCusto - totalDebitos;
+
+        const valorMeiGlobal = parseFloat(String(valorMei || 0));
+
+        const listDebs = [...debDocsForProf];
+        let finalTotalDebitos = totalDebitos;
+
+        const parts = dataInicial.split('-');
+        const month = parts[1] ? parseInt(parts[1], 10) : referenciaMes;
+        const year = parts[0] ? parseInt(parts[0], 10) : referenciaAno;
+
+        let retroMonth = month - 1;
+        let retroYear = year;
+        if (retroMonth === 0) {
+          retroMonth = 12;
+          retroYear = year - 1;
+        }
+        const mesFormatado = String(retroMonth).padStart(2, '0');
+        const anoFormatado = retroYear;
+        const textoMotivo = `RETENÇÃO DE GUIA MEI - REF. ${mesFormatado}/${anoFormatado}`;
+
+        // Deduct MEI value if temMei
+        if (profissional && profissional.temMei && valorMeiGlobal > 0) {
+            valorLiquido -= valorMeiGlobal;
+
+            // Injetar o débito descritivo ("Retenção de Guia MEI")
+            const autoDebit = {
+              idProfissional: profId || 'prof-desconhecido',
+              nomeProfissional: profName,
+              data: new Date(),
+              valor: valorMeiGlobal,
+              motivo: textoMotivo,
+              status: 'descontado' as const
+            };
+            const savedDebit = await addDebitoProfissional(autoDebit);
+            listDebs.push(savedDebit);
+            finalTotalDebitos += valorMeiGlobal;
+        }
+
+        // 3. Bloqueio de Emissão Zerada
+        if (valorLiquido <= 0) {
+          alert('Não é possível gerar uma folha com valor zerado ou negativo.');
+          setIsSaving(false);
+          return;
+        }
+
+        const savedFolha = await addFolhaPagamento({
             idProfissional: profId || 'prof-desconhecido',
             nomeProfissional: profName,
             dataEmissao: new Date().toISOString(),
             periodoApurado: { inicio: dataInicial, fim: dataFinal },
-            valorTotalPlantoes: somaRepasses + somaAjudas,
-            valorTotalDebitos: totalDebitos,
-            valorLiquidoReceber: valorLiquidoReceber,
+            valorTotalPlantoes: totalPlantoes + totalAjudaCusto,
+            valorTotalDebitos: finalTotalDebitos,
+            valorLiquidoReceber: valorLiquido,
             status: 'Fechada',
-            historicoDebitos: debDocsForProf,
+            historicoDebitos: listDebs,
             plantoesCongelados: agends
         });
+
+        // 3. Liquidação (Baixa) Automática de débitos pendentes que entraram no cálculo
+        for (const deb of debDocsForProf) {
+          await updateDebitoProfissional({
+            ...deb,
+            status: 'descontado',
+            folhaIdVinculada: savedFolha.id
+          });
+        }
+
+        // Associa a folha ao débito MEI automático se existir no histórico
+        const meiDebit = listDebs.find(d => d.id !== 'virtual-mei-debit' && d.motivo === textoMotivo);
+        if (meiDebit && meiDebit.id) {
+          await updateDebitoProfissional({
+            ...meiDebit,
+            status: 'descontado',
+            folhaIdVinculada: savedFolha.id
+          });
+        }
         alert(`Folha para ${profName} fechada com sucesso!`);
       } catch (err) {
         console.error(err);
@@ -627,6 +852,162 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       } finally {
         setIsSaving(false);
       }
+  };
+
+  const processBatchPayroll = async () => {
+    setIsBatchProcessing(true);
+    try {
+      const parts = dataInicial.split('-');
+      const month = parts[1] ? parseInt(parts[1], 10) : referenciaMes;
+      const year = parts[0] ? parseInt(parts[0], 10) : referenciaAno;
+      const refString = `${String(month).padStart(2, '0')}/${year}`;
+
+      let retroMonth = month - 1;
+      let retroYear = year;
+      if (retroMonth === 0) {
+        retroMonth = 12;
+        retroYear = year - 1;
+      }
+      const mesFormatado = String(retroMonth).padStart(2, '0');
+      const anoFormatado = retroYear;
+      const textoMotivo = `RETENÇÃO DE GUIA MEI - REF. ${mesFormatado}/${anoFormatado}`;
+
+      // Pre-checks for ALL selected professionals beforehand (Scale Fechada and Anti-duplex)
+      const targetMonthYear = getMonthYearString(dataInicial);
+      for (const pId of selectedProfissionais) {
+        const pObj = profissionais.find(p => p.id === pId);
+        const name = pObj?.nome || '';
+
+        // Scale Closed Check
+        const closed = await isEscalaFechada(pId, 'profissional', dataInicial, dataFinal);
+        if (!closed) {
+          alert(`Ação negada: A escala do período selecionado ainda não foi fechada pela coordenação para o profissional ${name}.`);
+          setIsBatchProcessing(false);
+          return;
+        }
+
+        // Anti-duplicity Check
+        const folhasQuery = query(
+          collection(db, 'folhas_pagamento'),
+          where('idProfissional', '==', pId)
+        );
+        const folhasSnap = await getDocs(folhasQuery);
+        let folhaExists = false;
+        folhasSnap.forEach(doc => {
+          const folObj = doc.data();
+          if (folObj.periodoApurado && folObj.periodoApurado.inicio) {
+            const existingMonthYear = getMonthYearString(folObj.periodoApurado.inicio);
+            if (existingMonthYear === targetMonthYear) {
+              folhaExists = true;
+            }
+          }
+        });
+        if (folhaExists) {
+          alert(`Aviso: A fatura/folha para este período já foi emitida para o profissional ${name}. Para gerar novamente, é necessário excluir o registro atual no Histórico Financeiro.`);
+          setIsBatchProcessing(false);
+          return;
+        }
+      }
+
+      await Promise.all(
+        selectedProfissionais.map(async (pId) => {
+          const profissional = profissionais.find(p => p.id === pId);
+          if (!profissional) return;
+
+          const profName = profissional.nome;
+          const agends = agendamentosGerados.filter(ag => ag.nomeProfissional === profName);
+
+          let somaRepasses = 0;
+          let somaAjudas = 0;
+          agends.forEach(ag => {
+            const vals = getAgendamentoCalculatedValues(ag);
+            somaRepasses += vals.valorRepasseFinal;
+            somaAjudas += vals.ajudaCusto;
+          });
+
+          // Current debits in the period
+          const debDocsForProf = debitosNoPeriodo.filter(d => 
+            (d.idProfissional === pId || 
+            d.nomeProfissional.toLowerCase() === profName.toLowerCase()) &&
+            (d.status === 'pendente' || d.status === undefined)
+          );
+          let totalDebitos = debDocsForProf.reduce((sum, d) => sum + d.valor, 0);
+
+          let totalPlantoes = somaRepasses;
+          let totalAjudaCusto = somaAjudas;
+
+          let valorLiquido = totalPlantoes + totalAjudaCusto - totalDebitos;
+
+          const valorMeiGlobal = parseFloat(String(valorMei || 0));
+
+          const listDebs = [...debDocsForProf];
+          let finalTotalDebitos = totalDebitos;
+
+          // Deduct MEI value if temMei
+          if (profissional && profissional.temMei && valorMeiGlobal > 0) {
+            valorLiquido -= valorMeiGlobal;
+
+            const autoDebit = {
+              idProfissional: pId,
+              nomeProfissional: profName,
+              data: new Date(),
+              valor: valorMeiGlobal,
+              motivo: textoMotivo,
+              status: 'descontado' as const
+            };
+            const savedDebit = await addDebitoProfissional(autoDebit);
+            listDebs.push(savedDebit);
+            finalTotalDebitos += valorMeiGlobal;
+          }
+
+          // Bloqueio de Emissão Zerada
+          if (valorLiquido <= 0) {
+            throw new Error(`Não é possível gerar uma folha com valor zerado ou negativo para ${profName}.`);
+          }
+
+          const savedFolha = await addFolhaPagamento({
+            idProfissional: pId,
+            nomeProfissional: profName,
+            dataEmissao: new Date().toISOString(),
+            periodoApurado: { inicio: dataInicial, fim: dataFinal },
+            valorTotalPlantoes: totalPlantoes + totalAjudaCusto,
+            valorTotalDebitos: finalTotalDebitos,
+            valorLiquidoReceber: valorLiquido,
+            status: 'Fechada',
+            historicoDebitos: listDebs,
+            plantoesCongelados: agends
+          });
+
+          // 3. Liquidação (Baixa) Automática de débitos pendentes que entraram no cálculo
+          for (const deb of debDocsForProf) {
+            await updateDebitoProfissional({
+              ...deb,
+              status: 'descontado',
+              folhaIdVinculada: savedFolha.id
+            });
+          }
+
+          // Associa a folha ao débito MEI automático se existir no histórico
+          const meiDebit = listDebs.find(d => d.id !== 'virtual-mei-debit' && d.motivo === textoMotivo);
+          if (meiDebit && meiDebit.id) {
+            await updateDebitoProfissional({
+              ...meiDebit,
+              status: 'descontado',
+              folhaIdVinculada: savedFolha.id
+            });
+          }
+        })
+      );
+
+      setNotification('Folhas fechadas com sucesso!');
+      setSelectedProfissionais([]);
+      setShowBatchModal(false);
+    } catch (err: any) {
+      console.error(err);
+      alert('Erro ao fechar as folhas em lote: ' + err.message);
+    } finally {
+      setIsBatchProcessing(false);
+    }
   };
 
   // Folha de Fatura (Por Paciente)
@@ -724,8 +1105,9 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
 
         const profId = profissionais.find(p => p.nome === profName)?.id;
         const debDocsForProf = debitosNoPeriodo.filter(d => 
-          (profId && d.idProfissional === profId) || 
-          (d.nomeProfissional.toLowerCase() === profName.toLowerCase())
+          ((profId && d.idProfissional === profId) || 
+          (d.nomeProfissional.toLowerCase() === profName.toLowerCase())) &&
+          (d.status === 'pendente' || d.status === undefined)
         );
         const totalDebs = debDocsForProf.reduce((sum, d) => sum + d.valor, 0);
         const valorLiquido = (somaRepasses + somaAjudas) - totalDebs;
@@ -807,8 +1189,9 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
 
         const profId = profissionais.find(p => p.nome === profName)?.id;
         const debDocsForProf = debitosNoPeriodo.filter(d => 
-          (profId && d.idProfissional === profId) || 
-          (d.nomeProfissional.toLowerCase() === profName.toLowerCase())
+          ((profId && d.idProfissional === profId) || 
+          (d.nomeProfissional.toLowerCase() === profName.toLowerCase())) &&
+          (d.status === 'pendente' || d.status === undefined)
         );
         const totalDebs = debDocsForProf.reduce((sum, d) => sum + d.valor, 0);
         const valorLiquido = (somaRepasses + somaAjudas) - totalDebs;
@@ -891,7 +1274,8 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
         nomeProfissional: profSelected.nome,
         data: dateObj,
         valor: valNumber,
-        motivo: newDebitMotivo
+        motivo: newDebitMotivo,
+        status: 'pendente'
       };
 
       if (idPaciente) {
@@ -982,6 +1366,17 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                     🧾 Fatura (Paciente)
                   </button>
                   <button
+                    id="btn-report-type-pagamento"
+                    onClick={() => { setFinanceTab('pagamento'); setHasGenerated(false); }}
+                    className={`px-4 py-2 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                      financeTab === 'pagamento'
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    💸 Pagamento (Profissional)
+                  </button>
+                  <button
                     id="btn-report-type-mei"
                     onClick={() => { setFinanceTab('mei'); setHasGenerated(false); }}
                     className={`px-4 py-2 rounded-md text-xs font-bold transition-all cursor-pointer ${
@@ -993,209 +1388,289 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                     📁 Listagem MEI
                   </button>
                   <button
-                    id="btn-report-type-pagamento"
-                    onClick={() => { setFinanceTab('pagamento'); setHasGenerated(false); }}
+                    id="btn-report-type-valor-mei"
+                    onClick={() => { setFinanceTab('valor_mei'); setHasGenerated(false); }}
                     className={`px-4 py-2 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                      financeTab === 'pagamento'
-                        ? 'bg-indigo-600 text-white shadow-sm'
+                      financeTab === 'valor_mei'
+                        ? 'bg-amber-600 text-white shadow-sm'
                         : 'text-slate-500 hover:text-slate-700'
                     }`}
                   >
-                    💸 Pagamento (Profissional)
+                    💰 Valor MEI
                   </button>
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-                <div className="flex flex-wrap items-end gap-4">
-                  {financeTab === 'fatura' && (
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">Selecionar Paciente</label>
-                      <select
-                        id="select-finance-paciente"
-                        value={pacienteSelecionado}
-                        onChange={(e) => setPacienteSelecionado(e.target.value)}
-                        className="p-2 border border-slate-200 rounded-lg text-sm bg-white min-w-[200px]"
-                      >
-                        <option value="">Selecione um paciente...</option>
-                        <option value="ALL">📋 TODOS OS PACIENTES</option>
-                        {activePacientes.map(p => (
-                          <option key={p.id} value={p.id}>{p.nome}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  {financeTab === 'pagamento' && (
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">Selecionar Profissional</label>
-                      <select
-                        id="select-finance-profissional"
-                        value={profissionalSelecionado}
-                        onChange={(e) => setProfissionalSelecionado(e.target.value)}
-                        className="p-2 border border-slate-200 rounded-lg text-sm bg-white min-w-[200px]"
-                      >
-                        <option value="">Selecione um profissional...</option>
-                        <option value="ALL">📋 TODOS OS PROFISSIONAIS</option>
-                        {activeProfissionais.map(p => (
-                          <option key={p.id} value={p.id}>{p.nome}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  {financeTab === 'mei' && (
-                    <div className="relative">
-                      <label className="block text-xs font-bold text-slate-500 mb-1">Selecionar Profissionais MEI</label>
-                      <button
-                        type="button"
-                        onClick={() => setShowMeiDropdown(!showMeiDropdown)}
-                        className="p-2 border border-slate-200 rounded-lg text-sm bg-white min-w-[240px] text-left flex justify-between items-center cursor-pointer hover:bg-slate-50 transition-colors"
-                      >
-                        <span className="truncate max-w-[200px] block">
-                          {meiProfissionaisSelecionados.length === 0
-                            ? 'Nenhum selecionado'
-                            : meiProfissionaisSelecionados.length === meiProfissionais.length
-                            ? '✨ TODOS (' + meiProfissionais.length + ')'
-                            : `${meiProfissionaisSelecionados.length} selecionado(s)`}
-                        </span>
-                        <ChevronDown className="w-4 h-4 text-slate-400 shrink-0 ml-1" />
-                      </button>
-
-                      {showMeiDropdown && (
-                        <div className="absolute left-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl p-3 min-w-[280px] max-h-[300px] overflow-y-auto z-[999] space-y-2">
-                          <div className="flex gap-2 pb-2 border-b border-slate-100 justify-between items-center text-[10px]">
-                            <button
-                              type="button"
-                              onClick={() => setMeiProfissionaisSelecionados(meiProfissionais.map(p => p.id))}
-                              className="text-blue-600 font-bold hover:underline cursor-pointer"
-                            >
-                              Selecionar Todos
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setMeiProfissionaisSelecionados([])}
-                              className="text-slate-500 font-bold hover:underline cursor-pointer"
-                            >
-                              Limpar Todos
-                            </button>
-                          </div>
-                          <div className="space-y-1 pt-1">
-                            {meiProfissionais.map(p => {
-                              const isChecked = meiProfissionaisSelecionados.includes(p.id);
-                              return (
-                                <label key={p.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-slate-50 cursor-pointer text-xs text-slate-700 select-none">
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={() => {
-                                      if (isChecked) {
-                                        setMeiProfissionaisSelecionados(meiProfissionaisSelecionados.filter(id => id !== p.id));
-                                      } else {
-                                        setMeiProfissionaisSelecionados([...meiProfissionaisSelecionados, p.id]);
-                                      }
-                                    }}
-                                    className="rounded text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5 cursor-pointer"
-                                  />
-                                  <span className="truncate">{p.nome}</span>
-                                  {p.cnpj && <span className="text-[9px] text-slate-400 font-mono ml-auto">{p.cnpj}</span>}
-                                </label>
-                              );
-                            })}
-                            {meiProfissionais.length === 0 && (
-                              <p className="text-[11px] text-slate-400 italic text-center py-2">Nenhum profissional com MEI ativo no cadastro.</p>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  
-                  {financeTab !== 'mei' ? (
-                    <>
+              {financeTab !== 'valor_mei' && (
+                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                  <div className="flex flex-wrap items-end gap-4">
+                    {financeTab === 'fatura' && (
                       <div>
-                        <label className="block text-xs font-bold text-slate-500 mb-1">Data Inicial</label>
-                        <input 
-                          id="input-finance-data-inicial"
-                          type="date"
-                          value={dataInicial}
-                          onChange={(e) => setDataInicial(e.target.value)}
-                          className="p-2 border border-slate-200 rounded-lg text-sm bg-white"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-500 mb-1">Data Final</label>
-                        <input 
-                          id="input-finance-data-final"
-                          type="date"
-                          value={dataFinal}
-                          onChange={(e) => setDataFinal(e.target.value)}
-                          className="p-2 border border-slate-200 rounded-lg text-sm bg-white"
-                        />
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-500 mb-1">Mês de Referência</label>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">Selecionar Paciente</label>
                         <select
-                          value={referenciaMes}
-                          onChange={(e) => setReferenciaMes(Number(e.target.value))}
-                          className="p-2 border border-slate-200 rounded-lg text-sm bg-white min-w-[130px] cursor-pointer"
+                          id="select-finance-paciente"
+                          value={pacienteSelecionado}
+                          onChange={(e) => setPacienteSelecionado(e.target.value)}
+                          className="p-2 border border-slate-200 rounded-lg text-sm bg-white min-w-[200px]"
                         >
-                          <option value="1">Janeiro</option>
-                          <option value="2">Fevereiro</option>
-                          <option value="3">Março</option>
-                          <option value="4">Abril</option>
-                          <option value="5">Maio</option>
-                          <option value="6">Junho</option>
-                          <option value="7">Julho</option>
-                          <option value="8">Agosto</option>
-                          <option value="9">Setembro</option>
-                          <option value="10">Outubro</option>
-                          <option value="11">Novembro</option>
-                          <option value="12">Dezembro</option>
+                          <option value="">Selecione um paciente...</option>
+                          <option value="ALL">📋 TODOS OS PACIENTES</option>
+                          {activePacientes.map(p => (
+                            <option key={p.id} value={p.id}>{p.nome}</option>
+                          ))}
                         </select>
                       </div>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-500 mb-1">Ano</label>
-                        <select
-                          value={referenciaAno}
-                          onChange={(e) => setReferenciaAno(Number(e.target.value))}
-                          className="p-2 border border-slate-200 rounded-lg text-sm bg-white min-w-[90px] cursor-pointer"
-                        >
-                          <option value="2024">2024</option>
-                          <option value="2025">2025</option>
-                          <option value="2026">2026</option>
-                          <option value="2027">2027</option>
-                        </select>
-                      </div>
-                    </>
-                  )}
-
-                  <button
-                    id="btn-finance-gerar-relatorio"
-                    onClick={handleGerarRelatorios}
-                    disabled={isGenerating}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold transition-all disabled:opacity-50 flex items-center gap-2 h-[38px] cursor-pointer"
-                  >
-                    {isGenerating ? (
-                      <>⏳ Aguarde...</>
-                    ) : (
-                      <>🔄 Gerar {financeTab === 'fatura' ? 'Fatura' : financeTab === 'pagamento' ? 'Folha de Pagamento' : 'Listagem MEI'}</>
                     )}
-                  </button>
+
+                    {financeTab === 'pagamento' && (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">Selecionar Profissional</label>
+                        <select
+                          id="select-finance-profissional"
+                          value={profissionalSelecionado}
+                          onChange={(e) => setProfissionalSelecionado(e.target.value)}
+                          className="p-2 border border-slate-200 rounded-lg text-sm bg-white min-w-[200px]"
+                        >
+                          <option value="">Selecione um profissional...</option>
+                          <option value="ALL">📋 TODOS OS PROFISSIONAIS</option>
+                          {activeProfissionais.map(p => (
+                            <option key={p.id} value={p.id}>{p.nome}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {financeTab === 'mei' && (
+                      <div className="relative">
+                        <label className="block text-xs font-bold text-slate-500 mb-1">Selecionar Profissionais MEI</label>
+                        <button
+                          type="button"
+                          onClick={() => setShowMeiDropdown(!showMeiDropdown)}
+                          className="p-2 border border-slate-200 rounded-lg text-sm bg-white min-w-[240px] text-left flex justify-between items-center cursor-pointer hover:bg-slate-50 transition-colors"
+                        >
+                          <span className="truncate max-w-[200px] block">
+                            {meiProfissionaisSelecionados.length === 0
+                              ? 'Nenhum selecionado'
+                              : meiProfissionaisSelecionados.length === meiProfissionais.length
+                              ? '✨ TODOS (' + meiProfissionais.length + ')'
+                              : `${meiProfissionaisSelecionados.length} selecionado(s)`}
+                          </span>
+                          <ChevronDown className="w-4 h-4 text-slate-400 shrink-0 ml-1" />
+                        </button>
+
+                        {showMeiDropdown && (
+                          <div className="absolute left-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl p-3 min-w-[280px] max-h-[300px] overflow-y-auto z-[999] space-y-2">
+                            <div className="flex gap-2 pb-2 border-b border-slate-100 justify-between items-center text-[10px]">
+                              <button
+                                type="button"
+                                onClick={() => setMeiProfissionaisSelecionados(meiProfissionais.map(p => p.id))}
+                                className="text-blue-600 font-bold hover:underline cursor-pointer"
+                              >
+                                Selecionar Todos
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setMeiProfissionaisSelecionados([])}
+                                className="text-slate-500 font-bold hover:underline cursor-pointer"
+                              >
+                                Limpar Todos
+                              </button>
+                            </div>
+                            <div className="space-y-1 pt-1">
+                              {meiProfissionais.map(p => {
+                                const isChecked = meiProfissionaisSelecionados.includes(p.id);
+                                return (
+                                  <label key={p.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-slate-50 cursor-pointer text-xs text-slate-700 select-none">
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={() => {
+                                        if (isChecked) {
+                                          setMeiProfissionaisSelecionados(meiProfissionaisSelecionados.filter(id => id !== p.id));
+                                        } else {
+                                          setMeiProfissionaisSelecionados([...meiProfissionaisSelecionados, p.id]);
+                                        }
+                                      }}
+                                      className="rounded text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5 cursor-pointer"
+                                    />
+                                    <span className="truncate">{p.nome}</span>
+                                    {p.cnpj && <span className="text-[9px] text-slate-400 font-mono ml-auto">{p.cnpj}</span>}
+                                  </label>
+                                );
+                              })}
+                              {meiProfissionais.length === 0 && (
+                                <p className="text-[11px] text-slate-400 italic text-center py-2">Nenhum profissional com MEI ativo no cadastro.</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    {financeTab !== 'mei' ? (
+                      <>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-1">Data Inicial</label>
+                          <input 
+                            id="input-finance-data-inicial"
+                            type="date"
+                            value={dataInicial}
+                            onChange={(e) => setDataInicial(e.target.value)}
+                            className="p-2 border border-slate-200 rounded-lg text-sm bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-1">Data Final</label>
+                          <input 
+                            id="input-finance-data-final"
+                            type="date"
+                            value={dataFinal}
+                            onChange={(e) => setDataFinal(e.target.value)}
+                            className="p-2 border border-slate-200 rounded-lg text-sm bg-white"
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-1">Mês de Referência</label>
+                          <select
+                            value={referenciaMes}
+                            onChange={(e) => setReferenciaMes(Number(e.target.value))}
+                            className="p-2 border border-slate-200 rounded-lg text-sm bg-white min-w-[130px] cursor-pointer"
+                          >
+                            <option value="1">Janeiro</option>
+                            <option value="2">Fevereiro</option>
+                            <option value="3">Março</option>
+                            <option value="4">Abril</option>
+                            <option value="5">Maio</option>
+                            <option value="6">Junho</option>
+                            <option value="7">Julho</option>
+                            <option value="8">Agosto</option>
+                            <option value="9">Setembro</option>
+                            <option value="10">Outubro</option>
+                            <option value="11">Novembro</option>
+                            <option value="12">Dezembro</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-1">Ano</label>
+                          <select
+                            value={referenciaAno}
+                            onChange={(e) => setReferenciaAno(Number(e.target.value))}
+                            className="p-2 border border-slate-200 rounded-lg text-sm bg-white min-w-[90px] cursor-pointer"
+                          >
+                            <option value="2024">2024</option>
+                            <option value="2025">2025</option>
+                            <option value="2026">2026</option>
+                            <option value="2027">2027</option>
+                          </select>
+                        </div>
+                      </>
+                    )}
+
+                    <button
+                      id="btn-finance-gerar-relatorio"
+                      onClick={handleGerarRelatorios}
+                      disabled={isGenerating}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold transition-all disabled:opacity-50 flex items-center gap-2 h-[38px] cursor-pointer"
+                    >
+                      {isGenerating ? (
+                        <>⏳ Aguarde...</>
+                      ) : (
+                        <>🔄 Gerar {financeTab === 'fatura' ? 'Fatura' : financeTab === 'pagamento' ? 'Folha de Pagamento' : 'Listagem MEI'}</>
+                      )}
+                    </button>
+                  </div>
+                  
+                  {/* Buttons removed as requested */}
                 </div>
-                
-                {/* Buttons removed as requested */}
-              </div>
+              )}
             </div>
           </div>
 
           {/* Main spreadsheet display container */}
           <div className="bg-white p-6 border border-slate-200 rounded-2xl shadow-sm space-y-6 print:border-none print:shadow-none print:p-0">
             
-            {!hasGenerated ? (
+            {financeTab === 'valor_mei' ? (
+              <div className="max-w-md mx-auto py-10 space-y-6 font-sans">
+                <div className="text-center space-y-2">
+                  <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto text-amber-600 shadow-sm border border-amber-100">
+                    <DollarSign size={32} />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-slate-800 text-lg">Configuração de Valor MEI</h3>
+                    <p className="text-slate-500 text-xs">Defina o valor em reais (R$) de referência para profissionais MEI.</p>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50/50 border border-slate-200/80 p-6 rounded-2xl space-y-4 shadow-sm/50">
+                  {loadingValorMei ? (
+                    <div className="flex flex-col items-center justify-center py-6 space-y-2">
+                      <div className="w-6 h-6 border-2 border-amber-600 border-t-transparent rounded-full animate-spin font-sans"></div>
+                      <span className="text-[11px] text-slate-400 font-medium font-mono">Processando...</span>
+                    </div>
+                  ) : !isEditingValorMei ? (
+                    <div className="space-y-5 text-center font-sans">
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">VALOR DEFINIDO ATUALMENTE</span>
+                        <p className="text-4xl font-black text-slate-800 tracking-tight">R$ {valorMei.toFixed(2)}</p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTempValorMei(String(valorMei));
+                          setIsEditingValorMei(true);
+                        }}
+                        className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 hover:text-slate-900 rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer font-sans"
+                      >
+                        <Pencil size={14} className="text-slate-500" />
+                        Editar Valor
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4 font-sans">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-slate-600">Valor MEI (R$)</label>
+                        <div className="relative rounded-xl shadow-sm">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <span className="text-slate-400 text-xs font-bold">R$</span>
+                          </div>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={tempValorMei}
+                            onChange={(e) => setTempValorMei(e.target.value)}
+                            placeholder="0,00"
+                            className="w-full pl-9 pr-4 py-2.5 text-sm border border-slate-300 rounded-xl text-slate-800 focus:outline-none focus:border-amber-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingValorMei(false)}
+                          className="flex-1 py-2 px-4 border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-bold transition-all cursor-pointer font-sans"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveValorMei}
+                          className="flex-1 py-2 px-4 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs shadow-md shadow-amber-200 hover:shadow-none transition-all flex items-center justify-center gap-1.5 cursor-pointer font-sans"
+                        >
+                          <CheckCircle size={14} />
+                          Salvar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : !hasGenerated ? (
               <div className="flex flex-col items-center justify-center space-y-4 py-16 text-center text-slate-500">
                 <DollarSign size={48} className="text-slate-300 mx-auto" />
                 <div>
@@ -1399,123 +1874,388 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
 
                 {financeTab === 'pagamento' && (
                   <div className="space-y-6">
-                    <div className="border-b border-slate-200 pb-2 mb-4">
-                      <h2 className="text-xl font-black text-slate-800">Folha de Pagamento (Profissionais)</h2>
-                      <p className="text-sm text-slate-500">Período Apurado: {dataInicial.split('-').reverse().join('/')} a {dataFinal.split('-').reverse().join('/')}</p>
+                    <div className="border-b border-slate-200 pb-2 mb-4 flex justify-between items-end flex-wrap gap-4">
+                      <div>
+                        <h2 className="text-xl font-black text-slate-800">Folha de Pagamento (Profissionais)</h2>
+                        <p className="text-sm text-slate-500">Período Apurado: {dataInicial.split('-').reverse().join('/')} a {dataFinal.split('-').reverse().join('/')}</p>
+                      </div>
                     </div>
 
                     {Object.keys(agendamentosPorProfissional).length === 0 ? (
                       <p className="text-slate-500 italic text-sm">Nenhum plantão ativo neste período.</p>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {(Object.entries(agendamentosPorProfissional) as [string, Agendamento[]][]).map(([profName, agends]) => {
-                          let somaRepasses = 0;
-                          let somaAjudas = 0;
-                          agends.forEach(ag => {
-                            const vals = getAgendamentoCalculatedValues(ag);
-                            somaRepasses += vals.valorRepasseFinal;
-                            somaAjudas += vals.ajudaCusto;
-                          });
-                          
-                          // Look up the professional and compute automatic deductions
-                          const profId = profissionais.find(p => p.nome === profName)?.id;
-                          const debDocsForProf = debitosNoPeriodo.filter(d => 
-                            (profId && d.idProfissional === profId) || 
-                            d.nomeProfissional.toLowerCase() === profName.toLowerCase()
-                          );
-                          const totalDebitos = debDocsForProf.reduce((sum, d) => sum + d.valor, 0);
-                          const valorLiquidoReceber = (somaRepasses + somaAjudas) - totalDebitos;
+                    ) : (() => {
+                      const calculatedProfs = (Object.entries(agendamentosPorProfissional) as [string, Agendamento[]][]).map(([profName, agends]) => {
+                        let somaRepasses = 0;
+                        let somaAjudas = 0;
+                        agends.forEach(ag => {
+                          const vals = getAgendamentoCalculatedValues(ag);
+                          somaRepasses += vals.valorRepasseFinal;
+                          somaAjudas += vals.ajudaCusto;
+                        });
+                        
+                        const profObj = profissionais.find(p => p.nome === profName);
+                        const profId = profObj?.id || `dummy-${profName.toLowerCase().replace(/\s/g, '-')}`;
+                        const temMei = profObj?.temMei === true;
+                        const cnpj = profObj?.cnpj || '';
+                        
+                        const debDocsForProf = debitosNoPeriodo.filter(d => 
+                          ((profId && d.idProfissional === profId) || 
+                          d.nomeProfissional.toLowerCase() === profName.toLowerCase()) &&
+                          (d.status === 'pendente' || d.status === undefined)
+                        );
+                        const totalDebitos = debDocsForProf.reduce((sum, d) => sum + d.valor, 0);
+                        
+                        const listDebs = [...debDocsForProf];
+                        let finalTotalDebitos = totalDebitos;
+                        let finalValorLiquidoReceber = (somaRepasses + somaAjudas) - totalDebitos;
 
-                          return (
-                            <div key={profName} className="border border-slate-200 rounded-xl overflow-hidden shadow-sm print:break-inside-avoid bg-white">
-                              <div className="bg-indigo-50 px-4 py-3 border-b border-indigo-100 flex justify-between items-center">
-                                <div>
-                                  <h3 className="font-bold text-indigo-900">{profName}</h3>
-                                  <p className="text-xs text-indigo-700">Total de Plantões Relacionados: {agends.length}</p>
-                                </div>
-                                <button
-                                  onClick={() => handleFecharFolhaProfissional(profName, agends)}
-                                  disabled={isSaving}
-                                  className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 disabled:opacity-50 cursor-pointer"
-                                >
-                                  {isSaving ? 'Salvando...' : '💾 Fechar Folha'}
-                                </button>
-                              </div>
-                              
-                              <div className="bg-white">
-                                <table className="w-full text-left text-xs mb-4">
-                                  <thead className="bg-slate-50 border-b border-indigo-50 text-slate-500 uppercase tracking-wider text-[10px]">
-                                    <tr>
-                                      <th className="py-2.5 px-4">Data</th>
-                                      <th className="py-2.5 px-4">Paciente</th>
-                                      <th className="py-2.5 px-4 text-right">Repasse</th>
-                                      <th className="py-2.5 px-4 text-right">Ajuda Custo</th>
-                                      <th className="py-2.5 px-4 text-right font-bold">Feriado/Adicional</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-slate-50">
-                                    {agends.sort((a,b) => a.data.localeCompare(b.data)).map(ag => {
-                                      const paciente = pacientes.find(p => p.id === ag.idPaciente);
-                                      const nomePac = paciente ? paciente.nome : 'Paciente Desconhecido';
-                                      const vals = getAgendamentoCalculatedValues(ag);
-                                      return (
-                                        <tr key={ag.id} className="hover:bg-slate-50/50">
-                                          <td className="py-2.5 px-4">{ag.data.split('-').reverse().join('/')}</td>
-                                          <td className="py-2.5 px-4">{nomePac}</td>
-                                          <td className="py-2.5 px-4 text-right">R$ {vals.valorRepasseFinal.toFixed(2)}</td>
-                                          <td className="py-2.5 px-4 text-right">R$ {vals.ajudaCusto.toFixed(2)}</td>
-                                          <td className="py-2.5 px-4 text-right text-slate-500">{ag.tipoDia && ag.tipoDia !== 'Normal' ? ag.tipoDia : '-'}</td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
+                        const valorMeiGlobal = parseFloat(String(valorMei || 0));
 
-                                <div className="p-4 space-y-3 bg-slate-50/50 text-xs border-t border-slate-100">
-                                  <div className="flex justify-between items-center text-slate-600">
-                                    <span>(+) Somatório de Repasses (Líquido Plantões):</span>
-                                    <span className="font-mono">R$ {somaRepasses.toFixed(2)}</span>
-                                  </div>
-                                  <div className="flex justify-between items-center text-slate-600">
-                                    <span>(+) Somatório Ajuda de Custo:</span>
-                                    <span className="font-mono">R$ {somaAjudas.toFixed(2)}</span>
-                                  </div>
-                                  
-                                  <div className="border-t border-slate-200 pt-3">
-                                    <div className="flex justify-between items-start">
-                                      <div className="space-y-1">
-                                        <span className="text-slate-600 font-bold block">(-) Total de Débitos do Período:</span>
-                                        {debDocsForProf.length > 0 ? (
-                                          <div className="pl-3 space-y-0.5 text-[10px] text-red-600 font-semibold">
-                                            {debDocsForProf.map(d => (
-                                              <div key={d.id}>
-                                                • {formatDebitDateDisplay(d.data)} - {d.motivo}: R$ {d.valor.toFixed(2)}
-                                              </div>
-                                            ))}
+                        if (temMei && valorMeiGlobal > 0) {
+                          const parts = dataInicial.split('-');
+                          const month = parts[1] ? parseInt(parts[1], 10) : referenciaMes;
+                          const year = parts[0] ? parseInt(parts[0], 10) : referenciaAno;
+                          let retroMonth = month - 1;
+                          let retroYear = year;
+                          if (retroMonth === 0) {
+                            retroMonth = 12;
+                            retroYear = year - 1;
+                          }
+                          const mesFormatado = String(retroMonth).padStart(2, '0');
+                          const anoFormatado = retroYear;
+                          const textoMotivo = `RETENÇÃO DE GUIA MEI - REF. ${mesFormatado}/${anoFormatado}`;
+
+                          listDebs.push({
+                            id: 'virtual-mei-debit',
+                            idProfissional: profId,
+                            nomeProfissional: profName,
+                            data: new Date().toISOString(),
+                            valor: valorMeiGlobal,
+                            motivo: textoMotivo
+                          } as any);
+
+                          finalTotalDebitos += valorMeiGlobal;
+                          finalValorLiquidoReceber -= valorMeiGlobal;
+                        }
+                        
+                        return {
+                          profId,
+                          profName,
+                          agends,
+                          somaRepasses,
+                          somaAjudas,
+                          debDocsForProf: listDebs,
+                          totalDebitos: finalTotalDebitos,
+                          valorLiquidoReceber: finalValorLiquidoReceber,
+                          temMei,
+                          cnpj
+                        };
+                      });
+
+                      const isAllSelected = calculatedProfs.length > 0 && selectedProfissionais.length === calculatedProfs.length;
+                      const handleSelectAll = (checked: boolean) => {
+                        if (checked) {
+                          const allIds = calculatedProfs.map(p => p.profId);
+                          setSelectedProfissionais(allIds);
+                        } else {
+                          setSelectedProfissionais([]);
+                        }
+                      };
+
+                      const handleToggleSelectProfissional = (id: string) => {
+                        if (selectedProfissionais.includes(id)) {
+                          setSelectedProfissionais(selectedProfissionais.filter(x => x !== id));
+                        } else {
+                          setSelectedProfissionais([...selectedProfissionais, id]);
+                        }
+                      };
+
+                      const numSelected = selectedProfissionais.length;
+                      const numSelectedWithMei = selectedProfissionais.filter(pId => {
+                        const profObj = profissionais.find(p => p.id === pId);
+                        return profObj?.temMei === true;
+                      }).length;
+
+                      return (
+                        <div className="space-y-4">
+                          {/* Bulk action toolbar */}
+                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-indigo-50/50 border border-indigo-100/50 p-4 rounded-2xl">
+                            <div>
+                              <p className="text-xs font-bold text-indigo-900">Fechamento em Lote (Lançamento Coletivo)</p>
+                              <p className="text-[11px] text-indigo-700">Selecione profissionais na tabela para consolidar e fechar suas folhas de uma só vez.</p>
+                            </div>
+                            <button
+                              id="btn-batch-close-payroll"
+                              onClick={() => setShowBatchModal(true)}
+                              disabled={selectedProfissionais.length === 0}
+                              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                                selectedProfissionais.length > 0
+                                  ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-100'
+                                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                              }`}
+                            >
+                              💼 Fechar Folha em Lote ({selectedProfissionais.length} selecionados)
+                            </button>
+                          </div>
+
+                          {/* Unified Modern Dashboard Table */}
+                          <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+                            <table className="w-full text-left text-xs">
+                              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px] font-bold">
+                                <tr>
+                                  <th className="py-3 px-4 w-12 text-center select-none">
+                                    <input
+                                      type="checkbox"
+                                      checked={isAllSelected}
+                                      onChange={(e) => handleSelectAll(e.target.checked)}
+                                      className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                                    />
+                                  </th>
+                                  <th className="py-3 px-4">Profissional</th>
+                                  <th className="py-3 px-4 text-center">Plantões</th>
+                                  <th className="py-3 px-4 text-right">Repasses (Bruto)</th>
+                                  <th className="py-3 px-4 text-right">Ajuda de Custo</th>
+                                  <th className="py-3 px-4 text-right">Débitos</th>
+                                  <th className="py-3 px-4 text-right font-black text-slate-700">Líquido a Receber</th>
+                                  <th className="py-3 px-4 text-center">Ações</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {calculatedProfs.map((p) => {
+                                  const isSelected = selectedProfissionais.includes(p.profId);
+                                  const isExpanded = expandedProfissionais.includes(p.profId);
+
+                                  return (
+                                    <React.Fragment key={p.profId}>
+                                      <tr className={`hover:bg-slate-50/50 transition-colors ${isSelected ? 'bg-indigo-50/10' : ''}`}>
+                                        <td className="py-4 px-4 text-center select-none">
+                                          <input
+                                            type="checkbox"
+                                            checked={isSelected}
+                                            onChange={() => handleToggleSelectProfissional(p.profId)}
+                                            className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                                          />
+                                        </td>
+                                        <td className="py-4 px-4 font-bold text-slate-800">
+                                          <div className="flex items-center gap-2">
+                                            <span>{p.profName}</span>
+                                            {p.temMei && (
+                                              <span
+                                                className="bg-emerald-50 text-emerald-700 text-[9px] font-bold px-1.5 py-0.5 rounded border border-emerald-200"
+                                                title={`MEI Ativo: ${p.cnpj}`}
+                                              >
+                                                MEI
+                                              </span>
+                                            )}
                                           </div>
-                                        ) : (
-                                          <span className="text-[10px] pl-3 text-slate-400 italic block">Nenhum débito no período apurado</span>
-                                        )}
-                                      </div>
-                                      <span className="font-mono font-bold text-red-600">
-                                        R$ {totalDebitos.toFixed(2)}
-                                      </span>
+                                        </td>
+                                        <td className="py-4 px-4 text-center font-mono font-bold text-slate-600">{p.agends.length}</td>
+                                        <td className="py-4 px-4 text-right font-mono text-slate-600">R$ {p.somaRepasses.toFixed(2)}</td>
+                                        <td className="py-4 px-4 text-right font-mono text-slate-600">R$ {p.somaAjudas.toFixed(2)}</td>
+                                        <td className="py-4 px-4 text-right font-mono text-red-600 font-bold font-sans">R$ {p.totalDebitos.toFixed(2)}</td>
+                                        <td className="py-4 px-4 text-right font-mono font-black text-indigo-700 text-sm">
+                                          R$ {p.valorLiquidoReceber.toFixed(2)}
+                                        </td>
+                                        <td className="py-4 px-4">
+                                          <div className="flex items-center justify-center gap-2">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                if (isExpanded) {
+                                                  setExpandedProfissionais(expandedProfissionais.filter(id => id !== p.profId));
+                                                } else {
+                                                  setExpandedProfissionais([...expandedProfissionais, p.profId]);
+                                                }
+                                              }}
+                                              className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold rounded-lg transition-colors cursor-pointer"
+                                            >
+                                              {isExpanded ? '🙈 Ocultar' : '👁️ Ver Plantões'}
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleFecharFolhaProfissional(p.profName, p.agends)}
+                                              disabled={isSaving}
+                                              className="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold rounded-lg transition-colors cursor-pointer"
+                                            >
+                                              {isSaving ? '⏳' : '💾 Fechar'}
+                                            </button>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                      
+                                      {/* Expanded Shift Detail Sub-row */}
+                                      {isExpanded && (
+                                        <tr>
+                                          <td colSpan={8} className="bg-slate-50/50 p-6 border-y border-slate-250 animate-in slide-in-from-top-1 duration-150">
+                                            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm max-w-4xl mx-auto">
+                                              <div className="bg-indigo-50/40 px-4 py-2 border-b border-indigo-100/50 flex justify-between items-center select-none font-sans">
+                                                <span className="text-[10px] font-black uppercase tracking-wider text-indigo-900 block">Demonstrativo de Fechamento de {p.profName}</span>
+                                                {p.temMei && p.cnpj && <span className="text-[10px] text-indigo-800 font-mono font-bold">CNPJ: {p.cnpj}</span>}
+                                              </div>
+                                              
+                                              <table className="w-full text-left text-[11px] line-height-none">
+                                                <thead className="bg-slate-50 border-b border-slate-100 text-slate-500 uppercase tracking-wider text-[9px] font-semibold">
+                                                  <tr>
+                                                    <th className="py-2 px-4">Data</th>
+                                                    <th className="py-2 px-4">Paciente</th>
+                                                    <th className="py-2 px-4 text-right">Repasse</th>
+                                                    <th className="py-2 px-4 text-right">Ajuda Custo</th>
+                                                    <th className="py-2 px-4 text-right">Tipo de Dia</th>
+                                                  </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-50">
+                                                  {p.agends.sort((a,b) => a.data.localeCompare(b.data)).map(ag => {
+                                                    const paciente = pacientes.find(pat => pat.id === ag.idPaciente);
+                                                    const nomePac = paciente ? paciente.nome : 'Paciente Desconhecido';
+                                                    const vals = getAgendamentoCalculatedValues(ag);
+                                                    return (
+                                                      <tr key={ag.id} className="hover:bg-slate-50/30">
+                                                        <td className="py-2 px-4">{ag.data.split('-').reverse().join('/')}</td>
+                                                        <td className="py-2 px-4">{nomePac}</td>
+                                                        <td className="py-2 px-4 text-right">R$ {vals.valorRepasseFinal.toFixed(2)}</td>
+                                                        <td className="py-2 px-4 text-right">R$ {vals.ajudaCusto.toFixed(2)}</td>
+                                                        <td className="py-2 px-4 text-right text-slate-400 font-mono">
+                                                          {ag.tipoDia && ag.tipoDia !== 'Normal' ? ag.tipoDia : '-'}
+                                                        </td>
+                                                      </tr>
+                                                    );
+                                                  })}
+                                                </tbody>
+                                              </table>
+
+                                              <div className="p-4 space-y-2 bg-slate-50/50 border-t border-slate-100 text-[11px] select-none font-sans">
+                                                <div className="flex justify-between items-center text-slate-600">
+                                                  <span>(+) Somatório de Repasses (Líquido Plantões):</span>
+                                                  <span className="font-mono">R$ {p.somaRepasses.toFixed(2)}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center text-slate-600">
+                                                  <span>(+) Somatório Ajuda de Custo:</span>
+                                                  <span className="font-mono">R$ {p.somaAjudas.toFixed(2)}</span>
+                                                </div>
+                                                
+                                                <div className="border-t border-slate-200/60 pt-2">
+                                                  <div className="flex justify-between items-start">
+                                                    <div className="space-y-1">
+                                                      <span className="text-slate-600 font-bold block">(-) Total de Débitos do Período:</span>
+                                                      {p.debDocsForProf.length > 0 ? (
+                                                        <div className="pl-3 space-y-0.5 text-[10px] text-red-600 font-semibold font-mono">
+                                                          {p.debDocsForProf.map(d => (
+                                                            <div key={d.id}>
+                                                              • {formatDebitDateDisplay(d.data)} - {d.motivo}: R$ {d.valor.toFixed(2)}
+                                                            </div>
+                                                          ))}
+                                                        </div>
+                                                      ) : (
+                                                        <span className="text-[10px] pl-3 text-slate-400 italic block">Nenhum débito no período apurado</span>
+                                                      )}
+                                                    </div>
+                                                    <span className="font-mono font-bold text-red-600">
+                                                      R$ {p.totalDebitos.toFixed(2)}
+                                                    </span>
+                                                  </div>
+                                                </div>
+                                                
+                                                <div className="flex justify-between items-center pt-3 mt-1 border-t-2 border-indigo-100">
+                                                  <span className="font-bold text-indigo-900 text-xs">Valor Líquido a Receber:</span>
+                                                  <span className="font-black text-indigo-700 text-sm font-mono">
+                                                    R$ {p.valorLiquidoReceber.toFixed(2)}
+                                                  </span>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      )}
+                                    </React.Fragment>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+
+                          {/* Batch Modal Rendered dynamically nested */}
+                          {showBatchModal && (
+                            <div className="fixed inset-0 bg-slate-900/60 z-[1000] backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+                              <div className="bg-white w-full max-w-md rounded-2xl border border-slate-200 shadow-2xl p-6 relative animate-in zoom-in-95 duration-200 select-none">
+                                <button
+                                  type="button"
+                                  onClick={() => setShowBatchModal(false)}
+                                  className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer p-1 rounded-lg hover:bg-slate-100"
+                                  disabled={isBatchProcessing}
+                                >
+                                  <X size={18} />
+                                </button>
+
+                                <div className="mb-4">
+                                  <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
+                                    <span>💼 Fechamento de Folha em Lote</span>
+                                  </h2>
+                                  <p className="text-xs text-slate-450 mt-1">
+                                    Resumo prévio dos valores a serem fechados coletivamente.
+                                  </p>
+                                </div>
+
+                                <div className="space-y-4 font-sans text-xs">
+                                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2">
+                                    <div className="flex justify-between">
+                                      <span className="text-slate-500 font-medium">Total de profissionais selecionados:</span>
+                                      <span className="font-bold text-slate-850 text-sm">{numSelected}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="text-slate-500 font-medium">Profissionais identificados com MEI:</span>
+                                      <span className="font-bold text-amber-700 text-sm">{numSelectedWithMei}</span>
                                     </div>
                                   </div>
-                                  
-                                  <div className="flex justify-between items-center pt-3 mt-1 border-t-2 border-indigo-100">
-                                    <span className="font-bold text-indigo-900 font-sans text-sm">Valor Líquido a Receber:</span>
-                                    <span className="font-black text-indigo-700 text-base font-mono">
-                                      R$ {valorLiquidoReceber.toFixed(2)}
-                                    </span>
+
+                                  {numSelectedWithMei > 0 && (
+                                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 flex gap-2.5">
+                                      <div className="shrink-0 mt-0.5">
+                                        <AlertTriangle className="w-4 h-4 text-amber-600" />
+                                      </div>
+                                      <div className="space-y-1">
+                                        <p className="font-bold text-amber-900 text-[11px] uppercase tracking-wide">Atenção (Lançamento Automático):</p>
+                                        <p className="leading-normal text-amber-800 font-medium font-sans">
+                                          O valor padrão de <span className="font-extrabold underline">R$ {valorMei.toFixed(2)}</span> será descontado automaticamente da folha dos profissionais com MEI ativo, gerando o respectivo registro de débito.
+                                        </p>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  <div className="flex gap-2 pt-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowBatchModal(false)}
+                                      disabled={isBatchProcessing}
+                                      className="flex-1 py-2.5 px-4 border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                                    >
+                                      Cancelar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={processBatchPayroll}
+                                      disabled={isBatchProcessing}
+                                      className="flex-1 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-md shadow-emerald-100 hover:shadow-none transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                                    >
+                                      {isBatchProcessing ? (
+                                        <>
+                                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                          <span>Gravando...</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <CheckCircle size={14} />
+                                          <span>Confirmar Fechamento</span>
+                                        </>
+                                      )}
+                                    </button>
                                   </div>
                                 </div>
                               </div>
                             </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </>
@@ -1570,6 +2310,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                     <th className="py-3 px-5">Profissional</th>
                     <th className="py-3 px-5">Data do Débito</th>
                     <th className="py-3 px-5">Motivo</th>
+                    <th className="py-3 px-5 text-center">Status</th>
                     <th className="py-3 px-5 text-right font-bold">Valor</th>
                     <th className="py-3 px-5 text-right w-[100px]">Ação</th>
                   </tr>
@@ -1577,7 +2318,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                 <tbody className="divide-y divide-slate-100">
                   {debitosProfissionais.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-12 text-center text-slate-400 italic">Nenhum débito registrado para profissionais cuidador.</td>
+                      <td colSpan={6} className="py-12 text-center text-slate-400 italic">Nenhum débito registrado para profissionais cuidador.</td>
                     </tr>
                   ) : (
                     debitosProfissionais.sort((a, b) => {
@@ -1600,6 +2341,13 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                             'bg-slate-100 text-slate-700'
                           }`}>
                             {d.motivo}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-5 text-center">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            d.status === 'descontado' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                          }`}>
+                            {d.status === 'descontado' ? 'Descontado' : 'Pendente'}
                           </span>
                         </td>
                         <td className="py-3.5 px-5 text-right font-black text-red-600 text-sm font-mono">R$ {d.valor.toFixed(2)}</td>
@@ -1832,6 +2580,68 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
 
     const faturaRef = useRef<HTMLDivElement>(null);
     const [loadingExport, setLoadingExport] = useState(false);
+    const [selectedHistorico, setSelectedHistorico] = useState<string[]>([]);
+
+    const handleExportWord = () => {
+        const dadosSelecionados = filteredFolhas
+            .filter(f => selectedHistorico.includes(f.id))
+            .map(f => {
+                let mesRef = '';
+                if (f.periodoApurado && f.periodoApurado.inicio) {
+                    const parts = f.periodoApurado.inicio.split('-');
+                    if (parts.length >= 2) {
+                        mesRef = `${parts[1]}/${parts[0]}`;
+                    }
+                }
+                return {
+                    nomeProfissional: f.nomeProfissional,
+                    mesReferencia: mesRef,
+                    valorLiquido: f.valorLiquidoReceber
+                };
+            });
+
+        const formatCurrency = (val: number) => {
+            return `R$ ${val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        };
+
+        let rows = dadosSelecionados.map(item => `
+          <tr>
+            <td style="border: 1px solid black; padding: 5px;">${item.nomeProfissional}</td>
+            <td style="border: 1px solid black; padding: 5px; text-align: center;">${item.mesReferencia}</td>
+            <td style="border: 1px solid black; padding: 5px; text-align: right;">${formatCurrency(item.valorLiquido)}</td>
+          </tr>
+        `).join('');
+
+        const htmlStr = `
+        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+        <head><meta charset="utf-8"><title>Resumo de Pagamentos</title></head>
+        <body style="font-family: Arial, sans-serif; background-color: #ffffff; color: #000000;">
+          <h3 style="text-align: center;">RESUMO PARA AGENDAMENTO BANCÁRIO</h3>
+          <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+            <thead>
+              <tr>
+                <th style="border: 1px solid black; padding: 5px; background-color: #ffffff;">Profissional</th>
+                <th style="border: 1px solid black; padding: 5px; background-color: #ffffff;">Mês Referência</th>
+                <th style="border: 1px solid black; padding: 5px; background-color: #ffffff;">Valor Líquido a Transferir</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </body>
+        </html>`;
+
+        const blob = new Blob(['\ufeff' + htmlStr], { type: 'application/msword;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'Resumo_Pagamentos.doc';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        setSelectedHistorico([]);
+    };
 
     const handleDownloadWordFromCanvas = async (docData: any, type: 'fatura' | 'folha') => {
         setLoadingExport(true);
@@ -2034,9 +2844,13 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                 <td className="p-3">{new Date(f.dataEmissao).toLocaleDateString('pt-BR')}</td>
                                 <td className="p-3 text-right font-bold text-slate-700">R$ {f.valorTotal.toFixed(2)}</td>
                                 <td className="p-3 text-center"><span className="px-2 py-1 rounded-full text-[10px] bg-green-100 text-green-700 font-bold">{f.status}</span></td>
-                                <td className="p-3 text-center flex gap-2">
-                                    <button className="text-blue-600 hover:text-blue-800 cursor-pointer" onClick={() => setViewDoc({ data: f, type: 'fatura' })}>👁️</button>
-                                    <button className="text-red-600 hover:text-red-800" onClick={() => setDeleteConfirm({ isOpen: true, id: f.id, type: 'fatura' })}>🗑️</button>
+                                <td className="p-3 text-center">
+                                    <div className="flex justify-center items-center gap-2">
+                                        <button className="text-blue-600 hover:text-blue-800 cursor-pointer" onClick={() => setViewDoc({ data: f, type: 'fatura' })}>👁️</button>
+                                        <button className="text-red-600 hover:text-red-800 cursor-pointer" onClick={() => {
+                                            setDeleteConfirm({ isOpen: true, id: f.id, type: 'fatura' });
+                                        }}>🗑️</button>
+                                    </div>
                                 </td>
                             </tr>
                         ))
@@ -2047,7 +2861,17 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
         </div>
         <div className="bg-white p-6 border border-slate-200 rounded-2xl shadow-sm">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-              <h2 className="text-md font-black text-slate-800">📜 Histórico de Folhas de Pagamento</h2>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <h2 className="text-md font-black text-slate-800">📜 Histórico de Folhas de Pagamento</h2>
+                <button
+                  id="btn-download-resumo-pagamento"
+                  onClick={handleExportWord}
+                  disabled={selectedHistorico.length === 0}
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-lg text-xs font-black transition-colors cursor-pointer"
+                >
+                  Baixar Resumo para Pagamento
+                </button>
+              </div>
               <div className="flex flex-wrap items-center gap-2">
                 <select
                   value={searchFolhaProfissional}
@@ -2072,6 +2896,20 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
               <table className="w-full text-xs text-left">
                   <thead className="text-slate-500 uppercase border-b border-slate-100">
                       <tr>
+                          <th className="p-3 w-10">
+                              <input 
+                                  type="checkbox"
+                                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                  checked={filteredFolhas.length > 0 && selectedHistorico.length === filteredFolhas.length}
+                                  onChange={(e) => {
+                                      if (e.target.checked) {
+                                          setSelectedHistorico(filteredFolhas.map(f => f.id));
+                                      } else {
+                                          setSelectedHistorico([]);
+                                      }
+                                  }}
+                              />
+                          </th>
                           <th className="p-3">Profissional</th>
                           <th className="p-3">Emissão</th>
                           <th className="p-3 text-right">Valor Líquido</th>
@@ -2082,20 +2920,38 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                   <tbody className="divide-y divide-slate-50">
                       {filteredFolhas.length === 0 ? (
                           <tr>
-                              <td colSpan={5} className="p-8 text-center text-slate-400 font-semibold bg-slate-50/20">
+                              <td colSpan={6} className="p-8 text-center text-slate-400 font-semibold bg-slate-50/20">
                                   Nenhum registro encontrado para estes filtros.
                               </td>
                           </tr>
                       ) : (
                           filteredFolhas.map(f => (
                               <tr key={f.id}>
+                                  <td className="p-3 w-10">
+                                      <input 
+                                          type="checkbox"
+                                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                          checked={selectedHistorico.includes(f.id)}
+                                          onChange={(e) => {
+                                              if (e.target.checked) {
+                                                  setSelectedHistorico(prev => [...prev, f.id]);
+                                              } else {
+                                                  setSelectedHistorico(prev => prev.filter(id => id !== f.id));
+                                              }
+                                          }}
+                                      />
+                                  </td>
                                   <td className="p-3">{f.nomeProfissional}</td>
                                   <td className="p-3">{new Date(f.dataEmissao).toLocaleDateString('pt-BR')}</td>
                                   <td className="p-3 text-right font-bold text-slate-700">R$ {f.valorLiquidoReceber.toFixed(2)}</td>
                                   <td className="p-3 text-center"><span className="px-2 py-1 rounded-full text-[10px] bg-blue-100 text-blue-700 font-bold">{f.status}</span></td>
-                                  <td className="p-3 text-center flex gap-2">
-                                      <button className="text-blue-600 hover:text-blue-800 cursor-pointer" onClick={() => setViewDoc({ data: f, type: 'folha' })}>👁️</button>
-                                      <button className="text-red-600 hover:text-red-800" onClick={() => setDeleteConfirm({ isOpen: true, id: f.id, type: 'folha' })}>🗑️</button>
+                                  <td className="p-3 text-center">
+                                      <div className="flex justify-center items-center gap-2">
+                                          <button className="text-blue-600 hover:text-blue-800 cursor-pointer" onClick={() => setViewDoc({ data: f, type: 'folha' })}>👁️</button>
+                                          <button className="text-red-600 hover:text-red-800 cursor-pointer" onClick={() => {
+                                              setDeleteConfirm({ isOpen: true, id: f.id, type: 'folha' });
+                                          }}>🗑️</button>
+                                      </div>
                                   </td>
                               </tr>
                           ))

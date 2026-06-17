@@ -711,10 +711,14 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const addDebitoProfissional = async (debito: Omit<DebitoProfissional, 'id'>) => {
     try {
-      const docRef = await addDoc(collection(db, 'debitos_profissionais'), debito);
+      const dataToSave = {
+        ...debito,
+        status: debito.status || 'pendente'
+      };
+      const docRef = await addDoc(collection(db, 'debitos_profissionais'), dataToSave);
       await addAuditLog('CREATE', 'debitos_profissionais', docRef.id, `Débito adicionado para o profissional ${debito.nomeProfissional}: R$ ${debito.valor}`);
       setNotification(`Débito de R$ ${debito.valor} registrado com sucesso para ${debito.nomeProfissional}.`);
-      return { id: docRef.id, ...debito } as DebitoProfissional;
+      return { id: docRef.id, ...dataToSave } as DebitoProfissional;
     } catch (err) {
       console.error("Erro ao adicionar débito:", err);
       handleFirestoreError(err, OperationType.CREATE, 'debitos_profissionais');

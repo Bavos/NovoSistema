@@ -158,7 +158,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
   };
 
   // Basic layout tab states
-  const [activeTab, setActiveTab] = useState<'geral' | 'endereco' | 'medico' | 'plano' | 'agendamento'>('geral');
+  const [activeTab, setActiveTab] = useState<'geral' | 'endereco' | 'medico' | 'plano' | 'agendamento' | 'ocorrencias'>('geral');
   const [alertDeactivateOpen, setAlertDeactivateOpen] = useState(false);
   const [deactivateReasonInput, setDeactivateReasonInput] = useState('');
 
@@ -256,6 +256,155 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
 
   // Shift Audit Inspector Modal state
   const [inspectedShiftJson, setInspectedShiftJson] = useState<any>(null);
+
+  // States for patient occurrences (Ocorrências)
+  const [ocData, setOcData] = useState(() => new Date().toISOString().split('T')[0]);
+  const [ocProfId, setOcProfId] = useState('');
+  const [ocDescricao, setOcDescricao] = useState('');
+  const [ocBloquear, setOcBloquear] = useState(false);
+  const [editingOcorrenciaId, setEditingOcorrenciaId] = useState<string | null>(null);
+  const [savingOcorrencia, setSavingOcorrencia] = useState(false);
+
+  // Handlers for occurrences (Ocorrências)
+  const handleSaveOcorrencia = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!paciente) {
+      alert('Salve o paciente antes de cadastrar uma ocorrência.');
+      return;
+    }
+    const targetPatient = pacientes.find(p => p.id === paciente.id);
+    if (!targetPatient) {
+      alert('Paciente correspondente não foi encontrado.');
+      return;
+    }
+
+    if (!ocData) {
+      alert('Selecione uma data para a ocorrência.');
+      return;
+    }
+    if (!ocProfId) {
+      alert('Selecione o profissional envolvido.');
+      return;
+    }
+    if (!ocDescricao.trim()) {
+      alert('Informe a descrição do motivo da ocorrência.');
+      return;
+    }
+
+    const matchedProf = profissionais.find(p => p.id === ocProfId);
+    const profName = matchedProf ? matchedProf.nome : 'Desconhecido';
+
+    setSavingOcorrencia(true);
+    try {
+      let currentOcs = [...(targetPatient.ocorrencias || [])];
+      let updatedOcs = [];
+
+      if (editingOcorrenciaId) {
+        // Edit existing
+        updatedOcs = currentOcs.map(oc => {
+          if (oc.id === editingOcorrenciaId) {
+            return {
+              ...oc,
+              data: ocData,
+              profissionalId: ocProfId,
+              profissionalNome: profName,
+              descricao: ocDescricao,
+              bloquearProfissional: ocBloquear
+            };
+          }
+          return oc;
+        });
+      } else {
+        // Add new
+        const newOc = {
+          id: 'oc-' + Date.now().toString(),
+          data: ocData,
+          profissionalId: ocProfId,
+          profissionalNome: profName,
+          descricao: ocDescricao,
+          bloquearProfissional: ocBloquear
+        };
+        updatedOcs = [...currentOcs, newOc];
+      }
+
+      // Handle block array (profissionaisBloqueados)
+      let blockedProfs = [...(targetPatient.profissionaisBloqueados || [])];
+      if (ocBloquear) {
+        if (!blockedProfs.includes(ocProfId)) {
+          blockedProfs.push(ocProfId);
+        }
+      } else {
+        const otherBlocksCount = updatedOcs.filter(oc => oc.profissionalId === ocProfId && oc.bloquearProfissional).length;
+        if (otherBlocksCount === 0) {
+          blockedProfs = blockedProfs.filter(id => id !== ocProfId);
+        }
+      }
+
+      const updatedObj: Paciente = {
+        ...targetPatient,
+        ocorrencias: updatedOcs,
+        profissionaisBloqueados: blockedProfs
+      };
+
+      await updatePaciente(updatedObj);
+      
+      // Clean up fields
+      setOcData(new Date().toISOString().split('T')[0]);
+      setOcProfId('');
+      setOcDescricao('');
+      setOcBloquear(false);
+      setEditingOcorrenciaId(null);
+      alert('Ocorrência salva com sucesso!');
+    } catch (err: any) {
+      alert('Erro ao salvar ocorrência: ' + err.message);
+    } finally {
+      setSavingOcorrencia(false);
+    }
+  };
+
+  const handleEditOcorrenciaClick = (oc: any) => {
+    setEditingOcorrenciaId(oc.id);
+    setOcData(oc.data);
+    setOcProfId(oc.profissionalId);
+    setOcDescricao(oc.descricao);
+    setOcBloquear(oc.bloquearProfissional || false);
+  };
+
+  const handleDeleteOcorrencia = async (ocId: string) => {
+    if (!paciente) return;
+    const targetPatient = pacientes.find(p => p.id === paciente.id);
+    if (!targetPatient) return;
+
+    if (!window.confirm('Tem certeza de que deseja excluir esta ocorrência?')) {
+      return;
+    }
+
+    try {
+      let currentOcs = [...(targetPatient.ocorrencias || [])];
+      const targetOc = currentOcs.find(oc => oc.id === ocId);
+      if (!targetOc) return;
+
+      const updatedOcs = currentOcs.filter(oc => oc.id !== ocId);
+
+      // Handle block array (profissionaisBloqueados)
+      let blockedProfs = [...(targetPatient.profissionaisBloqueados || [])];
+      const otherBlocksCount = updatedOcs.filter(oc => oc.profissionalId === targetOc.profissionalId && oc.bloquearProfissional).length;
+      if (otherBlocksCount === 0) {
+        blockedProfs = blockedProfs.filter(id => id !== targetOc.profissionalId);
+      }
+
+      const updatedObj: Paciente = {
+        ...targetPatient,
+        ocorrencias: updatedOcs,
+        profissionaisBloqueados: blockedProfs
+      };
+
+      await updatePaciente(updatedObj);
+      alert('Ocorrência excluída com sucesso!');
+    } catch (err: any) {
+      alert('Erro ao excluir ocorrência: ' + err.message);
+    }
+  };
 
   // Local state for Patient Forms
   const [nome, setNome] = useState('');
@@ -1437,6 +1586,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
               <span>Plano de Atendimento</span>
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab('agendamento')}
               className={`flex items-center space-x-1 px-4 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-all ${
                 activeTab === 'agendamento'
@@ -1446,6 +1596,19 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
             >
               <CalendarDays size={14} />
               <span>Agendamento</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('ocorrencias')}
+              className={`flex items-center space-x-1 px-4 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-all ${
+                activeTab === 'ocorrencias'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800'
+              }`}
+              id="tab-btn-ocorrencias"
+            >
+              <AlertOctagon size={14} />
+              <span>Ocorrências</span>
             </button>
           </div>
 
@@ -2896,6 +3059,165 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                   </table>
                 </div>
                 )}
+              </div>
+            )}
+
+            {activeTab === 'ocorrencias' && (
+              <div className="space-y-6 animate-in fade-in-30 slide-in-from-right-3">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-700 border-b border-slate-100 pb-2 uppercase tracking-wider italic">
+                    {editingOcorrenciaId ? 'EDITAR OCORRÊNCIA' : 'CADASTRAR NOVA OCORRÊNCIA'}
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                    <div className="space-y-1">
+                      <label className="block text-xs font-normal text-slate-700">Data da Ocorrência *</label>
+                      <input
+                        type="date"
+                        value={ocData}
+                        onChange={(e) => setOcData(e.target.value)}
+                        className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-xs font-normal text-slate-700">Profissional Envolvido *</label>
+                      <select
+                        value={ocProfId}
+                        onChange={(e) => setOcProfId(e.target.value)}
+                        className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500"
+                      >
+                        <option value="">Selecione um profissional</option>
+                        {profissionais.map(p => (
+                          <option key={p.id} value={p.id}>
+                            {p.nome} ({p.especialidade || p.profissao || 'Profissional'})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="md:col-span-2 space-y-1">
+                      <label className="block text-xs font-normal text-slate-700">Descrição do Motivo *</label>
+                      <textarea
+                        rows={3}
+                        value={ocDescricao}
+                        onChange={(e) => setOcDescricao(e.target.value)}
+                        placeholder="Relate detalhadamente os fatos ocorridos..."
+                        className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2 flex items-center space-x-2 py-1">
+                      <input
+                        type="checkbox"
+                        id="check-bloquear-prof"
+                        checked={ocBloquear}
+                        onChange={(e) => setOcBloquear(e.target.checked)}
+                        className="h-4 w-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500 cursor-pointer"
+                      />
+                      <label htmlFor="check-bloquear-prof" className="text-xs font-semibold text-rose-700 cursor-pointer select-none">
+                        Bloquear este profissional para este paciente
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 justify-end mt-4">
+                    {editingOcorrenciaId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingOcorrenciaId(null);
+                          setOcData(new Date().toISOString().split('T')[0]);
+                          setOcProfId('');
+                          setOcDescricao('');
+                          setOcBloquear(false);
+                        }}
+                        className="px-4 py-2 hover:bg-slate-100 font-medium text-xs text-slate-600 rounded-lg transition-colors cursor-pointer"
+                      >
+                        Cancelar Edição
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      disabled={savingOcorrencia}
+                      onClick={handleSaveOcorrencia}
+                      className="bg-blue-600 text-white px-5 py-2 rounded-lg text-xs font-semibold shadow-md shadow-blue-200 hover:bg-blue-700 transition-colors flex items-center space-x-1.5 cursor-pointer disabled:bg-blue-400 font-sans"
+                    >
+                      <Save size={14} />
+                      <span>{savingOcorrencia ? 'Salvando...' : 'Salvar Ocorrência'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Histórico list */}
+                <div className="pt-6 border-t border-slate-100 font-sans">
+                  <h4 className="text-xs font-bold text-slate-700 mb-3 uppercase tracking-wider italic">
+                    Histórico de Ocorrências ({(pacientes.find(p => p.id === paciente?.id)?.ocorrencias || []).length})
+                  </h4>
+                  
+                  {((pacientes.find(p => p.id === paciente?.id)?.ocorrencias || []).length === 0) ? (
+                    <div className="p-6 text-center text-xs text-slate-400 italic border border-dashed border-slate-200 rounded-xl">
+                      Nenhuma ocorrência registrada para este paciente.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                            <th className="p-3">Data</th>
+                            <th className="p-3">Profissional</th>
+                            <th className="p-3">Descrição / Relato</th>
+                            <th className="p-3 text-center">Status</th>
+                            <th className="p-3 text-right">Ações</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-slate-700">
+                          {(pacientes.find(p => p.id === paciente?.id)?.ocorrencias || []).map((oc) => (
+                            <tr key={oc.id} className="hover:bg-slate-50/50 transition-colors">
+                              <td className="p-3 whitespace-nowrap font-medium text-slate-500">
+                                {oc.data ? oc.data.split('-').reverse().join('/') : '-'}
+                              </td>
+                              <td className="p-3 whitespace-nowrap font-semibold">
+                                {oc.profissionalNome}
+                              </td>
+                              <td className="p-3 max-w-sm break-words text-slate-600">
+                                {oc.descricao}
+                              </td>
+                              <td className="p-3 text-center whitespace-nowrap">
+                                {oc.bloquearProfissional ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                    [ BLOQUEADO ]
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600">
+                                    Registrado
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-3 text-right whitespace-nowrap">
+                                <div className="flex justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEditOcorrenciaClick(oc)}
+                                    className="p-1 px-2 bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100 rounded transition-colors text-[10px] font-semibold cursor-pointer"
+                                  >
+                                    Editar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteOcorrencia(oc.id)}
+                                    className="p-1 px-2 bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 rounded transition-colors text-[10px] font-semibold cursor-pointer"
+                                  >
+                                    Excluir
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </form>

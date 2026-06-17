@@ -130,6 +130,15 @@ export interface DadosPagamento {
   emailFaturamento?: string;
 }
 
+export interface OcorrenciaPaciente {
+  id: string;
+  data: string;
+  profissionalId: string;
+  profissionalNome: string;
+  descricao: string;
+  bloquearProfissional: boolean;
+}
+
 export interface Paciente {
   id: string;
   nome: string;
@@ -148,6 +157,7 @@ export interface Paciente {
   dadosPagamento?: DadosPagamento;
   createdAt: string;
   profissionaisBloqueados?: string[];
+  ocorrencias?: OcorrenciaPaciente[];
 }
 
 export interface Plantao {
@@ -209,9 +219,11 @@ export interface DebitoProfissional {
   nomeProfissional: string;
   data: any; // Saved in full format / Timestamp
   valor: number;
-  motivo: 'Curinga' | 'Passagem' | 'Outros';
+  motivo: 'Curinga' | 'Passagem' | 'Outros' | string;
   idPaciente?: string;
   nomePaciente?: string;
+  status?: 'pendente' | 'descontado';
+  folhaIdVinculada?: string;
 }
 
 export interface FaturaPaciente {
