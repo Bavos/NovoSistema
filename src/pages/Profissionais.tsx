@@ -3,8 +3,9 @@ import html2canvas from 'html2canvas';
 import { useFirebase } from '../context/FirebaseContext';
 import { Profissional, Agendamento, DocumentoAnexo } from '../types';
 import { Plus, Edit2, Trash2, X, Check, CalendarDays, Paperclip, AlertCircle, Printer, Download, FileImage } from 'lucide-react';
-import { db } from '../lib/firebase';
-import { collection, query, where, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { db, storage } from '../lib/firebase';
+import { collection, query, where, orderBy, onSnapshot, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { profissionalSchema } from '../schemas/validationSchemas';
 
 
@@ -16,6 +17,22 @@ export const Profissionais: React.FC = () => {
   const [editingProf, setEditingProf] = useState<Profissional | null>(null);
   const [activeTab, setActiveTab] = useState<'dados' | 'agenda' | 'cracha'>('dados');
   const [agendamentosProf, setAgendamentosProf] = useState<Agendamento[]>([]);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Estados para documentos anexos reais (Storage + Firestore)
+  const [tipoDocumentoAnexo, setTipoDocumentoAnexo] = useState<string>('');
+  const [arquivoAnexo, setArquivoAnexo] = useState<File | null>(null);
+  const [salvandoAnexo, setSalvandoAnexo] = useState<boolean>(false);
+  const documentoInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (successMessage) {
+      const timer = setTimeout(() => {
+        setSuccessMessage(null);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage]);
 
   useEffect(() => {
     if (editingProf && activeTab === 'agenda') {
@@ -102,6 +119,15 @@ export const Profissionais: React.FC = () => {
   const handleOpenModal = (prof: Profissional | null = null, initialTab: 'dados' | 'agenda' | 'cracha' = 'dados') => {
     setEditingProf(prof);
     setActiveTab(initialTab);
+    
+    // Resetar estados de anexo de documento
+    setTipoDocumentoAnexo('');
+    setArquivoAnexo(null);
+    setSalvandoAnexo(false);
+    if (documentoInputRef.current) {
+      documentoInputRef.current.value = '';
+    }
+
     setFormData(prof ? {
         nome: prof.nome || '',
         especialidade: prof.especialidade || '',
@@ -192,10 +218,12 @@ export const Profissionais: React.FC = () => {
       };
       if (editingProf) {
         await updateProfissional({ ...editingProf, ...finalData });
+        setSuccessMessage("Alterações do profissional salvas com sucesso!");
       } else {
-        await addProfissional(finalData);
+        const addedProf = await addProfissional(finalData);
+        setEditingProf(addedProf);
+        setSuccessMessage("Novo profissional cadastrado com sucesso!");
       }
-      setIsModalOpen(false);
     } catch (err) {
       console.error("Erro ao salvar:", err);
       alert("Erro ao salvar profissional. Tente novamente.");
@@ -211,6 +239,7 @@ export const Profissionais: React.FC = () => {
       try {
         const url = await uploadProfissionalFoto(file);
         setFormData(prev => ({ ...prev, foto: url }));
+        setSuccessMessage("Foto do profissional enviada com sucesso!");
       } catch (err) {
         console.error("Erro ao subir foto:", err);
         alert("Erro ao enviar foto. Tente novamente.");
@@ -220,53 +249,94 @@ export const Profissionais: React.FC = () => {
     }
   };
 
-  const addDocumentoAnexoRow = () => {
-    const newDoc: DocumentoAnexo = {
-      id: Date.now() + Math.random().toString(36).substring(2, 9),
-      tipo: 'Crachá',
-      arquivo: null,
-      nomeArquivo: ''
-    };
+  const removeDocumentoAnexoRow = async (id: string | number) => {
+    const updated = (formData.documentosAnexos || []).filter(doc => doc.id !== id);
     setFormData(prev => ({
       ...prev,
-      documentosAnexos: [...(prev.documentosAnexos || []), newDoc]
+      documentosAnexos: updated
     }));
-  };
 
-  const removeDocumentoAnexoRow = (id: string | number) => {
-    setFormData(prev => ({
-      ...prev,
-      documentosAnexos: (prev.documentosAnexos || []).filter(doc => doc.id !== id)
-    }));
-  };
-
-  const updateDocumentoAnexoRow = (id: string | number, field: keyof DocumentoAnexo, value: any) => {
-    setFormData(prev => ({
-      ...prev,
-      documentosAnexos: (prev.documentosAnexos || []).map(doc =>
-        doc.id === id ? { ...doc, [field]: value } : doc
-      )
-    }));
-  };
-
-  const handleDocumentoFileChange = async (id: string | number, e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setUploading(true);
+    if (editingProf) {
       try {
-        const url = await uploadPdf(file, `documentos/${id}_${file.name}`);
-        setFormData(prev => ({
-          ...prev,
-          documentosAnexos: (prev.documentosAnexos || []).map(doc =>
-            doc.id === id ? { ...doc, arquivo: url, nomeArquivo: file.name } : doc
-          )
-        }));
+        const profRef = doc(db, 'profissionais', editingProf.id);
+        await updateDoc(profRef, {
+          documentosAnexos: updated
+        });
+        setSuccessMessage("Anexo removido com sucesso!");
       } catch (err) {
-        console.error("Erro ao subir documento:", err);
-        alert("Erro ao enviar documento. Tente novamente.");
-      } finally {
-        setUploading(false);
+        console.error("Erro ao remover anexo do Firestore:", err);
       }
+    }
+  };
+
+  const handleUploadAnexo = async () => {
+    if (!editingProf) {
+      alert("Por favor, salve o profissional primeiro para poder enviar documentos anexos.");
+      return;
+    }
+    if (!arquivoAnexo) {
+      alert("Selecione um arquivo primeiro.");
+      return;
+    }
+    if (!tipoDocumentoAnexo) {
+      alert("Por favor, selecione o Tipo de Documento.");
+      return;
+    }
+
+    setSalvandoAnexo(true);
+
+    try {
+      const id = editingProf.id;
+      // Fazer o upload para o Firebase Storage
+      const pathRef = `profissionais/${id}/${arquivoAnexo.name}`;
+      const storageRef = ref(storage, pathRef);
+      
+      const uploadResult = await uploadBytes(storageRef, arquivoAnexo);
+      const downloadUrl = await getDownloadURL(uploadResult.ref);
+
+      // Criar o objeto conforme especificado no requisito do usuário:
+      // { url: downloadUrl, tipo: tipoDocumentoAnexo, nome: arquivo.name, data: new Date() }
+      const novoAnexo = {
+        id: `doc-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        tipo: tipoDocumentoAnexo,
+        url: downloadUrl,
+        arquivo: downloadUrl, // compatibilidade
+        nome: arquivoAnexo.name,
+        nomeArquivo: arquivoAnexo.name, // compatibilidade
+        data: new Date().toISOString()
+      };
+
+      // Carregar os anexos existentes no formData
+      const currentAnexos = formData.documentosAnexos || [];
+      const updatedAnexos = [...currentAnexos, novoAnexo];
+
+      // Atualizar o Firestore
+      const profRef = doc(db, 'profissionais', id);
+      await updateDoc(profRef, {
+        documentosAnexos: updatedAnexos
+      });
+
+      // Atualizar o estado local
+      setFormData(prev => ({
+        ...prev,
+        documentosAnexos: updatedAnexos
+      }));
+
+      // Limpar os campos do input
+      setArquivoAnexo(null);
+      setTipoDocumentoAnexo('');
+      if (documentoInputRef.current) {
+        documentoInputRef.current.value = '';
+      }
+
+      // Exiba o alerta de 'Salvo com sucesso' APENAS dentro do then do Firestore
+      setSuccessMessage("Documento anexo salvo com sucesso!");
+
+    } catch (err) {
+      console.error("Erro no upload de documento real:", err);
+      alert("Erro ao enviar documento. Tente novamente.");
+    } finally {
+      setSalvandoAnexo(false);
     }
   };
 
@@ -775,22 +845,117 @@ export const Profissionais: React.FC = () => {
                        <input type="text" placeholder="PIX" value={formData.dadosBancarios.pix} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, pix: e.target.value}})} className="p-2 border border-slate-200 rounded-lg text-sm" />
                     </div>
 
-                    <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                            <span className="font-bold text-xs text-[#1a3c2e] uppercase">Documentos Anexos</span>
-                            <button type="button" onClick={addDocumentoAnexoRow} className="text-[#b8860b] text-xs font-bold">+ Adicionar</button>
-                        </div>
-                        {(formData.documentosAnexos || []).map((doc, index) => (
-                             <div key={doc.id} className="flex gap-2 items-center p-2 border rounded-lg">
-                                <select value={doc.tipo} onChange={e => updateDocumentoAnexoRow(doc.id, 'tipo', e.target.value)} disabled={!!doc.arquivo} className="p-2 border rounded-lg text-sm w-1/3">
-                                    <option value="Selecione">Selecione...</option>
+                    <div className="space-y-3 p-4 border border-slate-100 rounded-xl bg-slate-50">
+                        <span className="font-bold text-xs text-[#1a3c2e] uppercase border-b pb-2 flex items-center gap-1.5">
+                            <Paperclip className="w-3.5 h-3.5" /> Documentos Anexos
+                        </span>
+                        
+                        {!editingProf ? (
+                          <div className="p-4 bg-amber-50 text-amber-800 border border-amber-200/50 rounded-xl text-xs flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                            <span>Para anexar documentos, primeiro salve o cadastro básico deste novo profissional no botão "Salvar" abaixo.</span>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            {/* Form de Upload */}
+                            <div className="p-3 border border-slate-200/60 rounded-xl bg-white space-y-3">
+                              <span className="block font-semibold text-xs text-slate-700">Adicionar Novo Documento</span>
+                              <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                                <div className="space-y-1 md:col-span-5">
+                                  <label className="text-[10px] font-bold text-slate-500 uppercase">Tipo de Documento</label>
+                                  <select 
+                                    value={tipoDocumentoAnexo} 
+                                    onChange={e => setTipoDocumentoAnexo(e.target.value)}
+                                    className="p-2 border border-slate-200 rounded-lg text-sm w-full bg-slate-50 focus:ring-1 focus:ring-[#1a3c2e] focus:outline-none"
+                                  >
+                                    <option value="">Selecione o tipo de documento...</option>
                                     <option value="Crachá">Crachá</option>
+                                    <option value="Comprovante de residência">Comprovante de residência</option>
+                                    <option value="Vacinas">Vacinas</option>
                                     <option value="Certificado">Certificado</option>
-                                </select>
-                                <input type="file" onChange={e => handleDocumentoFileChange(doc.id, e)} className="text-sm p-2" />
-                                <button type="button" onClick={() => removeDocumentoAnexoRow(doc.id)} className="text-red-500 hover:text-red-700">X</button>
-                             </div>
-                        ))}
+                                    <option value="Formulário">Formulário</option>
+                                  </select>
+                                </div>
+                                
+                                <div className="space-y-1 md:col-span-4">
+                                  <label className="text-[10px] font-bold text-slate-500 uppercase">Arquivo</label>
+                                  <input 
+                                    type="file" 
+                                    ref={documentoInputRef}
+                                    onChange={e => setArquivoAnexo(e.target.files?.[0] || null)}
+                                    className="p-1 border border-slate-200 rounded-lg text-xs w-full bg-slate-50 cursor-pointer"
+                                  />
+                                </div>
+
+                                <div className="md:col-span-3">
+                                  <button
+                                    type="button"
+                                    onClick={handleUploadAnexo}
+                                    disabled={salvandoAnexo}
+                                    className="w-full bg-[#1a3c2e] text-[#b8860b] hover:bg-[#132c22] disabled:bg-slate-300 disabled:text-slate-500 rounded-lg font-bold py-2 px-3 text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                                  >
+                                    {salvandoAnexo ? (
+                                      <>
+                                        <span className="w-3 h-3 border-2 border-[#b8860b] border-t-transparent rounded-full animate-spin"></span>
+                                        <span>Carregando...</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Plus className="w-3.5 h-3.5" />
+                                        <span>Salvar Anexo</span>
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Lista de Documentos já gravados */}
+                            <div className="space-y-2">
+                              <span className="block font-semibold text-xs text-slate-700">Arquivos Salvos ({ (formData.documentosAnexos || []).length })</span>
+                              {(!formData.documentosAnexos || formData.documentosAnexos.length === 0) ? (
+                                <p className="text-xs text-slate-400 italic p-2">Nenhum documento anexado ainda.</p>
+                              ) : (
+                                <div className="grid grid-cols-1 gap-2">
+                                  {(formData.documentosAnexos || []).map((docItem) => (
+                                    <div key={docItem.id} className="flex justify-between items-center bg-white p-2.5 rounded-lg border border-slate-100 shadow-sm text-xs">
+                                      <div className="flex items-center gap-2 min-w-0 mr-4">
+                                        <div className="p-1.5 bg-slate-100 rounded text-[#1a3c2e]">
+                                          <Paperclip className="w-3.5 h-3.5" strokeWidth={2.5} />
+                                        </div>
+                                        <div className="truncate">
+                                          <p className="font-bold text-[#1a3c2e]">{docItem.tipo}</p>
+                                          <p className="text-[10px] text-slate-500 truncate">{docItem.nome || docItem.nomeArquivo || 'Anexo'}</p>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-2 flex-shrink-0">
+                                        {(docItem.url || docItem.arquivo) && (
+                                          <a 
+                                            href={docItem.url || docItem.arquivo || '#'} 
+                                            target="_blank" 
+                                            rel="noopener noreferrer" 
+                                            referrerPolicy="no-referrer"
+                                            className="px-2.5 py-1 text-[10px] font-bold text-[#b8860b] bg-[#b8860b]/10 rounded hover:bg-[#b8860b]/20 transition-colors"
+                                          >
+                                            Visualizar
+                                          </a>
+                                        )}
+                                        <button 
+                                          type="button" 
+                                          onClick={() => removeDocumentoAnexoRow(docItem.id)} 
+                                          className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                          title="Deletar anexo definitivamente"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                     </div>
                   </div>
                   </div>
@@ -807,6 +972,14 @@ export const Profissionais: React.FC = () => {
                 )}
             </div>
           </form>
+        </div>
+      )}
+
+      {successMessage && (
+        <div className="fixed bottom-5 right-5 z-[100] bg-[#1a3c2e] text-[#b8860b] border border-[#b8860b]/30 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-bottom-5 duration-300">
+          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+          <span className="text-sm font-semibold">{successMessage}</span>
+          <button type="button" onClick={() => setSuccessMessage(null)} className="ml-2 text-[#b8860b]/70 hover:text-[#b8860b] text-xs font-bold leading-none">×</button>
         </div>
       )}
     </div>

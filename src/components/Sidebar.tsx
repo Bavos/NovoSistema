@@ -148,12 +148,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <motion.div
             animate={{ opacity: effectiveExpanded ? 1 : 0 }}
             transition={{ duration: 0.2 }}
-            className="flex flex-col whitespace-nowrap"
+            className="flex items-center whitespace-nowrap"
           >
-            <span className="text-xs font-semibold text-off-white leading-none capitalize">
+            <span className="text-xs font-semibold text-off-white capitalize">
               {userRole}
             </span>
-            <span className="text-[10px] text-mustard-gold mt-1 uppercase tracking-wider">Unidade Rio</span>
           </motion.div>
         </div>
       </div>
