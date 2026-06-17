@@ -25,6 +25,22 @@ export const Profissionais: React.FC = () => {
   const [salvandoAnexo, setSalvandoAnexo] = useState<boolean>(false);
   const documentoInputRef = useRef<HTMLInputElement>(null);
 
+  // Estado para titularidade de conta bancária (Sim/Não)
+  const [isTitularConta, setIsTitularConta] = useState<string>('Sim');
+
+  // Estado para visualização de documentos em modal
+  const [previewDoc, setPreviewDoc] = useState<{ url: string; tipo: string; nome?: string } | null>(null);
+
+  const isImageFile = (url: string, name?: string) => {
+    const urlLower = (url || '').toLowerCase();
+    const nameLower = (name || '').toLowerCase();
+    return (
+      urlLower.includes('.png') || urlLower.includes('.jpg') || urlLower.includes('.jpeg') || urlLower.includes('.gif') || urlLower.includes('.webp') || urlLower.includes('.svg') ||
+      nameLower.endsWith('.png') || nameLower.endsWith('.jpg') || nameLower.endsWith('.jpeg') || nameLower.endsWith('.gif') || nameLower.endsWith('.webp') || nameLower.endsWith('.svg') ||
+      urlLower.includes('image') || nameLower.startsWith('img-') || nameLower.includes('whatsapp')
+    );
+  };
+
   useEffect(() => {
     if (successMessage) {
       const timer = setTimeout(() => {
@@ -95,7 +111,10 @@ export const Profissionais: React.FC = () => {
       vacinas: '',
       outros: ''
     },
-    documentosAnexos: [] as DocumentoAnexo[]
+    documentosAnexos: [] as DocumentoAnexo[],
+    nomeTitularConta: '',
+    cpfTitularConta: '',
+    grauParentescoTitular: '',
   });
 
   // Calculate age based on dataNascimento
@@ -128,6 +147,9 @@ export const Profissionais: React.FC = () => {
       documentoInputRef.current.value = '';
     }
 
+    // Definir estado de titularidade da conta
+    setIsTitularConta(prof ? (prof.isTitularConta === 'Não' || prof.isTitularConta === false ? 'Não' : 'Sim') : 'Sim');
+ 
     setFormData(prof ? {
         nome: prof.nome || '',
         especialidade: prof.especialidade || '',
@@ -160,7 +182,10 @@ export const Profissionais: React.FC = () => {
           vacinas: '',
           outros: ''
         },
-        documentosAnexos: prof.documentosAnexos || []
+        documentosAnexos: prof.documentosAnexos || [],
+        nomeTitularConta: prof.nomeTitularConta || '',
+        cpfTitularConta: prof.cpfTitularConta || '',
+        grauParentescoTitular: prof.grauParentescoTitular || '',
     } : {
         nome: '',
         especialidade: '',
@@ -186,7 +211,10 @@ export const Profissionais: React.FC = () => {
           vacinas: '',
           outros: ''
         },
-        documentosAnexos: []
+        documentosAnexos: [],
+        nomeTitularConta: '',
+        cpfTitularConta: '',
+        grauParentescoTitular: '',
     });
     setIsModalOpen(true);
   };
@@ -214,7 +242,11 @@ export const Profissionais: React.FC = () => {
       const finalData = {
         ...formData,
         especialidade: formData.profissao,
-        ativo: formData.status === 'Ativo'
+        ativo: formData.status === 'Ativo',
+        isTitularConta: isTitularConta === 'Sim' ? 'Sim' : 'Não',
+        nomeTitularConta: isTitularConta === 'Não' ? formData.nomeTitularConta : '',
+        cpfTitularConta: isTitularConta === 'Não' ? formData.cpfTitularConta : '',
+        grauParentescoTitular: isTitularConta === 'Não' ? formData.grauParentescoTitular : ''
       };
       if (editingProf) {
         await updateProfissional({ ...editingProf, ...finalData });
@@ -838,7 +870,62 @@ export const Profissionais: React.FC = () => {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 border border-slate-100 rounded-xl bg-slate-50">
-                       <span className="md:col-span-4 font-bold text-xs text-[#1a3c2e] uppercase border-b pb-2 mb-2">Financeiro</span>
+                       <div className="md:col-span-4 flex items-center justify-between border-b pb-2 mb-2">
+                          <span className="font-bold text-xs text-[#1a3c2e] uppercase">Financeiro</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-slate-500 normal-case">Titular da Conta?</span>
+                            <select
+                              value={isTitularConta}
+                              onChange={(e) => setIsTitularConta(e.target.value)}
+                              className="p-1 px-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-700 outline-none focus:ring-1 focus:ring-[#1a3c2e] cursor-pointer"
+                            >
+                              <option value="Sim">Sim</option>
+                              <option value="Não">Não</option>
+                            </select>
+                          </div>
+                       </div>
+
+                       {isTitularConta === 'Não' && (
+                          <div className="md:col-span-4 grid grid-cols-1 md:grid-cols-3 gap-4 pb-4 border-b border-dashed border-slate-200/60 mb-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[10px] font-bold text-slate-500 uppercase">Nome do Titular da Conta</label>
+                              <input
+                                type="text"
+                                placeholder="Nome Completo do Titular"
+                                value={formData.nomeTitularConta || ''}
+                                onChange={e => setFormData({ ...formData, nomeTitularConta: e.target.value })}
+                                className="p-2 border border-slate-200 rounded-lg text-sm bg-white"
+                                required={isTitularConta === 'Não'}
+                              />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[10px] font-bold text-slate-500 uppercase">CPF do Titular</label>
+                              <input
+                                type="text"
+                                placeholder="CPF do Titular"
+                                value={formData.cpfTitularConta || ''}
+                                onChange={e => setFormData({ ...formData, cpfTitularConta: e.target.value })}
+                                className="p-2 border border-slate-200 rounded-lg text-sm bg-white"
+                                required={isTitularConta === 'Não'}
+                              />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[10px] font-bold text-slate-500 uppercase">Grau de Parentesco</label>
+                              <select
+                                value={formData.grauParentescoTitular || ''}
+                                onChange={e => setFormData({ ...formData, grauParentescoTitular: e.target.value })}
+                                className="p-2 border border-slate-200 rounded-lg text-sm bg-white cursor-pointer"
+                                required={isTitularConta === 'Não'}
+                              >
+                                <option value="">Selecione...</option>
+                                <option value="Cônjuge">Cônjuge</option>
+                                <option value="Filho(a)">Filho(a)</option>
+                                <option value="Pai/Mãe">Pai/Mãe</option>
+                                <option value="Outro">Outro</option>
+                              </select>
+                            </div>
+                          </div>
+                       )}
                        <input type="text" placeholder="Banco" value={formData.dadosBancarios.banco} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, banco: e.target.value}})} className="p-2 border border-slate-200 rounded-lg text-sm" />
                        <input type="text" placeholder="Agência" value={formData.dadosBancarios.agencia} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, agencia: e.target.value}})} className="p-2 border border-slate-200 rounded-lg text-sm" />
                        <input type="text" placeholder="Conta" value={formData.dadosBancarios.conta} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, conta: e.target.value}})} className="p-2 border border-slate-200 rounded-lg text-sm" />
@@ -930,15 +1017,17 @@ export const Profissionais: React.FC = () => {
                                       </div>
                                       <div className="flex items-center gap-2 flex-shrink-0">
                                         {(docItem.url || docItem.arquivo) && (
-                                          <a 
-                                            href={docItem.url || docItem.arquivo || '#'} 
-                                            target="_blank" 
-                                            rel="noopener noreferrer" 
-                                            referrerPolicy="no-referrer"
-                                            className="px-2.5 py-1 text-[10px] font-bold text-[#b8860b] bg-[#b8860b]/10 rounded hover:bg-[#b8860b]/20 transition-colors"
+                                          <button 
+                                            type="button" 
+                                            onClick={() => setPreviewDoc({
+                                              url: docItem.url || docItem.arquivo || '',
+                                              tipo: docItem.tipo || 'Documento',
+                                              nome: docItem.nome || docItem.nomeArquivo || 'Anexo'
+                                            })}
+                                            className="px-2.5 py-1 text-[10px] font-bold text-[#b8860b] bg-[#b8860b]/10 rounded hover:bg-[#b8860b]/20 transition-colors cursor-pointer"
                                           >
                                             Visualizar
-                                          </a>
+                                          </button>
                                         )}
                                         <button 
                                           type="button" 
@@ -980,6 +1069,102 @@ export const Profissionais: React.FC = () => {
           <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
           <span className="text-sm font-semibold">{successMessage}</span>
           <button type="button" onClick={() => setSuccessMessage(null)} className="ml-2 text-[#b8860b]/70 hover:text-[#b8860b] text-xs font-bold leading-none">×</button>
+        </div>
+      )}
+
+      {/* Modal de Visualização de Documentos */}
+      {previewDoc && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full flex flex-col max-h-[90vh] overflow-hidden border border-slate-100 animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="p-2 bg-[#1a3c2e]/10 text-[#1a3c2e] rounded-lg flex-shrink-0">
+                  <Paperclip className="w-4 h-4" strokeWidth={2.5} />
+                </div>
+                <div className="truncate">
+                  <h3 className="font-bold text-sm text-[#1a3c2e]">{previewDoc.tipo}</h3>
+                  <p className="text-xs text-slate-500 truncate max-w-[200px] sm:max-w-md">{previewDoc.nome || 'Anexo'}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewDoc(null)}
+                className="p-1.5 px-3 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-lg text-xs transition-all font-bold cursor-pointer"
+              >
+                ✕ Fechar
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-4 sm:p-6 overflow-y-auto flex-grow flex items-center justify-center bg-slate-100/50 min-h-[300px]">
+              {(() => {
+                const isImg = isImageFile(previewDoc.url, previewDoc.nome);
+                if (isImg) {
+                  return (
+                    <div className="relative group max-w-full">
+                      <img
+                        src={previewDoc.url}
+                        alt={previewDoc.nome}
+                        referrerPolicy="no-referrer"
+                        className="max-h-[55vh] max-w-full object-contain mx-auto rounded-lg shadow-md border border-slate-200 bg-white"
+                        onError={(e) => {
+                          e.currentTarget.referrerPolicy = "";
+                        }}
+                      />
+                    </div>
+                  );
+                } else {
+                  return (
+                    <div className="text-center p-6 sm:p-8 bg-white rounded-2xl border border-slate-200/50 shadow-sm max-w-md w-full space-y-4">
+                      <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                        <FileImage className="w-8 h-8" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-700 text-sm">Visualização de Documento</h4>
+                        <p className="text-xs text-slate-500 mt-1">Este arquivo ({previewDoc.nome || 'Anexo'}) não é uma imagem comum ou requer um visualizador externo (ex: PDF grande).</p>
+                      </div>
+                      
+                      <div className="flex flex-col gap-2 pt-2">
+                        <a
+                          href={previewDoc.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full bg-[#1a3c2e] hover:bg-[#11291f] text-[#b8860b] py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow transition-all cursor-pointer"
+                        >
+                          <Download className="w-4 h-4" />
+                          <span>Abrir em Nova Aba</span>
+                        </a>
+                      </div>
+                    </div>
+                  );
+                }
+              })()}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 flex flex-col sm:flex-row gap-3 sm:gap-0 justify-between items-center bg-slate-50">
+              <span className="text-[10px] font-semibold text-slate-400 font-mono truncate max-w-xs">Arquivo em Nuvem de Armazenamento Seguro</span>
+              <div className="flex gap-2 w-full sm:w-auto justify-end">
+                <a
+                  href={previewDoc.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 text-xs font-semibold text-[#1a3c2e] hover:bg-slate-200/60 rounded-lg border border-slate-200 transition-all cursor-pointer inline-flex items-center gap-1 w-full sm:w-auto justify-center"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPreviewDoc(null)}
+                  className="px-5 py-2 text-xs font-bold bg-[#1a3c2e] text-[#b8860b] hover:bg-[#122b21] rounded-lg shadow-sm transition-all cursor-pointer w-full sm:w-auto"
+                >
+                  Ok
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -7,9 +7,10 @@ import React, { useState, useEffect } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
 import { PatientList } from '../components/PatientList';
 import { PatientRecord } from '../components/PatientRecord';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 
 interface PacientesProps {
-  globalSearchQuery: string;
+  globalSearchQuery?: string;
   onViewChange?: (isForm: boolean, title: string) => void;
 }
 
@@ -51,10 +52,12 @@ export const Pacientes: React.FC<PacientesProps> = ({ globalSearchQuery, onViewC
 
   if (isBrowsingForm) {
     return (
-      <PatientRecord
-        paciente={selectedPaciente}
-        onBack={handleBackToList}
-      />
+      <ErrorBoundary onReset={handleBackToList}>
+        <PatientRecord
+          paciente={selectedPaciente}
+          onBack={handleBackToList}
+        />
+      </ErrorBoundary>
     );
   }
 

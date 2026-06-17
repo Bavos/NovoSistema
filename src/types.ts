@@ -47,6 +47,10 @@ export interface Profissional {
     outros?: string;
   };
   documentosAnexos?: DocumentoAnexo[];
+  isTitularConta?: boolean | string;
+  nomeTitularConta?: string;
+  cpfTitularConta?: string;
+  grauParentescoTitular?: string;
 }
 
 export interface DocumentoAnexo {

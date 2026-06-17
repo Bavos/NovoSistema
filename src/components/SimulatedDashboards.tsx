@@ -20,7 +20,10 @@ import {
   X,
   Plus,
   Info,
-  Pencil
+  Pencil,
+  Search,
+  Printer,
+  FileDown
 } from 'lucide-react';
 import { INITIAL_PROFESSIONALS } from '../mockData';
 import { useFirebase } from '../context/FirebaseContext';
@@ -103,31 +106,95 @@ export const ProfissionaisDashboard: React.FC = () => {
  * Tab 3: Escalas de Plantões Consolidada
  * ---------------------------------------------------- */
 export const EscalasDashboard: React.FC = () => {
+  const [filtroStatus, setFiltroStatus] = useState<string>('Todos');
+  const [busca, setBusca] = useState<string>('');
+
   const handlePrint = () => {
     window.print();
   };
 
+  const escalasData = [
+    { id: 1, profissional: 'João Albuquerque (12h - Dia)', detalhes: 'Dra. Maria Santos • Entrada regular às 07:00', status: 'ATIVO', cor: 'emerald' },
+    { id: 2, profissional: 'Maria Eduarda (24h)', detalhes: 'Enf. Juliana Silveira • Início às 08:00', status: 'ATIVO', cor: 'emerald' },
+    { id: 3, profissional: 'Roberto Carlos Silva (Fisioterapia)', detalhes: 'Fis. Dra. Luciana Varela • Visita técnica domiciliar às 15:30', status: 'AGENDADO', cor: 'amber' },
+  ];
+
+  const filteredEscalas = escalasData.filter(escala => {
+    const matchesStatus = filtroStatus === 'Todos' || escala.status === filtroStatus;
+    const matchesBusca = 
+      escala.profissional.toLowerCase().includes(busca.toLowerCase()) || 
+      escala.detalhes.toLowerCase().includes(busca.toLowerCase());
+    return matchesStatus && matchesBusca;
+  });
+
   return (
     <div className="space-y-4 animate-in fade-in-30" id="escalas-dashboard">
-      <div className="bg-white p-5 border border-slate-200 rounded-2xl shadow-sm space-y-4">
-        <div className="flex items-center justify-between border-b border-sidebar-divider border-slate-100 pb-3">
+      {/* Visual Report Header ONLY during print */}
+      <div className="hidden print:block border-b-2 border-[#1a3c2e] pb-4 mb-4">
+        <h1 className="text-xl font-bold text-[#1a3c2e] uppercase">SISTEMA RH CUIDADO DOMICILIAR</h1>
+        <h2 className="text-lg font-black text-slate-800">Relatório de Escala de Plantões Diária</h2>
+        <p className="text-xs text-slate-500 mt-1">Visão integrada das escalas ativas para o dia 12/06/2026</p>
+        <div className="flex gap-4 text-[10px] text-slate-400 mt-2">
+          <span><strong>Filtro de Status:</strong> {filtroStatus}</span>
+          {busca && <span><strong>Filtro de Pesquisa:</strong> "{busca}"</span>}
+          <span><strong>Total Filtrado:</strong> {filteredEscalas.length} de {escalasData.length} escalas</span>
+        </div>
+      </div>
+
+      <div className="bg-white p-5 border border-slate-200 rounded-2xl shadow-sm space-y-4 print:border-none print:shadow-none print:p-0">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-sidebar-divider border-slate-100 pb-3 gap-3 print:border-slate-300">
           <div>
             <h2 className="text-sm font-bold text-slate-800">Painel Consolidado de Escalas Diárias</h2>
             <p className="text-xs text-slate-400">Visão integrada de prestadores escalados para o dia de hoje (12/06/2026).</p>
           </div>
-          <div className="flex space-x-2">
+          <div className="flex items-center gap-2 self-end sm:self-auto print:hidden">
             <span className="text-xs bg-slate-100 px-3 py-1.5 rounded-lg font-bold text-slate-600">12/06/2026</span>
             <button
               onClick={handlePrint}
-              className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-blue-700 transition-colors print:hidden"
+              className="text-xs bg-[#1a3c2e] text-[#b8860b] hover:bg-[#122b21] px-4 py-1.5 rounded-lg font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer hover:scale-[1.01]"
             >
-              Imprimir Escala
+              <Printer className="w-3.5 h-3.5" /> Exportar para PDF
             </button>
           </div>
         </div>
 
+        {/* Filters and search block - hidden when printing */}
+        <div className="flex flex-col sm:flex-row gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100 print:hidden relative z-10">
+          <div className="flex-1 relative flex items-center">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Pesquisar por cuidador ou paciente..."
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              className="w-full text-xs pl-9 pr-3 py-2 border border-slate-200 rounded-lg bg-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#1a3c2e]"
+            />
+            {busca && (
+              <button
+                type="button"
+                onClick={() => setBusca('')}
+                className="text-xs font-bold text-slate-400 hover:text-slate-600 px-2 absolute right-2"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold text-slate-500 uppercase">Filtrar Status:</span>
+            <select
+              value={filtroStatus}
+              onChange={(e) => setFiltroStatus(e.target.value)}
+              className="p-1.5 px-3 border border-slate-200 rounded-lg text-xs bg-white text-slate-700 outline-none focus:ring-1 focus:ring-[#1a3c2e] cursor-pointer"
+            >
+              <option value="Todos">Todos</option>
+              <option value="ATIVO">Ativos</option>
+              <option value="AGENDADO">Agendados</option>
+            </select>
+          </div>
+        </div>
+
         {/* Calendar timeline visual placeholder */}
-        <div className="grid grid-cols-7 gap-1 border border-slate-100 rounded-xl overflow-hidden bg-slate-50 text-center text-[10px] uppercase font-bold text-slate-500 select-none">
+        <div className="grid grid-cols-7 gap-1 border border-slate-100 rounded-xl overflow-hidden bg-slate-50 text-center text-[10px] uppercase font-bold text-slate-500 select-none print:hidden">
           {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map(d => (
             <div key={d} className={`p-2 border-r border-slate-100 last:border-0 ${d === 'Sex' ? 'bg-blue-600 text-white' : 'bg-slate-100/50'}`}>
               {d === 'Sex' ? 'Hoje (Sex)' : d}
@@ -136,41 +203,38 @@ export const EscalasDashboard: React.FC = () => {
         </div>
 
         <div className="space-y-3 pt-2">
-          <div className="flex items-center justify-between bg-emerald-50/45 p-3 rounded-xl border border-emerald-100 text-xs">
-            <div className="flex items-center space-x-2.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
-              <div>
-                <p className="font-semibold text-slate-800">João Albuquerque (12h - Dia)</p>
-                <p className="text-[10px] text-slate-400">Dra. Maria Santos • Entrada regular dás 07:00</p>
-              </div>
+          {filteredEscalas.length === 0 ? (
+            <div className="text-center p-8 bg-slate-50 border border-dashed border-slate-200 rounded-xl">
+              <p className="text-xs text-slate-500 italic">Nenhuma escala encontrada com as configurações atuais de filtro.</p>
             </div>
-            <span className="font-bold text-emerald-700">ATIVO</span>
-          </div>
-
-          <div className="flex items-center justify-between bg-emerald-50/45 p-3 rounded-xl border border-emerald-100 text-xs">
-            <div className="flex items-center space-x-2.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-              <div>
-                <p className="font-semibold text-slate-800">Maria Eduarda (24h)</p>
-                <p className="text-[10px] text-slate-400">Enf. Juliana Silveira • Início das 08:00</p>
+          ) : (
+            filteredEscalas.map(escala => (
+              <div 
+                key={escala.id} 
+                className={`flex items-center justify-between p-3 rounded-xl border text-xs transition-colors ${
+                  escala.status === 'ATIVO' 
+                    ? 'bg-emerald-50/45 border-emerald-100' 
+                    : 'bg-amber-50/45 border-amber-100'
+                }`}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <span className={`w-2.5 h-2.5 rounded-full ${
+                    escala.status === 'ATIVO' ? 'bg-emerald-500' : 'bg-amber-500'
+                  } ${escala.id === 1 ? 'animate-ping print:animate-none' : ''}`}></span>
+                  <div>
+                    <p className="font-semibold text-slate-800">{escala.profissional}</p>
+                    <p className="text-[10px] text-slate-400">{escala.detalhes}</p>
+                  </div>
+                </div>
+                <span className={`font-bold uppercase tracking-wider ${
+                  escala.status === 'ATIVO' ? 'text-emerald-700' : 'text-amber-700'
+                }`}>{escala.status}</span>
               </div>
-            </div>
-            <span className="font-bold text-emerald-700">ATIVO</span>
-          </div>
-
-          <div className="flex items-center justify-between bg-amber-50/45 p-3 rounded-xl border border-amber-100 text-xs">
-            <div className="flex items-center space-x-2.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-              <div>
-                <p className="font-semibold text-slate-800">Roberto Carlos Silva (Fisioterapia)</p>
-                <p className="text-[10px] text-slate-400">Fis. Dra. Luciana Varela • Visita técnica domiciliar às 15:30</p>
-              </div>
-            </div>
-            <span className="font-bold text-amber-700">AGENDADO</span>
-          </div>
+            ))
+          )}
         </div>
 
-        <p className="text-[10px] text-slate-400 italic">
+        <p className="text-[10px] text-slate-400 italic print:hidden">
           *As escalas podem ser livremente editadas ou suspensas abrindo-se diretamente o prontuário individual do respectivo paciente corporativo.
         </p>
       </div>
@@ -959,6 +1023,34 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
               </div>
             ) : (
               <>
+                {/* Export Buttons bar using current filtered view */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200/60 print:hidden mb-6">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse"></span>
+                    <span className="text-xs font-bold text-slate-700">Relatório Consolidado Gerado com Sucesso</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={handlePrint}
+                      className="px-3.5 py-2 bg-[#1a3c2e] hover:bg-[#122b21] hover:scale-[1.01] active:scale-[0.99] text-[#b8860b] rounded-xl text-xs font-black tracking-tight transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Printer className="w-4 h-4" /> Exportar para PDF (Imprimir)
+                    </button>
+                    <button
+                      onClick={exportExcel}
+                      className="px-3.5 py-2 bg-[#f8fafc] hover:bg-slate-100 hover:scale-[1.01] text-slate-700 rounded-xl text-xs font-bold tracking-tight border border-slate-200 shadow-sm flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <FileDown className="w-4 h-4 text-emerald-600" /> Exportar Planilha Excel
+                    </button>
+                    <button
+                      onClick={exportWord}
+                      className="px-3.5 py-2 bg-[#f8fafc] hover:bg-slate-100 hover:scale-[1.01] text-slate-700 rounded-xl text-xs font-bold tracking-tight border border-slate-200 shadow-sm flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Briefcase className="w-4 h-4 text-blue-600" /> Exportar Word
+                    </button>
+                  </div>
+                </div>
+
                 {financeTab === 'fatura' && (
                   <div className="space-y-6">
                     <div className="border-b border-slate-200 pb-4 mb-4 flex justify-between">
