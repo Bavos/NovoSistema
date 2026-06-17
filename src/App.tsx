@@ -56,7 +56,7 @@ function DashboardContent() {
     if (activeSidebarTab === 'profissionais') return 'Gestão de Cuidadores & Profissionais';
     if (activeSidebarTab === 'escalas') return 'Escalas Diárias de Plantões';
     if (activeSidebarTab === 'financeiro') return 'Financeiro';
-    if (activeSidebarTab === 'empresa') return 'Dados Organizacionais';
+    if (activeSidebarTab === 'empresa') return 'Informações Gerais';
     return 'CuidarHome';
   };
 

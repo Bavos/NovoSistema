@@ -162,14 +162,17 @@ export const Dashboard: React.FC<{
               {aniversariantes.map((aniv, idx) => (
                 <span
                   key={idx}
-                  className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[11px] font-bold border ${
-                    aniv.type === 'Paciente'
-                      ? 'bg-off-white text-forest-green border-mustard-gold/20'
-                      : 'bg-off-white text-forest-green border-mustard-gold/20'
-                  }`}
+                  className="flex items-center gap-3 px-3 py-1.5 rounded-full text-xs font-medium text-forest-green"
                   id={`birthday-${aniv.type.toLowerCase()}-${idx}`}
                 >
-                  <span className="text-mustard-gold">{aniv.type === 'Paciente' ? '🎂' : '🎉'}</span> {aniv.nome}
+                  {aniv.nome}
+                  <span 
+                    className={aniv.type === 'Paciente' 
+                      ? 'text-[#b8860b] font-semibold text-xs px-2.5 pt-0.5 pb-[3px] rounded-full bg-[#fdf8ec] border border-[#b8860b]/20 w-[85.76px] text-center' 
+                      : 'text-[#1a3c2e] font-semibold text-xs px-2.5 pt-0.5 pb-[3px] rounded-full bg-[#e8f0ec] border border-[#1a3c2e]/20 w-[85.76px] text-center'}
+                  >
+                    {aniv.type === 'Paciente' ? 'Paciente' : 'Profissional'}
+                  </span>
                 </span>
               ))}
             </div>

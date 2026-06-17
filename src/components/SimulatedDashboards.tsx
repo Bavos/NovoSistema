@@ -1479,6 +1479,73 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
     const [viewDoc, setViewDoc] = useState<{data: any, type: 'fatura' | 'folha' } | null>(null);
     const [empresa, setEmpresa] = useState<any>(null);
 
+    const faturaRef = useRef<HTMLDivElement>(null);
+    const [loadingExport, setLoadingExport] = useState(false);
+
+    const handleDownloadWordFromCanvas = async (docData: any, type: 'fatura' | 'folha') => {
+        setLoadingExport(true);
+        const printElement = document.getElementById('print-area') || faturaRef.current;
+        if (printElement) {
+            try {
+                const html2canvas = (await import('html2canvas')).default;
+                const canvas = await html2canvas(printElement, {
+                    backgroundColor: '#fcf8f2',
+                    scale: 2,
+                    useCORS: true,
+                    logging: false,
+                    onclone: (clonedDoc) => {
+                        try {
+                            const allElements = clonedDoc.getElementsByTagName('*');
+                            for (let i = 0; i < allElements.length; i++) {
+                                const el = allElements[i] as HTMLElement;
+                                const style = window.getComputedStyle(el);
+                                if (!style) continue;
+                                
+                                if (style.backgroundColor && (style.backgroundColor.includes('oklab') || style.backgroundColor.includes('oklch'))) {
+                                    el.style.setProperty('background-color', '#fcf8f2', 'important');
+                                }
+                                if (style.color && (style.color.includes('oklab') || style.color.includes('oklch'))) {
+                                    el.style.setProperty('color', '#1a3c2e', 'important');
+                                }
+                                if (style.borderColor && (style.borderColor.includes('oklab') || style.borderColor.includes('oklch'))) {
+                                    el.style.setProperty('border-color', '#b8860b', 'important');
+                                }
+                            }
+                        } catch (e) {
+                            console.warn("Erro ao higienizar oklab no clone", e);
+                        }
+                    }
+                });
+                
+                // Gera a imagem final em altíssima qualidade (JPEG) para evitar o crash/limites do parser html do Word Mobile
+                const imgData = canvas.toDataURL('image/jpeg', 1.0);
+                
+                // Construct dynamic name using requested rule and variable mapping
+                const fatura = {
+                    paciente: type === 'fatura' ? docData.nomePaciente : docData.nomeProfissional,
+                    dataEmissao: docData.dataEmissao && docData.dataEmissao.includes('-')
+                        ? docData.dataEmissao.split('-').reverse().join('/')
+                        : docData.dataEmissao
+                };
+
+                // Cria o link de download direto para o JPEG (Funciona 100% no celular e PC)
+                const link = document.createElement('a');
+                link.href = imgData;
+                link.download = `${type === 'fatura' ? 'Fatura' : 'Folha'}_${fatura?.paciente?.replace(/\s+/g, '_') || 'Paciente'}_${fatura?.dataEmissao?.replace(/\//g, '-') || 'Data'}.jpg`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                console.log("[FaturaExporter] File downloaded successfully as JPEG.");
+            } catch (err: any) {
+                console.error("Erro na exportação:", err);
+                alert("Houve um problema ao gerar a fatura.");
+            }
+        } else {
+            alert("Referência do elemento do faturamento não encontrada.");
+        }
+        setLoadingExport(false);
+    };
+
     // Filter states
     const [searchFaturaPaciente, setSearchFaturaPaciente] = useState('');
     const [searchFaturaData, setSearchFaturaData] = useState('');
@@ -1716,198 +1783,12 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                             <button 
                                 className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold cursor-pointer hover:bg-blue-700 transition-colors"
                                 onClick={async () => {
-                                    const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell } = await import('docx');
-                                    
-                                    const empName = empresa?.razaoSocial || 'RH CUIDADO DOMICILIAR';
-                                    const empCnpj = empresa?.cnpj || '00.000.000/0000-00';
-                                    const empEnd = empresa?.endereco || 'Endereço Comercial';
-                                    const docTypeTitle = viewDoc.type === 'fatura' ? 'FATURA COMERCIAL' : 'FOLHA DE PAGAMENTO';
-                                    const docNumber = viewDoc.data.numeroFatura || (viewDoc.type === 'folha' ? 'FOLHA-' + viewDoc.data.id.substring(0,6) : 'XXXX');
-                                    
-                                    const formattedEmission = new Date(viewDoc.data.dataEmissao).toLocaleDateString('pt-BR');
-                                    const isFatura = viewDoc.type === 'fatura';
-                                    
-                                    // 1. Cabeçalho Corporativo
-                                    const cmpHeader = new Paragraph({
-                                        children: [
-                                            new TextRun({ text: empName.toUpperCase(), bold: true, size: 28, color: "1A3C2E" }),
-                                        ],
-                                        spacing: { after: 60 }
-                                    });
-                                    const cmpDetails = new Paragraph({
-                                        children: [
-                                            new TextRun({ text: `CNPJ: ${empCnpj}  |  ${empEnd}`, size: 18, color: "666666" })
-                                        ],
-                                        spacing: { after: 200 }
-                                    });
-                                    
-                                    // Divisor Dourado (B8860B)
-                                    const goldDivider = new Paragraph({
-                                        children: [
-                                            new TextRun({ text: "=========================================================================", bold: true, color: "B8860B" })
-                                        ],
-                                        spacing: { after: 200 }
-                                    });
-                                    
-                                    // 2. Metadados do Prontuário / Faturamento
-                                    const docTitlePara = new Paragraph({
-                                        children: [
-                                            new TextRun({ text: docTypeTitle, bold: true, size: 24, color: "1A3C2E" }),
-                                            new TextRun({ text: `  (Nº: ${docNumber})`, bold: true, size: 20, color: "B8860B" })
-                                        ],
-                                        spacing: { after: 120 }
-                                    });
-                                    
-                                    const metaInfo = new Paragraph({
-                                        children: [
-                                            new TextRun({ text: `Emissão: `, bold: true, size: 18, color: "333333" }),
-                                            new TextRun({ text: `${formattedEmission}    |    `, size: 18, color: "333333" }),
-                                            new TextRun({ text: `Status: `, bold: true, size: 18, color: "333333" }),
-                                            new TextRun({ text: `${viewDoc.data.status}    |    `, size: 18, color: "333333" }),
-                                            new TextRun({ text: `${isFatura ? 'Paciente' : 'Profissional'}: `, bold: true, size: 18, color: "333333" }),
-                                            new TextRun({ text: `${isFatura ? viewDoc.data.nomePaciente : viewDoc.data.nomeProfissional}`, bold: true, size: 18, color: "1A3C2E" })
-                                        ],
-                                        spacing: { after: 300 }
-                                    });
-                                    
-                                    // 3. Tabela de Composição de Plantões
-                                    const tableHeader = new TableRow({
-                                        children: [
-                                            new TableCell({
-                                                children: [new Paragraph({ children: [new TextRun({ text: "Data", bold: true, color: "FFFFFF", size: 18 })] })],
-                                                shading: { fill: "1A3C2E" }
-                                            }),
-                                            new TableCell({
-                                                children: [new Paragraph({ children: [new TextRun({ text: isFatura ? "Profissional" : "Paciente", bold: true, color: "FFFFFF", size: 18 })] })],
-                                                shading: { fill: "1A3C2E" }
-                                            }),
-                                            new TableCell({
-                                                children: [new Paragraph({ children: [new TextRun({ text: "Serviço", bold: true, color: "FFFFFF", size: 18 })] })],
-                                                shading: { fill: "1A3C2E" }
-                                            }),
-                                            new TableCell({
-                                                children: [new Paragraph({ children: [new TextRun({ text: "Valor", bold: true, color: "FFFFFF", size: 18 })] })],
-                                                shading: { fill: "1A3C2E" }
-                                            })
-                                        ]
-                                    });
-                                    
-                                    const tableRows = (viewDoc.data.plantoesCongelados || []).map((p: any) => {
-                                        const valorLinha = calculateRowValue(p, viewDoc.type);
-                                        return new TableRow({
-                                            children: [
-                                                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: formatDateBR(p.data), size: 18 })] })] }),
-                                                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: isFatura ? p.nomeProfissional : p.nomePaciente, size: 18 })] })] }),
-                                                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: p.tipoDia || 'Plantão Normal', size: 18 })] })] }),
-                                                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: `R$ ${valorLinha.toFixed(2)}`, size: 18 })] })] })
-                                            ]
-                                        });
-                                    });
-                                    
-                                    const tableFooterRows: any[] = [];
-                                    const totalGlobal = isFatura
-                                        ? (viewDoc.data.valorTotal || 0)
-                                        : (viewDoc.data.valorLiquidoReceber || 0);
-                                        
-                                    if (!isFatura && viewDoc.data.valorTotalDebitos > 0) {
-                                        tableFooterRows.push(new TableRow({
-                                            children: [
-                                                new TableCell({ children: [new Paragraph("")] }),
-                                                new TableCell({ children: [new Paragraph("")] }),
-                                                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "SOMA DOS PLANTÕES:", bold: true, size: 18 })] })] }),
-                                                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: `R$ ${viewDoc.data.valorTotalPlantoes.toFixed(2)}`, size: 18 })] })] })
-                                            ]
-                                        }));
-                                        tableFooterRows.push(new TableRow({
-                                            children: [
-                                                new TableCell({ children: [new Paragraph("")] }),
-                                                new TableCell({ children: [new Paragraph("")] }),
-                                                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "DESCONTOS (DÉBITOS):", bold: true, color: "FF0505", size: 18 })] })] }),
-                                                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: `- R$ ${viewDoc.data.valorTotalDebitos.toFixed(2)}`, color: "FF0505", size: 18 })] })] })
-                                            ]
-                                        }));
-                                    }
-                                    
-                                    tableFooterRows.push(new TableRow({
-                                        children: [
-                                            new TableCell({ children: [new Paragraph("")] }),
-                                            new TableCell({ children: [new Paragraph("")] }),
-                                            new TableCell({
-                                                children: [new Paragraph({ children: [new TextRun({ text: isFatura ? "TOTAL DA FATURA:" : "VALOR LÍQUIDO A RECEBER:", bold: true, color: "1A3C2E", size: 18 })] })],
-                                                shading: { fill: "F0F9F4" }
-                                            }),
-                                            new TableCell({
-                                                children: [new Paragraph({ children: [new TextRun({ text: `R$ ${totalGlobal.toFixed(2)}`, bold: true, color: "1A3C2E", size: 18 })] })],
-                                                shading: { fill: "F0F9F4" }
-                                            })
-                                        ]
-                                    }));
-                                    
-                                    const plantoesTable = new Table({
-                                        rows: [
-                                            tableHeader,
-                                            ...tableRows,
-                                            ...tableFooterRows
-                                        ],
-                                        width: {
-                                            size: 100,
-                                            type: "pct" as any
-                                        }
-                                    });
-                                    
-                                    // 4. Termo de Veracidade e Assinaturas
-                                    const spacer = new Paragraph({ children: [new TextRun({ text: "" })], spacing: { after: 400 } });
-                                    
-                                    const lgpdNotice = new Paragraph({
-                                        children: [
-                                            new TextRun({
-                                                text: "O documento acima compreende dados confidenciais e de uso restrito da coordenadoria do RH Cuidado Domiciliar em conformidade com as diretivas do CFM, COFEN e a Lei Geral de Proteção de Dados (LGPD). É de inteira obrigação das partes a confidencialidade.",
-                                                italics: true,
-                                                size: 16,
-                                                color: "777777"
-                                            })
-                                        ],
-                                        spacing: { after: 600 }
-                                    });
-                                    
-                                    const signatureLinePara = new Paragraph({
-                                        children: [
-                                            new TextRun({ text: "___________________________                       ___________________________", bold: true, color: "999999" })
-                                        ],
-                                        spacing: { after: 100 }
-                                    });
-                                    
-                                    const signatureLabelsPara = new Paragraph({
-                                        children: [
-                                            new TextRun({ text: "      Responsável Clínico / Direção                               Responsável de Enfermagem / Prestador", size: 16, color: "555555" })
-                                        ]
-                                    });
-                                    
-                                    const doc = new Document({
-                                        sections: [{
-                                            children: [
-                                                cmpHeader,
-                                                cmpDetails,
-                                                goldDivider,
-                                                docTitlePara,
-                                                metaInfo,
-                                                plantoesTable,
-                                                spacer,
-                                                lgpdNotice,
-                                                signatureLinePara,
-                                                signatureLabelsPara
-                                            ]
-                                        }]
-                                    });
-                                    
-                                    const blob = await Packer.toBlob(doc);
-                                    const url = URL.createObjectURL(blob);
-                                    const a = document.createElement('a');
-                                    a.href = url;
-                                    a.download = `${viewDoc.type === 'fatura' ? 'fatura' : 'folha_pagamento'}_${viewDoc.data.id.substring(0, 8)}.docx`;
-                                    a.click();
+                                    await handleDownloadWordFromCanvas(viewDoc.data, viewDoc.type);
                                 }}
-                            >Exportar DOCX</button>
+                                disabled={loadingExport}
+                            >
+                                {loadingExport ? "Gerando..." : "Exportar Imagem (JPEG)"}
+                            </button>
                             <button 
                                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold cursor-pointer hover:bg-emerald-700 transition-colors"
                                  onClick={() => {
@@ -1975,7 +1856,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                             <button onClick={() => setViewDoc(null)} className="px-4 py-2 bg-slate-200 rounded-lg text-xs font-bold hover:bg-slate-300 transition-colors">Fechar</button>
                         </div>
                       </div>
-                      <div id="print-area" className="w-[210mm] p-[10mm] bg-white text-black border border-slate-300 mx-auto print:w-full print:p-0 print:border-none print:shadow-none print:m-0">
+                      <div id="print-area" ref={faturaRef} className="w-[210mm] p-[10mm] bg-[#fcf8f2] text-black border border-slate-300 mx-auto print:w-full print:p-0 print:border-none print:shadow-none print:m-0">
                         {/* Header with Company Logo etc */}
                         <div className="flex justify-between items-start border-b-2 border-[#b8860b] pb-4 mb-6">
                             <div className="flex items-center gap-4">
@@ -1984,7 +1865,8 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                  )}
                                  <div className="text-[#1a3c2e]">
                                    <h2 className="text-xl font-black">{empresa?.razaoSocial || 'EMPRESA PADRÃO'}</h2>
-                                   <p className="text-[10px] font-bold">{empresa?.cnpj || '00.000.000/0000-00'} • {empresa?.endereco || 'Endereço Indisponível'}</p>
+                                   <p className="text-sm text-gray-600 font-bold mt-1">CNPJ: {empresa?.cnpj || '00.000.000/0000-00'}</p>
+                                   <p className="text-sm text-gray-600 mt-0.5">{empresa?.endereco || 'Endereço Indisponível'}</p>
                                  </div>
                             </div>
                             <div className="text-right text-[#1a3c2e]">
@@ -2253,27 +2135,11 @@ export const EmpresaDashboard: React.FC = () => {
   return (
     <div className="space-y-6 animate-in fade-in-30" id="empresa-dashboard">
       <div className="bg-white p-5 border border-slate-200 rounded-2xl shadow-sm space-y-5">
-        <div>
-          <h2 className="text-sm font-bold text-slate-800">Configurações Empresa CuidarHome S.A.</h2>
-          <p className="text-xs text-slate-400">Configure as políticas gerais de faturamento residencial de plantões e dados da unidade.</p>
-        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
           {/* Dados da Unidade Matriz */}
           <div className="space-y-3 p-4 bg-slate-50/30 border border-slate-150 border-slate-200/90 rounded-xl flex flex-col justify-between">
             <div className="space-y-3 w-full">
-              <div className="flex items-center justify-between">
-                <h4 className="font-bold text-slate-700">Dados da Unidade Matriz</h4>
-                {isAdmin && !isEditingMatriz && (
-                  <button 
-                    onClick={startEditing}
-                    className="px-2 py-0.5 text-[10px] uppercase font-bold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer bg-white border border-slate-200 rounded-md shadow-sm"
-                  >
-                    Editar
-                  </button>
-                )}
-              </div>
-              
               {isEditingMatriz ? (
                 <div className="space-y-2">
                   <div className="space-y-1">
@@ -2371,7 +2237,7 @@ export const EmpresaDashboard: React.FC = () => {
                     />
                   </div>
                   <div className="space-y-0.5">
-                    <label className="text-[9px] uppercase font-bold text-slate-400">Unidade de Operação</label>
+                    <label className="text-[9px] uppercase font-bold text-slate-400">Endereço:</label>
                     <input 
                       value={tempUnidade} 
                       onChange={e => setTempUnidade(e.target.value)} 
@@ -2379,23 +2245,23 @@ export const EmpresaDashboard: React.FC = () => {
                       className="w-full p-1.5 border border-slate-200 rounded-lg text-xs" 
                     />
                   </div>
-                  <div className="space-y-0.5">
-                    <label className="text-[9px] uppercase font-bold text-slate-400">Direção Geral Regional</label>
-                    <input 
-                      value={tempDirecao} 
-                      onChange={e => setTempDirecao(e.target.value)} 
-                      type="text" 
-                      className="w-full p-1.5 border border-slate-200 rounded-lg text-xs" 
-                    />
-                  </div>
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {logoUrl && <img src={logoUrl} alt="Logo" className="w-24 h-16 object-contain border rounded bg-white shadow-sm" />}
+                  <div className="flex items-center gap-6 mb-6">
+                    {logoUrl && <img src={logoUrl} alt="Logo" className="w-24 h-16 object-contain border rounded bg-white shadow-sm" />}
+                    {isAdmin && (
+                      <button 
+                        onClick={startEditing}
+                        className="px-2 py-0.5 text-[10px] uppercase font-bold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer bg-white border border-slate-200 rounded-md shadow-sm"
+                      >
+                        Editar
+                      </button>
+                    )}
+                  </div>
                   <p>Razão Social: <strong className="text-slate-700">{razaoSocial}</strong></p>
                   <p>CNPJ: <strong className="text-slate-700">{cnpj}</strong></p>
-                  <p>Unidade de Operação: <strong className="text-slate-700 text-blue-600">{unidadeOperacao}</strong></p>
-                  <p>Direção Geral Regional: <strong className="text-slate-700">{direcaoGeral}</strong></p>
+                  <p>Endereço: <strong className="text-slate-700 text-blue-600">{unidadeOperacao}</strong></p>
                 </div>
               )}
             </div>

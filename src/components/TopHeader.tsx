@@ -3,10 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
-import logo from '../assets/images/rh_logo_v2_1781470281009.jpg';
+import React, { useState, useEffect } from 'react';
 import { Bell, LogOut, Shield, Settings, User, Check } from 'lucide-react';
 import { useFirebase } from '../context/FirebaseContext';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 interface TopHeaderProps {
   isSidebarExpanded: boolean;
@@ -19,7 +20,18 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [empresa, setEmpresa] = useState<any>(null);
   const { user, userRole, usuariosSistema, logout } = useFirebase();
+
+  useEffect(() => {
+    const docRef = doc(db, 'configuracoes_empresa', 'empresa');
+    const unsub = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setEmpresa(docSnap.data());
+      }
+    });
+    return unsub;
+  }, []);
 
   const currentUserProfile = (usuariosSistema || []).find(u => {
     const uEmail = u?.email;
@@ -54,9 +66,13 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <div className="flex items-center gap-3">
-          <img src={logo} alt="Logo" className="w-16 h-10 object-cover rounded-full border border-forest-green" />
-        </div>
+        {empresa?.logoUrl && (
+          <img 
+            src={empresa.logoUrl} 
+            alt="Logo da Empresa" 
+            className="h-14 w-auto object-contain mix-blend-multiply" 
+          />
+        )}
       </div>
 
       {/* Control Actions */}

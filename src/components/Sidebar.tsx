@@ -35,11 +35,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { userRole } = useFirebase();
 
   const allMenuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: Activity, desc: 'Visão Executiva 360º' },
+    { id: 'dashboard', label: 'Início', icon: Activity, desc: 'Visão Executiva 360º' },
     { id: 'pacientes', label: 'Pacientes', icon: Users, desc: 'Gestão de Planos & Prontuários' },
     { id: 'profissionais', label: 'Profissionais', icon: Briefcase, desc: 'Cuidadores & Enfermagem' },
     { id: 'escalas', label: 'Escalas', icon: Calendar, desc: 'Alocação diária' },
-    { id: 'financeiro', label: 'Financeiro', icon: DollarSign, desc: 'Honorários & Plantões' },
+    { id: 'financeiro', label: 'Faturas & Pagamentos', icon: DollarSign, desc: 'Gestão Financeira' },
     { id: 'empresa', label: 'Empresa', icon: Building2, desc: 'Configurações corporativas' },
   ];
 
@@ -73,7 +73,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             transition={{ duration: 0.2 }}
             className="flex flex-col whitespace-nowrap"
           >
-            <span className="font-extrabold text-off-white text-sm tracking-wide uppercase">CuidarHome</span>
+            <span className="font-extrabold text-off-white text-sm tracking-wide uppercase">RH CS</span>
             <span className="text-[10px] text-mustard-gold font-mono tracking-widest font-medium">SISTEMA</span>
           </motion.div>
         </div>

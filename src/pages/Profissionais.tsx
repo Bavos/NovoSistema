@@ -367,65 +367,32 @@ export const Profissionais: React.FC = () => {
 
     const handleDownloadPng = async () => {
       setLoading(true);
-      
-      const restoredStyles: (() => void)[] = [];
-      try {
-        console.log("[BadgeGerador] Sanitizing stylesheets for PNG to bypass html2canvas oklch parse error...");
-        
-        // 1. Sanitize standard <style> tags loaded by Vite
-        const styleTags = Array.from(document.querySelectorAll('style'));
-        for (const styleTag of styleTags) {
-          const originalText = styleTag.textContent;
-          if (originalText && originalText.includes('oklch')) {
-            const sanitizedText = originalText.replace(/oklch\([^)]+\)/g, 'rgb(128, 128, 128)');
-            styleTag.textContent = sanitizedText;
-            restoredStyles.push(() => {
-              styleTag.textContent = originalText;
-            });
-          }
-        }
-
-        // 2. Sanitize any link tags if present in built environment
-        const linkTags = Array.from(document.querySelectorAll('link[rel="stylesheet"]')) as HTMLLinkElement[];
-        for (const linkTag of linkTags) {
-          try {
-            const isSameOrigin = !linkTag.href || linkTag.href.startsWith(window.location.origin) || !linkTag.href.startsWith('http');
-            if (isSameOrigin) {
-              const response = await fetch(linkTag.href);
-              if (response.ok) {
-                const originalCss = await response.text();
-                if (originalCss.includes('oklch')) {
-                  const sanitizedCss = originalCss.replace(/oklch\([^)]+\)/g, 'rgb(128, 128, 128)');
-                  const tempStyle = document.createElement('style');
-                  tempStyle.setAttribute('data-sanitizer-temp', 'true');
-                  tempStyle.textContent = sanitizedCss;
-                  document.head.appendChild(tempStyle);
-                  
-                  linkTag.disabled = true;
-                  restoredStyles.push(() => {
-                    document.head.removeChild(tempStyle);
-                    linkTag.disabled = false;
-                  });
-                }
-              }
-            }
-          } catch (err) {
-            console.warn("[BadgeGerador] Handled link tag: ", err);
-          }
-        }
-      } catch (e) {
-        console.warn("[BadgeGerador] Stylesheet sanitization error:", e);
-      }
-
       if (badgeRef.current) {
         try {
-          console.log("[BadgeGerador] Starting html2canvas capture for PNG...");
+          console.log("[BadgeGerador] Starting html2canvas capture for PNG with onclone...");
           const canvas = await html2canvas(badgeRef.current, {
             scale: 2,
             useCORS: true,
             allowTaint: true,
-            logging: true,
-            backgroundColor: '#ffffff'
+            logging: false,
+            backgroundColor: '#fcf8f2',
+            onclone: (clonedDoc) => {
+              const allElements = clonedDoc.getElementsByTagName('*');
+              for (let i = 0; i < allElements.length; i++) {
+                const el = allElements[i] as HTMLElement;
+                const computedStyle = window.getComputedStyle(el);
+                
+                if (computedStyle.backgroundColor.includes('oklab') || computedStyle.backgroundColor.includes('oklch')) {
+                  el.style.setProperty('background-color', '#fcf8f2', 'important');
+                }
+                if (computedStyle.color.includes('oklab') || computedStyle.color.includes('oklch')) {
+                  el.style.setProperty('color', '#1a3c2e', 'important');
+                }
+                if (computedStyle.borderColor.includes('oklab') || computedStyle.borderColor.includes('oklch')) {
+                  el.style.setProperty('border-color', '#b8860b', 'important');
+                }
+              }
+            }
           });
           
           console.log("[BadgeGerador] Canvas generated successfully. Converting to PNG data URL.");
@@ -438,123 +405,79 @@ export const Profissionais: React.FC = () => {
         } catch (err: any) {
           console.error("Erro ao gerar PNG:", err);
           alert(`Infelizmente erro ao gerar o arquivo PNG: ${err.message || String(err)}`);
-        } finally {
-          // RESTORE ALL ORIGINAL STYLES RETROACTIVELY
-          console.log("[BadgeGerador] Restoring original stylesheets...");
-          restoredStyles.forEach(restore => {
-            try {
-              restore();
-            } catch (e) {
-              console.error("[BadgeGerador] Error while restoring style:", e);
-            }
-          });
         }
       } else {
         alert("Referência do elemento do crachá não encontrada.");
-        restoredStyles.forEach(restore => {
-          try {
-            restore();
-          } catch {}
-        });
       }
       setLoading(false);
     };
 
     const handleDownloadWord = async () => {
       setLoading(true);
-      
-      const restoredStyles: (() => void)[] = [];
-      try {
-        console.log("[BadgeGerador] Sanitizing stylesheets to bypass html2canvas oklch parse error...");
-        
-        // 1. Sanitize standard <style> tags loaded by Vite
-        const styleTags = Array.from(document.querySelectorAll('style'));
-        for (const styleTag of styleTags) {
-          const originalText = styleTag.textContent;
-          if (originalText && originalText.includes('oklch')) {
-            const sanitizedText = originalText.replace(/oklch\([^)]+\)/g, 'rgb(128, 128, 128)');
-            styleTag.textContent = sanitizedText;
-            restoredStyles.push(() => {
-              styleTag.textContent = originalText;
-            });
-          }
-        }
-
-        // 2. Sanitize any link tags if present in built environment
-        const linkTags = Array.from(document.querySelectorAll('link[rel="stylesheet"]')) as HTMLLinkElement[];
-        for (const linkTag of linkTags) {
-          try {
-            const isSameOrigin = !linkTag.href || linkTag.href.startsWith(window.location.origin) || !linkTag.href.startsWith('http');
-            if (isSameOrigin) {
-              const response = await fetch(linkTag.href);
-              if (response.ok) {
-                const originalCss = await response.text();
-                if (originalCss.includes('oklch')) {
-                  const sanitizedCss = originalCss.replace(/oklch\([^)]+\)/g, 'rgb(128, 128, 128)');
-                  const tempStyle = document.createElement('style');
-                  tempStyle.setAttribute('data-sanitizer-temp', 'true');
-                  tempStyle.textContent = sanitizedCss;
-                  document.head.appendChild(tempStyle);
-                  
-                  linkTag.disabled = true;
-                  restoredStyles.push(() => {
-                    document.head.removeChild(tempStyle);
-                    linkTag.disabled = false;
-                  });
-                }
-              }
-            }
-          } catch (err) {
-            console.warn("[BadgeGerador] Handled link tag: ", err);
-          }
-        }
-      } catch (e) {
-        console.warn("[BadgeGerador] Stylesheet sanitization error:", e);
-      }
-
       if (badgeRef.current) {
         try {
-          console.log("[BadgeGerador] Starting html2canvas capture...");
+          console.log("[BadgeGerador] Starting html2canvas capture with onclone...");
           const canvas = await html2canvas(badgeRef.current, {
             scale: 2,
             useCORS: true,
             allowTaint: true, // safe because we converted to base64 but can render other parts
-            logging: true,
-            backgroundColor: '#ffffff'
+            logging: false,
+            backgroundColor: '#fcf8f2',
+            onclone: (clonedDoc) => {
+              try {
+                const allElements = clonedDoc.getElementsByTagName('*');
+                for (let i = 0; i < allElements.length; i++) {
+                  const el = allElements[i] as HTMLElement;
+                  const style = window.getComputedStyle(el);
+                  if (!style) continue;
+                  
+                  if (style.backgroundColor && (style.backgroundColor.includes('oklab') || style.backgroundColor.includes('oklch'))) {
+                    el.style.setProperty('background-color', '#fcf8f2', 'important');
+                  }
+                  if (style.color && (style.color.includes('oklab') || style.color.includes('oklch'))) {
+                    el.style.setProperty('color', '#1a3c2e', 'important');
+                  }
+                  if (style.borderColor && (style.borderColor.includes('oklab') || style.borderColor.includes('oklch'))) {
+                    el.style.setProperty('border-color', '#b8860b', 'important');
+                  }
+                }
+              } catch (e) {
+                console.warn("Erro ao higienizar oklab no clone", e);
+              }
+            }
           });
           
           console.log("[BadgeGerador] Canvas generated successfully. Converting to blob.");
-          const imgData = canvas.toDataURL('image/png');
-          const html = '<html><body style="margin:0; padding:0; display:flex; justify-content:center; align-items:center;"><img src="' + imgData + '" style="width:100%; max-width:700px; display:block;"/></body></html>';
-          const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
+          // JPEG format at 0.9 quality reduces payload to prevent parser failures or crash in mobile tools
+          const imgData = canvas.toDataURL('image/jpeg', 0.9);
+          
+          const htmlStr = `
+          <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+          <head>
+            <meta charset="utf-8">
+            <title>Crachá de Identidade</title>
+          </head>
+          <body style="background-color: #fcf8f2; text-align: center; margin: 0; padding: 0;">
+            <img src="${imgData}" style="width: 100%; max-width: 800px; height: auto;" />
+          </body>
+          </html>`;
+          
+          const blob = new Blob(['\ufeff', htmlStr], { type: 'application/msword' });
           const url = URL.createObjectURL(blob);
           const link = document.createElement('a');
           link.href = url;
           link.download = `cracha_${profData.nome || 'profissional'}.doc`;
+          document.body.appendChild(link);
           link.click();
+          document.body.removeChild(link);
           URL.revokeObjectURL(url);
           console.log("[BadgeGerador] Badge file triggered for download.");
         } catch (err: any) {
           console.error("Erro ao gerar Word:", err);
           alert(`Infelizmente erro ao gerar o arquivo de download: ${err.message || String(err)}\nPor favor tente novamente.`);
-        } finally {
-          // RESTORE ALL ORIGINAL STYLES RETROACTIVELY
-          console.log("[BadgeGerador] Restoring original stylesheets...");
-          restoredStyles.forEach(restore => {
-            try {
-              restore();
-            } catch (e) {
-              console.error("[BadgeGerador] Error while restoring style:", e);
-            }
-          });
         }
       } else {
         alert("Referência do elemento do crachá não encontrada.");
-        restoredStyles.forEach(restore => {
-          try {
-            restore();
-          } catch {}
-        });
       }
       setLoading(false);
     };
@@ -586,14 +509,14 @@ export const Profissionais: React.FC = () => {
         </div>
         
         {/* We move ref={badgeRef} to the actual card container only, so downloading excludes the button and any surrounding non-badge UI elements */}
-        <div className="flex flex-row gap-0 justify-center items-stretch print:flex-row print:gap-0 p-4 bg-white rounded-lg border-2 border-slate-300 w-[700px] h-[400px]" ref={badgeRef}>
+        <div className="flex flex-row gap-0 justify-center items-stretch print:flex-row print:gap-0 p-4 bg-[#fcf8f2] border-2 border-[#b8860b] rounded-xl shadow-sm divide-x divide-gray-200 w-[700px] h-[400px]" ref={badgeRef}>
           {/* Lado Esquerdo (Frente) */}
-          <div className="w-1/2 border-r border-slate-300 p-6 flex flex-col items-center justify-between text-center">
+          <div className="w-1/2 p-6 flex flex-col items-center justify-between text-center">
              <div className="w-full flex justify-center mb-4">
                 {loadingConfig ? (
                   <div className="w-32 h-16 bg-gray-100 animate-pulse rounded" />
                 ) : logoBase64 ? (
-                  <img src={logoBase64} alt="Logo" className="h-16 w-auto object-contain font-medium" crossOrigin="anonymous" />
+                  <img src={logoBase64} alt="Logo" className="object-contain h-20 w-auto mix-blend-multiply" crossOrigin="anonymous" />
                 ) : <div className="w-32 h-16 bg-gray-100 flex items-center justify-center text-[10px] text-gray-400">Sem Logo</div>}
              </div>
                 
