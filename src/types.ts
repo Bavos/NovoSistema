@@ -51,6 +51,17 @@ export interface Profissional {
   nomeTitularConta?: string;
   cpfTitularConta?: string;
   grauParentescoTitular?: string;
+  pacientesBloqueados?: string[];
+}
+
+export interface Ocorrencia {
+  id?: string;
+  data: string;
+  pacienteId: string;
+  pacienteNome: string;
+  descricao: string;
+  bloquearEscala: boolean;
+  createdAt?: string;
 }
 
 export interface DocumentoAnexo {
@@ -58,6 +69,8 @@ export interface DocumentoAnexo {
   tipo: string;
   arquivo: string | null;
   nomeArquivo?: string;
+  nome?: string;
+  url?: string;
 }
 
 export interface AuditLog {
@@ -77,7 +90,7 @@ export interface Endereco {
   bairro: string;
   cidade: string;
   estado: string;
-  logisticaChegada: string; // Amplo texto livre para informações de logística de chegada
+  logisticaChegada?: string; // Amplo texto livre para informações de logística de chegada
 }
 
 export interface InformacoesMedicas {
@@ -92,18 +105,20 @@ export interface EscalacaoPlano {
   id: string; // unique identifier within this patient configurations
   tipoEscala: string;
   horaInicio: string;
-  valorPlantao: number;
-  ajudaCusto: number;
-  taxaAdm: number;
+  valorPlantao: number | "";
+  ajudaCusto: number | "";
+  taxaAdm: number | "";
 }
 
 export interface PlanoAtendimento {
   tipoEscala: string;
   horaInicioPadrao: string;
-  valorSugeridoPlantao: number;
-  ajudaCusto?: number;
-  taxaAdm?: number;
+  valorSugeridoPlantao: number | "";
+  ajudaCusto?: number | "";
+  taxaAdm?: number | "";
   tiposPlantao?: EscalacaoPlano[];
+  convenio?: string;
+  matricula?: string;
 }
 
 export interface DadosPagamento {
@@ -132,6 +147,7 @@ export interface Paciente {
   planoAtendimento: PlanoAtendimento;
   dadosPagamento?: DadosPagamento;
   createdAt: string;
+  profissionaisBloqueados?: string[];
 }
 
 export interface Plantao {
@@ -171,7 +187,7 @@ export interface Agendamento {
   valorRepasse: number;
   ajudaCusto: number;
   taxaAdm: number;
-  status: 'Aberta' | 'Concluido' | 'Cancelado';
+  status: 'Aberta' | 'Concluido' | 'Cancelado' | 'Confirmado';
   observacao?: string;
   escalaCongelada?: boolean;
   tipoDia?: 'Normal' | 'Feriado 20%' | 'Feriado 50%';

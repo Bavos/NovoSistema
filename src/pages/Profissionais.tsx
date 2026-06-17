@@ -1,23 +1,33 @@
 import React, { useState, useEffect, useRef } from 'react';
 import html2canvas from 'html2canvas';
 import { useFirebase } from '../context/FirebaseContext';
-import { Profissional, Agendamento, DocumentoAnexo } from '../types';
-import { Plus, Edit2, Trash2, X, Check, CalendarDays, Paperclip, AlertCircle, Printer, Download, FileImage } from 'lucide-react';
+import { Profissional, Agendamento, DocumentoAnexo, Ocorrencia } from '../types';
+import { Plus, Edit2, Trash2, X, Check, CalendarDays, Paperclip, AlertCircle, Printer, Download, FileImage, Search } from 'lucide-react';
 import { db, storage } from '../lib/firebase';
-import { collection, query, where, orderBy, onSnapshot, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, doc, getDoc, updateDoc, addDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { profissionalSchema } from '../schemas/validationSchemas';
 
 
 export const Profissionais: React.FC = () => {
-  const { profissionais, addProfissional, updateProfissional, deleteProfissional, uploadLogo, uploadProfissionalFoto, uploadPdf } = useFirebase();
+  const { profissionais, pacientes, addProfissional, updateProfissional, deleteProfissional, uploadLogo, uploadProfissionalFoto, uploadPdf, userRole } = useFirebase();
+  const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [editingProf, setEditingProf] = useState<Profissional | null>(null);
-  const [activeTab, setActiveTab] = useState<'dados' | 'agenda' | 'cracha'>('dados');
+  const [activeTab, setActiveTab] = useState<'dados' | 'agenda' | 'cracha' | 'ocorrencias'>('dados');
   const [agendamentosProf, setAgendamentosProf] = useState<Agendamento[]>([]);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Estados para Gestão de Ocorrências e Bloqueio
+  const [ocorrencias, setOcorrencias] = useState<Ocorrencia[]>([]);
+  const [ocData, setOcData] = useState(new Date().toISOString().split('T')[0]);
+  const [ocPacienteId, setOcPacienteId] = useState('');
+  const [ocDescricao, setOcDescricao] = useState('');
+  const [ocBloquear, setOcBloquear] = useState(false);
+  const [editingOcorrenciaId, setEditingOcorrenciaId] = useState<string | null>(null);
+  const [savingOcorrencia, setSavingOcorrencia] = useState(false);
 
   // Estados para documentos anexos reais (Storage + Firestore)
   const [tipoDocumentoAnexo, setTipoDocumentoAnexo] = useState<string>('');
@@ -71,6 +81,29 @@ export const Profissionais: React.FC = () => {
       return () => unsubscribe();
     } else {
       setAgendamentosProf([]);
+    }
+  }, [editingProf, activeTab]);
+
+  useEffect(() => {
+    if (editingProf && activeTab === 'ocorrencias') {
+      const q = query(
+        collection(db, 'profissionais', editingProf.id, 'ocorrencias'),
+        orderBy('data', 'desc')
+      );
+      
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const list: Ocorrencia[] = [];
+        snapshot.forEach(doc => {
+          list.push({ ...doc.data(), id: doc.id } as Ocorrencia);
+        });
+        setOcorrencias(list);
+      }, (err) => {
+        console.error('Error fetching occurrences for professional:', err);
+      });
+      
+      return () => unsubscribe();
+    } else {
+      setOcorrencias([]);
     }
   }, [editingProf, activeTab]);
 
@@ -135,7 +168,7 @@ export const Profissionais: React.FC = () => {
     }
   }, [formData.dataNascimento]);
 
-  const handleOpenModal = (prof: Profissional | null = null, initialTab: 'dados' | 'agenda' | 'cracha' = 'dados') => {
+  const handleOpenModal = (prof: Profissional | null = null, initialTab: 'dados' | 'agenda' | 'cracha' | 'ocorrencias' = 'dados') => {
     setEditingProf(prof);
     setActiveTab(initialTab);
     
@@ -146,6 +179,14 @@ export const Profissionais: React.FC = () => {
     if (documentoInputRef.current) {
       documentoInputRef.current.value = '';
     }
+
+    // Resetar estados de ocorrências
+    setOcData(new Date().toISOString().split('T')[0]);
+    setOcPacienteId('');
+    setOcDescricao('');
+    setOcBloquear(false);
+    setEditingOcorrenciaId(null);
+    setSavingOcorrencia(false);
 
     // Definir estado de titularidade da conta
     setIsTitularConta(prof ? (prof.isTitularConta === 'Não' || prof.isTitularConta === false ? 'Não' : 'Sim') : 'Sim');
@@ -175,18 +216,18 @@ export const Profissionais: React.FC = () => {
           cidade: prof.endereco.cidade || '',
           estado: prof.endereco.estado || ''
         } : { rua: '', numero: '', cep: '', bairro: '', cidade: '', estado: '' },
-        documentos: prof.documentos || {
-          cracha: '',
-          certificados: '',
-          comprovanteResidencia: '',
-          vacinas: '',
-          outros: ''
+        documentos: {
+          cracha: prof.documentos?.cracha || '',
+          certificados: prof.documentos?.certificados || '',
+          comprovanteResidencia: prof.documentos?.comprovanteResidencia || '',
+          vacinas: prof.documentos?.vacinas || '',
+          outros: prof.documentos?.outros || ''
         },
         documentosAnexos: prof.documentosAnexos || [],
         nomeTitularConta: prof.nomeTitularConta || '',
         cpfTitularConta: prof.cpfTitularConta || '',
         grauParentescoTitular: prof.grauParentescoTitular || '',
-    } : {
+    } as any : {
         nome: '',
         especialidade: '',
         telefone: '',
@@ -200,7 +241,7 @@ export const Profissionais: React.FC = () => {
         rg: '',
         cpf: '',
         conselho: '',
-        status: '',
+        status: 'Ativo',
         ativo: true,
         dadosBancarios: { banco: '', agencia: '', conta: '', pix: '' },
         endereco: { rua: '', numero: '', cep: '', bairro: '', cidade: '', estado: '' },
@@ -217,6 +258,103 @@ export const Profissionais: React.FC = () => {
         grauParentescoTitular: '',
     });
     setIsModalOpen(true);
+  };
+
+  // Funções de Gestão de Ocorrências e Sincronização de Bloqueios de Escala
+  const updateBlockedPatients = async (profId: string) => {
+    try {
+      const occSnap = await getDocs(collection(db, 'profissionais', profId, 'ocorrencias'));
+      const blockedSet = new Set<string>();
+      occSnap.forEach(oDoc => {
+        const data = oDoc.data();
+        if (data.bloquearEscala && data.pacienteId) {
+          blockedSet.add(data.pacienteId);
+        }
+      });
+      const uniqueBlocked = Array.from(blockedSet);
+      await updateDoc(doc(db, 'profissionais', profId), {
+        pacientesBloqueados: uniqueBlocked
+      });
+      console.log('Escalas bloqueadas do profissional:', uniqueBlocked);
+    } catch (err) {
+      console.error('Erro de sincronização de pacientesBloqueados:', err);
+    }
+  };
+
+  const handleSaveOcorrencia = async () => {
+    if (!editingProf) return;
+    if (!ocPacienteId) {
+      alert('Por favor, selecione o paciente.');
+      return;
+    }
+    if (!ocDescricao.trim()) {
+      alert('Por favor, detalhe a ocorrência.');
+      return;
+    }
+
+    setSavingOcorrencia(true);
+    try {
+      const chosenPaciente = pacientes.find(p => p.id === ocPacienteId);
+      const payload = {
+        data: ocData,
+        pacienteId: ocPacienteId,
+        pacienteNome: chosenPaciente ? chosenPaciente.nome : 'Paciente Desconhecido',
+        descricao: ocDescricao.trim(),
+        bloquearEscala: ocBloquear,
+        createdAt: new Date().toISOString()
+      };
+
+      if (editingOcorrenciaId) {
+        const docRef = doc(db, 'profissionais', editingProf.id, 'ocorrencias', editingOcorrenciaId);
+        await updateDoc(docRef, payload);
+        alert('Ocorrência atualizada com sucesso.');
+      } else {
+        const colRef = collection(db, 'profissionais', editingProf.id, 'ocorrencias');
+        await addDoc(colRef, payload);
+        alert('Ocorrência registrada com sucesso.');
+      }
+
+      // Atualiza a trava 'pacientesBloqueados' no documento base do profissional
+      await updateBlockedPatients(editingProf.id);
+
+      // Limpar form
+      setOcData(new Date().toISOString().split('T')[0]);
+      setOcPacienteId('');
+      setOcDescricao('');
+      setOcBloquear(false);
+      setEditingOcorrenciaId(null);
+    } catch (err) {
+      console.error('Erro ao salvar ocorrencia:', err);
+      alert('Erro ao salvar ocorrência.');
+    } finally {
+      setSavingOcorrencia(false);
+    }
+  };
+
+  const handleEditOcorrenciaClick = (oc: Ocorrencia) => {
+    if (!oc.id) return;
+    setEditingOcorrenciaId(oc.id);
+    setOcData(oc.data);
+    setOcPacienteId(oc.pacienteId);
+    setOcDescricao(oc.descricao);
+    setOcBloquear(oc.bloquearEscala);
+  };
+
+  const handleDeleteOcorrencia = async (ocId: string) => {
+    if (!editingProf) return;
+    if (!window.confirm('Tem certeza de que deseja excluir permanentemente esta ocorrência?')) return;
+
+    try {
+      const docRef = doc(db, 'profissionais', editingProf.id, 'ocorrencias', ocId);
+      await deleteDoc(docRef);
+      alert('Ocorrência excluída com sucesso.');
+
+      // Recalcula bloqueios
+      await updateBlockedPatients(editingProf.id);
+    } catch (err) {
+      console.error('Erro ao excluir ocorrencia:', err);
+      alert('Erro ao excluir ocorrência.');
+    }
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -239,7 +377,7 @@ export const Profissionais: React.FC = () => {
     setLoading(true); // O estado loading precisa ser definido no componente, adicionarei logo adiante
 
     try {
-      const finalData = {
+      const rawData = {
         ...formData,
         especialidade: formData.profissao,
         ativo: formData.status === 'Ativo',
@@ -248,14 +386,24 @@ export const Profissionais: React.FC = () => {
         cpfTitularConta: isTitularConta === 'Não' ? formData.cpfTitularConta : '',
         grauParentescoTitular: isTitularConta === 'Não' ? formData.grauParentescoTitular : ''
       };
+
+      // Limpar campos undefined para evitar erros no Firestore setDoc()
+      const finalData: any = {};
+      Object.keys(rawData).forEach(key => {
+        const val = (rawData as any)[key];
+        if (val !== undefined) {
+          finalData[key] = val;
+        }
+      });
+
       if (editingProf) {
-        await updateProfissional({ ...editingProf, ...finalData });
+        await updateProfissional({ ...editingProf, ...finalData } as any);
         setSuccessMessage("Alterações do profissional salvas com sucesso!");
       } else {
-        const addedProf = await addProfissional(finalData);
-        setEditingProf(addedProf);
+        await addProfissional(finalData as any);
         setSuccessMessage("Novo profissional cadastrado com sucesso!");
       }
+      setIsModalOpen(false);
     } catch (err) {
       console.error("Erro ao salvar:", err);
       alert("Erro ao salvar profissional. Tente novamente.");
@@ -554,15 +702,16 @@ export const Profissionais: React.FC = () => {
           const imgData = canvas.toDataURL('image/jpeg', 0.9);
           
           const htmlStr = `
-          <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
-          <head>
-            <meta charset="utf-8">
-            <title>Crachá de Identidade</title>
-          </head>
-          <body style="background-color: #fcf8f2; text-align: center; margin: 0; padding: 0;">
-            <img src="${imgData}" style="width: 100%; max-width: 800px; height: auto;" />
-          </body>
-          </html>`;
+  <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+  <head>
+    <meta charset="utf-8">
+    <title>Crachá de Identidade</title>
+  </head>
+  <body style="background-color: #fcf8f2; text-align: center; margin: 0; padding: 40px 0;">
+    <!-- O width fixo em 320px garante que o Word não estique a imagem -->
+    <img src="${imgData}" width="320" style="width: 320px; height: auto; border: 1px solid #b8860b; border-radius: 10px; box-shadow: 2px 2px 10px rgba(0,0,0,0.1);" />
+  </body>
+  </html>`;
           
           const blob = new Blob(['\ufeff', htmlStr], { type: 'application/msword' });
           const url = URL.createObjectURL(blob);
@@ -594,20 +743,9 @@ export const Profissionais: React.FC = () => {
               disabled={loading || loadingConfig}
               className="px-6 py-2.5 bg-[#1a3c2e] text-[#b8860b] font-bold text-xs rounded-lg hover:opacity-90 transition-opacity flex items-center gap-2 disabled:bg-gray-400 cursor-pointer shadow-sm border border-[#b8860b]"
             >
-              {loading ? 'Preparando...' : <><FileImage size={14} /> Baixar Crachá (Imagem PNG - Recomendado)</>}
-            </button>
-            <button
-              type="button"
-              onClick={handleDownloadWord}
-              disabled={loading || loadingConfig}
-              className="px-5 py-2.5 bg-slate-100 text-slate-700 font-bold text-xs rounded-lg hover:bg-slate-200 transition-colors flex items-center gap-2 disabled:bg-gray-400 cursor-pointer border border-slate-300"
-            >
-              {loading ? 'Carregando...' : <><Printer size={14} /> Baixar Crachá (Formato Word .doc)</>}
+              {loading ? 'Preparando...' : <><FileImage size={14} /> Baixar</>}
             </button>
           </div>
-          <p className="text-[11px] text-slate-500 text-center max-w-lg mt-1">
-            * <strong>Dispositivos móveis e tablets:</strong> Recomendamos baixar como <strong>Imagem PNG</strong>. O formato Word (.doc) pode ser marcado como corrompido neste dispositivo pois é um arquivo HTML disfarçado de documento.
-          </p>
         </div>
         
         {/* We move ref={badgeRef} to the actual card container only, so downloading excludes the button and any surrounding non-badge UI elements */}
@@ -674,13 +812,39 @@ export const Profissionais: React.FC = () => {
     );
   };
 
+  const filteredAndSortedProfissionais = (profissionais || [])
+    .filter(prof => {
+      const query = searchTerm.trim().toLowerCase();
+      if (!query) {
+        return prof.status === 'Ativo';
+      }
+      const nomeMatch = (prof.nome || '').toLowerCase().includes(query);
+      const cpfMatch = (prof.cpf || '').toLowerCase().includes(query);
+      return nomeMatch || cpfMatch;
+    })
+    .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+
   return (
     <div className="space-y-5">
-      <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 print:hidden">
-        <h2 className="text-sm font-bold text-slate-800">Gerenciamento de Profissionais</h2>
+      <div className="flex flex-col sm:flex-row items-center justify-between bg-white p-4 rounded-xl border border-slate-200 print:hidden gap-4">
+        {/* Lado Esquerdo: Campo de busca estilizado com lupa interna */}
+        <div className="relative w-full max-w-md">
+          <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+            <Search size={16} className="text-slate-400" />
+          </span>
+          <input
+            type="text"
+            placeholder="Buscar por Nome ou CPF..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1a3c2e] outline-none"
+          />
+        </div>
+
+        {/* Lado Direito: Botão para incluir */}
         <button
           onClick={() => handleOpenModal()}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 flex items-center gap-2"
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 flex items-center gap-2 cursor-pointer shadow-sm w-full sm:w-auto justify-center"
         >
           <Plus size={14} /> Novo Profissional
         </button>
@@ -698,32 +862,33 @@ export const Profissionais: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {(profissionais || []).map(prof => (
-              <tr key={prof.id} className="hover:bg-slate-50 transition-colors duration-150">
+            {filteredAndSortedProfissionais.map(prof => (
+              <tr 
+                key={prof.id} 
+                className={`transition-colors duration-150 ${prof.status !== 'Ativo' ? 'bg-red-50 hover:bg-red-100/70 text-slate-700' : 'bg-white hover:bg-slate-50'}`}
+              >
                 <td className="p-3 font-medium text-slate-800 text-left">{prof.nome}</td>
                 <td className="p-3 text-slate-600 text-left">{prof.especialidade}</td>
                 <td className="p-3 text-slate-600 text-left">{prof.telefone}</td>
                 <td className="p-3 text-center">
                     <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold ${prof.status === 'Ativo' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'}`}>
-                        {prof.status}
+                        {prof.status || 'Inativo'}
                     </span>
                 </td>
                  <td className="p-3">
-                  <div className="flex gap-2 justify-center items-center">
-                    <button
-                      onClick={() => handleOpenModal(prof, 'agenda')}
-                      className="text-[#1a3c2e] bg-[#1a3c2e]/5 hover:bg-[#1a3c2e]/10 hover:text-[#1a3c2e] transition-colors   px-2 py-1 rounded-lg border border-[#1a3c2e]/10 flex items-center gap-1 font-extrabold text-[10px] cursor-pointer"
-                      title="Ver Agenda de Plantões"
-                    >
-                      <CalendarDays size={12} className="text-[#b8860b]" />
-                      <span>Agenda</span>
-                    </button>
+                <div className="flex gap-2 justify-center items-center">
                     <button onClick={() => handleOpenModal(prof, 'dados')} className="text-blue-600 hover:text-blue-850 hover:bg-blue-50 transition-all p-1.5 rounded-lg border border-transparent hover:border-blue-100" title="Editar"><Edit2 size={13} /></button>
-                    <button onClick={() => deleteProfissional(prof.id)} className="text-red-600 hover:text-red-850 hover:bg-red-50 transition-all p-1.5 rounded-lg border border-transparent hover:border-red-100" title="Deletar"><Trash2 size={13} /></button>
                   </div>
                 </td>
               </tr>
             ))}
+            {filteredAndSortedProfissionais.length === 0 && (
+              <tr>
+                <td colSpan={5} className="p-8 text-center text-slate-400 text-xs">
+                  Nenhum profissional encontrado.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -792,13 +957,181 @@ export const Profissionais: React.FC = () => {
                   >
                     Gerar Crachá
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('ocorrencias')}
+                    className={`font-black pb-1.5 text-xs uppercase tracking-wider transition-colors border-b-2 ${
+                      activeTab === 'ocorrencias'
+                        ? 'border-[#1a3c2e] text-[#1a3c2e]'
+                        : 'border-transparent text-slate-400 hover:text-slate-600'
+                    }`}
+                  >
+                    Ocorrências
+                  </button>
                 </>
               )}
             </div>
 
             {(() => {
               switch (activeTab) {
-                case 'cracha': return <BadgeGerador profData={formData} />;
+                case 'ocorrencias': return (
+                  <div className="space-y-6">
+                    {/* Form de Ocorrências */}
+                    <div className="p-4 border border-slate-100 rounded-xl bg-slate-50/50 space-y-4">
+                      <h4 className="text-xs font-black text-[#1a3c2e] uppercase tracking-wider block border-b pb-1">
+                        {editingOcorrenciaId ? 'Editar Ocorrência' : 'Registrar Nova Ocorrência'}
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-[#1a3c2e] uppercase block">Data</label>
+                          <input
+                            type="date"
+                            value={ocData}
+                            onChange={(e) => setOcData(e.target.value)}
+                            className="p-2 border border-slate-200 rounded-lg text-sm w-full bg-white focus:ring-1 focus:ring-[#1a3c2e]"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-[#1a3c2e] uppercase block">Paciente</label>
+                          <select
+                            value={ocPacienteId}
+                            onChange={(e) => setOcPacienteId(e.target.value)}
+                            className="p-2 border border-slate-200 rounded-lg text-sm w-full bg-white focus:ring-1 focus:ring-[#1a3c2e]"
+                            required
+                          >
+                            <option value="">Selecione o paciente...</option>
+                            {[...pacientes].sort((a, b) => a.nome.localeCompare(b.nome)).map(p => (
+                              <option key={p.id} value={p.id}>
+                                {p.nome} {p.status ? `(${p.status})` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="space-y-1 md:col-span-2">
+                          <label className="text-[10px] font-bold text-[#1a3c2e] uppercase block">Descrição do Motivo</label>
+                          <textarea
+                            rows={3}
+                            placeholder="Descreva detalhadamente o motivo da ocorrência..."
+                            value={ocDescricao}
+                            onChange={(e) => setOcDescricao(e.target.value)}
+                            className="p-2 border border-slate-200 rounded-lg text-sm w-full bg-white focus:ring-1 focus:ring-[#1a3c2e]"
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      {/* Checkbox de Bloqueio */}
+                      <div className="flex items-center gap-2 mt-2">
+                        <input
+                          type="checkbox"
+                          id="ocBloquear"
+                          checked={ocBloquear}
+                          onChange={(e) => setOcBloquear(e.target.checked)}
+                          className="w-4 h-4 text-[#1a3c2e] border-slate-300 rounded focus:ring-[#1a3c2e] cursor-pointer"
+                        />
+                        <label htmlFor="ocBloquear" className="text-xs font-bold text-slate-700 cursor-pointer select-none">
+                          Bloquear na escala deste paciente
+                        </label>
+                      </div>
+
+                      {/* Botões do Form de Ocorrência */}
+                      <div className="flex gap-2 justify-end pt-2 border-t border-slate-100">
+                        {editingOcorrenciaId && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOcData(new Date().toISOString().split('T')[0]);
+                              setOcPacienteId('');
+                              setOcDescricao('');
+                              setOcBloquear(false);
+                              setEditingOcorrenciaId(null);
+                            }}
+                            className="px-4 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-700 transition"
+                          >
+                            Cancelar Edição
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={handleSaveOcorrencia}
+                          disabled={savingOcorrencia}
+                          className="px-4 py-1.5 text-xs font-extrabold text-white bg-red-650 hover:bg-red-700 rounded-lg transition shadow-sm disabled:opacity-50"
+                          style={{ backgroundColor: '#1a3c2e', color: '#b8860b' }}
+                        >
+                          {savingOcorrencia ? 'Salvando...' : 'Salvar Ocorrência'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Histórico de Ocorrências */}
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-black text-[#1a3c2e] uppercase tracking-wider block">
+                        Histórico de Ocorrências ({ocorrencias.length})
+                      </h4>
+                      {ocorrencias.length === 0 ? (
+                        <p className="text-xs text-slate-400 italic text-center p-4 bg-slate-50 rounded-lg">
+                          Nenhuma ocorrência registrada para este profissional.
+                        </p>
+                      ) : (
+                        <div className="overflow-x-auto border border-slate-100 rounded-xl bg-white">
+                          <table className="w-full text-xs text-left border-collapse">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-slate-150 text-[#1a3c2e] font-black uppercase tracking-wider text-[10px]">
+                                <th className="p-3">Data</th>
+                                <th className="p-3">Paciente</th>
+                                <th className="p-3">Status / Bloqueio</th>
+                                <th className="p-3">Descrição do Motivo</th>
+                                <th className="p-3 text-center">Ações</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {ocorrencias.map((oc) => (
+                                <tr key={oc.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                                  <td className="p-3 font-mono text-slate-600 whitespace-nowrap">
+                                    {oc.data.split('-').reverse().join('/')}
+                                  </td>
+                                  <td className="p-3 font-bold text-slate-800">{oc.pacienteNome}</td>
+                                  <td className="p-3">
+                                    {oc.bloquearEscala ? (
+                                      <span className="inline-block bg-red-100 text-red-750 px-2.5 py-1 rounded-full text-[10px] font-extrabold border border-red-200 uppercase tracking-wide">
+                                        BLOQUEADO
+                                      </span>
+                                    ) : (
+                                      <span className="inline-block bg-slate-50 text-slate-500 px-2.5 py-1 rounded-full text-[10px] font-bold border border-slate-200 uppercase tracking-wide">
+                                        Sem Bloqueio
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="p-3 text-slate-600 break-words max-w-[200px]">{oc.descricao}</td>
+                                  <td className="p-3 text-center">
+                                    <div className="flex items-center justify-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleEditOcorrenciaClick(oc)}
+                                        className="text-blue-600 hover:text-blue-800 px-2 py-1 hover:bg-blue-50 rounded transition font-semibold"
+                                      >
+                                        Editar
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => oc.id && handleDeleteOcorrencia(oc.id)}
+                                        className="text-red-600 hover:text-red-800 px-2 py-1 hover:bg-red-50 rounded transition font-semibold"
+                                      >
+                                        Excluir
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+                case 'cracha': return <BadgeGerador profData={formData as any} />;
                 case 'agenda': return (
                   <div className="space-y-4">
                      {/* ... (rest of the content from turn 2) ... */}
@@ -821,6 +1154,33 @@ export const Profissionais: React.FC = () => {
                         <label className="text-[10px] font-bold text-[#1a3c2e] uppercase uppercase">Nome Completo</label>
                         <input type="text" placeholder="Digite o nome completo" value={formData.nome} onChange={e => setFormData({...formData, nome: e.target.value})} className="p-2 border border-slate-200 rounded-lg text-sm w-full focus:ring-1 focus:ring-[#1a3c2e]" required />
                       </div>
+                      
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-[#1a3c2e] uppercase block mb-1">Tem MEI?</label>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setFormData({...formData, temMei: true})}
+                            className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors ${formData.temMei ? 'bg-[#1a3c2e] text-white shadow-sm' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                          >
+                            SIM
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setFormData({...formData, temMei: false, cnpj: ''})}
+                            className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors ${!formData.temMei ? 'bg-red-600 text-white shadow-sm' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                          >
+                            NÃO
+                          </button>
+                        </div>
+                      </div>
+                      
+                      {formData.temMei && (
+                        <div className="space-y-1 md:col-span-1">
+                           <label className="text-[10px] font-bold text-[#1a3c2e] uppercase text-emerald-800">CNPJ</label>
+                           <input type="text" placeholder="00.000.000/0000-00" value={formData.cnpj} onChange={e => setFormData({...formData, cnpj: e.target.value})} className="p-2 border border-emerald-300 rounded-lg text-sm w-full focus:ring-1 focus:ring-emerald-700 bg-emerald-50" required={formData.temMei} />
+                        </div>
+                      )}
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-[#1a3c2e] uppercase">Sexo</label>
                         <select value={formData.sexo} onChange={e => setFormData({...formData, sexo: e.target.value})} className="p-2 border border-slate-200 rounded-lg text-sm w-full">
@@ -846,16 +1206,16 @@ export const Profissionais: React.FC = () => {
                         <input type="text" placeholder="Digite o CPF" value={formData.cpf} onChange={e => setFormData({...formData, cpf: e.target.value})} className="p-2 border border-slate-200 rounded-lg text-sm w-full" required />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-[#1a3c2e] uppercase">Profissão</label>
-                        <input type="text" placeholder="Digite a profissão" value={formData.profissao} onChange={e => setFormData({...formData, profissao: e.target.value})} className="p-2 border border-slate-200 rounded-lg text-sm w-full" />
+                        <label className="text-[10px] font-bold text-[#1a3c2e] uppercase">Profissão (Obrigatório)</label>
+                        <input type="text" placeholder="Digite a profissão" value={formData.profissao} onChange={e => setFormData({...formData, profissao: e.target.value})} className="p-2 border border-slate-200 rounded-lg text-sm w-full" required />
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-[#1a3c2e] uppercase">Conselho Profissional</label>
                         <input type="text" placeholder="Digite o conselho" value={formData.conselho} onChange={e => setFormData({...formData, conselho: e.target.value})} className="p-2 border border-slate-200 rounded-lg text-sm w-full" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-[#1a3c2e] uppercase">Telefone</label>
-                        <input type="tel" placeholder="(00) 00000-0000" value={formData.telefone} onChange={e => setFormData({...formData, telefone: e.target.value})} className="p-2 border border-slate-200 rounded-lg text-sm w-full" />
+                        <label className="text-[10px] font-bold text-[#1a3c2e] uppercase">Telefone (Obrigatório)</label>
+                        <input type="tel" placeholder="(00) 00000-0000" value={formData.telefone} onChange={e => setFormData({...formData, telefone: e.target.value})} className="p-2 border border-slate-200 rounded-lg text-sm w-full" required />
                       </div>
                     </div>
 
@@ -1053,7 +1413,28 @@ export const Profissionais: React.FC = () => {
             })()}
 
             <div className="flex flex-col sm:flex-row gap-3 justify-between items-center pt-4 border-t border-slate-100 mt-2 print:hidden">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2 hover:bg-gray-100 font-medium text-sm text-slate-600 rounded-lg transition-colors cursor-pointer w-full sm:w-auto">Cancelar / Fechar</button>
+                <div className="flex gap-2 w-full sm:w-auto">
+                    <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2 hover:bg-gray-100 font-medium text-sm text-slate-600 rounded-lg transition-colors cursor-pointer w-full sm:w-auto">Fechar</button>
+                    {editingProf && userRole === 'Administrador' && activeTab === 'dados' && (
+                        <button
+                            type="button"
+                            onClick={async () => {
+                                if (!window.confirm('ATENÇÃO: Tem certeza que deseja excluir permanentemente este profissional? Esta ação não pode ser desfeita.')) return;
+                                try {
+                                    await deleteProfissional(editingProf.id);
+                                    setIsModalOpen(false);
+                                    setSuccessMessage("Profissional excluído com sucesso!");
+                                } catch (err) {
+                                    console.error(err);
+                                    alert("Erro ao excluir profissional.");
+                                }
+                            }}
+                            className="px-5 py-2 font-bold text-sm text-red-600 border border-red-600 hover:bg-red-50 rounded-lg transition-all cursor-pointer w-full sm:w-auto"
+                        >
+                            Excluir Profissional
+                        </button>
+                    )}
+                </div>
                 {activeTab === 'dados' && (
                   <button type="submit" disabled={loading} className="bg-[#1a3c2e] text-[#b8860b] px-4 py-2 rounded-lg font-bold disabled:bg-gray-400">
                     {loading ? 'Salvando...' : 'Salvar'}

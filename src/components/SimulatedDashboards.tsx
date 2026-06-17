@@ -23,7 +23,8 @@ import {
   Pencil,
   Search,
   Printer,
-  FileDown
+  FileDown,
+  ChevronDown
 } from 'lucide-react';
 import { INITIAL_PROFESSIONALS } from '../mockData';
 import { useFirebase } from '../context/FirebaseContext';
@@ -268,7 +269,24 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   React.useEffect(() => {
     setSubTab(initialSubTab as any);
   }, [initialSubTab]);
-  const [financeTab, setFinanceTab] = useState<'fatura' | 'pagamento'>('fatura');
+  const [financeTab, setFinanceTab] = useState<'fatura' | 'pagamento' | 'mei'>('fatura');
+  const [meiProfissionaisSelecionados, setMeiProfissionaisSelecionados] = useState<string[]>([]);
+  const [referenciaMes, setReferenciaMes] = useState<number>(() => new Date().getMonth() + 1);
+  const [referenciaAno, setReferenciaAno] = useState<number>(() => new Date().getFullYear());
+  const [meiResult, setMeiResult] = useState<{ profissionalId: string; nome: string; cnpj: string }[]>([]);
+  const [showMeiDropdown, setShowMeiDropdown] = useState(false);
+  const [meiSearch, setMeiSearch] = useState('');
+
+  const meiProfissionais = activeProfissionais.filter(p => p.temMei && p.cnpj && p.cnpj.trim() !== '');
+
+  const getReferenciaMesNome = (m: number) => {
+    const list = [
+      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ];
+    return list[m - 1] || '';
+  };
+
   const [dataInicial, setDataInicial] = useState('2026-06-01');
   const [dataFinal, setDataFinal] = useState('2026-06-30');
   const [pacienteSelecionado, setPacienteSelecionado] = useState('');
@@ -383,19 +401,26 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   };
 
   const handleGerarRelatorios = async () => {
-    if (!dataInicial || !dataFinal) {
-      alert('Por favor, preencha ambas as datas.');
-      return;
-    }
-    
-    if (financeTab === 'fatura' && !pacienteSelecionado) {
-      alert('Por favor, selecione um paciente para gerar a fatura.');
-      return;
-    }
+    if (financeTab === 'mei') {
+      if (meiProfissionaisSelecionados.length === 0) {
+        alert('Por favor, selecione ao menos um profissional MEI para gerar a listagem.');
+        return;
+      }
+    } else {
+      if (!dataInicial || !dataFinal) {
+        alert('Por favor, preencha ambas as datas.');
+        return;
+      }
+      
+      if (financeTab === 'fatura' && !pacienteSelecionado) {
+        alert('Por favor, selecione um paciente para gerar a fatura.');
+        return;
+      }
 
-    if (financeTab === 'pagamento' && !profissionalSelecionado) {
-      alert('Por favor, selecione um profissional para gerar a folha de pagamento.');
-      return;
+      if (financeTab === 'pagamento' && !profissionalSelecionado) {
+        alert('Por favor, selecione um profissional para gerar a folha de pagamento.');
+        return;
+      }
     }
     
     setIsGenerating(true);
@@ -404,7 +429,16 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       const agendamentosRef = collection(db, 'agendamentos');
       
       let q;
-      if (financeTab === 'fatura') {
+      if (financeTab === 'mei') {
+        const startStr = `${referenciaAno}-${String(referenciaMes).padStart(2, '0')}-01`;
+        const maxDays = new Date(referenciaAno, referenciaMes, 0).getDate();
+        const endStr = `${referenciaAno}-${String(referenciaMes).padStart(2, '0')}-${String(maxDays).padStart(2, '0')}`;
+        q = query(
+          agendamentosRef,
+          where('data', '>=', startStr),
+          where('data', '<=', endStr)
+        );
+      } else if (financeTab === 'fatura') {
         if (pacienteSelecionado === 'ALL') {
           q = query(
             agendamentosRef,
@@ -456,6 +490,24 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
         return; // Abort query result
       }
 
+      if (financeTab === 'mei') {
+        const selectedMEIProfs = activeProfissionais.filter(
+          p => p.temMei && p.cnpj && p.cnpj.trim() !== '' && meiProfissionaisSelecionados.includes(p.id)
+        );
+
+        const profsWithPlantoes = selectedMEIProfs.filter(prof => {
+          return docs.some(ag => ag.idProfissional === prof.id && ag.status !== 'Cancelado');
+        });
+
+        const resultList = profsWithPlantoes.map(p => ({
+          profissionalId: p.id,
+          nome: p.nome,
+          cnpj: p.cnpj || ''
+        }));
+
+        setMeiResult(resultList);
+      }
+
       // Query debitos_profissionais
       const debitosRef = collection(db, 'debitos_profissionais');
       const debSnap = await getDocs(debitosRef);
@@ -489,7 +541,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
         };
 
         const debitDateStr = parseDebitDateString(d.data);
-        const matchesDate = debitDateStr >= dataInicial && debitDateStr <= dataFinal;
+        const matchesDate = financeTab === 'mei' ? false : (debitDateStr >= dataInicial && debitDateStr <= dataFinal);
         
         let matchesProf = true;
         if (profissionalSelecionado !== 'ALL' && d.idProfissional !== profissionalSelecionado) {
@@ -633,7 +685,12 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   const exportExcel = () => {
     let csvContent = '\uFEFF'; // BOM for UTF-8 in Excel
     
-    if (financeTab === 'fatura') {
+    if (financeTab === 'mei') {
+      csvContent += 'Nome do Profissional;CNPJ\n';
+      meiResult.forEach(p => {
+        csvContent += `"${p.nome}";"${p.cnpj}"\n`;
+      });
+    } else if (financeTab === 'fatura') {
       csvContent += 'Paciente;Data;Profissional;Horário;Tipo do Plantão;Mão de Obra (R$);Taxa Adm (R$);Ajuda Custo (R$);Cobrado Dia (R$)\n';
       
       const pData = Object.entries(agendamentosPorPaciente) as [string, Agendamento[]][];
@@ -683,7 +740,10 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `Relatorio_${financeTab}_${dataInicial}_a_${dataFinal}.csv`;
+    const downloadName = financeTab === 'mei'
+      ? `Listagem_MEI_${getReferenciaMesNome(referenciaMes)}_${referenciaAno}.csv`
+      : `Relatorio_${financeTab}_${dataInicial}_a_${dataFinal}.csv`;
+    link.download = downloadName;
     link.click();
   };
 
@@ -922,6 +982,17 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                     🧾 Fatura (Paciente)
                   </button>
                   <button
+                    id="btn-report-type-mei"
+                    onClick={() => { setFinanceTab('mei'); setHasGenerated(false); }}
+                    className={`px-4 py-2 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                      financeTab === 'mei'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    📁 Listagem MEI
+                  </button>
+                  <button
                     id="btn-report-type-pagamento"
                     onClick={() => { setFinanceTab('pagamento'); setHasGenerated(false); }}
                     className={`px-4 py-2 rounded-md text-xs font-bold transition-all cursor-pointer ${
@@ -937,7 +1008,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
 
               <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                 <div className="flex flex-wrap items-end gap-4">
-                  {financeTab === 'fatura' ? (
+                  {financeTab === 'fatura' && (
                     <div>
                       <label className="block text-xs font-bold text-slate-500 mb-1">Selecionar Paciente</label>
                       <select
@@ -953,7 +1024,9 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                         ))}
                       </select>
                     </div>
-                  ) : (
+                  )}
+
+                  {financeTab === 'pagamento' && (
                     <div>
                       <label className="block text-xs font-bold text-slate-500 mb-1">Selecionar Profissional</label>
                       <select
@@ -970,37 +1043,146 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                       </select>
                     </div>
                   )}
+
+                  {financeTab === 'mei' && (
+                    <div className="relative">
+                      <label className="block text-xs font-bold text-slate-500 mb-1">Selecionar Profissionais MEI</label>
+                      <button
+                        type="button"
+                        onClick={() => setShowMeiDropdown(!showMeiDropdown)}
+                        className="p-2 border border-slate-200 rounded-lg text-sm bg-white min-w-[240px] text-left flex justify-between items-center cursor-pointer hover:bg-slate-50 transition-colors"
+                      >
+                        <span className="truncate max-w-[200px] block">
+                          {meiProfissionaisSelecionados.length === 0
+                            ? 'Nenhum selecionado'
+                            : meiProfissionaisSelecionados.length === meiProfissionais.length
+                            ? '✨ TODOS (' + meiProfissionais.length + ')'
+                            : `${meiProfissionaisSelecionados.length} selecionado(s)`}
+                        </span>
+                        <ChevronDown className="w-4 h-4 text-slate-400 shrink-0 ml-1" />
+                      </button>
+
+                      {showMeiDropdown && (
+                        <div className="absolute left-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl p-3 min-w-[280px] max-h-[300px] overflow-y-auto z-[999] space-y-2">
+                          <div className="flex gap-2 pb-2 border-b border-slate-100 justify-between items-center text-[10px]">
+                            <button
+                              type="button"
+                              onClick={() => setMeiProfissionaisSelecionados(meiProfissionais.map(p => p.id))}
+                              className="text-blue-600 font-bold hover:underline cursor-pointer"
+                            >
+                              Selecionar Todos
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setMeiProfissionaisSelecionados([])}
+                              className="text-slate-500 font-bold hover:underline cursor-pointer"
+                            >
+                              Limpar Todos
+                            </button>
+                          </div>
+                          <div className="space-y-1 pt-1">
+                            {meiProfissionais.map(p => {
+                              const isChecked = meiProfissionaisSelecionados.includes(p.id);
+                              return (
+                                <label key={p.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-slate-50 cursor-pointer text-xs text-slate-700 select-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => {
+                                      if (isChecked) {
+                                        setMeiProfissionaisSelecionados(meiProfissionaisSelecionados.filter(id => id !== p.id));
+                                      } else {
+                                        setMeiProfissionaisSelecionados([...meiProfissionaisSelecionados, p.id]);
+                                      }
+                                    }}
+                                    className="rounded text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5 cursor-pointer"
+                                  />
+                                  <span className="truncate">{p.nome}</span>
+                                  {p.cnpj && <span className="text-[9px] text-slate-400 font-mono ml-auto">{p.cnpj}</span>}
+                                </label>
+                              );
+                            })}
+                            {meiProfissionais.length === 0 && (
+                              <p className="text-[11px] text-slate-400 italic text-center py-2">Nenhum profissional com MEI ativo no cadastro.</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1">Data Inicial</label>
-                    <input 
-                      id="input-finance-data-inicial"
-                      type="date"
-                      value={dataInicial}
-                      onChange={(e) => setDataInicial(e.target.value)}
-                      className="p-2 border border-slate-200 rounded-lg text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1">Data Final</label>
-                    <input 
-                      id="input-finance-data-final"
-                      type="date"
-                      value={dataFinal}
-                      onChange={(e) => setDataFinal(e.target.value)}
-                      className="p-2 border border-slate-200 rounded-lg text-sm"
-                    />
-                  </div>
+                  {financeTab !== 'mei' ? (
+                    <>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">Data Inicial</label>
+                        <input 
+                          id="input-finance-data-inicial"
+                          type="date"
+                          value={dataInicial}
+                          onChange={(e) => setDataInicial(e.target.value)}
+                          className="p-2 border border-slate-200 rounded-lg text-sm bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">Data Final</label>
+                        <input 
+                          id="input-finance-data-final"
+                          type="date"
+                          value={dataFinal}
+                          onChange={(e) => setDataFinal(e.target.value)}
+                          className="p-2 border border-slate-200 rounded-lg text-sm bg-white"
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">Mês de Referência</label>
+                        <select
+                          value={referenciaMes}
+                          onChange={(e) => setReferenciaMes(Number(e.target.value))}
+                          className="p-2 border border-slate-200 rounded-lg text-sm bg-white min-w-[130px] cursor-pointer"
+                        >
+                          <option value="1">Janeiro</option>
+                          <option value="2">Fevereiro</option>
+                          <option value="3">Março</option>
+                          <option value="4">Abril</option>
+                          <option value="5">Maio</option>
+                          <option value="6">Junho</option>
+                          <option value="7">Julho</option>
+                          <option value="8">Agosto</option>
+                          <option value="9">Setembro</option>
+                          <option value="10">Outubro</option>
+                          <option value="11">Novembro</option>
+                          <option value="12">Dezembro</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">Ano</label>
+                        <select
+                          value={referenciaAno}
+                          onChange={(e) => setReferenciaAno(Number(e.target.value))}
+                          className="p-2 border border-slate-200 rounded-lg text-sm bg-white min-w-[90px] cursor-pointer"
+                        >
+                          <option value="2024">2024</option>
+                          <option value="2025">2025</option>
+                          <option value="2026">2026</option>
+                          <option value="2027">2027</option>
+                        </select>
+                      </div>
+                    </>
+                  )}
+
                   <button
                     id="btn-finance-gerar-relatorio"
                     onClick={handleGerarRelatorios}
                     disabled={isGenerating}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold transition-colors disabled:opacity-50 flex items-center gap-2 h-[38px] cursor-pointer"
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold transition-all disabled:opacity-50 flex items-center gap-2 h-[38px] cursor-pointer"
                   >
                     {isGenerating ? (
                       <>⏳ Aguarde...</>
                     ) : (
-                      <>🔄 Gerar {financeTab === 'fatura' ? 'Fatura' : 'Folha de Pagamento'}</>
+                      <>🔄 Gerar {financeTab === 'fatura' ? 'Fatura' : financeTab === 'pagamento' ? 'Folha de Pagamento' : 'Listagem MEI'}</>
                     )}
                   </button>
                 </div>
@@ -1024,32 +1206,108 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
             ) : (
               <>
                 {/* Export Buttons bar using current filtered view */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200/60 print:hidden mb-6">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse"></span>
-                    <span className="text-xs font-bold text-slate-700">Relatório Consolidado Gerado com Sucesso</span>
+                {financeTab !== 'mei' && (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200/60 print:hidden mb-6">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse"></span>
+                      <span className="text-xs font-bold text-slate-700">Relatório Consolidado Gerado com Sucesso</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={handlePrint}
+                        className="px-3.5 py-2 bg-[#1a3c2e] hover:bg-[#122b21] hover:scale-[1.01] active:scale-[0.99] text-[#b8860b] rounded-xl text-xs font-black tracking-tight transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Printer className="w-4 h-4" /> Exportar para PDF (Imprimir)
+                      </button>
+                      <button
+                        onClick={exportExcel}
+                        className="px-3.5 py-2 bg-[#f8fafc] hover:bg-slate-100 hover:scale-[1.01] text-slate-700 rounded-xl text-xs font-bold tracking-tight border border-slate-200 shadow-sm flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <FileDown className="w-4 h-4 text-emerald-600" /> Exportar Planilha Excel
+                      </button>
+                      <button
+                        onClick={exportWord}
+                        className="px-3.5 py-2 bg-[#f8fafc] hover:bg-slate-100 hover:scale-[1.01] text-slate-700 rounded-xl text-xs font-bold tracking-tight border border-slate-200 shadow-sm flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Briefcase className="w-4 h-4 text-blue-600" /> Exportar Word
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      onClick={handlePrint}
-                      className="px-3.5 py-2 bg-[#1a3c2e] hover:bg-[#122b21] hover:scale-[1.01] active:scale-[0.99] text-[#b8860b] rounded-xl text-xs font-black tracking-tight transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Printer className="w-4 h-4" /> Exportar para PDF (Imprimir)
-                    </button>
-                    <button
-                      onClick={exportExcel}
-                      className="px-3.5 py-2 bg-[#f8fafc] hover:bg-slate-100 hover:scale-[1.01] text-slate-700 rounded-xl text-xs font-bold tracking-tight border border-slate-200 shadow-sm flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <FileDown className="w-4 h-4 text-emerald-600" /> Exportar Planilha Excel
-                    </button>
-                    <button
-                      onClick={exportWord}
-                      className="px-3.5 py-2 bg-[#f8fafc] hover:bg-slate-100 hover:scale-[1.01] text-slate-700 rounded-xl text-xs font-bold tracking-tight border border-slate-200 shadow-sm flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Briefcase className="w-4 h-4 text-blue-600" /> Exportar Word
-                    </button>
+                )}
+
+                {financeTab === 'mei' && (
+                  <div className="space-y-6">
+                    {/* Visual Report Header ONLY during print */}
+                    <div className="hidden print:block border-b border-slate-300 pb-4 mb-6">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h1 className="text-xl font-bold text-slate-950 uppercase">SISTEMA RH CUIDADO DOMICILIAR</h1>
+                          <h2 className="text-base font-black text-slate-800">Relatório de Listagem MEI</h2>
+                          <p className="text-xs text-slate-500 mt-1">Período de Referência: {getReferenciaMesNome(referenciaMes)} de {referenciaAno}</p>
+                        </div>
+                        {empresa && (
+                          <div className="text-right text-xs text-slate-600">
+                            <p className="font-bold">{empresa.razaoSocial}</p>
+                            <p>CNPJ: {empresa.cnpj}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 print:hidden animate-in fade-in slide-in-from-top-3">
+                      <div>
+                        <h2 className="text-lg font-black text-slate-800">Listagem MEI de Referência</h2>
+                        <h3 className="text-xs font-bold text-slate-500 mt-0.5">
+                          Referência: <span className="text-emerald-700 font-extrabold">{getReferenciaMesNome(referenciaMes)} de {referenciaAno}</span>
+                        </h3>
+                        <p className="text-[11px] text-slate-400 mt-1">
+                          Mostrando profissionais MEI selecionados com pelo menos um plantão executado.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={exportExcel}
+                          className="px-3 py-2 bg-[#f8fafc] hover:bg-slate-100 hover:scale-[1.01] text-slate-700 rounded-xl text-xs font-bold tracking-tight border border-slate-200 shadow-sm flex items-center gap-1.5 cursor-pointer transition-all"
+                        >
+                          <FileDown className="w-4 h-4 text-emerald-600" /> Exportar Planilha Excel
+                        </button>
+                        <button
+                          onClick={handlePrint}
+                          className="px-3.5 py-2 bg-[#1a3c2e] hover:bg-[#122b21] hover:scale-[1.01] active:scale-[0.99] text-[#b8860b] rounded-xl text-xs font-black tracking-tight transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Printer className="w-4 h-4" /> Exportar / Imprimir
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto border border-slate-200/80 rounded-2xl bg-white shadow-sm animate-in fade-in duration-300">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 text-slate-500 uppercase text-[10px] tracking-wider font-bold border-b border-slate-200/80">
+                            <th className="p-4 font-black">Nome do Profissional</th>
+                            <th className="p-4 font-black">CNPJ</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {meiResult.length === 0 ? (
+                            <tr>
+                              <td colSpan={2} className="p-10 text-center text-slate-400 italic bg-slate-50/20">
+                                Nenhum profissional MEI selecionado executou plantões no mês de referência.
+                              </td>
+                            </tr>
+                          ) : (
+                            meiResult.map((p, index) => (
+                              <tr key={p.profissionalId || index} className="hover:bg-slate-50/50 transition-colors">
+                                <td className="p-4 font-bold text-slate-800">{p.nome}</td>
+                                <td className="p-4 font-mono text-slate-600">{p.cnpj}</td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {financeTab === 'fatura' && (
                   <div className="space-y-6">
@@ -1500,6 +1758,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                 >
                   <option value="Curinga">Curinga</option>
                   <option value="Passagem">Passagem</option>
+                  <option value="MEI">MEI</option>
                   <option value="Outros">Outros</option>
                 </select>
               </div>
@@ -1871,7 +2130,6 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                       <div className="flex justify-between items-center mb-4 print:hidden">
                         <h3 className="font-black text-lg text-slate-800">Visualização de {viewDoc.type === 'fatura' ? 'Fatura' : 'Folha'}</h3>
                         <div className="flex gap-2">
-                            <button onClick={() => window.print()} className="px-4 py-2 bg-slate-800 text-white rounded-lg text-xs font-bold cursor-pointer hover:bg-slate-700 transition-colors">Imprimir PDF</button>
                             <button 
                                 className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold cursor-pointer hover:bg-blue-700 transition-colors"
                                 onClick={async () => {

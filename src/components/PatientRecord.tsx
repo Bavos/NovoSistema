@@ -144,6 +144,19 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
     deleteAgendamento
   } = useFirebase();
 
+  const isBlockedBidirectional = (prof: any) => {
+    if (!paciente) return false;
+    const patientId = paciente.id;
+    if (prof.pacientesBloqueados && prof.pacientesBloqueados.includes(patientId)) {
+      return true;
+    }
+    const profId = prof.id;
+    if (paciente.profissionaisBloqueados && paciente.profissionaisBloqueados.includes(profId)) {
+      return true;
+    }
+    return false;
+  };
+
   // Basic layout tab states
   const [activeTab, setActiveTab] = useState<'geral' | 'endereco' | 'medico' | 'plano' | 'agendamento'>('geral');
   const [alertDeactivateOpen, setAlertDeactivateOpen] = useState(false);
@@ -774,6 +787,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
       return;
     }
 
+    const pickedProf = profissionais.find(p => p.nome === newShiftProf);
+    if (pickedProf && isBlockedBidirectional(pickedProf)) {
+      alert('Atenção: Este profissional possui uma restrição de atendimento (bloqueio) para este paciente devido a uma ocorrência passada.');
+      return;
+    }
+
     try {
       const datesToSchedule = newShiftDatesList.length > 0 ? newShiftDatesList : [newShiftDate];
       
@@ -858,6 +877,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
     }
     if (!avulsoProf.trim()) {
       alert('Por favor, indique o profissional responsável.');
+      return;
+    }
+
+    const pickedProf = profissionais.find(p => p.nome === avulsoProf);
+    if (pickedProf && isBlockedBidirectional(pickedProf)) {
+      alert('Atenção: Este profissional possui uma restrição de atendimento (bloqueio) para este paciente devido a uma ocorrência passada.');
       return;
     }
 
@@ -2004,9 +2029,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                               )}
                             </td>
                             <td className="p-3 text-center font-mono bg-slate-50/35">{tp.horaInicio}</td>
-                            <td className="p-3 text-right font-normal text-slate-900">R$ {tp.valorPlantao.toFixed(2)}</td>
-                            <td className="p-3 text-right text-slate-500">R$ {(tp.ajudaCusto || 0).toFixed(2)}</td>
-                            <td className="p-3 text-right text-slate-500">R$ {(tp.taxaAdm || 0).toFixed(2)}</td>
+                            <td className="p-3 text-right font-normal text-slate-900">R$ {(Number(tp.valorPlantao) || 0).toFixed(2)}</td>
+                            <td className="p-3 text-right text-slate-500">R$ {(Number(tp.ajudaCusto) || 0).toFixed(2)}</td>
+                            <td className="p-3 text-right text-slate-500">R$ {(Number(tp.taxaAdm) || 0).toFixed(2)}</td>
                             <td className="p-3 text-center">
                               <div className="flex items-center justify-center space-x-1.5">
                                 {tp.isPrincipal ? (
@@ -2391,7 +2416,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                             {profissionais.filter(p =>
                               ((p.nome || '').toLowerCase().includes((newShiftProf || '').toLowerCase()) ||
                               (p.especialidade || '').toLowerCase().includes((newShiftProf || '').toLowerCase())) &&
-                              p.status === 'Ativo'
+                              p.status === 'Ativo' &&
+                              !isBlockedBidirectional(p)
                             ).map((prof) => (
                               <button
                                 key={prof.id}
@@ -2421,8 +2447,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                               </button>
                             ))}
                             {profissionais.filter(p => 
-                              (p.nome || '').toLowerCase().includes((newShiftProf || '').toLowerCase()) ||
-                              (p.especialidade || '').toLowerCase().includes((newShiftProf || '').toLowerCase())
+                              ((p.nome || '').toLowerCase().includes((newShiftProf || '').toLowerCase()) ||
+                              (p.especialidade || '').toLowerCase().includes((newShiftProf || '').toLowerCase())) &&
+                              p.status === 'Ativo' &&
+                              !isBlockedBidirectional(p)
                             ).length === 0 && (
                               <div className="p-3 text-center text-xs text-slate-400 italic">
                                 Nenhum profissional cadastrado com este nome.
@@ -3004,7 +3032,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                     {profissionais.filter(p =>
                       ((p.nome || '').toLowerCase().includes((editShiftProfName || '').toLowerCase()) ||
                       (p.especialidade || '').toLowerCase().includes((editShiftProfName || '').toLowerCase())) &&
-                      p.status === 'Ativo'
+                      p.status === 'Ativo' &&
+                      !isBlockedBidirectional(p)
                     ).map((prof) => (
                       <button
                         key={prof.id}
@@ -3034,8 +3063,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       </button>
                     ))}
                     {profissionais.filter(p =>
-                      (p.nome || '').toLowerCase().includes((editShiftProfName || '').toLowerCase()) ||
-                      (p.especialidade || '').toLowerCase().includes((editShiftProfName || '').toLowerCase())
+                      ((p.nome || '').toLowerCase().includes((editShiftProfName || '').toLowerCase()) ||
+                      (p.especialidade || '').toLowerCase().includes((editShiftProfName || '').toLowerCase())) &&
+                      p.status === 'Ativo' &&
+                      !isBlockedBidirectional(p)
                     ).length === 0 && (
                       <div className="p-3 text-center text-xs text-slate-400 italic">
                         Nenhum profissional com este nome.
@@ -3155,7 +3186,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                     {profissionais
                       .filter(p =>
                         (p.nome || '').toLowerCase().includes((avulsoProf || '').toLowerCase()) &&
-                        p.status === 'Ativo'
+                        p.status === 'Ativo' &&
+                        !isBlockedBidirectional(p)
                       )
                       .map((prof) => (
                         <button
@@ -3480,7 +3512,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                         {profissionais
                           .filter(p =>
                             (p.nome || '').toLowerCase().includes((detailsProfName || '').toLowerCase()) &&
-                            p.status === 'Ativo'
+                            p.status === 'Ativo' &&
+                            !isBlockedBidirectional(p)
                           )
                           .map((prof) => (
                             <button
@@ -3628,6 +3661,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                           };
 
                           const pickedProf = profissionais.find(p => p.nome === detailsProfName);
+                          if (pickedProf && isBlockedBidirectional(pickedProf)) {
+                            alert('Atenção: Este profissional possui uma restrição de atendimento (bloqueio) para este paciente devido a uma ocorrência passada.');
+                            return;
+                          }
 
                           const updatedAg: any = {
                             ...selectedShiftForDetails,
@@ -3773,7 +3810,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       <div className="absolute left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl z-25 divide-y divide-slate-100 font-sans">
                         {profissionais.filter(p =>
                           (p.nome || '').toLowerCase().includes((avulsoProf || '').toLowerCase()) &&
-                          p.status === 'Ativo'
+                          p.status === 'Ativo' &&
+                          !isBlockedBidirectional(p)
                         ).map((prof) => (
                           <button
                             key={prof.id}
@@ -4317,8 +4355,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                           filteredShiftsForPatient.forEach(s => {
                             if (s.status !== 'Cancelado') {
                               // Valor base + ajuda custo
-                              let base = s.valorPlantao ?? paciente?.planoAtendimento?.valorSugeridoPlantao ?? 150;
-                              let extra = s.ajudaCusto ?? paciente?.planoAtendimento?.ajudaCusto ?? 0;
+                              let base = Number(s.valorPlantao) || Number(paciente?.planoAtendimento?.valorSugeridoPlantao) || 150;
+                              let extra = Number(s.ajudaCusto) || Number(paciente?.planoAtendimento?.ajudaCusto) || 0;
                               if (s.feriado === '20%') {
                                 sum += (base * 1.20) + extra;
                               } else if (s.feriado === '50%') {
@@ -4340,7 +4378,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                           let sum = 0;
                           filteredShiftsForPatient.forEach(s => {
                             if (s.status !== 'Cancelado') {
-                              let baseTaxa = s.taxaAdm ?? paciente?.planoAtendimento?.taxaAdm ?? 0;
+                              let baseTaxa = Number(s.taxaAdm) || Number(paciente?.planoAtendimento?.taxaAdm) || 0;
                               if (s.feriado === '20%') {
                                 sum += baseTaxa * 1.20;
                               } else if (s.feriado === '50%') {
@@ -4363,9 +4401,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                           let sumTaxa = 0;
                           filteredShiftsForPatient.forEach(s => {
                             if (s.status !== 'Cancelado') {
-                              let base = s.valorPlantao ?? paciente?.planoAtendimento?.valorSugeridoPlantao ?? 150;
-                              let extra = s.ajudaCusto ?? paciente?.planoAtendimento?.ajudaCusto ?? 0;
-                              let baseTaxa = s.taxaAdm ?? paciente?.planoAtendimento?.taxaAdm ?? 0;
+                              let base = Number(s.valorPlantao) || Number(paciente?.planoAtendimento?.valorSugeridoPlantao) || 150;
+                              let extra = Number(s.ajudaCusto) || Number(paciente?.planoAtendimento?.ajudaCusto) || 0;
+                              let baseTaxa = Number(s.taxaAdm) || Number(paciente?.planoAtendimento?.taxaAdm) || 0;
                               if (s.feriado === '20%') {
                                 sumRepasse += (base * 1.20) + extra;
                                 sumTaxa += baseTaxa * 1.20;
@@ -4407,9 +4445,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                         </tr>
                       ) : (
                         filteredShiftsForPatient.filter(x => x.status !== 'Cancelado').map((item) => {
-                          const base = item.valorPlantao ?? paciente?.planoAtendimento?.valorSugeridoPlantao ?? 150;
-                          const extra = item.ajudaCusto ?? paciente?.planoAtendimento?.ajudaCusto ?? 0;
-                          const baseTaxa = item.taxaAdm ?? paciente?.planoAtendimento?.taxaAdm ?? 0;
+                          const base = Number(item.valorPlantao) || Number(paciente?.planoAtendimento?.valorSugeridoPlantao) || 150;
+                          const extra = Number(item.ajudaCusto) || Number(paciente?.planoAtendimento?.ajudaCusto) || 0;
+                          const baseTaxa = Number(item.taxaAdm) || Number(paciente?.planoAtendimento?.taxaAdm) || 0;
                           let repasseCalculado = base + extra;
                           let taxaCalculada = baseTaxa;
                           if (item.feriado === '20%') {
@@ -4434,10 +4472,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                                 {item.feriado ? `Feriado (+${item.feriado})` : 'Normal (Sem Adicional)'}
                               </td>
                               <td className="py-2 px-2 border-r border-slate-200 text-right font-bold text-slate-800">
-                                R$ {repasseCalculado.toFixed(2)}
+                                R$ {(Number(repasseCalculado) || 0).toFixed(2)}
                               </td>
                               <td className="py-2 px-2 text-right font-bold text-slate-700">
-                                R$ {taxaCalculada.toFixed(2)}
+                                R$ {(Number(taxaCalculada) || 0).toFixed(2)}
                               </td>
                             </tr>
                           );
@@ -4777,19 +4815,19 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                     </div>
                     <div className="p-2 border border-slate-200 rounded-lg bg-slate-50/50">
                       <span className="text-[8.5px] font-bold text-slate-450 block uppercase leading-none">Valor Negociado p/ Plantão:</span>
-                      <p className="font-bold text-slate-800 font-mono mt-0.5">R$ {valorSugeridoPlantao.toFixed(2)}</p>
+                      <p className="font-bold text-slate-800 font-mono mt-0.5">R$ {(Number(valorSugeridoPlantao) || 0).toFixed(2)}</p>
                     </div>
                     <div className="p-2 border border-slate-200 rounded-lg bg-slate-50/50">
                       <span className="text-[8.5px] font-bold text-slate-450 block uppercase leading-none">Ajuda de Custo Profissional:</span>
-                      <p className="font-bold text-slate-800 font-mono mt-0.5">R$ {ajudaCusto.toFixed(2)}</p>
+                      <p className="font-bold text-slate-800 font-mono mt-0.5">R$ {(Number(ajudaCusto) || 0).toFixed(2)}</p>
                     </div>
                     <div className="p-2 border border-slate-200 rounded-lg bg-slate-50/50">
                       <span className="text-[8.5px] font-bold text-slate-450 block uppercase leading-none">Taxa Adm do Fechamento:</span>
-                      <p className="font-bold text-[#1a3c2e] font-mono mt-0.5">R$ {taxaAdm.toFixed(2)}</p>
+                      <p className="font-bold text-[#1a3c2e] font-mono mt-0.5">R$ {(Number(taxaAdm) || 0).toFixed(2)}</p>
                     </div>
                     <div className="p-2 border border-emerald-200 rounded-lg bg-emerald-50/20">
                       <span className="text-[8.5px] font-black text-[#1a3c2e] block uppercase leading-none">Consolidado Total por Turno:</span>
-                      <p className="font-extrabold text-[#1a3c2e] font-mono mt-0.5">R$ {(valorSugeridoPlantao + taxaAdm + ajudaCusto).toFixed(2)}</p>
+                      <p className="font-extrabold text-[#1a3c2e] font-mono mt-0.5">R$ {(Number(valorSugeridoPlantao || 0) + Number(taxaAdm || 0) + Number(ajudaCusto || 0)).toFixed(2)}</p>
                     </div>
                   </div>
                 </div>

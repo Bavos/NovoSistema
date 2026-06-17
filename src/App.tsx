@@ -53,7 +53,7 @@ function DashboardContent() {
     if (activeSidebarTab === 'pacientes') {
       return pacientesTitleOverride;
     }
-    if (activeSidebarTab === 'profissionais') return 'Gestão de Cuidadores & Profissionais';
+    if (activeSidebarTab === 'profissionais') return 'Gestão de Profissionais';
     if (activeSidebarTab === 'escalas') return 'Escalas Diárias de Plantões';
     if (activeSidebarTab === 'financeiro') return 'Financeiro';
     if (activeSidebarTab === 'empresa') return 'Informações Gerais';

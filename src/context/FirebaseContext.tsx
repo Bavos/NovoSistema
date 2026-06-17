@@ -71,6 +71,7 @@ interface FirebaseContextType {
   deleteFaturaPaciente: (id: string) => Promise<void>;
   deleteFolhaPagamento: (id: string) => Promise<void>;
   uploadLogo: (file: File) => Promise<string>;
+  uploadProfissionalFoto: (file: File) => Promise<string>;
   uploadPdf: (file: File, path: string) => Promise<string>;
 }
 
