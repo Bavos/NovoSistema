@@ -7,6 +7,7 @@ import { db, storage } from '../lib/firebase';
 import { collection, query, where, orderBy, onSnapshot, doc, getDoc, updateDoc, addDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { profissionalSchema } from '../schemas/validationSchemas';
+import { mascaraCPF, mascaraCNPJ, mascaraTelefone, mascaraCEP } from '../lib/masks';
 
 
 export const Profissionais: React.FC = () => {
@@ -863,40 +864,40 @@ export const Profissionais: React.FC = () => {
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-md print:hidden">
-        <table className="w-full text-xs">
-          <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 text-[10px] font-semibold uppercase tracking-wider">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 border-b border-slate-300 text-gray-800 text-sm font-semibold">
             <tr>
-              <th className="p-3 text-left">Nome</th>
-              <th className="p-3 text-left">Especialidade</th>
-              <th className="p-3 text-left">Telefone</th>
-              <th className="p-3 text-center">Status</th>
-              <th className="p-3 text-center">Ações</th>
+              <th className="py-4 px-4 text-left font-semibold text-gray-800 text-sm">Nome</th>
+              <th className="py-4 px-4 text-left font-semibold text-gray-800 text-sm">Especialidade</th>
+              <th className="py-4 px-4 text-left font-semibold text-gray-800 text-sm">Telefone</th>
+              <th className="py-4 px-4 text-center font-semibold text-gray-800 text-sm">Status</th>
+              <th className="py-4 px-4 text-center font-semibold text-gray-800 text-sm">Ações</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
-            {filteredAndSortedProfissionais.map(prof => (
+          <tbody className="divide-y divide-slate-150 text-gray-900 text-sm md:text-base">
+            {filteredAndSortedProfissionais.map((prof, index) => (
               <tr 
                 key={prof.id} 
-                className={`transition-colors duration-150 ${prof.status !== 'Ativo' ? 'bg-red-50 hover:bg-red-100/70 text-slate-700' : 'bg-white hover:bg-slate-50'}`}
+                className={`transition-colors duration-150 ${prof.status !== 'Ativo' ? 'bg-red-50 hover:bg-red-100/70 text-slate-700' : index % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/50 hover:bg-slate-50'}`}
               >
-                <td className="p-3 font-medium text-slate-800 text-left">{prof.nome}</td>
-                <td className="p-3 text-slate-600 text-left">{prof.especialidade}</td>
-                <td className="p-3 text-slate-600 text-left">{prof.telefone}</td>
-                <td className="p-3 text-center">
-                    <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold ${prof.status === 'Ativo' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'}`}>
+                <td className="py-4 px-4 font-normal text-gray-900 text-left text-base">{prof.nome}</td>
+                <td className="py-4 px-4 text-slate-600 text-left text-sm font-normal">{prof.especialidade}</td>
+                <td className="py-4 px-4 text-slate-600 text-left text-sm font-normal">{prof.telefone}</td>
+                <td className="py-4 px-4 text-center">
+                    <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-bold ${prof.status === 'Ativo' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'}`}>
                         {prof.status || 'Inativo'}
                     </span>
                 </td>
-                 <td className="p-3">
+                 <td className="py-4 px-4">
                 <div className="flex gap-2 justify-center items-center">
-                    <button onClick={() => handleOpenModal(prof, 'dados')} className="text-blue-600 hover:text-blue-850 hover:bg-blue-50 transition-all p-1.5 rounded-lg border border-transparent hover:border-blue-100" title="Editar"><Edit2 size={13} /></button>
+                    <button onClick={() => handleOpenModal(prof, 'dados')} className="text-blue-600 hover:text-blue-855 hover:bg-blue-50 transition-all p-2 rounded-lg border border-transparent hover:border-blue-100 cursor-pointer" title="Editar"><Edit2 size={14} /></button>
                   </div>
                 </td>
               </tr>
             ))}
             {filteredAndSortedProfissionais.length === 0 && (
               <tr>
-                <td colSpan={5} className="p-8 text-center text-slate-400 text-xs">
+                <td colSpan={5} className="py-8 px-4 text-center text-slate-400 text-sm font-normal">
                   Nenhum profissional encontrado.
                 </td>
               </tr>
@@ -1223,7 +1224,7 @@ export const Profissionais: React.FC = () => {
                       {formData.temMei && (
                         <div className="space-y-1 md:col-span-1">
                            <label className="text-[10px] font-bold text-[#1a3c2e] uppercase text-emerald-800">CNPJ</label>
-                           <input type="text" placeholder="00.000.000/0000-00" value={formData.cnpj} onChange={e => setFormData({...formData, cnpj: e.target.value})} className="p-2 border border-emerald-300 rounded-lg text-sm w-full focus:ring-1 focus:ring-emerald-700 bg-emerald-50" required={formData.temMei} />
+                           <input type="text" placeholder="00.000.000/0000-00" value={formData.cnpj} onChange={e => setFormData({...formData, cnpj: mascaraCNPJ(e.target.value)})} maxLength={18} className="p-2 border border-emerald-300 rounded-lg text-sm w-full focus:ring-1 focus:ring-emerald-700 bg-emerald-50" required={formData.temMei} />
                         </div>
                       )}
                       <div className="space-y-1">
@@ -1248,7 +1249,7 @@ export const Profissionais: React.FC = () => {
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-[#1a3c2e] uppercase">CPF (Obrigatório)</label>
-                        <input type="text" placeholder="Digite o CPF" value={formData.cpf} onChange={e => setFormData({...formData, cpf: e.target.value})} className="p-2 border border-slate-200 rounded-lg text-sm w-full" required />
+                        <input type="text" placeholder="000.000.000-00" value={formData.cpf} onChange={e => setFormData({...formData, cpf: mascaraCPF(e.target.value)})} maxLength={14} className="p-2 border border-slate-200 rounded-lg text-sm w-full" required />
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-[#1a3c2e] uppercase">Profissão (Obrigatório)</label>
@@ -1260,13 +1261,13 @@ export const Profissionais: React.FC = () => {
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-[#1a3c2e] uppercase">Telefone (Obrigatório)</label>
-                        <input type="tel" placeholder="(00) 00000-0000" value={formData.telefone} onChange={e => setFormData({...formData, telefone: e.target.value})} className="p-2 border border-slate-200 rounded-lg text-sm w-full" required />
+                        <input type="tel" placeholder="(00) 00000-0000" value={formData.telefone} onChange={e => setFormData({...formData, telefone: mascaraTelefone(e.target.value)})} maxLength={15} className="p-2 border border-slate-200 rounded-lg text-sm w-full" required />
                       </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 border border-slate-100 rounded-xl bg-slate-50">
                        <span className="md:col-span-4 font-bold text-xs text-[#1a3c2e] uppercase border-b pb-2 mb-2">Endereço</span>
-                       <input type="text" placeholder="CEP" value={formData.endereco.cep} onChange={e => setFormData({...formData, endereco: {...formData.endereco, cep: e.target.value}})} className="p-2 border border-slate-200 rounded-lg text-sm" />
+                       <input type="text" placeholder="CEP" value={formData.endereco.cep} onChange={e => setFormData({...formData, endereco: {...formData.endereco, cep: mascaraCEP(e.target.value)}})} maxLength={9} className="p-2 border border-slate-200 rounded-lg text-sm" />
                        <input type="text" placeholder="Logradouro" value={formData.endereco.rua} onChange={e => setFormData({...formData, endereco: {...formData.endereco, rua: e.target.value}})} className="p-2 border border-slate-200 rounded-lg text-sm md:col-span-2" />
                        <input type="text" placeholder="Nº" value={formData.endereco.numero} onChange={e => setFormData({...formData, endereco: {...formData.endereco, numero: e.target.value}})} className="p-2 border border-slate-200 rounded-lg text-sm" />
                        <input type="text" placeholder="Bairro" value={formData.endereco.bairro} onChange={e => setFormData({...formData, endereco: {...formData.endereco, bairro: e.target.value}})} className="p-2 border border-slate-200 rounded-lg text-sm" />
@@ -1309,7 +1310,8 @@ export const Profissionais: React.FC = () => {
                                 type="text"
                                 placeholder="CPF do Titular"
                                 value={formData.cpfTitularConta || ''}
-                                onChange={e => setFormData({ ...formData, cpfTitularConta: e.target.value })}
+                                onChange={e => setFormData({ ...formData, cpfTitularConta: mascaraCPF(e.target.value) })}
+                                maxLength={14}
                                 className="p-2 border border-slate-200 rounded-lg text-sm bg-white"
                                 required={isTitularConta === 'Não'}
                               />

@@ -10,6 +10,7 @@ import { Paciente, Plantao, CancelingReason, EscalacaoPlano, Agendamento } from 
 import { useFirebase } from '../context/FirebaseContext';
 import { usePacienteData } from '../hooks/usePacienteData';
 import { pacienteSchema } from '../schemas/validationSchemas';
+import { mascaraCPF, mascaraTelefone, mascaraCEP } from '../lib/masks';
 import {
   Save,
   Lock,
@@ -1540,74 +1541,74 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
         {/* Right side form view containing horizontals sub tabs */}
         <div className="lg:col-span-8 space-y-4">
           {/* sub-tabs header block */}
-          <div className="flex border-b border-slate-100 bg-slate-50/50 p-2 rounded-xl border border-slate-200/80 shadow-sm gap-2 overflow-x-auto shrink-0 select-none">
+          <div className="flex border-b border-slate-100 bg-slate-50/50 p-2.5 rounded-xl border border-slate-200/80 shadow-sm gap-2 overflow-x-auto shrink-0 select-none">
             <button
               onClick={() => setActiveTab('geral')}
-              className={`flex items-center space-x-1 px-4 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-all ${
+              className={`flex items-center space-x-1.5 px-4 py-2.5 rounded-md text-sm font-semibold whitespace-nowrap transition-all ${
                 activeTab === 'geral'
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800'
               }`}
             >
-              <User size={14} />
+              <User size={16} />
               <span>Geral & Contato</span>
             </button>
             <button
               onClick={() => setActiveTab('endereco')}
-              className={`flex items-center space-x-1 px-4 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-all ${
+              className={`flex items-center space-x-1.5 px-4 py-2.5 rounded-md text-sm font-semibold whitespace-nowrap transition-all ${
                 activeTab === 'endereco'
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800'
               }`}
             >
-              <MapPin size={14} />
+              <MapPin size={16} />
               <span>Endereço</span>
             </button>
             <button
               onClick={() => setActiveTab('medico')}
-              className={`flex items-center space-x-1 px-4 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-all ${
+              className={`flex items-center space-x-1.5 px-4 py-2.5 rounded-md text-sm font-semibold whitespace-nowrap transition-all ${
                 activeTab === 'medico'
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800'
               }`}
             >
-              <Stethoscope size={14} />
+              <Stethoscope size={16} />
               <span>Info Médica</span>
             </button>
             <button
               onClick={() => setActiveTab('plano')}
-              className={`flex items-center space-x-1 px-4 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-all ${
+              className={`flex items-center space-x-1.5 px-4 py-2.5 rounded-md text-sm font-semibold whitespace-nowrap transition-all ${
                 activeTab === 'plano'
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800'
               }`}
             >
-              <Clock size={14} />
+              <Clock size={16} />
               <span>Plano de Atendimento</span>
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('agendamento')}
-              className={`flex items-center space-x-1 px-4 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-all ${
+              className={`flex items-center space-x-1.5 px-4 py-2.5 rounded-md text-sm font-semibold whitespace-nowrap transition-all ${
                 activeTab === 'agendamento'
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800'
               }`}
             >
-              <CalendarDays size={14} />
+              <CalendarDays size={16} />
               <span>Agendamento</span>
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('ocorrencias')}
-              className={`flex items-center space-x-1 px-4 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-all ${
+              className={`flex items-center space-x-1.5 px-4 py-2.5 rounded-md text-sm font-semibold whitespace-nowrap transition-all ${
                 activeTab === 'ocorrencias'
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800'
               }`}
               id="tab-btn-ocorrencias"
             >
-              <AlertOctagon size={14} />
+              <AlertOctagon size={16} />
               <span>Ocorrências</span>
             </button>
           </div>
@@ -1638,7 +1639,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       required
                       disabled={isCurrentlyDeactivated}
                       value={cpf}
-                      onChange={(e) => setCpf(e.target.value)}
+                      onChange={(e) => setCpf(mascaraCPF(e.target.value))}
+                      maxLength={14}
                       className="w-full text-xs p-2.5 border border-slate-350 rounded-lg text-slate-950 font-extrabold bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
                       placeholder="Ex: 000.000.000-00"
                     />
@@ -1691,8 +1693,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       required
                       disabled={isCurrentlyDeactivated}
                       value={telefoneResponsavel}
-                      onChange={(e) => setTelefoneResponsavel(e.target.value)}
-                      className="w-full text-xs p-2.5 border border-slate-350 rounded-lg text-slate-950 font-extrabold bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
+                      onChange={(e) => setTelefoneResponsavel(mascaraTelefone(e.target.value))}
+                      maxLength={15}
+                      className="w-full text-xs p-2.5 border border-slate-350 rounded-lg text-slate-950 font-extrabold bg-white focus:outline-none focus:border-blue-550 focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
                       placeholder="Ex: (21) 90000-0000"
                     />
                   </div>
@@ -1748,8 +1751,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                           required
                           disabled={isCurrentlyDeactivated}
                           value={cpfPagador}
-                          onChange={(e) => setCpfPagador(e.target.value)}
-                          className="w-full text-xs p-2.5 border border-slate-350 rounded-lg text-slate-950 font-extrabold bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
+                          onChange={(e) => setCpfPagador(mascaraCPF(e.target.value))}
+                          maxLength={14}
+                          className="w-full text-xs p-2.5 border border-slate-350 rounded-lg text-slate-950 font-extrabold bg-white focus:outline-none focus:border-blue-550 focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
                           placeholder="Ex: 000.000.000-00"
                         />
                       </div>
@@ -1823,8 +1827,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       type="text"
                       disabled={isCurrentlyDeactivated}
                       value={cep}
-                      onChange={(e) => setCep(e.target.value)}
-                      className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed"
+                      onChange={(e) => setCep(mascaraCEP(e.target.value))}
+                      maxLength={9}
+                      className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-550 focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed"
                       placeholder="Ex: 22000-000"
                     />
                   </div>
@@ -2169,45 +2174,45 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
 
                   {/* Table of configured shifts, containing complete list (Principal + Additionals) */}
                   <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-xs mb-4">
-                    <table className="min-w-[700px] w-full text-left border-collapse text-xs">
+                    <table className="min-w-[700px] w-full text-left border-collapse text-sm">
                       <thead>
-                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-normal">
-                          <th className="p-3 font-normal">Tipo do Plantão</th>
-                          <th className="p-3 text-center font-normal">Horário de Início</th>
-                          <th className="p-3 text-right font-normal">Valor Plantão</th>
-                          <th className="p-3 text-right font-normal">Aj. de Custo</th>
-                          <th className="p-3 text-right font-normal">Taxa Adm</th>
-                          <th className="p-3 text-center w-44 font-normal">Ações</th>
+                        <tr className="bg-slate-50 border-b border-slate-300 text-slate-800 font-semibold">
+                          <th className="py-3 px-4 font-semibold text-slate-800 text-sm">Tipo do Plantão</th>
+                          <th className="py-3 px-4 text-center font-semibold text-slate-800 text-sm">Horário de Início</th>
+                          <th className="py-3 px-4 text-right font-semibold text-slate-800 text-sm">Valor Plantão</th>
+                          <th className="py-3 px-4 text-right font-semibold text-slate-800 text-sm">Aj. de Custo</th>
+                          <th className="py-3 px-4 text-right font-semibold text-slate-800 text-sm">Taxa Adm</th>
+                          <th className="py-3 px-4 text-center w-48 font-semibold text-slate-800 text-sm">Ações</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100 text-slate-700">
-                        {allRows.map((tp) => (
-                          <tr key={tp.id} className="hover:bg-slate-50/50 transition-colors">
-                            <td className="p-3 font-normal text-slate-800 flex items-center space-x-2">
+                      <tbody className="divide-y divide-slate-100 text-gray-900 text-sm md:text-base">
+                        {allRows.map((tp, index) => (
+                          <tr key={tp.id} className={`transition-colors hover:bg-slate-50 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
+                            <td className="py-3 px-4 font-normal text-gray-905 text-gray-900 flex items-center space-x-2">
                               <span>{tp.tipoEscala}</span>
                               {tp.isPrincipal && (
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800 uppercase tracking-wide">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 uppercase tracking-wide">
                                   ⭐ Principal
                                 </span>
                               )}
                             </td>
-                            <td className="p-3 text-center font-mono bg-slate-50/35">{tp.horaInicio}</td>
-                            <td className="p-3 text-right font-normal text-slate-900">R$ {(Number(tp.valorPlantao) || 0).toFixed(2)}</td>
-                            <td className="p-3 text-right text-slate-500">R$ {(Number(tp.ajudaCusto) || 0).toFixed(2)}</td>
-                            <td className="p-3 text-right text-slate-500">R$ {(Number(tp.taxaAdm) || 0).toFixed(2)}</td>
-                            <td className="p-3 text-center">
-                              <div className="flex items-center justify-center space-x-1.5">
+                            <td className="py-3 px-4 text-center font-mono bg-slate-50/35 text-sm">{tp.horaInicio}</td>
+                            <td className="py-3 px-4 text-right font-normal text-slate-900">R$ {(Number(tp.valorPlantao) || 0).toFixed(2)}</td>
+                            <td className="py-3 px-4 text-right text-slate-600 font-normal">R$ {(Number(tp.ajudaCusto) || 0).toFixed(2)}</td>
+                            <td className="py-3 px-4 text-right text-slate-600 font-normal">R$ {(Number(tp.taxaAdm) || 0).toFixed(2)}</td>
+                            <td className="py-3 px-4 text-center">
+                              <div className="flex items-center justify-center space-x-2">
                                 {tp.isPrincipal ? (
                                   <>
-                                    <span className="text-[10px] text-slate-400 italic mr-1">Padrão</span>
+                                    <span className="text-xs text-slate-400 italic mr-1">Padrão</span>
                                     <button
                                       type="button"
                                       disabled={isCurrentlyDeactivated}
                                       onClick={() => handleDeletePlantao(tp.id, true)}
-                                      className="p-1 px-1.5 border border-red-200 text-red-650 hover:bg-red-50 hover:text-red-750 rounded-md disabled:opacity-50 transition-all font-semibold inline-flex items-center space-x-1 cursor-pointer text-[11px]"
+                                      className="py-1 px-2.5 border border-red-200 text-red-650 hover:bg-red-50 hover:text-red-750 rounded-md disabled:opacity-50 transition-all font-semibold inline-flex items-center space-x-1 cursor-pointer text-xs"
                                       title="Limpar plantão principal"
                                     >
-                                      <Trash2 size={11} />
+                                      <Trash2 size={13} />
                                       <span>Excluir</span>
                                     </button>
                                   </>
@@ -2224,20 +2229,20 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                                         setNewSubAjudaCusto(tp.ajudaCusto);
                                         setNewSubTaxaAdm(tp.taxaAdm);
                                       }}
-                                      className="p-1 px-1.5 border border-blue-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700 rounded-md disabled:opacity-50 transition-all font-semibold inline-flex items-center space-x-1 cursor-pointer text-[11px]"
+                                      className="py-1 px-2.5 border border-blue-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700 rounded-md disabled:opacity-50 transition-all font-semibold inline-flex items-center space-x-1 cursor-pointer text-xs"
                                       title="Editar formato"
                                     >
-                                      <Edit2 size={11} />
+                                      <Edit2 size={13} />
                                       <span>Editar</span>
                                     </button>
                                     <button
                                       type="button"
                                       disabled={isCurrentlyDeactivated}
                                       onClick={() => handleDeletePlantao(tp.id, false)}
-                                      className="p-1 px-1.5 border border-red-200 text-red-650 hover:bg-red-50 hover:text-red-750 rounded-md disabled:opacity-50 transition-all font-semibold inline-flex items-center space-x-1 cursor-pointer text-[11px]"
+                                      className="py-1 px-2.5 border border-red-200 text-red-100 text-red-650 bg-red-50 hover:bg-red-100 hover:text-red-750 border-red-200 rounded-md disabled:opacity-50 transition-all font-semibold inline-flex items-center space-x-1 cursor-pointer text-xs"
                                       title="Excluir plantão adicional"
                                     >
-                                      <Trash2 size={11} />
+                                      <Trash2 size={13} />
                                       <span>Excluir</span>
                                     </button>
                                   </>
@@ -2903,39 +2908,39 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                 {/* Tabulation of scale list */}
                 {calendarView === 'lista' && (
                   <div className="border border-slate-200 rounded-xl overflow-hidden mt-2 bg-slate-50/20">
-                  <table className="w-full text-left text-xs border-collapse">
+                  <table className="w-full text-left text-sm border-collapse">
                     <thead>
-                      <tr className="bg-slate-100 border-b border-slate-300 text-slate-900 font-extrabold uppercase tracking-wider text-[10px]">
-                        <th className="py-2.5 px-3">Data</th>
-                        <th className="py-2.5 px-3">Profissional Alocado</th>
-                        <th className="py-2.5 px-3 text-center">Status</th>
-                        <th className="py-2.5 px-3 text-center">Ações</th>
+                      <tr className="bg-slate-100 border-b border-slate-300 text-gray-800 font-semibold">
+                        <th className="py-3 px-4 text-sm font-semibold text-gray-850 text-slate-800">Data</th>
+                        <th className="py-3 px-4 text-sm font-semibold text-gray-850 text-slate-800">Profissional Alocado</th>
+                        <th className="py-3 px-4 text-center text-sm font-semibold text-gray-850 text-slate-800">Status</th>
+                        <th className="py-3 px-4 text-center text-sm font-semibold text-gray-850 text-slate-800">Ações</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-slate-100 text-gray-900 text-sm md:text-base">
                       {isNew || filteredShiftsForPatient.length === 0 ? (
                         <tr>
-                          <td colSpan={4} className="py-8 text-center text-slate-500 italic font-medium">
+                          <td colSpan={4} className="py-8 text-center text-gray-500 italic font-normal">
                             Nenhum plantão ativo programado para este paciente no sistema.
                           </td>
                         </tr>
                       ) : (
-                        filteredShiftsForPatient.map((item) => {
+                        filteredShiftsForPatient.map((item, index) => {
                           const isCancelled = item.status === 'Cancelado';
                           return (
                             <tr
                               key={item.id}
                               className={`hover:bg-slate-50/70 transition-colors ${
-                                isCancelled ? 'bg-rose-50/10 text-slate-400 line-through' : 'bg-white'
+                                isCancelled ? 'bg-rose-50/10 text-slate-400 line-through' : index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'
                               }`}
                             >
                               {/* Date & Weekday */}
-                              <td className="py-3 px-3">
-                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
-                                  <div className="flex items-center space-x-1 whitespace-nowrap">
-                                    <span className="font-bold text-slate-800">{item.diaSemana}</span>
+                              <td className="py-3 px-4">
+                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                                  <div className="flex items-center space-x-1.5 whitespace-nowrap">
+                                    <span className="font-semibold text-gray-905">{item.diaSemana}</span>
                                     <span className="text-slate-400">-</span>
-                                    <span className="font-mono font-normal">{new Date(item.data + 'T12:00:00').toLocaleDateString('pt-BR')}</span>
+                                    <span className="font-mono font-normal text-gray-900">{new Date(item.data + 'T12:00:00').toLocaleDateString('pt-BR')}</span>
                                   </div>
                                   
                                   {/* Holiday toggle buttons next to the date */}
@@ -2948,7 +2953,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                                           feriado: null
                                         });
                                       }}
-                                      className={`px-2 py-0.5 text-[8px] font-extrabold rounded-l-md border ${
+                                      className={`px-2.5 py-1 text-xs font-semibold rounded-l-md border ${
                                         !item.feriado
                                           ? 'bg-slate-200 text-slate-800 border-slate-300'
                                           : 'bg-white text-slate-400 border-slate-200 hover:bg-slate-50'
@@ -2965,7 +2970,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                                           feriado: '20%'
                                         });
                                       }}
-                                      className={`px-2 py-0.5 text-[8px] font-extrabold border-t border-b border-r ${
+                                      className={`px-2.5 py-1 text-xs font-semibold border-t border-b border-r ${
                                         item.feriado === '20%'
                                           ? 'bg-amber-100 text-amber-805 border-amber-300'
                                           : 'bg-white text-slate-400 border-slate-200 hover:bg-slate-50'
@@ -2982,7 +2987,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                                           feriado: '50%'
                                         });
                                       }}
-                                      className={`px-2 py-0.5 text-[8px] font-extrabold rounded-r-md border-t border-b border-r ${
+                                      className={`px-2.5 py-1 text-xs font-semibold rounded-r-md border-t border-b border-r ${
                                         item.feriado === '50%'
                                           ? 'bg-rose-100 text-rose-805 border-rose-300'
                                           : 'bg-white text-slate-400 border-slate-200 hover:bg-slate-50'
@@ -2996,23 +3001,23 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                               </td>
 
                               {/* Prof Name */}
-                              <td className="py-3 px-3 font-normal text-slate-700">
+                              <td className="py-3 px-4 font-normal text-gray-900 text-base">
                                 {item.profissional}
                               </td>
 
                               {/* Status indicators */}
-                              <td className="py-3 px-3 text-center">
+                              <td className="py-3 px-4 text-center">
                                 {item.status === 'Confirmado' ? (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100 italic uppercase">
+                                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-100 uppercase">
                                     CONFIRMADO🟢
                                   </span>
                                 ) : (
-                                  <div className="flex flex-col items-center justify-center space-y-0.5">
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-100 italic uppercase">
+                                  <div className="flex flex-col items-center justify-center space-y-1">
+                                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-100 uppercase">
                                       CANCELADO🔴
                                     </span>
                                     {item.motivoCancelamento && (
-                                      <span className="text-[9px] text-rose-800 block italic font-mono bg-rose-50 p-1 border border-rose-100 rounded leading-none max-w-[150px] truncate" title={item.motivoCancelamento}>
+                                      <span className="text-xs text-rose-800 block italic font-mono bg-rose-50 p-1 border border-rose-100 rounded leading-none max-w-[150px] truncate" title={item.motivoCancelamento}>
                                         {item.motivoCancelamento}
                                       </span>
                                     )}
@@ -3021,13 +3026,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                               </td>
 
                               {/* Actions column */}
-                              <td className="py-3 px-3 text-center">
-                                <div className="flex items-center justify-center space-x-1.5">
+                              <td className="py-3 px-4 text-center">
+                                <div className="flex items-center justify-center space-x-2">
                                   <button
                                     type="button"
                                     onClick={() => handleTriggerEditShift(item)}
                                     title="Editar Profissional ou Data deste plantão"
-                                    className="px-2.5 py-1 text-[10px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200 rounded-md hover:bg-blue-105 transition-colors cursor-pointer"
+                                    className="px-3 py-1.5 text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors cursor-pointer"
                                   >
                                     ✏️ Editar
                                   </button>
@@ -3035,7 +3040,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                                     type="button"
                                     onClick={() => handleDeleteAgendamento(item.id)}
                                     title="Excluir permanentemente"
-                                    className="px-2.5 py-1 text-[10px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200 rounded-md hover:bg-rose-100 transition-colors cursor-pointer"
+                                    className="px-3 py-1.5 text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 rounded-md hover:bg-rose-105 transition-colors cursor-pointer"
                                   >
                                     🗑️ Excluir
                                   </button>
@@ -3044,7 +3049,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                                       type="button"
                                       onClick={() => handleTriggerCancelClick(item.id)}
                                       title="Cancelar / Excluir este plantão"
-                                      className="px-2.5 py-1 text-[10px] font-extrabold bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-105 transition-colors cursor-pointer"
+                                      className="px-3 py-1.5 text-xs font-semibold bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-100 transition-colors cursor-pointer"
                                     >
                                       ❌ Excluir
                                     </button>
@@ -3160,52 +3165,52 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                     </div>
                   ) : (
                     <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                      <table className="w-full text-left border-collapse text-xs">
+                      <table className="w-full text-left border-collapse text-sm">
                         <thead>
-                          <tr className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase font-bold text-slate-500 tracking-wider">
-                            <th className="p-3">Data</th>
-                            <th className="p-3">Profissional</th>
-                            <th className="p-3">Descrição / Relato</th>
-                            <th className="p-3 text-center">Status</th>
-                            <th className="p-3 text-right">Ações</th>
+                          <tr className="bg-slate-50 border-b border-slate-300 text-gray-800 font-semibold text-xs uppercase tracking-wider">
+                            <th className="py-3 px-4 text-sm font-semibold text-slate-800">Data</th>
+                            <th className="py-3 px-4 text-sm font-semibold text-slate-800">Profissional</th>
+                            <th className="py-3 px-4 text-sm font-semibold text-slate-800">Descrição / Relato</th>
+                            <th className="py-3 px-4 text-center text-sm font-semibold text-slate-800">Status</th>
+                            <th className="py-3 px-4 text-right text-sm font-semibold text-slate-800">Ações</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100 text-slate-700">
-                          {(pacientes.find(p => p.id === paciente?.id)?.ocorrencias || []).map((oc) => (
-                            <tr key={oc.id} className="hover:bg-slate-50/50 transition-colors">
-                              <td className="p-3 whitespace-nowrap font-medium text-slate-500">
+                        <tbody className="divide-y divide-slate-100 text-gray-900 text-sm md:text-base">
+                          {(pacientes.find(p => p.id === paciente?.id)?.ocorrencias || []).map((oc, index) => (
+                            <tr key={oc.id} className={`transition-colors hover:bg-slate-50 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
+                              <td className="py-3 px-4 whitespace-nowrap font-normal text-slate-500">
                                 {oc.data ? oc.data.split('-').reverse().join('/') : '-'}
                               </td>
-                              <td className="p-3 whitespace-nowrap font-semibold">
+                              <td className="py-3 px-4 whitespace-nowrap font-semibold text-gray-900">
                                 {oc.profissionalNome}
                               </td>
-                              <td className="p-3 max-w-sm break-words text-slate-600">
+                              <td className="py-3 px-4 max-w-sm break-words text-gray-600 font-normal">
                                 {oc.descricao}
                               </td>
-                              <td className="p-3 text-center whitespace-nowrap">
+                              <td className="py-3 px-4 text-center whitespace-nowrap">
                                 {oc.bloquearProfissional ? (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                  <span className="inline-flex items-center px-2.5 py-1 rounded text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
                                     [ BLOQUEADO ]
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600">
+                                  <span className="inline-flex items-center px-2.5 py-1 rounded text-xs font-medium bg-slate-100 text-slate-605">
                                     Registrado
                                   </span>
                                 )}
                               </td>
-                              <td className="p-3 text-right whitespace-nowrap">
-                                <div className="flex justify-end gap-1.5">
+                              <td className="py-3 px-4 text-right whitespace-nowrap">
+                                <div className="flex justify-end gap-2">
                                   <button
                                     type="button"
                                     onClick={() => handleEditOcorrenciaClick(oc)}
-                                    className="p-1 px-2 bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100 rounded transition-colors text-[10px] font-semibold cursor-pointer"
+                                    className="py-1 px-2.5 bg-slate-55 bg-slate-50 text-slate-605 border border-slate-205 hover:bg-slate-105 rounded transition-colors text-xs font-medium cursor-pointer"
                                   >
                                     Editar
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => handleDeleteOcorrencia(oc.id)}
-                                    className="p-1 px-2 bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 rounded transition-colors text-[10px] font-semibold cursor-pointer"
+                                    className="py-1 px-2.5 bg-red-54 bg-red-50 text-red-700 border border-red-200 hover:bg-red-105 rounded transition-colors text-xs font-medium cursor-pointer"
                                   >
                                     Excluir
                                   </button>
@@ -4747,26 +4752,26 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                 </div>
 
                 {/* Tabela de Plantões Completas */}
-                <div className="space-y-2">
-                  <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-widest text-left">Turnos Auditados Realizados:</h3>
-                  <table className="w-full text-left text-[10px] border-collapse border border-slate-300">
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-gray-800 uppercase tracking-wider text-left">Turnos Auditados Realizados:</h3>
+                  <table className="w-full text-left text-sm border-collapse border border-slate-200 rounded-xl overflow-hidden shadow-xs">
                     <thead>
-                      <tr className="bg-slate-100 border-b border-slate-400 text-slate-900 font-black uppercase text-[8.5px]">
-                        <th className="py-2 px-2 border-r border-slate-300">Data & Semana</th>
-                        <th className="py-2 px-2 border-r border-slate-300">Horário</th>
-                        <th className="py-2 px-2 border-r border-slate-300">Profissional Cuidador Credenciado</th>
-                        <th className="py-2 px-2 border-r border-slate-300">Feriado / Encargo</th>
-                        <th className="py-2 px-2 border-r border-slate-300 text-right">Repasse Líquido</th>
-                        <th className="py-2 px-2 text-right">Taxa Adm</th>
+                      <tr className="bg-slate-50 border-b border-slate-300 text-gray-800 font-semibold text-xs uppercase">
+                        <th className="py-3 px-3 border-r border-slate-200">Data & Semana</th>
+                        <th className="py-3 px-3 border-r border-slate-200">Horário</th>
+                        <th className="py-3 px-3 border-r border-slate-200">Profissional Cuidador Credenciado</th>
+                        <th className="py-3 px-3 border-r border-slate-200">Feriado / Encargo</th>
+                        <th className="py-3 px-3 border-r border-slate-200 text-right">Repasse Líquido</th>
+                        <th className="py-3 px-3 text-right">Taxa Adm</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200">
+                    <tbody className="divide-y divide-slate-150 text-gray-900 text-sm md:text-base">
                       {filteredShiftsForPatient.filter(x => x.status !== 'Cancelado').length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="py-6 text-center text-slate-400 italic">Nenhum plantão ativo no período fechado.</td>
+                          <td colSpan={6} className="py-8 text-center text-gray-500 italic font-normal">Nenhum plantão ativo no período fechado.</td>
                         </tr>
                       ) : (
-                        filteredShiftsForPatient.filter(x => x.status !== 'Cancelado').map((item) => {
+                        filteredShiftsForPatient.filter(x => x.status !== 'Cancelado').map((item, index) => {
                           const base = Number(item.valorPlantao) || Number(paciente?.planoAtendimento?.valorSugeridoPlantao) || 150;
                           const extra = Number(item.ajudaCusto) || Number(paciente?.planoAtendimento?.ajudaCusto) || 0;
                           const baseTaxa = Number(item.taxaAdm) || Number(paciente?.planoAtendimento?.taxaAdm) || 0;
@@ -4780,23 +4785,23 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                             taxaCalculada = baseTaxa * 1.50;
                           }
                           return (
-                            <tr key={item.id} className="hover:bg-slate-50 transition-colors font-mono">
-                              <td className="py-2 px-2 border-r border-slate-200 font-sans font-bold">
+                            <tr key={item.id} className={`transition-colors hover:bg-slate-50 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
+                              <td className="py-3 px-3 border-r border-slate-200 font-sans font-medium text-gray-900 text-sm md:text-base">
                                 {new Date(item.data + 'T12:00:00').toLocaleDateString('pt-BR')} ({item.diaSemana})
                               </td>
-                              <td className="py-2 px-2 border-r border-slate-200">
+                              <td className="py-3 px-3 border-r border-slate-200 font-mono text-sm font-normal text-gray-600">
                                 {item.horaInicio || '08:00'} - {item.horaTermino || '20:00'}
                               </td>
-                              <td className="py-2 px-2 border-r border-slate-200 font-sans font-semibold">
+                              <td className="py-3 px-3 border-r border-slate-200 font-sans font-normal text-gray-900 text-base">
                                 {item.profissional}
                               </td>
-                              <td className="py-2 px-2 border-r border-slate-200 font-sans font-extrabold text-slate-500">
-                                {item.feriado ? `Feriado (+${item.feriado})` : 'Normal (Sem Adicional)'}
+                              <td className="py-3 px-3 border-r border-slate-200 font-sans font-normal text-gray-650 text-gray-600 text-sm">
+                                {item.feriado ? `Feriado (+${item.feriado})` : 'Normal'}
                               </td>
-                              <td className="py-2 px-2 border-r border-slate-200 text-right font-bold text-slate-800">
+                              <td className="py-3 px-3 border-r border-slate-200 text-right font-normal text-gray-900 text-base">
                                 R$ {(Number(repasseCalculado) || 0).toFixed(2)}
                               </td>
-                              <td className="py-2 px-2 text-right font-bold text-slate-700">
+                              <td className="py-3 px-3 text-right font-normal text-gray-700 text-base">
                                 R$ {(Number(taxaCalculada) || 0).toFixed(2)}
                               </td>
                             </tr>

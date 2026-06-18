@@ -31,6 +31,7 @@ import { useFirebase } from '../context/FirebaseContext';
 import { Agendamento, DebitoProfissional } from '../types';
 import { db } from '../lib/firebase';
 import { collection, query, where, getDocs, doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import { mascaraCNPJ } from '../lib/masks';
 
 /* ----------------------------------------------------
  * Tab 2: Profissionais Co-curators
@@ -424,35 +425,6 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
     message: string;
     onConfirm: () => void | Promise<void>;
   } | null>(null);
-
-  const [isClearingDebits, setIsClearingDebits] = useState(false);
-
-  const handleClearAllDebitos = async () => {
-    setDeleteConfirmDialog({
-      isOpen: true,
-      title: 'Zerar Todos os Débitos (Testes)',
-      message: 'ATENÇÃO: Você está prestes a excluir TODOS os registros de débitos de profissionais já lançados. Esta ação deletará todos os documentos do Firestore permanentemente e não poderá ser desfeita.',
-      onConfirm: async () => {
-        setIsClearingDebits(true);
-        try {
-          const q = collection(db, 'debitos_profissionais');
-          const snap = await getDocs(q);
-          
-          if (snap.empty) {
-            return;
-          }
-
-          const promises = snap.docs.map(docRef => deleteDoc(doc(db, 'debitos_profissionais', docRef.id)));
-          await Promise.all(promises);
-        } catch (err) {
-          console.error("Erro ao zerar débitos:", err);
-          alert("Erro ao zerar os débitos no Firestore.");
-        } finally {
-          setIsClearingDebits(false);
-        }
-      }
-    });
-  };
 
   const parseInputDateToDateObject = (dateStr: string): Date => {
     const [year, month, day] = dateStr.split('-').map(Number);
@@ -2273,14 +2245,6 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
             </div>
             <div className="flex flex-wrap gap-2 self-start">
               <button
-                onClick={handleClearAllDebitos}
-                disabled={isClearingDebits}
-                className="px-4 py-2 border border-orange-200 hover:bg-orange-50 text-orange-700 rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer flex items-center justify-center gap-1.5"
-                title="Apagar todos os débitos da base para começar do zero"
-              >
-                {isClearingDebits ? 'Limpando...' : 'Zerar Dados (Testes)'}
-              </button>
-              <button
                 onClick={() => {
                   setEditingDebitId(null);
                   setNewDebitProfId('');
@@ -3184,6 +3148,7 @@ export const EmpresaDashboard: React.FC = () => {
   const [tempDirecao, setTempDirecao] = useState('');
   const [tempLogo, setTempLogo] = useState<File | null>(null);
   const [shouldClearLogo, setShouldClearLogo] = useState(false);
+  const [isResettingDatabase, setIsResettingDatabase] = useState(false);
 
   // Diagnostic states
   const [uploadDiagnostics, setUploadDiagnostics] = useState<string[]>([]);
@@ -3338,6 +3303,75 @@ export const EmpresaDashboard: React.FC = () => {
     }
   };
 
+  const handleHardReset = async () => {
+    if (!isAdmin) {
+      alert("Acesso negado. Apenas o administrador tem permissão para realizar o Hard Reset.");
+      return;
+    }
+
+    const confirmRep = window.prompt(
+      'AÇÃO DESTRUTIVA: Isso apagará TODOS os cadastros, escalas e histórico financeiro do sistema de forma irreversível. Para confirmar, digite exatamente a palavra: ZERAR'
+    );
+
+    if (!confirmRep || confirmRep.trim().toUpperCase() !== 'ZERAR') {
+      alert("Operação cancelada pelo usuário.");
+      return;
+    }
+
+    setIsResettingDatabase(true);
+    try {
+      setNotification("Iniciando Hard Reset...");
+
+      // 1º - Coleções de Movimentação: faturas, folhas_pagamento, escalas, debitos, ocorrencias.
+      
+      // A. Faturas Pacientes
+      const faturasSnap = await getDocs(collection(db, 'faturas_pacientes'));
+      const fatDocRefs = faturasSnap.docs.map(d => deleteDoc(doc(db, 'faturas_pacientes', d.id)));
+      await Promise.all(fatDocRefs);
+
+      // B. Folhas Pagamento
+      const folhasSnap = await getDocs(collection(db, 'folhas_pagamento'));
+      const folDocRefs = folhasSnap.docs.map(d => deleteDoc(doc(db, 'folhas_pagamento', d.id)));
+      await Promise.all(folDocRefs);
+
+      // C. Escalas (agendamentos)
+      const agSnap = await getDocs(collection(db, 'agendamentos'));
+      const agDocRefs = agSnap.docs.map(d => deleteDoc(doc(db, 'agendamentos', d.id)));
+      await Promise.all(agDocRefs);
+
+      // D. Debitos (debitos_profissionais)
+      const debSnap = await getDocs(collection(db, 'debitos_profissionais'));
+      const debDocRefs = debSnap.docs.map(d => deleteDoc(doc(db, 'debitos_profissionais', d.id)));
+      await Promise.all(debDocRefs);
+
+      // E. Ocorrencias (subcoleção de profissionais)
+      const profSnap = await getDocs(collection(db, 'profissionais'));
+      for (const profDoc of profSnap.docs) {
+        const occColl = collection(db, 'profissionais', profDoc.id, 'ocorrencias');
+        const occSnap = await getDocs(occColl);
+        const occDocRefs = occSnap.docs.map(d => deleteDoc(doc(db, 'profissionais', profDoc.id, 'ocorrencias', d.id)));
+        await Promise.all(occDocRefs);
+      }
+
+      // Agora, Coleções Base: profissionais, pacientes.
+      const profDocRefs = profSnap.docs.map(d => deleteDoc(doc(db, 'profissionais', d.id)));
+      await Promise.all(profDocRefs);
+
+      const pacSnap = await getDocs(collection(db, 'pacientes'));
+      const pacDocRefs = pacSnap.docs.map(d => deleteDoc(doc(db, 'pacientes', d.id)));
+      await Promise.all(pacDocRefs);
+
+      setNotification("Hard Reset concluído com sucesso!");
+      alert("Sistema restaurado para o padrão de fábrica.");
+      window.location.reload();
+    } catch (err: any) {
+      console.error("Erro no Hard Reset:", err);
+      alert("Erro ao realizar o Hard Reset: " + (err.message || String(err)));
+    } finally {
+      setIsResettingDatabase(false);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in-30" id="empresa-dashboard">
       <div className="bg-white p-5 border border-slate-200 rounded-2xl shadow-sm space-y-5">
@@ -3437,8 +3471,9 @@ export const EmpresaDashboard: React.FC = () => {
                     <label className="text-[9px] uppercase font-bold text-slate-400">CNPJ</label>
                     <input 
                       value={tempCnpj} 
-                      onChange={e => setTempCnpj(e.target.value)} 
+                      onChange={e => setTempCnpj(mascaraCNPJ(e.target.value))} 
                       type="text" 
+                      maxLength={18}
                       className="w-full p-1.5 border border-slate-200 rounded-lg text-xs" 
                     />
                   </div>
@@ -3496,6 +3531,49 @@ export const EmpresaDashboard: React.FC = () => {
       </div>
       
       {isAdmin && <GestaoAcessos />}
+
+      {/* Danger Zone / Área de Risco */}
+      {isAdmin && (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-5 shadow-sm space-y-4 animate-in fade-in-30">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-red-100 text-red-600 rounded-lg">
+              <AlertTriangle size={20} />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-red-800 font-sans">Danger Zone / Área de Risco</h3>
+              <p className="text-xs text-red-600 mt-0.5">
+                Cuidado! As ações abaixo são altamente destrutivas e irreversíveis. Utilize apenas para fins de manutenção ou limpeza completa de dados de teste.
+              </p>
+            </div>
+          </div>
+          
+          <div className="border-t border-red-150 pt-4 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+            <div className="max-w-xl">
+              <h4 className="text-xs font-bold text-slate-800">Zerar Banco de Dados (Hard Reset)</h4>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Apaga de forma definitiva cadastros de profissionais, pacientes, escalas (agendamentos), faturas, folhas de pagamento, débitos e ocorrências na nuvem. Mantém as configurações organizacionais intactas.
+              </p>
+            </div>
+            <button
+              onClick={handleHardReset}
+              disabled={isResettingDatabase}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer disabled:bg-red-300 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 self-start sm:self-center"
+            >
+              {isResettingDatabase ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span>Resetando Banco...</span>
+                </>
+              ) : (
+                <>
+                  <Trash2 size={14} />
+                  <span>Zerar Banco de Dados (Hard Reset)</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

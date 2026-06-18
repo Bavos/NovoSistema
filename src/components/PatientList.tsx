@@ -226,13 +226,13 @@ export const PatientList: React.FC<PatientListProps> = ({
 
       {/* Advanced Filter Panel */}
       {showFilters && (
-        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/85 grid grid-cols-1 sm:grid-cols-3 gap-4 shadow-inner text-xs animate-in slide-in-from-top-3 duration-200">
+        <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-5 shadow-inner text-sm animate-in slide-in-from-top-3 duration-200">
           <div>
-            <label className="block font-normal text-slate-700 mb-1">Status:</label>
+            <label className="block font-medium text-gray-700 mb-1.5 text-sm">Status:</label>
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs text-slate-700 focus:outline-none focus:border-blue-500"
+              className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm text-gray-900 focus:outline-none focus:border-blue-500"
             >
               <option value="todos">Todos os Pacientes</option>
               <option value="Ativo">Ativos</option>
@@ -241,11 +241,11 @@ export const PatientList: React.FC<PatientListProps> = ({
           </div>
 
           <div>
-            <label className="block font-normal text-slate-700 mb-1">Grau de Dependência:</label>
+            <label className="block font-medium text-gray-700 mb-1.5 text-sm">Grau de Dependência:</label>
             <select
               value={filterDependence}
               onChange={(e) => setFilterDependence(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs text-slate-700 focus:outline-none focus:border-blue-500"
+              className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm text-gray-900 focus:outline-none focus:border-blue-500"
             >
               <option value="todos">Qualquer dependência</option>
               <option value="Baixo">Baixo</option>
@@ -256,11 +256,11 @@ export const PatientList: React.FC<PatientListProps> = ({
           </div>
 
           <div>
-            <label className="block font-normal text-slate-700 mb-1">Bairro:</label>
+            <label className="block font-medium text-gray-700 mb-1.5 text-sm">Bairro:</label>
             <select
               value={filterBairro}
               onChange={(e) => setFilterBairro(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs text-slate-700 focus:outline-none focus:border-blue-500"
+              className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm text-gray-900 focus:outline-none focus:border-blue-500"
             >
               <option value="todos">Qualquer Bairro</option>
               {uniqueBairros.map((b) => (
@@ -278,7 +278,7 @@ export const PatientList: React.FC<PatientListProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase font-semibold text-slate-700 tracking-wider">
+              <tr className="bg-slate-50 border-b border-slate-200 text-sm font-semibold text-gray-800 tracking-wider">
                 <th className="py-4 px-4 w-12 text-center">
                   <input
                     type="checkbox"
@@ -287,14 +287,14 @@ export const PatientList: React.FC<PatientListProps> = ({
                     className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                   />
                 </th>
-                <th className="py-4 px-4 text-left">Nome Completo</th>
-                <th className="p-3 text-left">Bairro</th>
-                <th className="p-3 text-left">Grau Dependência</th>
-                <th className="p-3 text-center">Plano de Escala</th>
-                <th className="p-3 text-center">Status</th>
+                <th className="py-4 px-4 text-left font-semibold text-gray-800">Nome Completo</th>
+                <th className="p-4 text-left font-semibold text-gray-800">Bairro</th>
+                <th className="p-4 text-left font-semibold text-gray-800">Grau Dependência</th>
+                <th className="p-4 text-center font-semibold text-gray-800">Plano de Escala</th>
+                <th className="p-4 text-center font-semibold text-gray-800">Status</th>
               </tr>
             </thead>
-            <tbody className="text-slate-600 text-sm divide-y divide-slate-100">
+            <tbody className="text-gray-900 text-base divide-y divide-slate-100">
               {filteredPacientes.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-12 text-center text-slate-400">
@@ -337,24 +337,24 @@ export const PatientList: React.FC<PatientListProps> = ({
                         <div className="flex flex-col">
                           <button
                             onClick={() => onSelectPatient(p)}
-                            className="font-normal text-slate-800 hover:text-blue-600 text-left transition-colors cursor-pointer"
+                            className="font-normal text-gray-900 hover:text-blue-600 text-left transition-colors cursor-pointer text-base"
                           >
                             {p.nome}
                           </button>
-                          <span className="text-xs text-slate-400 mt-0.5 font-mono">CPF: {p.cpf}</span>
+                          <span className="text-sm text-gray-500 mt-0.5 font-mono">CPF: {p.cpf}</span>
                         </div>
                       </td>
 
                       {/* Bairro */}
                       <td className="py-4 px-4">
-                        <div className="flex flex-col space-y-1">
-                          <span className="font-normal text-slate-800">{p.bairro}</span>
-                          <div className="flex flex-wrap gap-1 items-center">
-                            <span className="text-[11px] font-medium text-indigo-700 bg-indigo-50/70 border border-indigo-150 px-1.5 py-0.5 rounded shadow-sm">
+                        <div className="flex flex-col space-y-1.5">
+                          <span className="font-normal text-gray-900 text-base">{p.bairro}</span>
+                          <div className="flex flex-wrap gap-1.5 items-center">
+                            <span className="text-xs font-normal text-indigo-700 bg-indigo-50 border border-indigo-150 px-2 py-0.5 rounded shadow-sm">
                               {p.planoAtendimento?.tipoEscala || 'Diurno 12h'} • {p.planoAtendimento?.horaInicioPadrao || '07:00'}
                             </span>
                             {p.planoAtendimento?.tiposPlantao && p.planoAtendimento.tiposPlantao.map((sub) => (
-                              <span key={sub.id} className="text-[10px] font-normal text-slate-600 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded" title={`Valor: R$ ${sub.valorPlantao}`}>
+                              <span key={sub.id} className="text-xs font-normal text-gray-600 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded" title={`Valor: R$ ${sub.valorPlantao}`}>
                                 {sub.tipoEscala} • {sub.horaInicio}
                               </span>
                             ))}
@@ -365,7 +365,7 @@ export const PatientList: React.FC<PatientListProps> = ({
                       {/* Grau Dependencia */}
                       <td className="py-4 px-4">
                         <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${getDependenceBadge(
+                          className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold border ${getDependenceBadge(
                             p.informacoesMedicas?.grauDependencia
                           )}`}
                         >
@@ -375,7 +375,7 @@ export const PatientList: React.FC<PatientListProps> = ({
 
                       {/* Plano de Escala */}
                       <td className="py-4 px-4 text-center">
-                        <span className="inline-flex items-center px-2 py-1 rounded bg-slate-100 text-slate-700 font-mono text-xs font-semibold border border-slate-200">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded bg-slate-100 text-slate-700 font-mono text-sm font-normal border border-slate-200">
                           {p.planoAtendimento?.tipoEscala || 'Diurno 12h'}
                         </span>
                       </td>
