@@ -1501,38 +1501,38 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
           <div className="border-t border-slate-100 my-2"></div>
 
           {/* Quick info list with nice typography */}
-          <div className="space-y-4 text-left text-xs bg-slate-100 p-4.5 rounded-2xl border border-slate-300 shadow-sm">
-            <div className="flex items-center space-x-2.5 pb-2 border-b border-slate-200">
-              <User size={14} className="text-slate-800 flex-shrink-0" />
+          <div className="space-y-4 text-left text-xs bg-slate-55 bg-slate-100 p-4.5 rounded-2xl border border-slate-300 shadow-sm">
+            <div className="flex items-center space-x-2.5 pb-2 border-b border-slate-205">
+              <User size={14} className="text-slate-500 flex-shrink-0" />
               <div className="truncate">
-                <span className="text-slate-900 block text-[10px] uppercase font-mono font-black tracking-wider bg-slate-205">Data de Nascimento</span>
-                <span className="text-slate-950 font-black text-sm block mt-0.5">{dataNascimento ? new Date(dataNascimento).toLocaleDateString('pt-BR') : 'Não informada'}</span>
+                <span className="text-slate-500 block text-[11px] uppercase tracking-wider font-semibold font-sans">Data de Nascimento</span>
+                <span className="text-gray-900 font-normal text-sm block mt-0.5">{dataNascimento ? new Date(dataNascimento + 'T12:00:00').toLocaleDateString('pt-BR') : 'Não informada'}</span>
               </div>
             </div>
 
-            <div className="flex items-center space-x-2.5 pb-2 border-b border-slate-200">
-              <FileText size={14} className="text-slate-800 flex-shrink-0" />
+            <div className="flex items-center space-x-2.5 pb-2 border-b border-slate-205">
+              <FileText size={14} className="text-slate-500 flex-shrink-0" />
               <div className="truncate">
-                <span className="text-slate-900 block text-[10px] uppercase font-mono font-black tracking-wider">CPF do Paciente</span>
-                <span className="text-slate-950 font-black text-sm block mt-0.5">{cpf || 'Não preenchido'}</span>
+                <span className="text-slate-500 block text-[11px] uppercase tracking-wider font-semibold font-sans">CPF do Paciente</span>
+                <span className="text-gray-900 font-normal text-sm block mt-0.5">{cpf || 'Não preenchido'}</span>
               </div>
             </div>
 
-            <div className="flex items-center space-x-2.5 pb-2 border-b border-slate-200">
-              <User size={14} className="text-slate-800 flex-shrink-0" />
+            <div className="flex items-center space-x-2.5 pb-2 border-b border-slate-205">
+              <User size={14} className="text-slate-500 flex-shrink-0" />
               <div className="truncate">
-                <span className="text-slate-900 block text-[10px] uppercase font-mono font-black tracking-wider">Responsável Familiar</span>
-                <span className="text-slate-950 font-black text-sm block mt-0.5 truncate max-w-[200px]" title={nomeResponsavel}>
+                <span className="text-slate-500 block text-[11px] uppercase tracking-wider font-semibold font-sans">Responsável Familiar</span>
+                <span className="text-gray-900 font-normal text-sm block mt-0.5 truncate max-w-[200px]" title={nomeResponsavel}>
                   {nomeResponsavel || 'Não preenchido'}
                 </span>
               </div>
             </div>
 
             <div className="flex items-center space-x-2.5">
-              <Phone size={14} className="text-slate-800 flex-shrink-0" />
+              <Phone size={14} className="text-slate-500 flex-shrink-0" />
               <div className="truncate">
-                <span className="text-slate-900 block text-[10px] uppercase font-mono font-black tracking-wider">Telefone do Responsável</span>
-                <span className="text-blue-900 font-extrabold text-sm block mt-0.5">{telefoneResponsavel ? <b>{telefoneResponsavel}</b> : 'Não preenchido'}</span>
+                <span className="text-slate-500 block text-[11px] uppercase tracking-wider font-semibold font-sans">Telefone do Responsável</span>
+                <span className="text-gray-900 font-normal text-sm block mt-0.5">{telefoneResponsavel || 'Não preenchido'}</span>
               </div>
             </div>
           </div>
@@ -1617,23 +1617,23 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
           <form onSubmit={handleSave} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm min-h-[380px]">
             {activeTab === 'geral' && (
               <div className="space-y-4 animate-in fade-in-30 slide-in-from-right-3">
-                <h4 className="text-xs font-bold text-slate-700 border-b border-slate-100 pb-2 uppercase tracking-wider italic">DADOS PRINCIPAIS DO PACIENTE</h4>
+                <h4 className="text-sm font-semibold text-gray-800 border-b border-slate-200 pb-2 uppercase tracking-wider">DADOS PRINCIPAIS DO PACIENTE</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="block text-xs font-normal text-slate-700">Nome Completo *</label>
+                    <label className="block text-sm font-medium text-gray-700">Nome Completo *</label>
                     <input
                       type="text"
                       required
                       disabled={isCurrentlyDeactivated}
                       value={nome}
                       onChange={(e) => setNome(e.target.value)}
-                      className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed"
+                      className="w-full text-sm p-2.5 border border-slate-3 rounded-lg text-gray-900 bg-white border-slate-300 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
                       placeholder="Nome completo do paciente"
                     />
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-black text-slate-900">CPF do Paciente *</label>
+                    <label className="block text-sm font-medium text-gray-700">CPF do Paciente *</label>
                     <input
                       type="text"
                       required
@@ -1641,53 +1641,53 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       value={cpf}
                       onChange={(e) => setCpf(mascaraCPF(e.target.value))}
                       maxLength={14}
-                      className="w-full text-xs p-2.5 border border-slate-350 rounded-lg text-slate-950 font-extrabold bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
+                      className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
                       placeholder="Ex: 000.000.000-00"
                     />
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-black text-slate-900">Data de Nascimento *</label>
+                    <label className="block text-sm font-medium text-gray-700">Data de Nascimento *</label>
                     <input
                       type="date"
                       required
                       disabled={isCurrentlyDeactivated}
                       value={dataNascimento}
                       onChange={(e) => setDataNascimento(e.target.value)}
-                      className="w-full text-xs p-2.5 border border-slate-350 rounded-lg text-slate-950 font-extrabold bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
+                      className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
                     />
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-black text-slate-900">E-mail de Contato (Opcional)</label>
+                    <label className="block text-sm font-medium text-gray-700">E-mail de Contato (Opcional)</label>
                     <input
                       type="email"
                       disabled={isCurrentlyDeactivated}
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="w-full text-xs p-2.5 border border-slate-205 rounded-lg text-slate-950 font-extrabold bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed"
+                      className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
                       placeholder="email@exemplo.com"
                     />
                   </div>
                 </div>
 
-                <h4 className="text-xs font-bold text-slate-900 border-b border-slate-200 pb-2 pt-3 uppercase tracking-wider italic">CONTATO DO RESPONSÁVEL FAMILIAR</h4>
+                <h4 className="text-sm font-semibold text-gray-800 border-b border-slate-200 pb-2 pt-3 uppercase tracking-wider">CONTATO DO RESPONSÁVEL FAMILIAR</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-black text-slate-900">Representante Responsável *</label>
+                    <label className="block text-sm font-medium text-gray-700">Representante Responsável *</label>
                     <input
                       type="text"
                       required
                       disabled={isCurrentlyDeactivated}
                       value={nomeResponsavel}
                       onChange={(e) => setNomeResponsavel(e.target.value)}
-                      className="w-full text-xs p-2.5 border border-slate-350 rounded-lg text-slate-950 font-extrabold bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
+                      className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
                       placeholder="Nome do parente / responsável formal"
                     />
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-black text-slate-900">Telefone do Responsável *</label>
+                    <label className="block text-sm font-medium text-gray-700">Telefone do Responsável *</label>
                     <input
                       type="text"
                       required
@@ -1695,21 +1695,21 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       value={telefoneResponsavel}
                       onChange={(e) => setTelefoneResponsavel(mascaraTelefone(e.target.value))}
                       maxLength={15}
-                      className="w-full text-xs p-2.5 border border-slate-350 rounded-lg text-slate-950 font-extrabold bg-white focus:outline-none focus:border-blue-550 focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
+                      className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-blue-550 focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
                       placeholder="Ex: (21) 90000-0000"
                     />
                   </div>
                 </div>
 
-                <h4 className="text-xs font-bold text-slate-900 border-b border-slate-200 pb-2 pt-3 uppercase tracking-wider italic">DADOS DE FATURAMENTO E PAGAMENTO</h4>
+                <h4 className="text-sm font-semibold text-gray-800 border-b border-slate-200 pb-2 pt-3 uppercase tracking-wider">DADOS DE FATURAMENTO E PAGAMENTO</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-black text-slate-900">Responsável pelo Pagamento? *</label>
+                    <label className="block text-sm font-medium text-gray-700">Responsável pelo Pagamento? *</label>
                     <select
                       disabled={isCurrentlyDeactivated}
                       value={responsavelPagamento}
                       onChange={(e) => setResponsavelPagamento(e.target.value as any)}
-                      className="w-full text-xs p-2.5 border border-slate-350 rounded-lg text-slate-950 font-extrabold bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed"
+                      className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
                     >
                       <option value="O próprio Paciente">O próprio Paciente</option>
                       <option value="Outro Responsável">Outro Responsável</option>
@@ -1717,12 +1717,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-black text-slate-900">Canal de Envio da Fatura/Boleto *</label>
+                    <label className="block text-sm font-medium text-gray-700">Canal de Envio da Fatura/Boleto *</label>
                     <select
                       disabled={isCurrentlyDeactivated}
                       value={opcaoEnvio}
                       onChange={(e) => setOpcaoEnvio(e.target.value as any)}
-                      className="w-full text-xs p-2.5 border border-slate-350 rounded-lg text-slate-950 font-extrabold bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed"
+                      className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
                     >
                       <option value="WhatsApp">WhatsApp</option>
                       <option value="E-mail">E-mail</option>
@@ -1733,19 +1733,19 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                   {responsavelPagamento === 'Outro Responsável' && (
                     <>
                       <div className="space-y-1.5">
-                        <label className="block text-xs font-black text-slate-900">Nome Completo do Pagador *</label>
+                        <label className="block text-sm font-medium text-gray-700">Nome Completo do Pagador *</label>
                         <input
                           type="text"
                           required
                           disabled={isCurrentlyDeactivated}
                           value={nomePagador}
                           onChange={(e) => setNomePagador(e.target.value)}
-                          className="w-full text-xs p-2.5 border border-slate-350 rounded-lg text-slate-950 font-extrabold bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
+                          className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
                           placeholder="Nome completo do portador da conta"
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="block text-xs font-black text-slate-900">CPF do Pagador *</label>
+                        <label className="block text-sm font-medium text-gray-700">CPF do Pagador *</label>
                         <input
                           type="text"
                           required
@@ -1753,7 +1753,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                           value={cpfPagador}
                           onChange={(e) => setCpfPagador(mascaraCPF(e.target.value))}
                           maxLength={14}
-                          className="w-full text-xs p-2.5 border border-slate-350 rounded-lg text-slate-950 font-extrabold bg-white focus:outline-none focus:border-blue-550 focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
+                          className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-blue-550 focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
                           placeholder="Ex: 000.000.000-00"
                         />
                       </div>
@@ -1762,14 +1762,14 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
 
                   {(opcaoEnvio === 'WhatsApp' || opcaoEnvio === 'Ambos') && (
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-black text-slate-900">WhatsApp para Faturamento *</label>
+                      <label className="block text-sm font-medium text-gray-700">WhatsApp para Faturamento *</label>
                       <input
                         type="text"
                         required
                         disabled={isCurrentlyDeactivated}
                         value={whatsappFaturamento}
                         onChange={(e) => setWhatsappFaturamento(e.target.value)}
-                        className="w-full text-xs p-2.5 border border-slate-350 rounded-lg text-slate-950 font-extrabold bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
+                        className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
                         placeholder="Ex: (21) 90000-0000"
                       />
                     </div>
@@ -1777,14 +1777,14 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
 
                   {(opcaoEnvio === 'E-mail' || opcaoEnvio === 'Ambos') && (
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-black text-slate-900">E-mail para Faturamento *</label>
+                      <label className="block text-sm font-medium text-gray-700">E-mail para Faturamento *</label>
                       <input
                         type="email"
                         required
                         disabled={isCurrentlyDeactivated}
                         value={emailFaturamento}
                         onChange={(e) => setEmailFaturamento(e.target.value)}
-                        className="w-full text-xs p-2.5 border border-slate-350 rounded-lg text-slate-950 font-extrabold bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
+                        className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
                         placeholder="faturamento@exemplo.com"
                       />
                     </div>
@@ -1889,36 +1889,36 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
 
             {activeTab === 'medico' && (
               <div className="space-y-4 animate-in fade-in-30 slide-in-from-right-3">
-                <h4 className="text-xs font-bold text-slate-700 border-b border-slate-100 pb-2 uppercase tracking-wider italic">HISTÓRICO CLÍNICO & PRONTUÁRIO DOMICILIAR</h4>
+                <h4 className="text-sm font-semibold text-gray-800 border-b border-slate-200 pb-2 uppercase tracking-wider">HISTÓRICO CLÍNICO & PRONTUÁRIO DOMICILIAR</h4>
 
                 {/* Replicating the Visual Card/Grid format from the reference standard */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="bg-slate-50/50 p-4 border border-slate-200 rounded-xl space-y-3">
-                    <h5 className="text-xs font-bold text-slate-800 flex items-center space-x-1">
+                    <h5 className="text-sm font-semibold text-gray-800 flex items-center space-x-1.5">
                       <span className="w-1.5 h-3 bg-blue-500 rounded-sm inline-block"></span>
                       <span>Diagnósticos & Comorbidades</span>
                     </h5>
                     <div className="space-y-3">
                       <div className="space-y-1.5">
-                        <label className="text-[11px] uppercase tracking-wider font-mono text-slate-900 font-black block">Diagnóstico Principal *</label>
+                        <label className="block text-sm font-medium text-gray-700">Diagnóstico Principal *</label>
                         <input
                           type="text"
                           required
                           disabled={isCurrentlyDeactivated}
                           value={diagnosticoPrincipal}
                           onChange={(e) => setDiagnosticoPrincipal(e.target.value)}
-                          className="w-full text-xs p-2.5 bg-white border border-slate-300 rounded-lg text-slate-950 font-extrabold focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
+                          className="w-full text-sm p-2.5 bg-white border border-slate-300 rounded-lg text-gray-900 font-normal focus:outline-none focus:border-blue-550 focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
                           placeholder="Ex: Alzheimer Estágio Moderado"
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-[11px] uppercase tracking-wider font-mono text-slate-900 font-black block">Comorbidades Associadas</label>
+                        <label className="block text-sm font-medium text-gray-700">Comorbidades Associadas</label>
                         <input
                           type="text"
                           disabled={isCurrentlyDeactivated}
                           value={comorbidades}
                           onChange={(e) => setComorbidades(e.target.value)}
-                          className="w-full text-xs p-2.5 bg-white border border-slate-300 rounded-lg text-slate-950 font-extrabold focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
+                          className="w-full text-sm p-2.5 bg-white border border-slate-300 rounded-lg text-gray-900 font-normal focus:outline-none focus:border-blue-550 focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
                           placeholder="Ex: Hipertensão, Diabetes Tipo 2"
                         />
                       </div>
@@ -1926,29 +1926,29 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                   </div>
 
                   <div className="bg-slate-50/50 p-4 border border-slate-200 rounded-xl space-y-3">
-                    <h5 className="text-xs font-bold text-slate-800 flex items-center space-x-1">
+                    <h5 className="text-sm font-semibold text-gray-800 flex items-center space-x-1.5">
                       <span className="w-1.5 h-3 bg-red-500 rounded-sm inline-block"></span>
                       <span>Alergias & Crises</span>
                     </h5>
                     <div className="space-y-3">
                       <div className="space-y-1">
-                        <label className="text-[10px] uppercase tracking-wider font-mono text-slate-400 font-normal block">Alergias Conhecidas</label>
+                        <label className="block text-sm font-medium text-gray-700">Alergias Conhecidas</label>
                         <input
                           type="text"
                           disabled={isCurrentlyDeactivated}
                           value={alergias}
                           onChange={(e) => setAlergias(e.target.value)}
-                          className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed"
+                          className="w-full text-sm p-2.5 bg-white border border-slate-300 rounded-lg text-gray-900 font-normal focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
                           placeholder="Ex: Penicilina, Corantes Amarelos"
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] uppercase tracking-wider font-mono text-slate-400 font-normal block">Grau de Dependência *</label>
+                        <label className="block text-sm font-medium text-gray-700">Grau de Dependência *</label>
                         <select
                           disabled={isCurrentlyDeactivated}
                           value={grauDependencia}
                           onChange={(e) => setGrauDependencia(e.target.value as any)}
-                          className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed"
+                          className="w-full text-sm p-2.5 bg-white border border-slate-300 rounded-lg text-gray-900 font-normal focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
                         >
                           <option value="Baixo">Baixo (Supervisão simples)</option>
                           <option value="Médio">Médio (Auxílio parcial)</option>
@@ -1961,13 +1961,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                 </div>
 
                 <div className="space-y-1">
-                  <label className="block text-xs font-normal text-slate-700">Observações Clínicas Gerais:</label>
+                  <label className="block text-sm font-medium text-gray-700">Observações Clínicas Gerais:</label>
                   <textarea
                     disabled={isCurrentlyDeactivated}
                     value={observacoesClinicas}
                     onChange={(e) => setObservacoesClinicas(e.target.value)}
                     rows={3}
-                    className="w-full text-xs p-3 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed font-sans"
+                    className="w-full text-sm p-2.5 bg-white border border-slate-300 rounded-lg text-gray-900 font-normal focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
                     placeholder="Outros apontamentos cruciais sobre alimentação por sonda, mobilidade, uso de andadores, cadeira de rodas..."
                   />
                 </div>
