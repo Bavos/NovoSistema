@@ -43,9 +43,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'empresa', label: 'Empresa', icon: Building2, desc: 'Configurações corporativas' },
   ];
 
-  // Restrict access for 'colaborador' role to the 'empresa' tab
+  // Restrict access for 'colaborador' role to 'financeiro' and 'empresa' tabs
   const menuItems = allMenuItems.filter(item => {
-    if (userRole?.toLowerCase() === 'colaborador' && item.id === 'empresa') {
+    if (userRole?.toLowerCase() === 'colaborador' && (item.id === 'empresa' || item.id === 'financeiro')) {
       return false;
     }
     return true;

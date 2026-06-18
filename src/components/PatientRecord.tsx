@@ -9,6 +9,7 @@ import { updateDoc, doc } from 'firebase/firestore';
 import { Paciente, Plantao, CancelingReason, EscalacaoPlano, Agendamento } from '../types';
 import { useFirebase } from '../context/FirebaseContext';
 import { usePacienteData } from '../hooks/usePacienteData';
+import { CardBase, DataGrid, DataField, SoftBadge } from './ui/DesignSystem';
 import { pacienteSchema } from '../schemas/validationSchemas';
 import { mascaraCPF, mascaraTelefone, mascaraCEP } from '../lib/masks';
 import {
@@ -142,7 +143,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
     agendamentos,
     addAgendamento,
     updateAgendamento,
-    deleteAgendamento
+    deleteAgendamento,
+    userRole
   } = useFirebase();
 
   const isBlockedBidirectional = (prof: any) => {
@@ -227,11 +229,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
     }
   }, [editShiftDate]);
 
-  // Single date state and curinga for Novo Agendamento
-  const [avulsoSingleDate, setAvulsoSingleDate] = useState(() => {
-    const today = new Date();
-    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  });
+  // Multi-date selection state for Novo Agendamento
+  const [datasSelecionadas, setDatasSelecionadas] = useState<string[]>([]);
+  const [tempDate, setTempDate] = useState("");
+  const [agnCalendarYear, setAgnCalendarYear] = useState(new Date().getFullYear());
+  const [agnCalendarMonth, setAgnCalendarMonth] = useState(new Date().getMonth());
 
   // Detailed Shift Details / Edit / Delete Modal State
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
@@ -754,6 +756,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
   // Local handler to compile and save Plano de Atendimento reference values to Firestore as base rates
   const handleSavePlanoAtendimento = async () => {
     if (isCurrentlyDeactivated) return;
+    if (userRole?.toLowerCase() === 'colaborador') {
+      alert('Acesso Negado: Usuários com perfil Colaborador não possuem permissão para alterar o Plano de Atendimento.');
+      return;
+    }
     if (!paciente?.id) {
       alert('Erro: ID do paciente não fornecido. Por favor, salve primeiro o formulário geral do paciente.');
       return;
@@ -1021,8 +1027,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
 
   const handleConfirmAvulso = async () => {
     if (!paciente) return;
-    if (!avulsoSingleDate) {
-      alert('Selecione uma data para o agendamento.');
+    if (datasSelecionadas.length === 0) {
+      alert('Selecione ao menos uma data para o agendamento.');
       return;
     }
     if (!avulsoProf.trim()) {
@@ -1102,29 +1108,43 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
       };
 
       const pickedProf = profissionais.find(p => p.nome === avulsoProf);
-      await addAgendamento({
-        idPaciente: paciente.id,
-        idProfissional: pickedProf ? pickedProf.id : 'n/a',
-        nomeProfissional: avulsoProf,
-        data: avulsoSingleDate,
-        horario: `${chosenHoraInicio}-${getTerminoTime(chosenHoraInicio, durationHrs)}`,
-        valorPlantao: plantaoFinal,
-        valorRepasse: plantaoFinal,
-        ajudaCusto: finalAjuda,
-        taxaAdm: taxaAdmFinal,
-        status: 'Confirmado',
-        observacao: avulsoObs || (avulsoCuringa ? 'CURINGA' : ''),
-        tipoDia: avulsoTipoDia as 'Normal' | 'Feriado 20%' | 'Feriado 50%',
-        isCuringa: avulsoCuringa
-      });
+      
+      // Criar agendamento individual para cada data selecionada
+      for (const curData of datasSelecionadas) {
+        // Check for conflicts
+        const conflict = agendamentos.find(p => p.data === curData && p.nomeProfissional === avulsoProf && p.status === 'Confirmado');
+        if (conflict) {
+          if (!window.confirm(`⚠️ Atenção: ${avulsoProf} já está escalado em outro plantão nesta data (${curData}). Tem certeza que deseja confirmar este agendamento simultâneo para essa data?`)) {
+            continue; // Pula essa data se o usuário não confirmar
+          }
+        }
 
+        await addAgendamento({
+          idPaciente: paciente.id,
+          idProfissional: pickedProf ? pickedProf.id : 'n/a',
+          nomeProfissional: avulsoProf,
+          data: curData,
+          horario: `${chosenHoraInicio}-${getTerminoTime(chosenHoraInicio, durationHrs)}`,
+          valorPlantao: plantaoFinal,
+          valorRepasse: plantaoFinal,
+          ajudaCusto: finalAjuda,
+          taxaAdm: taxaAdmFinal,
+          status: 'Confirmado',
+          observacao: avulsoObs || (avulsoCuringa ? 'CURINGA' : ''),
+          tipoDia: avulsoTipoDia as 'Normal' | 'Feriado 20%' | 'Feriado 50%',
+          isCuringa: avulsoCuringa
+        });
+      }
+
+      const totalQuantity = datasSelecionadas.length;
       setAvulsoProf('');
       setAvulsoPlantaoOptionId('principal');
       setAvulsoTipoDia('Normal');
       setAvulsoObs('');
       setAvulsoCuringa(false);
+      setDatasSelecionadas([]);
       setAvulsoModalOpen(false);
-      alert('Novo agendamento criado com sucesso!');
+      alert(totalQuantity > 1 ? `${totalQuantity} plantões agendados em lote com sucesso!` : 'Novo agendamento criado com sucesso!');
     } catch (err) {
       alert('Erro ao criar novo agendamento.');
     }
@@ -2256,16 +2276,22 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                   </div>
                 </div>
 
-                <div className="flex justify-end pt-4 border-t border-slate-100">
-                  <button
-                    type="button"
-                    disabled={isCurrentlyDeactivated}
-                    onClick={handleSavePlanoAtendimento}
-                    className="flex items-center space-x-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0"
-                    id="save-plano-atendimento"
-                  >
-                    <span>💾 Salvar Plano de Atendimento</span>
-                  </button>
+                <div className="flex justify-end pt-4 border-t border-slate-100 items-center justify-between">
+                  {userRole?.toLowerCase() === 'colaborador' ? (
+                    <span className="text-xs text-amber-600 font-semibold italic flex items-center gap-1.5 bg-amber-50 border border-amber-200 p-2 rounded-lg">
+                      ⚠️ Apenas administradores podem alterar as regras e valores do Plano de Atendimento.
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={isCurrentlyDeactivated}
+                      onClick={handleSavePlanoAtendimento}
+                      className="flex items-center space-x-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0"
+                      id="save-plano-atendimento"
+                    >
+                      <span>💾 Salvar Plano de Atendimento</span>
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -2307,7 +2333,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       onClick={() => {
                         const today = new Date();
                         const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-                        setAvulsoSingleDate(todayStr);
+                        setDatasSelecionadas([todayStr]);
                         setAvulsoProf('');
                         setAvulsoPlantaoOptionId('principal');
                         setAvulsoTipoDia('Normal');
@@ -3044,16 +3070,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                                   >
                                     🗑️ Excluir
                                   </button>
-                                  {item.status === 'Confirmado' && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleTriggerCancelClick(item.id)}
-                                      title="Cancelar / Excluir este plantão"
-                                      className="px-3 py-1.5 text-xs font-semibold bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-100 transition-colors cursor-pointer"
-                                    >
-                                      ❌ Excluir
-                                    </button>
-                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -3495,7 +3511,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
               </button>
             </div>
 
-            <div className="space-y-3.5">
+            <div className="space-y-3.5 max-h-[65vh] overflow-y-auto pr-2 pb-4">
               {/* Professional Autocomplete Search Field */}
               <div className="space-y-1 relative">
                 <label className="block text-xs font-bold text-slate-700">Alocar Profissional</label>
@@ -3533,19 +3549,139 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                 )}
               </div>
 
-              {/* Single Date Picker Input */}
-              <div className="space-y-1">
-                <label className="block text-xs font-bold text-slate-700">Data do Plantão </label>
-                <input
-                  type="date"
-                  value={avulsoSingleDate}
-                  onChange={(e) => setAvulsoSingleDate(e.target.value)}
-                  className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/50 focus:outline-none focus:border-blue-500 font-sans"
-                />
+              {/* Custom Multi-Select Calendar */}
+              <div className="space-y-2.5">
+                <label className="block text-xs font-bold text-slate-700">Data do(s) Plantão(ões) (Múltiplas Escolhas)</label>
+                
+                <div className="bg-[#fcfbf9] border border-gray-150 rounded-xl p-3 shadow-sm font-sans max-w-sm mx-auto">
+                  {/* Calendar Header with Navigation */}
+                  <div className="flex items-center justify-between mb-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (agnCalendarMonth === 0) {
+                          setAgnCalendarMonth(11);
+                          setAgnCalendarYear(agnCalendarYear - 1);
+                        } else {
+                          setAgnCalendarMonth(agnCalendarMonth - 1);
+                        }
+                      }}
+                      className="p-1 px-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                    <span className="font-semibold text-xs uppercase tracking-wider text-[#1a3c2e]">
+                      {["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"][agnCalendarMonth]} {agnCalendarYear}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (agnCalendarMonth === 11) {
+                          setAgnCalendarMonth(0);
+                          setAgnCalendarYear(agnCalendarYear + 1);
+                        } else {
+                          setAgnCalendarMonth(agnCalendarMonth + 1);
+                        }
+                      }}
+                      className="p-1 px-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
+
+                  {/* Day Names Grid */}
+                  <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-gray-400 mb-1.5">
+                    {["D", "S", "T", "Q", "Q", "S", "S"].map((d, index) => (
+                      <div key={index} className="py-0.5">{d}</div>
+                    ))}
+                  </div>
+
+                  {/* Days Grid */}
+                  <div className="grid grid-cols-7 gap-1">
+                    {Array.from({ length: new Date(agnCalendarYear, agnCalendarMonth, 1).getDay() }).map((_, i) => (
+                      <div key={`empty-${i}`} className="h-8 w-8" />
+                    ))}
+                    {Array.from({ length: new Date(agnCalendarYear, agnCalendarMonth + 1, 0).getDate() }, (_, i) => i + 1).map((dayNum) => {
+                      const formattedDate = `${agnCalendarYear}-${String(agnCalendarMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+                      const isSelected = datasSelecionadas.includes(formattedDate);
+                      const isToday = new Date().toDateString() === new Date(agnCalendarYear, agnCalendarMonth, dayNum).toDateString();
+                      
+                      return (
+                        <button
+                          key={dayNum}
+                          type="button"
+                          onClick={() => {
+                            if (isSelected) {
+                              setDatasSelecionadas(datasSelecionadas.filter(d => d !== formattedDate));
+                            } else {
+                              setDatasSelecionadas([...datasSelecionadas, formattedDate]);
+                            }
+                          }}
+                          className={`h-8 w-8 text-xs font-semibold flex items-center justify-center transition-all cursor-pointer select-none mx-auto rounded-full
+                            ${isSelected 
+                              ? 'bg-[#1a3c2e] text-white font-bold hover:bg-[#1a3c2e]/90 shadow-sm transform scale-105' 
+                              : isToday
+                                ? 'bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100/50'
+                                : 'text-gray-700 hover:bg-gray-150/50 hover:text-gray-900'
+                            }`}
+                        >
+                          {dayNum}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Tags / Chips das Datas Selecionadas */}
+                <div className="space-y-1.5 mt-2">
+                  <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500">
+                    <span>Dias selecionados ({datasSelecionadas.length}):</span>
+                    {datasSelecionadas.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setDatasSelecionadas([])}
+                        className="text-red-600 hover:underline font-bold text-xs"
+                      >
+                        Limpar todos ×
+                      </button>
+                    )}
+                  </div>
+                  {datasSelecionadas.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 p-2.5 bg-gray-50 border border-gray-150 rounded-lg max-h-32 overflow-y-auto">
+                      {datasSelecionadas
+                        .slice()
+                        .sort()
+                        .map((dt) => {
+                          const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+                          const dObj = new Date(dt + 'T12:00:00');
+                          const dW = days[dObj.getDay()] || 'Sex';
+                          return (
+                            <div
+                              key={dt}
+                              className="inline-flex items-center space-x-1.5 px-2 py-0.5 bg-blue-50 border border-blue-100 rounded text-[11px] text-blue-800 font-medium"
+                            >
+                              <span>{dW}</span>
+                              <span className="text-blue-300 font-light text-[9px]">•</span>
+                              <span>{dt.split('-').reverse().join('/')}</span>
+                              <button
+                                type="button"
+                                onClick={() => setDatasSelecionadas(datasSelecionadas.filter((x) => x !== dt))}
+                                className="text-red-500 hover:text-red-700 font-bold text-xs ml-1 focus:outline-none cursor-pointer"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-slate-400 italic">Selecione as datas diretamente no calendário acima.</p>
+                  )}
+                </div>
               </div>
 
               {/* Horário / Plantão Option Select Dropdown */}
-              <div className="space-y-1">
+              <div className="space-y-1 col-span-12">
                 <label className="block text-xs font-bold text-slate-700">Horário / Turno</label>
                 <select
                   value={avulsoPlantaoOptionId}
@@ -3561,7 +3697,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
               </div>
 
               {/* Financial modifier with 20% and 50% */}
-              <div className="space-y-1">
+              <div className="space-y-1 col-span-12">
                 <label className="block text-xs font-bold text-slate-700">Acréscimo Feriado (Faturamento/Repasse)</label>
                 <select
                   value={avulsoTipoDia}
@@ -3589,23 +3725,29 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
               </div>
 
               {/* Financial preview card box */}
-              <div className="bg-slate-50 border border-slate-150 rounded-xl p-3.5 space-y-2 mt-1">
-                <div className="text-[10px] font-black text-slate-450 uppercase tracking-wider block border-b border-slate-100 pb-1">
+              <CardBase className="mt-1 p-4 space-y-2.5">
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider block border-b border-gray-100 pb-1.5">
                   Resumo Financeiro Estimado
                 </div>
-                <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 text-xs text-slate-650 font-sans">
+                <div className="grid grid-cols-2 gap-x-2 gap-y-2 text-xs text-gray-600 font-sans">
                   <span>Valor Líquido Repasse:</span>
-                  <span className="font-semibold text-slate-800 text-right font-mono">R$ {computedRepasse.toFixed(2)}</span>
+                  <span className="font-semibold text-gray-900 text-right font-mono">R$ {computedRepasse.toFixed(2)}</span>
                   <span>Ajuda de Custo:</span>
-                  <span className="font-semibold text-slate-800 text-right font-mono">R$ {computedAjuda.toFixed(2)}</span>
+                  <span className="font-semibold text-gray-900 text-right font-mono">R$ {computedAjuda.toFixed(2)}</span>
                   <span>Taxa Adm / Faturamento:</span>
-                  <span className="font-semibold text-slate-800 text-right font-mono">R$ {computedTaxa.toFixed(2)}</span>
-                  <div className="col-span-2 border-t border-slate-150 pt-1 flex justify-between font-bold text-sky-700">
-                    <span>Faturamento Total Paciente:</span>
+                  <span className="font-semibold text-gray-900 text-right font-mono">R$ {computedTaxa.toFixed(2)}</span>
+                  <div className="col-span-2 border-t border-gray-100 pt-2 flex justify-between font-bold text-sky-700">
+                    <span>Faturamento Unid. Paciente:</span>
                     <span>R$ {(computedRepasse + computedTaxa + computedAjuda).toFixed(2)}</span>
                   </div>
+                  {datasSelecionadas.length > 1 && (
+                    <div className="col-span-2 border-t border-dashed border-indigo-100 pt-2 flex justify-between font-extrabold text-[#1a3c2e]">
+                      <span>Total do Lote ({datasSelecionadas.length}x):</span>
+                      <span>R$ {((computedRepasse + computedTaxa + computedAjuda) * datasSelecionadas.length).toFixed(2)}</span>
+                    </div>
+                  )}
                 </div>
-              </div>
+              </CardBase>
 
               <div className="space-y-1">
                 <label className="block text-xs font-bold text-slate-700">Observações adicionais</label>
@@ -4649,39 +4791,31 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                 </div>
 
                 {/* Bloco de Faturamento / Resumo Financeiro */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-3 bg-slate-50 border border-slate-200 rounded-xl text-left">
-                  <div className="space-y-0.5">
-                    <span className="text-[9px] font-bold text-slate-450 text-slate-400 uppercase">Paciente Assistido:</span>
-                    <p className="text-xs font-black text-slate-805 text-slate-800 truncate">{nome || paciente?.nome}</p>
-                  </div>
-                  <div className="space-y-0.5">
-                    <span className="text-[9px] font-bold text-slate-450 text-slate-400 uppercase">CPF do Responsável:</span>
-                    <p className="text-xs font-mono font-bold text-slate-805 text-slate-800">{cpf || '---'}</p>
-                  </div>
-                  <div className="space-y-0.5 col-span-1">
-                    <span className="text-[9px] font-bold text-slate-450 text-slate-400 uppercase block">Logistica de Chegada:</span>
-                    <p className="text-[10px] font-semibold text-slate-700 leading-none truncate">{logisticaChegada || 'Não explicitado'}</p>
-                  </div>
-                  <div className="space-y-0.5 text-right bg-slate-100/85 p-2 rounded-lg border border-slate-200">
-                    <span className="text-[9px] font-black text-blue-700 uppercase leading-none block">Total de Turnos:</span>
-                    <p className="text-sm font-black text-blue-900 font-mono mt-0.5">
-                      {filteredShiftsForPatient.filter(x => x.status !== 'Cancelado').length} Ativos
-                    </p>
-                  </div>
-                </div>
+                <CardBase className="bg-[#faf9f6]/30 p-4">
+                  <DataGrid cols={4} className="gap-4">
+                    <DataField label="Paciente Assistido" value={nome || paciente?.nome} />
+                    <DataField label="CPF do Responsável" value={cpf || '---'} className="font-mono text-xs" />
+                    <DataField label="Logística de Chegada" value={logisticaChegada || 'Não explicitado'} />
+                    <div className="text-right flex flex-col justify-center">
+                      <span className="text-xs font-semibold text-gray-550 text-gray-500 uppercase tracking-wider block leading-none">Total de Turnos:</span>
+                      <p className="text-sm font-bold text-[#142d22] font-mono mt-1">
+                        {filteredShiftsForPatient.filter(x => x.status !== 'Cancelado').length} Ativos
+                      </p>
+                    </div>
+                  </DataGrid>
+                </CardBase>
 
                 {/* Resumo Consolidado de Custos (Conforme regra Arquiteto) */}
-                <div className="p-4 border border-blue-200 rounded-2xl bg-blue-50/20 text-left">
-                  <span className="text-[9px] font-extrabold text-blue-800 uppercase tracking-widest block font-sans mb-2">📊 Demonstrativo Financeiro de Repasses & Taxas</span>
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
-                    <div className="p-2.5 bg-white border border-slate-200 rounded-xl shadow-xs">
-                      <span className="text-[8.5px] font-bold text-slate-400 block uppercase leading-none">Total Repasse Profissionais:</span>
-                      <p className="text-sm font-bold text-slate-800 font-mono mt-1">
-                        R$ {(() => {
+                <CardBase className="bg-[#faf9f6]/40 border border-gray-100 p-5 space-y-4">
+                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wider block">📊 Demonstrativo Financeiro de Repasses & Taxas</span>
+                  <DataGrid cols={4} className="gap-4">
+                    <CardBase className="p-4 bg-white/80 border border-gray-150 shadow-none col-span-2 md:col-span-1">
+                      <DataField 
+                        label="Total Repasse Profissionais" 
+                        value={`R$ ${(() => {
                           let sum = 0;
                           filteredShiftsForPatient.forEach(s => {
                             if (s.status !== 'Cancelado') {
-                              // Valor base + ajuda custo
                               let base = Number(s.valorPlantao) || Number(paciente?.planoAtendimento?.valorSugeridoPlantao) || 150;
                               let extra = Number(s.ajudaCusto) || Number(paciente?.planoAtendimento?.ajudaCusto) || 0;
                               if (s.feriado === '20%') {
@@ -4694,14 +4828,15 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                             }
                           });
                           return sum.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                        })()}
-                      </p>
-                    </div>
+                        })()}`} 
+                        className="font-mono text-xs"
+                      />
+                    </CardBase>
 
-                    <div className="p-2.5 bg-white border border-slate-205 border-slate-200 rounded-xl shadow-xs">
-                      <span className="text-[8.5px] font-bold text-slate-400 block uppercase leading-none">Total Faturamento Tx Adm:</span>
-                      <p className="text-sm font-bold text-slate-800 font-mono mt-1">
-                        R$ {(() => {
+                    <CardBase className="p-4 bg-white/80 border border-gray-150 shadow-none col-span-2 md:col-span-1">
+                      <DataField 
+                        label="Total Faturamento Tx Adm" 
+                        value={`R$ ${(() => {
                           let sum = 0;
                           filteredShiftsForPatient.forEach(s => {
                             if (s.status !== 'Cancelado') {
@@ -4716,14 +4851,15 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                             }
                           });
                           return sum.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                        })()}
-                      </p>
-                    </div>
+                        })()}`} 
+                        className="font-mono text-xs"
+                      />
+                    </CardBase>
 
-                    <div className="p-2.5 bg-white border border-slate-200 rounded-xl shadow-xs sm:col-span-2 bg-gradient-to-br from-emerald-50/50 to-emerald-100 flex flex-col justify-center border-emerald-200">
-                      <span className="text-[9px] font-black text-emerald-800 block uppercase leading-none">Valor Consolidado Líquido Estimado da Fatura (R$):</span>
-                      <p className="text-base font-black text-emerald-900 font-mono mt-1">
-                        R$ {(() => {
+                    <CardBase className="p-4 col-span-4 md:col-span-2 bg-[#1a3c2e]/5 border border-[#1a3c2e]/10 flex flex-col justify-center shadow-none">
+                      <DataField 
+                        label="Valor Consolidado Líquido Estimado da Fatura" 
+                        value={`R$ ${(() => {
                           let sumRepasse = 0;
                           let sumTaxa = 0;
                           filteredShiftsForPatient.forEach(s => {
@@ -4745,11 +4881,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                           });
                           const total = sumRepasse + sumTaxa;
                           return total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                        })()}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                        })()}`} 
+                        className="font-mono text-emerald-800 text-sm"
+                      />
+                    </CardBase>
+                  </DataGrid>
+                </CardBase>
 
                 {/* Tabela de Plantões Completas */}
                 <div className="space-y-3">

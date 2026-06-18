@@ -3,6 +3,7 @@ import html2canvas from 'html2canvas';
 import { useFirebase } from '../context/FirebaseContext';
 import { Profissional, Agendamento, DocumentoAnexo, Ocorrencia } from '../types';
 import { Plus, Edit2, Trash2, X, Check, CalendarDays, Paperclip, AlertCircle, Printer, Download, FileImage, Search } from 'lucide-react';
+import { CardBase, DataGrid, DataField, SoftBadge } from '../components/ui/DesignSystem';
 import { db, storage } from '../lib/firebase';
 import { collection, query, where, orderBy, onSnapshot, doc, getDoc, updateDoc, addDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -863,34 +864,46 @@ export const Profissionais: React.FC = () => {
         </button>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-md print:hidden">
+      <div className="bg-white border border-gray-100 rounded-xl overflow-hidden shadow-sm print:hidden">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 border-b border-slate-300 text-gray-800 text-sm font-semibold">
+          <thead className="bg-[#fbfaf8] border-b border-gray-100 text-gray-400 text-xs uppercase tracking-wider font-semibold">
             <tr>
-              <th className="py-4 px-4 text-left font-semibold text-gray-800 text-sm">Nome</th>
-              <th className="py-4 px-4 text-left font-semibold text-gray-800 text-sm">Especialidade</th>
-              <th className="py-4 px-4 text-left font-semibold text-gray-800 text-sm">Telefone</th>
-              <th className="py-4 px-4 text-center font-semibold text-gray-800 text-sm">Status</th>
-              <th className="py-4 px-4 text-center font-semibold text-gray-800 text-sm">Ações</th>
+              <th className="py-3.5 px-4 text-left font-semibold text-gray-500 text-xs">Nome</th>
+              <th className="py-3.5 px-4 text-left font-semibold text-gray-500 text-xs">Especialidade</th>
+              <th className="py-3.5 px-4 text-left font-semibold text-gray-500 text-xs">Telefone</th>
+              <th className="py-3.5 px-4 text-center font-semibold text-gray-500 text-xs">Status</th>
+              <th className="py-3.5 px-4 text-center font-semibold text-gray-500 text-xs">Ações</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-150 text-gray-900 text-sm md:text-base">
+          <tbody className="divide-y divide-gray-50 text-gray-700 text-sm">
             {filteredAndSortedProfissionais.map((prof, index) => (
               <tr 
                 key={prof.id} 
-                className={`transition-colors duration-150 ${prof.status !== 'Ativo' ? 'bg-red-50 hover:bg-red-100/70 text-slate-700' : index % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/50 hover:bg-slate-50'}`}
+                className={`transition-colors duration-150 hover:bg-gray-50/80 ${prof.status !== 'Ativo' ? 'bg-rose-50/30 text-slate-700' : index % 2 === 0 ? 'bg-white' : 'bg-[#faf9f6]/40'}`}
               >
-                <td className="py-4 px-4 font-normal text-gray-900 text-left text-base">{prof.nome}</td>
-                <td className="py-4 px-4 text-slate-600 text-left text-sm font-normal">{prof.especialidade}</td>
-                <td className="py-4 px-4 text-slate-600 text-left text-sm font-normal">{prof.telefone}</td>
-                <td className="py-4 px-4 text-center">
-                    <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-bold ${prof.status === 'Ativo' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'}`}>
-                        {prof.status || 'Inativo'}
-                    </span>
+                <td className="py-3.5 px-4 font-semibold text-gray-900 text-left text-sm">{prof.nome}</td>
+                <td className="py-3.5 px-4 text-left text-xs font-normal">
+                  {prof.especialidade ? (
+                    <SoftBadge variant="indigo">{prof.especialidade}</SoftBadge>
+                  ) : (
+                    <span className="text-gray-300 italic">Geral</span>
+                  )}
                 </td>
-                 <td className="py-4 px-4">
-                <div className="flex gap-2 justify-center items-center">
-                    <button onClick={() => handleOpenModal(prof, 'dados')} className="text-blue-600 hover:text-blue-855 hover:bg-blue-50 transition-all p-2 rounded-lg border border-transparent hover:border-blue-100 cursor-pointer" title="Editar"><Edit2 size={14} /></button>
+                <td className="py-3.5 px-4 text-slate-500 text-left text-xs font-normal font-mono">{prof.telefone}</td>
+                <td className="py-3.5 px-4 text-center">
+                    <SoftBadge variant={prof.status === 'Ativo' ? 'green' : 'red'}>
+                        {prof.status || 'Inativo'}
+                    </SoftBadge>
+                </td>
+                 <td className="py-3.5 px-4">
+                  <div className="flex gap-2 justify-center items-center">
+                    <button 
+                      onClick={() => handleOpenModal(prof, 'dados')} 
+                      className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50/50 transition-all p-1.5 rounded-lg border border-transparent hover:border-indigo-100 cursor-pointer" 
+                      title="Editar"
+                    >
+                      <Edit2 size={13} />
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -1185,36 +1198,40 @@ export const Profissionais: React.FC = () => {
                 );
                 default: return (
                   <div className="space-y-6">
-                  <div className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 border border-slate-100 rounded-xl bg-slate-50">
-                      <div className="md:col-span-3 flex justify-center">
-                        <label className="relative cursor-pointer">
+                    {/* Bloco 1: Dados Pessoais */}
+                    <CardBase className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="md:col-span-3 flex justify-center mb-2">
+                        <label className="relative cursor-pointer group">
                           <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
-                          <div className="w-24 h-24 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden bg-white hover:border-[#1a3c2e] transition-colors">
-                            {formData.foto ? <img src={formData.foto} alt="Foto" className="w-full h-full object-cover"/> : <span className="text-xs text-slate-400">Foto</span>}
+                          <div className="w-24 h-24 rounded-full border-2 border-dashed border-gray-200 flex flex-col items-center justify-center overflow-hidden bg-white hover:border-[#1a3c2e] hover:bg-gray-50 transition-all shadow-inner">
+                            {formData.foto ? (
+                              <img src={formData.foto} alt="Foto" className="w-full h-full object-cover"/>
+                            ) : (
+                              <span className="text-[10px] font-semibold text-gray-450 uppercase tracking-widest text-gray-400">Add Foto</span>
+                            )}
                           </div>
                         </label>
                       </div>
                       
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-[#1a3c2e] uppercase uppercase">Nome Completo</label>
-                        <input type="text" placeholder="Digite o nome completo" value={formData.nome} onChange={e => setFormData({...formData, nome: e.target.value})} className="p-2 border border-slate-200 rounded-lg text-sm w-full focus:ring-1 focus:ring-[#1a3c2e]" required />
+                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Nome Completo</label>
+                        <input type="text" placeholder="Digite o nome completo" value={formData.nome} onChange={e => setFormData({...formData, nome: e.target.value})} className="p-2 border border-gray-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-[#1a3c2e] focus:border-transparent outline-none bg-white text-gray-800" required />
                       </div>
                       
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-[#1a3c2e] uppercase block mb-1">Tem MEI?</label>
+                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">Tem MEI?</label>
                         <div className="flex gap-2">
                           <button
                             type="button"
                             onClick={() => setFormData({...formData, temMei: true})}
-                            className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors ${formData.temMei ? 'bg-[#1a3c2e] text-white shadow-sm' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${formData.temMei ? 'bg-[#1a3c2e] text-[#b8860b] shadow-xs' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
                           >
                             SIM
                           </button>
                           <button
                             type="button"
                             onClick={() => setFormData({...formData, temMei: false, cnpj: ''})}
-                            className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors ${!formData.temMei ? 'bg-red-600 text-white shadow-sm' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${!formData.temMei ? 'bg-red-50 text-red-700 shadow-xs border border-red-100' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
                           >
                             NÃO
                           </button>
@@ -1223,67 +1240,70 @@ export const Profissionais: React.FC = () => {
                       
                       {formData.temMei && (
                         <div className="space-y-1 md:col-span-1">
-                           <label className="text-[10px] font-bold text-[#1a3c2e] uppercase text-emerald-800">CNPJ</label>
-                           <input type="text" placeholder="00.000.000/0000-00" value={formData.cnpj} onChange={e => setFormData({...formData, cnpj: mascaraCNPJ(e.target.value)})} maxLength={18} className="p-2 border border-emerald-300 rounded-lg text-sm w-full focus:ring-1 focus:ring-emerald-700 bg-emerald-50" required={formData.temMei} />
+                           <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider text-emerald-800">CNPJ</label>
+                           <input type="text" placeholder="00.000.000/0000-00" value={formData.cnpj} onChange={e => setFormData({...formData, cnpj: mascaraCNPJ(e.target.value)})} maxLength={18} className="p-2 border border-emerald-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-emerald-700 bg-emerald-50/50 text-emerald-900" required={formData.temMei} />
                         </div>
                       )}
+                      
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-[#1a3c2e] uppercase">Sexo</label>
-                        <select value={formData.sexo} onChange={e => setFormData({...formData, sexo: e.target.value})} className="p-2 border border-slate-200 rounded-lg text-sm w-full">
+                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Sexo</label>
+                        <select value={formData.sexo} onChange={e => setFormData({...formData, sexo: e.target.value})} className="p-2 border border-gray-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-[#1a3c2e] focus:border-transparent outline-none bg-white font-sans text-gray-800">
                           <option value="">Selecione...</option>
                           <option value="Masculino">Masculino</option>
                           <option value="Feminino">Feminino</option>
                         </select>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-[#1a3c2e] uppercase">Data de Nascimento</label>
-                        <input type="date" value={formData.dataNascimento} onChange={e => setFormData({...formData, dataNascimento: e.target.value})} className="p-2 border border-slate-200 rounded-lg text-sm w-full" />
+                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Data de Nascimento</label>
+                        <input type="date" value={formData.dataNascimento} onChange={e => setFormData({...formData, dataNascimento: e.target.value})} className="p-2 border border-gray-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-[#1a3c2e] focus:border-transparent outline-none bg-white text-gray-800" />
                       </div>
                       <div className="space-y-1">
-                         <label className="text-[10px] font-bold text-[#1a3c2e] uppercase">Idade</label>
-                         <input type="text" value={formData.idade || ''} disabled className="p-2 border border-slate-200 rounded-lg text-sm w-full bg-slate-100" />
+                         <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Idade</label>
+                         <input type="text" value={formData.idade || ''} disabled className="p-2 border border-gray-100 rounded-lg text-xs w-full bg-gray-50 text-gray-400" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-[#1a3c2e] uppercase">RG</label>
-                        <input type="text" placeholder="Digite o RG" value={formData.rg} onChange={e => setFormData({...formData, rg: e.target.value})} className="p-2 border border-slate-200 rounded-lg text-sm w-full" />
+                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">RG</label>
+                        <input type="text" placeholder="Digite o RG" value={formData.rg} onChange={e => setFormData({...formData, rg: e.target.value})} className="p-2 border border-gray-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-[#1a3c2e] focus:border-transparent outline-none bg-white text-gray-800" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-[#1a3c2e] uppercase">CPF (Obrigatório)</label>
-                        <input type="text" placeholder="000.000.000-00" value={formData.cpf} onChange={e => setFormData({...formData, cpf: mascaraCPF(e.target.value)})} maxLength={14} className="p-2 border border-slate-200 rounded-lg text-sm w-full" required />
+                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">CPF (Obrigatório)</label>
+                        <input type="text" placeholder="000.000.000-00" value={formData.cpf} onChange={e => setFormData({...formData, cpf: mascaraCPF(e.target.value)})} maxLength={14} className="p-2 border border-gray-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-[#1a3c2e] focus:border-transparent outline-none bg-white text-gray-800" required />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-[#1a3c2e] uppercase">Profissão (Obrigatório)</label>
-                        <input type="text" placeholder="Digite a profissão" value={formData.profissao} onChange={e => setFormData({...formData, profissao: e.target.value})} className="p-2 border border-slate-200 rounded-lg text-sm w-full" required />
+                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Profissão (Obrigatório)</label>
+                        <input type="text" placeholder="Digite a profissão" value={formData.profissao} onChange={e => setFormData({...formData, profissao: e.target.value})} className="p-2 border border-gray-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-[#1a3c2e] focus:border-transparent outline-none bg-white text-gray-800" required />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-[#1a3c2e] uppercase">Conselho Profissional</label>
-                        <input type="text" placeholder="Digite o conselho" value={formData.conselho} onChange={e => setFormData({...formData, conselho: e.target.value})} className="p-2 border border-slate-200 rounded-lg text-sm w-full" />
+                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Conselho Profissional</label>
+                        <input type="text" placeholder="Digite o conselho" value={formData.conselho} onChange={e => setFormData({...formData, conselho: e.target.value})} className="p-2 border border-gray-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-[#1a3c2e] focus:border-transparent outline-none bg-white text-gray-800" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-[#1a3c2e] uppercase">Telefone (Obrigatório)</label>
-                        <input type="tel" placeholder="(00) 00000-0000" value={formData.telefone} onChange={e => setFormData({...formData, telefone: mascaraTelefone(e.target.value)})} maxLength={15} className="p-2 border border-slate-200 rounded-lg text-sm w-full" required />
+                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Telefone (Obrigatório)</label>
+                        <input type="tel" placeholder="(00) 00000-0000" value={formData.telefone} onChange={e => setFormData({...formData, telefone: mascaraTelefone(e.target.value)})} maxLength={15} className="p-2 border border-gray-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-[#1a3c2e] focus:border-transparent outline-none bg-white text-gray-800" required />
                       </div>
-                    </div>
+                    </CardBase>
 
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 border border-slate-100 rounded-xl bg-slate-50">
-                       <span className="md:col-span-4 font-bold text-xs text-[#1a3c2e] uppercase border-b pb-2 mb-2">Endereço</span>
-                       <input type="text" placeholder="CEP" value={formData.endereco.cep} onChange={e => setFormData({...formData, endereco: {...formData.endereco, cep: mascaraCEP(e.target.value)}})} maxLength={9} className="p-2 border border-slate-200 rounded-lg text-sm" />
-                       <input type="text" placeholder="Logradouro" value={formData.endereco.rua} onChange={e => setFormData({...formData, endereco: {...formData.endereco, rua: e.target.value}})} className="p-2 border border-slate-200 rounded-lg text-sm md:col-span-2" />
-                       <input type="text" placeholder="Nº" value={formData.endereco.numero} onChange={e => setFormData({...formData, endereco: {...formData.endereco, numero: e.target.value}})} className="p-2 border border-slate-200 rounded-lg text-sm" />
-                       <input type="text" placeholder="Bairro" value={formData.endereco.bairro} onChange={e => setFormData({...formData, endereco: {...formData.endereco, bairro: e.target.value}})} className="p-2 border border-slate-200 rounded-lg text-sm" />
-                       <input type="text" placeholder="Cidade" value={formData.endereco.cidade} onChange={e => setFormData({...formData, endereco: {...formData.endereco, cidade: e.target.value}})} className="p-2 border border-slate-200 rounded-lg text-sm" />
-                       <input type="text" placeholder="UF" value={formData.endereco.estado} onChange={e => setFormData({...formData, endereco: {...formData.endereco, estado: e.target.value}})} className="p-2 border border-slate-200 rounded-lg text-sm" />
-                    </div>
+                    {/* Bloco 2: Endereço */}
+                    <CardBase className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                       <span className="md:col-span-4 font-bold text-xs text-[#1a3c2e] uppercase border-b border-gray-50 pb-2 mb-1">Endereço</span>
+                       <input type="text" placeholder="CEP" value={formData.endereco.cep} onChange={e => setFormData({...formData, endereco: {...formData.endereco, cep: mascaraCEP(e.target.value)}})} maxLength={9} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
+                       <input type="text" placeholder="Logradouro" value={formData.endereco.rua} onChange={e => setFormData({...formData, endereco: {...formData.endereco, rua: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs md:col-span-2 text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
+                       <input type="text" placeholder="Nº" value={formData.endereco.numero} onChange={e => setFormData({...formData, endereco: {...formData.endereco, numero: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
+                       <input type="text" placeholder="Bairro" value={formData.endereco.bairro} onChange={e => setFormData({...formData, endereco: {...formData.endereco, bairro: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
+                       <input type="text" placeholder="Cidade" value={formData.endereco.cidade} onChange={e => setFormData({...formData, endereco: {...formData.endereco, cidade: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
+                       <input type="text" placeholder="UF" value={formData.endereco.estado} onChange={e => setFormData({...formData, endereco: {...formData.endereco, estado: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
+                    </CardBase>
 
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 border border-slate-100 rounded-xl bg-slate-50">
-                       <div className="md:col-span-4 flex items-center justify-between border-b pb-2 mb-2">
+                    {/* Bloco 3: Financeiro */}
+                    <CardBase className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                       <div className="md:col-span-4 flex items-center justify-between border-b border-gray-50 pb-2 mb-1">
                           <span className="font-bold text-xs text-[#1a3c2e] uppercase">Financeiro</span>
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-semibold text-slate-500 normal-case">Titular da Conta?</span>
                             <select
                               value={isTitularConta}
                               onChange={(e) => setIsTitularConta(e.target.value)}
-                              className="p-1 px-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-700 outline-none focus:ring-1 focus:ring-[#1a3c2e] cursor-pointer"
+                              className="p-1 px-2 border border-gray-200 rounded-lg text-xs bg-white text-slate-700 outline-none focus:ring-1 focus:ring-[#1a3c2e] cursor-pointer"
                             >
                               <option value="Sim">Sim</option>
                               <option value="Não">Não</option>
@@ -1292,36 +1312,36 @@ export const Profissionais: React.FC = () => {
                        </div>
 
                        {isTitularConta === 'Não' && (
-                          <div className="md:col-span-4 grid grid-cols-1 md:grid-cols-3 gap-4 pb-4 border-b border-dashed border-slate-200/60 mb-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                          <div className="md:col-span-4 grid grid-cols-1 md:grid-cols-3 gap-4 pb-4 border-b border-dashed border-gray-100 mb-2 animate-in fade-in slide-in-from-top-1 duration-200">
                             <div className="flex flex-col gap-1">
-                              <label className="text-[10px] font-bold text-slate-500 uppercase">Nome do Titular da Conta</label>
+                              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Nome do Titular da Conta</label>
                               <input
                                 type="text"
                                 placeholder="Nome Completo do Titular"
                                 value={formData.nomeTitularConta || ''}
                                 onChange={e => setFormData({ ...formData, nomeTitularConta: e.target.value })}
-                                className="p-2 border border-slate-200 rounded-lg text-sm bg-white"
+                                className="p-2 border border-gray-200 rounded-lg text-xs bg-white text-gray-800"
                                 required={isTitularConta === 'Não'}
                               />
                             </div>
                             <div className="flex flex-col gap-1">
-                              <label className="text-[10px] font-bold text-slate-500 uppercase">CPF do Titular</label>
+                              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">CPF do Titular</label>
                               <input
                                 type="text"
                                 placeholder="CPF do Titular"
                                 value={formData.cpfTitularConta || ''}
                                 onChange={e => setFormData({ ...formData, cpfTitularConta: mascaraCPF(e.target.value) })}
                                 maxLength={14}
-                                className="p-2 border border-slate-200 rounded-lg text-sm bg-white"
+                                className="p-2 border border-gray-200 rounded-lg text-xs bg-white text-gray-800"
                                 required={isTitularConta === 'Não'}
                               />
                             </div>
                             <div className="flex flex-col gap-1">
-                              <label className="text-[10px] font-bold text-slate-500 uppercase">Grau de Parentesco</label>
+                              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Grau de Parentesco</label>
                               <select
                                 value={formData.grauParentescoTitular || ''}
                                 onChange={e => setFormData({ ...formData, grauParentescoTitular: e.target.value })}
-                                className="p-2 border border-slate-200 rounded-lg text-sm bg-white cursor-pointer"
+                                className="p-2 border border-gray-200 rounded-lg text-xs bg-white text-gray-800 cursor-pointer"
                                 required={isTitularConta === 'Não'}
                               >
                                 <option value="">Selecione...</option>
@@ -1333,14 +1353,15 @@ export const Profissionais: React.FC = () => {
                             </div>
                           </div>
                        )}
-                       <input type="text" placeholder="Banco" value={formData.dadosBancarios.banco} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, banco: e.target.value}})} className="p-2 border border-slate-200 rounded-lg text-sm" />
-                       <input type="text" placeholder="Agência" value={formData.dadosBancarios.agencia} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, agencia: e.target.value}})} className="p-2 border border-slate-200 rounded-lg text-sm" />
-                       <input type="text" placeholder="Conta" value={formData.dadosBancarios.conta} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, conta: e.target.value}})} className="p-2 border border-slate-200 rounded-lg text-sm" />
-                       <input type="text" placeholder="PIX" value={formData.dadosBancarios.pix} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, pix: e.target.value}})} className="p-2 border border-slate-200 rounded-lg text-sm" />
-                    </div>
+                       <input type="text" placeholder="Banco" value={formData.dadosBancarios.banco} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, banco: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]" />
+                       <input type="text" placeholder="Agência" value={formData.dadosBancarios.agencia} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, agencia: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]" />
+                       <input type="text" placeholder="Conta" value={formData.dadosBancarios.conta} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, conta: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]" />
+                       <input type="text" placeholder="PIX" value={formData.dadosBancarios.pix} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, pix: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]" />
+                    </CardBase>
 
-                    <div className="space-y-3 p-4 border border-slate-100 rounded-xl bg-slate-50">
-                        <span className="font-bold text-xs text-[#1a3c2e] uppercase border-b pb-2 flex items-center gap-1.5">
+                    {/* Bloco 4: Documentos Anexos */}
+                    <CardBase className="space-y-3">
+                        <span className="font-bold text-xs text-[#1a3c2e] uppercase border-b border-gray-50 pb-2 flex items-center gap-1.5">
                             <Paperclip className="w-3.5 h-3.5" /> Documentos Anexos
                         </span>
                         
@@ -1452,8 +1473,7 @@ export const Profissionais: React.FC = () => {
                             </div>
                           </div>
                         )}
-                    </div>
-                  </div>
+                    </CardBase>
                   </div>
                 );
               }

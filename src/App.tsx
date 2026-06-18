@@ -20,6 +20,23 @@ import { Dashboard } from './components/Dashboard';
 import { motion, AnimatePresence } from 'motion/react';
 import { Users, Award, ShieldAlert, Heart, Activity, AlertCircle, X } from 'lucide-react';
 
+const AccessDeniedView: React.FC = () => (
+  <div className="flex flex-col items-center justify-center p-12 bg-white rounded-3xl border border-red-200 shadow-sm max-w-lg mx-auto text-center space-y-4 animate-in fade-in zoom-in-95 duration-200">
+    <div className="p-4 bg-red-50 text-red-650 rounded-full">
+      <ShieldAlert size={48} className="text-red-600 animate-bounce" />
+    </div>
+    <h2 className="text-xl font-extrabold text-slate-800">403 - Acesso Restrito</h2>
+    <p className="text-xs text-slate-500 leading-relaxed max-w-sm">
+      Esta seção contém dados financeiros e configurações corporativas sensíveis. Seu perfil de acesso atual <strong>(Colaborador)</strong> não possui permissões necessárias para visualizar este conteúdo.
+    </p>
+    <div className="pt-2">
+      <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest font-bold text-[#b8860b] bg-[#fdfaf2] border border-[#f5ebcf] px-3.5 py-1.5 rounded-full select-none shadow-xs font-mono">
+        🛡️ Segurança Sistêmica CuidarHome
+      </span>
+    </div>
+  </div>
+);
+
 function DashboardContent() {
   const [activeSidebarTab, setActiveSidebarTab] = useState<string>('dashboard');
   const [financeiroSubTab, setFinanceiroSubTab] = useState<'folhas' | 'debitos'>('folhas');
@@ -40,10 +57,10 @@ function DashboardContent() {
   const rawName = currentUserProfile?.nome || user?.displayName || user?.email?.split('@')[0] || 'Renato B. Z.';
   const displayName = rawName.replace(/\s?\((Admin|Colaborador)\)/g, '');
 
-  // Redirect away from Empresa if role is Colaborador
+  // Redirect away from Empresa and Financeiro if role is Colaborador
   React.useEffect(() => {
-    if (userRole?.toLowerCase() === 'colaborador' && activeSidebarTab === 'empresa') {
-      setActiveSidebarTab('pacientes');
+    if (userRole?.toLowerCase() === 'colaborador' && (activeSidebarTab === 'empresa' || activeSidebarTab === 'financeiro')) {
+      setActiveSidebarTab('dashboard');
     }
   }, [userRole, activeSidebarTab]);
 
@@ -178,9 +195,17 @@ function DashboardContent() {
                 ) : activeSidebarTab === 'escalas' ? (
                   <EscalasDashboard />
                 ) : activeSidebarTab === 'financeiro' ? (
-                  <FinanceiroDashboard initialSubTab={financeiroSubTab} />
+                  userRole?.toLowerCase() === 'colaborador' ? (
+                    <AccessDeniedView />
+                  ) : (
+                    <FinanceiroDashboard initialSubTab={financeiroSubTab} />
+                  )
                 ) : activeSidebarTab === 'empresa' ? (
-                  <EmpresaDashboard />
+                  userRole?.toLowerCase() === 'colaborador' ? (
+                    <AccessDeniedView />
+                  ) : (
+                    <EmpresaDashboard />
+                  )
                 ) : null}
               </motion.div>
             </AnimatePresence>
