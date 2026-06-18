@@ -533,7 +533,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setNotification(`Plantão criado com sucesso.`);
       return fullPlantao;
     } catch (err) {
-      console.error(`[Firebase] Error adding plantao: ${id}`, err);
+      console.error('[Firebase] Error adding plantao:', id, err);
       handleFirestoreError(err, OperationType.CREATE, `plantoes/${id}`);
       throw err;
     }
@@ -546,7 +546,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       await addAuditLog('UPDATE', 'plantoes', updatedPlantao.id, `Plantão atualizado`);
       setNotification(`Plantão atualizado com sucesso.`);
     } catch (err) {
-      console.error(`[Firebase] Error updating plantao: ${updatedPlantao.id}`, err);
+      console.error('[Firebase] Error updating plantao:', updatedPlantao.id, err);
       handleFirestoreError(err, OperationType.UPDATE, `plantoes/${updatedPlantao.id}`);
       throw err;
     }
@@ -559,7 +559,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       await addAuditLog('DELETE', 'plantoes', id, `Plantão excluído`);
       setNotification(`Plantão excluído com sucesso.`);
     } catch (err) {
-      console.error(`[Firebase] Error deleting plantao: ${id}`, err);
+      console.error('[Firebase] Error deleting plantao:', id, err);
       handleFirestoreError(err, OperationType.DELETE, `plantoes/${id}`);
       throw err;
     }
