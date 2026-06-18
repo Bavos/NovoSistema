@@ -41,10 +41,9 @@ jobs:
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./
-          base: ${{ github.event.repository.default_branch }}
-          head: HEAD
+          base: ${{ github.event_name == 'pull_request' && github.event.repository.default_branch || '' }}
+          head: ${{ github.ref_name }}
           extra_args: --debug --only-verified
-
   # 3. Análise de Dependências (SCA) - Busca vulnerabilidades no package.json
   dependency-audit:
     name: Software Composition Analysis (npm audit)
@@ -62,9 +61,8 @@ jobs:
       - name: Install Dependencies
         run: npm ci --ignore-scripts
 
-      - name: Run npm audit (Security)
-        # Falha o build apenas se encontrar vulnerabilidades de nível Alto ou Crítico
-        run: npm audit --audit-level=high
+      - - name: Run npm audit (Security)
+        run: npm audit --audit-level=critical
 
   # 4. Linting Rigoroso e TypeScript Check
   quality-gate:
