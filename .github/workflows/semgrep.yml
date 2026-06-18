@@ -15,6 +15,6 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Semgrep
-        uses: returntocorp/semgrep-action@v1
-        with:
+        uses: semgrep/semgrep-action@v1
+        with
           config: p/security-audit p/secrets p/typescript
