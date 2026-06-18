@@ -17,13 +17,11 @@ import {
   Lock,
   Unlock,
   AlertOctagon,
-  FileText,
   MapPin,
   Stethoscope,
   Clock,
   CalendarDays,
   User,
-  Phone,
   ArrowLeft,
   X,
   Plus,
@@ -817,6 +815,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
 
   // Function to delete or clear a configuration/mode of shift (either Principal or Additional) from Plano de Atendimento
   const handleDeletePlantao = (id: string, isPrincipal: boolean) => {
+    if (userRole?.toLowerCase() === 'colaborador') {
+      alert('Acesso Negado: Usuários com perfil Colaborador não possuem permissão para realizar alterações no Plano de Atendimento.');
+      return;
+    }
     if (!paciente?.id) {
       alert('Erro: ID do paciente não localizado. Por favor, salve primeiro os dados gerais do paciente.');
       return;
@@ -1304,13 +1306,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
     }
   };
 
-  const lettersMonogram = (nome || 'Novo Paciente')
-    .split(' ')
-    .map((n) => n[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
-
   // Compiled options representing all configured shifts (Principal + Additionals)
   const availableShifts = [
     {
@@ -1369,7 +1364,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
       {/* Lock Warning Alert Frame */}
       {isCurrentlyDeactivated && (
         <div
-          className="bg-red-50 border-l-4 border-red-500 text-red-800 p-4 rounded-r-xl shadow-sm text-xs flex items-start space-x-3"
+          className="bg-red-55 bg-red-50 border-l-4 border-red-500 text-red-800 p-4 rounded-r-xl shadow-sm text-xs flex items-start space-x-3"
           id="warning-deactivated"
         >
           <AlertOctagon className="text-red-600 mt-0.5 flex-shrink-0" size={18} />
@@ -1388,40 +1383,46 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
         </div>
       )}
 
-      {/* Header of the Prontuário */}
-      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-1.5">
-          <div className="flex items-center space-x-2">
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight" id="prontuario-title text-slate-800">
-              {isNew ? 'Cadastrar Novo Paciente' : `Detalhes do Paciente: ${nome}`}
+      {/* Header of the Prontuário Consolidado (Single Header Flex) */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-6 border-b border-slate-200 gap-4 mb-6" id="cons-header-paciente">
+        {/* Lado Esquerdo: Identificação do Paciente */}
+        <div className="space-y-2 text-left">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight" id="prontuario-title-novo">
+              {isNew ? 'Cadastrar Novo Paciente' : nome || 'Nome do Paciente'}
             </h1>
             <div className="flex-shrink-0">
               {pStatus === 'Ativo' ? (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-800 italic uppercase">
-                  ● ATIVO
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-800 uppercase tracking-older">
+                  • ATIVO
                 </span>
               ) : (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 italic uppercase">
-                  ● DESATIVADO
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 uppercase tracking-older">
+                  • DESATIVADO
                 </span>
               )}
             </div>
           </div>
-          <p className="text-xs text-slate-400">
-            {isNew
-              ? 'Insira as diretrizes clínicas e de logística para formalização do início do plantão.'
-              : `Prontuário clínico ativo em cooperação integrada. Criado em: ${
-                  paciente ? new Date(paciente.createdAt).toLocaleDateString('pt-BR') : '-'
-                }`}
-          </p>
+          
+          {/* Soft Badges menores de Bairro e Turno */}
+          {!isNew && (
+            <div className="flex flex-wrap gap-2 pt-1">
+              <span className="inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#1A3626]/8 text-[#1A3626] border border-slate-100">
+                Bairro: {bairro || 'Sem Bairro'}
+              </span>
+              <span className="inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#1A3626]/8 text-[#1A3626] border border-slate-100">
+                Turno: {tipoEscala || 'Diurno 12h'} ({horaInicioPadrao || '07:00'})
+              </span>
+            </div>
+          )}
         </div>
 
-        {/* Global Save and Deactivate triggers */}
-        <div className="flex items-center space-x-3 shrink-0">
+        {/* Lado Direito: Barra de Ações */}
+        <div className="flex items-center space-x-2 shadow-xs shrink-0 md:justify-end w-full md:w-auto">
           <button
             type="button"
             onClick={onBack}
-            className="bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 px-4 py-2 rounded-md text-xs font-semibold transition-colors flex items-center space-x-1.5 cursor-pointer shadow-sm"
+            className="bg-transparent hover:bg-slate-100 text-slate-700 h-9 px-3.5 rounded-lg text-xs font-semibold transition-colors flex items-center space-x-1.5 cursor-pointer"
             id="btn-voltar-topo-global"
           >
             <ArrowLeft size={15} />
@@ -1431,11 +1432,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
             <button
               type="button"
               onClick={() => setImprimirProntuarioModalOpen(true)}
-              className="bg-teal-600 hover:bg-teal-700 text-white border border-teal-700 px-4 py-2 rounded-md text-xs font-semibold transition-colors flex items-center space-x-1.5 cursor-pointer shadow-sm"
+              className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 h-9 px-3.5 rounded-lg text-xs font-semibold transition-colors flex items-center space-x-1.5 cursor-pointer"
               id="btn-imprimir-prontuario-global"
             >
               <Printer size={15} />
-              <span>📄 Exportar Prontuário (PDF)</span>
+              <span>Exportar Prontuário</span>
             </button>
           )}
           {!isCurrentlyDeactivated ? (
@@ -1444,28 +1445,28 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                 <button
                   type="button"
                   onClick={() => setAlertDeactivateOpen(true)}
-                  className="bg-red-50 text-red-650 text-rose-700 px-4 py-2 rounded-md text-xs font-semibold border border-red-200 hover:bg-red-100/50 transition-colors flex items-center space-x-1"
+                  className="bg-transparent text-red-650 hover:bg-red-50 hover:text-red-700 h-9 px-3.5 rounded-lg text-xs font-semibold transition-colors flex items-center space-x-1.5 cursor-pointer"
                   id="btn-desativar-paciente"
                 >
                   <Lock size={15} />
-                  <span>🔒 Desativar Paciente</span>
+                  <span>Desativar Paciente</span>
                 </button>
               )}
               <button
                 type="button"
                 onClick={handleSave}
-                className="bg-blue-600 text-white px-5 py-2 rounded-md text-xs font-semibold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-colors flex items-center space-x-1.5 cursor-pointer"
+                className="bg-forest-green hover:bg-hover-green text-white h-9 px-4.5 rounded-lg text-xs font-semibold shadow-md transition-colors flex items-center space-x-1.5 cursor-pointer"
                 id="btn-salvar-alteracoes"
               >
                 <Save size={15} />
-                <span>💾 Salvar Alterações</span>
+                <span>Salvar Alterações</span>
               </button>
             </>
           ) : (
             <button
               type="button"
               onClick={handleReactivate}
-              className="bg-emerald-600 text-white px-5 py-2 rounded-md text-xs font-semibold shadow-lg shadow-emerald-200 hover:bg-emerald-700 transition-colors flex items-center space-x-1.5"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white h-9 px-4.5 rounded-lg text-xs font-bold shadow-md transition-colors flex items-center space-x-1.5"
               id="btn-reativar-paciente"
             >
               <Unlock size={15} className="animate-bounce" />
@@ -1475,91 +1476,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
         </div>
       </div>
 
-      {/* Content Form Body Split Layout - Left fixed Card & Right tab block */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Card: Identificação Fixo */}
-        <div className="lg:col-span-4 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-5 text-center relative overflow-hidden">
-          {/* Cover decorative bar */}
-          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-500 via-indigo-500 to-blue-600"></div>
-
-          {/* Profile Circle Initial block */}
-          <div className="flex justify-center pt-3">
-            <div className="w-20 h-20 rounded-full bg-slate-50 border-2 border-slate-200/90 flex items-center justify-center font-extrabold text-slate-700 text-lg shadow-sm shadow-slate-100 relative">
-              <span className="font-sans text-xl font-bold text-slate-600">{lettersMonogram}</span>
-              <span
-                className={`absolute bottom-0 right-0 w-4 h-4 rounded-full border-2 border-white ${
-                  isCurrentlyDeactivated ? 'bg-red-500' : 'bg-green-500'
-                }`}
-              ></span>
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <h3 className="font-bold text-slate-800 text-sm truncate uppercase tracking-tight">
-              {nome || 'Nome em preenchimento'}
-            </h3>
-            <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] uppercase font-mono tracking-wider bg-slate-100 text-slate-500 font-medium">
-              Bairro: {bairro || 'Não definido'}
-            </span>
-            <div className="flex flex-col items-center space-y-1.5 mt-2">
-              <div className="text-[10px] text-indigo-700 bg-indigo-50/70 border border-indigo-150 rounded px-2 py-1 font-sans inline-flex items-center space-x-1.5 mx-auto justify-center shadow-sm">
-                <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse"></span>
-                <span>{tipoEscala || 'Diurno 12h'} • {horaInicioPadrao || '07:00'}</span>
-              </div>
-              {tiposPlantao && tiposPlantao.length > 0 && (
-                <div className="flex flex-wrap gap-1 justify-center max-w-[220px]">
-                  {tiposPlantao.map((sub) => (
-                    <span key={sub.id} className="text-[9px] text-slate-500 bg-slate-50 border border-slate-200/80 px-1.5 py-0.5 rounded shadow-xs" title={`Valor: R$ ${sub.valorPlantao}`}>
-                      {sub.tipoEscala} • {sub.horaInicio}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="border-t border-slate-100 my-2"></div>
-
-          {/* Quick info list with nice typography */}
-          <div className="space-y-4 text-left text-xs bg-slate-55 bg-slate-100 p-4.5 rounded-2xl border border-slate-300 shadow-sm">
-            <div className="flex items-center space-x-2.5 pb-2 border-b border-slate-205">
-              <User size={14} className="text-slate-500 flex-shrink-0" />
-              <div className="truncate">
-                <span className="text-slate-500 block text-[11px] uppercase tracking-wider font-semibold font-sans">Data de Nascimento</span>
-                <span className="text-gray-900 font-normal text-sm block mt-0.5">{dataNascimento ? new Date(dataNascimento + 'T12:00:00').toLocaleDateString('pt-BR') : 'Não informada'}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-2.5 pb-2 border-b border-slate-205">
-              <FileText size={14} className="text-slate-500 flex-shrink-0" />
-              <div className="truncate">
-                <span className="text-slate-500 block text-[11px] uppercase tracking-wider font-semibold font-sans">CPF do Paciente</span>
-                <span className="text-gray-900 font-normal text-sm block mt-0.5">{cpf || 'Não preenchido'}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-2.5 pb-2 border-b border-slate-205">
-              <User size={14} className="text-slate-500 flex-shrink-0" />
-              <div className="truncate">
-                <span className="text-slate-500 block text-[11px] uppercase tracking-wider font-semibold font-sans">Responsável Familiar</span>
-                <span className="text-gray-900 font-normal text-sm block mt-0.5 truncate max-w-[200px]" title={nomeResponsavel}>
-                  {nomeResponsavel || 'Não preenchido'}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-2.5">
-              <Phone size={14} className="text-slate-500 flex-shrink-0" />
-              <div className="truncate">
-                <span className="text-slate-500 block text-[11px] uppercase tracking-wider font-semibold font-sans">Telefone do Responsável</span>
-                <span className="text-gray-900 font-normal text-sm block mt-0.5">{telefoneResponsavel || 'Não preenchido'}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
+      {/* Content Form Body - Unified Layout with Extreme Minimalism */}
+      <div className="space-y-4">
         {/* Right side form view containing horizontals sub tabs */}
-        <div className="lg:col-span-8 space-y-4">
+        <div className="space-y-4">
           {/* sub-tabs header block */}
           <div className="flex border-b border-slate-100 bg-slate-50/50 p-2.5 rounded-xl border border-slate-200/80 shadow-sm gap-2 overflow-x-auto shrink-0 select-none">
             <button
@@ -2001,7 +1921,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                   <div className="space-y-1 col-span-1 md:col-span-1">
                     <label className="block text-xs font-normal text-slate-700">Tipo de Escala Principal</label>
                     <select
-                      disabled={isCurrentlyDeactivated}
+                      disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
                       value={tipoEscala}
                       onChange={(e) => setTipoEscala(e.target.value as any)}
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed"
@@ -2019,7 +1939,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                     <label className="block text-xs font-normal text-slate-700">Horário de Início</label>
                     <input
                       type="time"
-                      disabled={isCurrentlyDeactivated}
+                      disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
                       value={horaInicioPadrao}
                       onChange={(e) => setHoraInicioPadrao(e.target.value)}
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed"
@@ -2030,7 +1950,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                     <label className="block text-xs font-normal text-slate-700">Valor do Plantão (R$)</label>
                     <input
                       type="number"
-                      disabled={isCurrentlyDeactivated}
+                      disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
                       value={valorSugeridoPlantao}
                       onChange={(e) => setValorSugeridoPlantao(e.target.value === '' ? '' : Number(e.target.value))}
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal text-slate-900"
@@ -2042,7 +1962,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                     <label className="block text-xs font-normal text-slate-700">Aj. de Custo (R$)</label>
                     <input
                       type="number"
-                      disabled={isCurrentlyDeactivated}
+                      disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
                       value={ajudaCusto}
                       onChange={(e) => setAjudaCusto(e.target.value === '' ? '' : Number(e.target.value))}
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed text-slate-600"
@@ -2054,7 +1974,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                     <label className="block text-xs font-normal text-slate-700">Tx Adm (R$)</label>
                     <input
                       type="number"
-                      disabled={isCurrentlyDeactivated}
+                      disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
                       value={taxaAdm}
                       onChange={(e) => setTaxaAdm(e.target.value === '' ? '' : Number(e.target.value))}
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed text-slate-600"
@@ -2078,7 +1998,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       <div className="space-y-1">
                         <label className="block text-[10px] font-normal text-slate-600">Tipo da Escala</label>
                         <select
-                          disabled={isCurrentlyDeactivated}
+                          disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
                           value={newSubTipoEscala}
                           onChange={(e) => setNewSubTipoEscala(e.target.value)}
                           className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-white font-normal"
@@ -2096,7 +2016,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                         <label className="block text-[10px] font-normal text-slate-600">Horário de Início</label>
                         <input
                           type="time"
-                          disabled={isCurrentlyDeactivated}
+                          disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
                           value={newSubHoraInicio}
                           onChange={(e) => setNewSubHoraInicio(e.target.value)}
                           className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-white font-normal"
@@ -2107,7 +2027,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                         <label className="block text-[10px] font-normal text-slate-600">Valor Plantão (R$)</label>
                         <input
                           type="number"
-                          disabled={isCurrentlyDeactivated}
+                          disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
                           value={newSubValorPlantao}
                           onChange={(e) => setNewSubValorPlantao(e.target.value === '' ? '' : Number(e.target.value))}
                           className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-white font-normal"
@@ -2118,7 +2038,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                         <label className="block text-[10px] font-normal text-slate-600">Aj. de Custo (R$)</label>
                         <input
                           type="number"
-                          disabled={isCurrentlyDeactivated}
+                          disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
                           value={newSubAjudaCusto}
                           onChange={(e) => setNewSubAjudaCusto(e.target.value === '' ? '' : Number(e.target.value))}
                           className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-white font-normal"
@@ -2129,7 +2049,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                         <label className="block text-[10px] font-normal text-slate-600">Tx Adm (R$)</label>
                         <input
                           type="number"
-                          disabled={isCurrentlyDeactivated}
+                          disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
                           value={newSubTaxaAdm}
                           onChange={(e) => setNewSubTaxaAdm(e.target.value === '' ? '' : Number(e.target.value))}
                           className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-white font-normal"
@@ -2141,6 +2061,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       {editingSubId && (
                         <button
                           type="button"
+                          disabled={userRole?.toLowerCase() === 'colaborador'}
                           onClick={() => {
                             setEditingSubId(null);
                             setNewSubTipoEscala('Diurno 12h');
@@ -2149,15 +2070,19 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                             setNewSubAjudaCusto(0);
                             setNewSubTaxaAdm(0);
                           }}
-                          className="mr-2 px-3 py-1.5 text-xs font-semibold text-slate-750 bg-slate-100 hover:bg-slate-200 rounded-lg shadow-xs transition-colors cursor-pointer"
+                          className="mr-2 px-3 py-1.5 text-xs font-semibold text-slate-750 bg-slate-100 hover:bg-slate-200 rounded-lg shadow-xs transition-colors cursor-pointer disabled:opacity-50"
                         >
                           Cancelar Edição
                         </button>
                       )}
                       <button
                         type="button"
-                        disabled={isCurrentlyDeactivated}
+                        disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
                         onClick={() => {
+                          if (userRole?.toLowerCase() === 'colaborador') {
+                            alert('Acesso Negado: Usuários com perfil Colaborador não possuem permissão para realizar alterações no Plano de Atendimento.');
+                            return;
+                          }
                           if (editingSubId) {
                             setTiposPlantao(tiposPlantao.map(t => t.id === editingSubId ? {
                               ...t,
@@ -2184,7 +2109,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                           setNewSubAjudaCusto(0);
                           setNewSubTaxaAdm(0);
                         }}
-                        className="flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 rounded-lg shadow-xs transition-colors cursor-pointer"
+                        className="flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed rounded-lg shadow-xs transition-colors cursor-pointer"
                       >
                         <Plus size={14} />
                         <span>{editingSubId ? 'Salvar Edição' : 'Adicionar Modo de Plantão'}</span>
@@ -2227,9 +2152,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                                     <span className="text-xs text-slate-400 italic mr-1">Padrão</span>
                                     <button
                                       type="button"
-                                      disabled={isCurrentlyDeactivated}
+                                      disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
                                       onClick={() => handleDeletePlantao(tp.id, true)}
-                                      className="py-1 px-2.5 border border-red-200 text-red-650 hover:bg-red-50 hover:text-red-750 rounded-md disabled:opacity-50 transition-all font-semibold inline-flex items-center space-x-1 cursor-pointer text-xs"
+                                      className="py-1 px-2.5 border border-red-200 text-red-650 hover:bg-red-50 hover:text-red-750 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-all font-semibold inline-flex items-center space-x-1 cursor-pointer text-xs"
                                       title="Limpar plantão principal"
                                     >
                                       <Trash2 size={13} />
@@ -2240,7 +2165,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                                   <>
                                     <button
                                       type="button"
-                                      disabled={isCurrentlyDeactivated}
+                                      disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
                                       onClick={() => {
                                         setEditingSubId(tp.id);
                                         setNewSubTipoEscala(tp.tipoEscala);
@@ -2249,7 +2174,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                                         setNewSubAjudaCusto(tp.ajudaCusto);
                                         setNewSubTaxaAdm(tp.taxaAdm);
                                       }}
-                                      className="py-1 px-2.5 border border-blue-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700 rounded-md disabled:opacity-50 transition-all font-semibold inline-flex items-center space-x-1 cursor-pointer text-xs"
+                                      className="py-1 px-2.5 border border-blue-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-all font-semibold inline-flex items-center space-x-1 cursor-pointer text-xs"
                                       title="Editar formato"
                                     >
                                       <Edit2 size={13} />
@@ -2257,9 +2182,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                                     </button>
                                     <button
                                       type="button"
-                                      disabled={isCurrentlyDeactivated}
+                                      disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
                                       onClick={() => handleDeletePlantao(tp.id, false)}
-                                      className="py-1 px-2.5 border border-red-200 text-red-100 text-red-650 bg-red-50 hover:bg-red-100 hover:text-red-750 border-red-200 rounded-md disabled:opacity-50 transition-all font-semibold inline-flex items-center space-x-1 cursor-pointer text-xs"
+                                      className="py-1 px-2.5 border border-red-200 text-red-100 text-red-650 bg-red-50 hover:bg-red-100 hover:text-red-750 border-red-200 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-all font-semibold inline-flex items-center space-x-1 cursor-pointer text-xs"
                                       title="Excluir plantão adicional"
                                     >
                                       <Trash2 size={13} />
@@ -2312,7 +2237,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       }`}
                     >
                       <Calendar size={13.5} />
-                      <span>📅 Programação (Mensal)</span>
+                      <span>Programação (Mensal)</span>
                     </button>
 
                     <button
@@ -2344,7 +2269,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white rounded-lg transition-all shadow-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer font-sans"
                     >
                       <Plus size={13.5} />
-                      <span>➕ Agendar</span>
+                      <span>Agendar</span>
                     </button>
 
                     <button
@@ -2358,7 +2283,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-indigo-950 hover:bg-indigo-900 text-white rounded-lg transition-all shadow-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer font-sans"
                     >
                       <Check size={13.5} />
-                      <span>✔ Concluir</span>
+                      <span>Concluir</span>
                     </button>
 
                     <button
@@ -2372,7 +2297,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-all shadow-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer font-sans"
                     >
                       <RotateCcw size={13.5} />
-                      <span>🔄 Reabrir</span>
+                      <span>Reabrir</span>
                     </button>
 
                     <button
@@ -2386,7 +2311,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-red-600 hover:bg-red-750 text-white rounded-lg transition-all shadow-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer font-sans"
                     >
                       <X size={13.5} />
-                      <span>✖ Exclusão</span>
+                      <span>Exclusão</span>
                     </button>
 
                     <button
@@ -2397,7 +2322,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-all shadow-xs cursor-pointer font-sans"
                     >
                       <Printer size={13.5} />
-                      <span>🖨️ Imprimir</span>
+                      <span>Imprimir</span>
                     </button>
                     
                   </div>
