@@ -7,7 +7,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Paciente, Plantao, Profissional, CancelingReason, AuditLog, Agendamento, UsuarioSistema, DebitoProfissional, FaturaPaciente, FolhaPagamento } from '../types';
 import { INITIAL_PACIENTES, INITIAL_PLANTOES } from '../mockData';
 import { db, auth, storage, OperationType, handleFirestoreError } from '../lib/firebase';
-import { signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, User } from 'firebase/auth';
+import { signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, sendEmailVerification, User } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import {
   collection,
@@ -90,8 +90,43 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Authentication State Observer
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (currentUser) => {
+    const unsub = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser && !currentUser.isAnonymous) {
+        const emailLower = currentUser.email?.toLowerCase();
+        
+        // Guard for email verification (exempting the bootstrap developer/admin email)
+        if (!currentUser.emailVerified && emailLower !== 'renatobz@gmail.com') {
+          await signOut(auth);
+          alert('Acesso negado: Você precisa confirmar o link que enviamos para o seu e-mail antes de acessar o sistema.');
+          setUser(null);
+          setLoading(false);
+          return;
+        }
+
+        try {
+          if (emailLower !== 'renatobz@gmail.com') {
+            const q = query(collection(db, 'usuarios_sistema'), where('email', '==', currentUser.email));
+            const querySnapshot = await getDocs(q);
+            if (querySnapshot.empty) {
+              await signOut(auth);
+              alert('Acesso Bloqueado: Esta conta foi desativada ou excluída pelo administrador.');
+              setUser(null);
+              setLoading(false);
+              return;
+            } else {
+              const docData = querySnapshot.docs[0].data();
+              if (docData && docData.status === 'Inativo') {
+                await signOut(auth);
+                alert('Acesso Bloqueado: Esta conta foi desativada ou excluída pelo administrador.');
+                setUser(null);
+                setLoading(false);
+                return;
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Erro na validação do Anti-Ghost Login:", e);
+        }
         setUser(currentUser);
       } else {
         setUser(null);
@@ -101,7 +136,15 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return unsub;
   }, []);
 
-  const login = async (email: string, pass: string) => { await signInWithEmailAndPassword(auth, email, pass); };
+  const login = async (email: string, pass: string) => {
+    const userCredential = await signInWithEmailAndPassword(auth, email, pass);
+    const loggedUser = userCredential.user;
+    if (loggedUser && !loggedUser.emailVerified && loggedUser.email?.toLowerCase() !== 'renatobz@gmail.com') {
+      await signOut(auth);
+      alert('Acesso negado: Você precisa confirmar o link que enviamos para o seu e-mail antes de acessar o sistema.');
+      return;
+    }
+  };
   const activateAccount = async (email: string, pass: string) => {
     const usersRef = collection(db, 'usuarios_sistema');
     // Buscamos se existe usuário cadastrado com esse email e status == 'Ativo'
@@ -111,10 +154,14 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         throw new Error('⚠️ Acesso Negado: Este e-mail não está autorizado pelo administrador da empresa.');
     }
     // Cria credencial no Firebase Auth
-    await createUserWithEmailAndPassword(auth, email, pass);
+    const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+    if (userCredential.user) {
+      await sendEmailVerification(userCredential.user);
+    }
     // Como criar um usuário faz ele logar automaticamente na mesma hora, fazemos signOut para não pular a tela de login
     await signOut(auth);
-    setNotification('Conta ativada com sucesso! Faça login para entrar.');
+    setNotification('Acesso criado! Um e-mail de verificação oficial foi enviado para o colaborador.');
+    alert('Acesso criado! Um e-mail de verificação oficial foi enviado para o colaborador.');
   };
   const logout = async () => { await signOut(auth); };
   const forgotPassword = async (email: string) => { await sendPasswordResetEmail(auth, email); };
@@ -133,9 +180,23 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (user && user.email) {
       const emailLower = user.email.toLowerCase();
       
-      // 1. Maintain userRole state in sync with real-time list
+      // Anti-Ghost: Real-time Check
       if (usuariosSistema.length > 0) {
         const usuario = usuariosSistema.find(u => u.email?.toLowerCase() === emailLower);
+        if (!usuario && emailLower !== 'renatobz@gmail.com') {
+          signOut(auth).then(() => {
+            alert('Acesso Bloqueado: Esta conta foi desativada ou excluída pelo administrador.');
+          });
+          return;
+        }
+        if (usuario && usuario.status === 'Inativo' && emailLower !== 'renatobz@gmail.com') {
+          signOut(auth).then(() => {
+            alert('Acesso Bloqueado: Esta conta foi desativada ou excluída pelo administrador.');
+          });
+          return;
+        }
+
+        // 1. Maintain userRole state in sync with real-time list
         if (usuario) {
           const rawRole = usuario.nivelAcesso?.toLowerCase();
           if (rawRole === 'colaborador') {
@@ -144,7 +205,6 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             setUserRole('Administrador');
           }
         } else {
-          // Default to Administrador for the bootstrapped developer account if not in list yet
           if (emailLower === 'renatobz@gmail.com') {
             setUserRole('Administrador');
           }
@@ -649,11 +709,23 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const deleteUsuarioSistema = async (id: string) => {
     try {
-      await updateDoc(doc(db, 'usuarios_sistema', id), { status: 'Inativo' });
-      setNotification('Utilizador inativado com sucesso.');
+      const targetUser = usuariosSistema.find(u => u.id === id);
+      const emailAlvo = targetUser?.email || '';
+
+      // 1. ANTES de executar o deleteDoc, cria um registro na coleção audit_logs usando addDoc
+      await addDoc(collection(db, 'audit_logs'), {
+        acao: 'EXCLUSAO_COLABORADOR',
+        emailAlvo,
+        dataHora: new Date().toISOString(),
+        adminResponsavel: auth.currentUser?.email || 'anonymous'
+      });
+
+      // 2. Só após o log ser salvo, executa a exclusão da ficha do colaborador no Firestore
+      await deleteDoc(doc(db, 'usuarios_sistema', id));
+      setNotification('Utilizador removido com sucesso.');
     } catch (err) {
-      console.error("Erro ao inativar utilizador:", err);
-      handleFirestoreError(err, OperationType.UPDATE, 'usuarios_sistema');
+      console.error("Erro ao remover utilizador:", err);
+      handleFirestoreError(err, OperationType.DELETE, 'usuarios_sistema');
       throw err;
     }
   };

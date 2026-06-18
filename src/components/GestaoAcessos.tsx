@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
 import { Trash2, Plus, Edit, AlertCircle } from 'lucide-react';
 import { UsuarioSistema } from '../types';
+import { auth } from '../lib/firebase';
+import { sendPasswordResetEmail } from 'firebase/auth';
 
 export const GestaoAcessos: React.FC = () => {
-  const { usuariosSistema, userRole, addUsuarioSistema, deleteUsuarioSistema, updateUsuarioSistema } = useFirebase();
+  const { usuariosSistema, userRole, addUsuarioSistema, deleteUsuarioSistema, updateUsuarioSistema, forgotPassword } = useFirebase();
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
   const [nivel, setNivel] = useState<'Administrador' | 'Colaborador'>('Colaborador');
@@ -95,7 +97,30 @@ export const GestaoAcessos: React.FC = () => {
             {usuariosSistema.filter((user) => user.status !== 'Inativo').map((user) => (
               <tr key={user.id} className="hover:bg-slate-50">
                 <td className="py-3 px-4 font-bold text-slate-700">{user.nome}</td>
-                <td className="py-3 px-4 text-slate-500">{user.email}</td>
+                <td className="py-3 px-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <span className="text-slate-500">{user.email}</span>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (window.confirm('Deseja enviar um link de redefinição de senha para o e-mail deste colaborador?')) {
+                          try {
+                            const emailDoColaborador = user.email;
+                            await sendPasswordResetEmail(auth, emailDoColaborador);
+                            alert('E-mail de redefinição enviado com sucesso para ' + emailDoColaborador);
+                          } catch (error: any) {
+                            console.error(error);
+                            alert('Erro ao enviar: ' + error.message);
+                          }
+                        }
+                      }}
+                      className="inline-flex items-center justify-center px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 hover:text-[#1a3c2e] hover:bg-slate-50 border border-slate-200 hover:border-slate-350 rounded-md transition-all duration-150 cursor-pointer select-none whitespace-nowrap"
+                      id={`reset-${user.id}`}
+                    >
+                      🔑 Enviar Redefinição de Senha
+                    </button>
+                  </div>
+                </td>
                 <td className="py-3 px-4">
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                     user.nivelAcesso === 'Administrador' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'
