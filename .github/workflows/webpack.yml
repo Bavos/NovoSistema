@@ -1,0 +1,90 @@
+name: DevSecOps Pipeline
+
+on:
+  push:
+    branches: [ "main", "master", "develop" ]
+  pull_request:
+    branches: [ "main", "master", "develop" ]
+
+jobs:
+  # 1. Varredura de Código Estático (SAST) - Mantendo a sua correção atualizada
+  sast-semgrep:
+    name: Code Security Analysis (Semgrep)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit 
+            p/secrets 
+            p/typescript 
+            p/javascript
+        env:
+          # Opcional: Se quiser integrar com o painel do Semgrep Cloud
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+
+  # 2. Prevenção de Vazamento de Credenciais (Secret Scanning)
+  secret-scanning:
+    name: API Key & Secret Scanner (TruffleHog)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Escaneia todo o histórico do commit para achar segredos apagados
+
+      - name: TruffleHog OSS
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --debug --only-verified
+
+  # 3. Análise de Dependências (SCA) - Busca vulnerabilidades no package.json
+  dependency-audit:
+    name: Software Composition Analysis (npm audit)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # ou a versão que você utiliza
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run npm audit (Security)
+        # Falha o build apenas se encontrar vulnerabilidades de nível Alto ou Crítico
+        run: npm audit --audit-level=high
+
+  # 4. Linting Rigoroso e TypeScript Check
+  quality-gate:
+    name: Code Quality & Types (ESLint/TSC)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type Check (TypeScript)
+        run: npx tsc --noEmit
+
+      - name: Run ESLint
+        run: npm run lint
