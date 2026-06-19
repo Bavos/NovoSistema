@@ -10,6 +10,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { profissionalSchema } from '../schemas/validationSchemas';
 import { mascaraCPF, mascaraCNPJ, mascaraTelefone, mascaraCEP } from '../lib/masks';
 import { fetchCep, fetchBanks } from '../lib/brasilApi';
+import { toast } from 'react-hot-toast';
 
 export const Profissionais: React.FC = () => {
   const { profissionais, pacientes, addProfissional, updateProfissional, deleteProfissional, uploadLogo, uploadProfissionalFoto, uploadPdf, userRole } = useFirebase();
@@ -438,15 +439,19 @@ export const Profissionais: React.FC = () => {
 
       if (editingProf) {
         await updateProfissional({ ...editingProf, ...finalData } as any);
-        setSuccessMessage("Alterações do profissional salvas com sucesso!");
+        toast.success("Alterações do profissional salvas com sucesso!", {
+          icon: '✅',
+        });
       } else {
         await addProfissional(finalData as any);
-        setSuccessMessage("Novo profissional cadastrado com sucesso!");
+        toast.success("Novo profissional cadastrado com sucesso!", {
+          icon: '✅',
+        });
       }
       setIsModalOpen(false);
     } catch (err) {
       console.error("Erro ao salvar:", err);
-      alert("Erro ao salvar profissional. Tente novamente.");
+      toast.error("Erro ao salvar profissional. Tente novamente.");
     } finally {
       setLoading(false);
     }
@@ -1518,14 +1523,16 @@ export const Profissionais: React.FC = () => {
                             type="button"
                             onClick={async () => {
                                 if (!window.confirm('ATENÇÃO: Tem certeza que deseja excluir permanentemente este profissional? Esta ação não pode ser desfeita.')) return;
-                                try {
-                                    await deleteProfissional(editingProf.id);
-                                    setIsModalOpen(false);
-                                    setSuccessMessage("Profissional excluído com sucesso!");
-                                } catch (err) {
-                                    console.error(err);
-                                    alert("Erro ao excluir profissional.");
-                                }
+                                    try {
+                                        await deleteProfissional(editingProf.id);
+                                        setIsModalOpen(false);
+                                        toast.success("Profissional excluído com sucesso!", {
+                                            icon: '✅',
+                                        });
+                                    } catch (err) {
+                                        console.error(err);
+                                        toast.error("Erro ao excluir profissional.");
+                                    }
                             }}
                             className="px-5 py-2 font-bold text-sm text-red-600 border border-red-600 hover:bg-red-50 rounded-lg transition-all cursor-pointer w-full sm:w-auto"
                         >

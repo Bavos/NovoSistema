@@ -39,6 +39,7 @@ import {
   Crown,
   Info
 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 
 // Helper to compute calendar positions matching the layout provided
 const getDaysInMonthGrid = (monthIndex: number, year: number) => {
@@ -356,9 +357,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
       setOcDescricao('');
       setOcBloquear(false);
       setEditingOcorrenciaId(null);
-      alert('Ocorrência salva com sucesso!');
+      toast.success('Ocorrência salva com sucesso!', {
+        icon: '✅',
+      });
     } catch (err: any) {
-      alert('Erro ao salvar ocorrência: ' + err.message);
+      toast.error('Erro ao salvar ocorrência: ' + err.message);
     } finally {
       setSavingOcorrencia(false);
     }
@@ -680,7 +683,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
   ];
 
   // Handle Form Save
-  const handleSave = async (e: React.MouseEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     console.log("handleSave chamado", { isNew, paciente });
     e.preventDefault();
     if (isCurrentlyDeactivated) {
@@ -764,7 +767,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
       if (isNew) {
         console.log("Chamando addPaciente");
         const result = await addPaciente(patientPayload);
-        alert(`Paciente ${result.nome} cadastrado com sucesso!`);
+        toast.success(`Paciente ${result.nome} cadastrado com sucesso!`, {
+          icon: '✅',
+        });
       } else if (paciente) {
         console.log("Chamando updatePaciente", paciente.id);
         const updatedObj: Paciente = {
@@ -775,7 +780,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
           desativadoMotivo: pDeactReason,
         };
         await updatePaciente(updatedObj);
-        alert('Alterações salvas com sucesso!');
+        toast.success('Alterações salvas com sucesso!', {
+          icon: '✅',
+        });
       } else {
         console.warn("Nem novo nem paciente existente?");
       }
@@ -822,9 +829,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
       };
 
       await updatePaciente(updatedObj);
-      alert('Plano de Atendimento e referências base salvas com sucesso no Firestore!');
+      toast.success('Plano de Atendimento e referências base salvas com sucesso!', {
+        icon: '✅',
+      });
     } catch (error: any) {
-      alert('Erro ao persistir plano de Atendimento: ' + error.message);
+      toast.error('Erro ao persistir plano de Atendimento: ' + error.message);
     }
   };
 
@@ -839,7 +848,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
       onConfirm: async () => {
         try {
           await deletePlantao(id);
-          alert('Agendamento excluído com sucesso!');
+          toast.success('Agendamento excluído com sucesso!', {
+            icon: '✅',
+          });
         } catch (error) {
           console.error("Erro ao deletar agendamento:", error);
           alert('Erro ao excluir agendamento. Verifique o console.');
@@ -932,7 +943,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
   // Turn off / Deactivate patient
   const handleDeactivateConfirm = async () => {
     if (!deactivateReasonInput.trim()) {
-      alert('Obrigatório preencher a justificativa da desativação do paciente.');
+      toast.error('Obrigatório preencher a justificativa da desativação do paciente.');
       return;
     }
     if (paciente) {
@@ -943,7 +954,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
       setPDeactReason(deactivateReasonInput);
       setAlertDeactivateOpen(false);
       setDeactivateReasonInput('');
-      alert('Paciente desativado no sistema.');
+      toast.success('Paciente desativado no sistema.', {
+        icon: '✅',
+      });
     }
   };
 
@@ -954,7 +967,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
       setPStatus('Ativo');
       setPDeactDate(null);
       setPDeactReason(null);
-      alert('Paciente reativado com sucesso! Os campos de edição estão desbloqueados.');
+      toast.success('Paciente reativado com sucesso!', {
+        icon: '✅',
+      });
     }
   };
 
@@ -1593,7 +1608,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
           {/* Form input sections */}
           <form onSubmit={handleSave} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm min-h-[380px]">
             {activeTab === 'geral' && (
-              <div className="space-y-4 animate-in fade-in-30 slide-in-from-right-3">
+              <div className="w-full max-w-3xl mx-auto space-y-4 animate-in fade-in-30 slide-in-from-right-3">
                 <h4 className="text-sm font-semibold text-gray-800 border-b border-slate-200 pb-2 uppercase tracking-wider">DADOS PRINCIPAIS DO PACIENTE</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1">
@@ -1771,7 +1786,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
             )}
 
             {activeTab === 'endereco' && (
-              <div className="space-y-4 animate-in fade-in-30 slide-in-from-right-3">
+              <div className="w-full max-w-3xl mx-auto space-y-4 animate-in fade-in-30 slide-in-from-right-3">
                 <h4 className="text-xs font-bold text-slate-700 border-b border-slate-100 pb-2 uppercase tracking-wider italic">ENDEREÇO DE ATENDIMENTO</h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="md:col-span-2 space-y-1">
@@ -1866,7 +1881,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
             )}
 
             {activeTab === 'medico' && (
-              <div className="space-y-4 animate-in fade-in-30 slide-in-from-right-3">
+              <div className="w-full max-w-3xl mx-auto space-y-4 animate-in fade-in-30 slide-in-from-right-3">
                 <h4 className="text-sm font-semibold text-gray-800 border-b border-slate-200 pb-2 uppercase tracking-wider">HISTÓRICO CLÍNICO & PRONTUÁRIO DOMICILIAR</h4>
 
                 {/* Replicating the Visual Card/Grid format from the reference standard */}
@@ -1953,7 +1968,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
             )}
 
             {activeTab === 'plano' && (
-              <div className="space-y-4 animate-in fade-in-30 slide-in-from-right-3">
+              <div className="w-full max-w-3xl mx-auto space-y-4 animate-in fade-in-30 slide-in-from-right-3">
                 <h4 className="text-xs font-bold text-slate-700 border-b border-slate-100 pb-2 uppercase tracking-wider italic">CONFIGURAÇÃO DE ESCALA (PLANTÃO PRINCIPAL)</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
                   <div className="space-y-1 col-span-1 md:col-span-1">
@@ -2260,7 +2275,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
             )}
 
             {activeTab === 'agendamento' && (
-              <div className="space-y-4 animate-in fade-in-30 slide-in-from-right-3">
+              <div className="w-full max-w-3xl mx-auto space-y-4 animate-in fade-in-30 slide-in-from-right-3">
                 {/* Operations Header Buttons Deck - RH Cuidado Domiciliar */}
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 shadow-xs space-y-2.5">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block font-sans">🛠️ Controles de Escala Operacional</span>
@@ -3049,7 +3064,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
             )}
 
             {activeTab === 'ocorrencias' && (
-              <div className="space-y-6 animate-in fade-in-30 slide-in-from-right-3">
+              <div className="w-full max-w-3xl mx-auto space-y-6 animate-in fade-in-30 slide-in-from-right-3">
                 <div>
                   <h4 className="text-xs font-bold text-slate-700 border-b border-slate-100 pb-2 uppercase tracking-wider italic">
                     {editingOcorrenciaId ? 'EDITAR OCORRÊNCIA' : 'CADASTRAR NOVA OCORRÊNCIA'}
