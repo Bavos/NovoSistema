@@ -1,0 +1,66 @@
+name: 🛡️ Pipeline de Auditoria e Testes
+
+# O gatilho: Roda sempre que alguém empurrar código para a branch 'main' ou abrir um Pull Request
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  auditoria-e-testes:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. Baixa o código do seu repositório para a máquina virtual do GitHub
+    - name: 📥 Checkout do Código
+      uses: actions/checkout@v4
+
+    # 2. Prepara o ambiente com a versão correta do Node.js
+    - name: ⚙️ Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    # 3. Instala as dependências exatamente como estão no package-lock.json
+    - name: 📦 Instalação Limpa (Clean Install)
+      run: npm ci
+
+    # -------------------------------------------------------------------
+    # BARREIRA 1: ESTRUTURA E SINTAXE (LINTER)
+    # Verifica variáveis não usadas, erros de digitação e padrões de código
+    # -------------------------------------------------------------------
+    - name: 🧹 Análise Estática (ESLint)
+      run: npm run lint
+      continue-on-error: false # Se falhar aqui, o pipeline morre e bloqueia o código
+
+    # -------------------------------------------------------------------
+    # BARREIRA 2: SEGURANÇA (VULNERABILIDADES)
+    # Procura brechas conhecidas (CVEs) em bibliotecas de terceiros
+    # -------------------------------------------------------------------
+    - name: 🔒 Auditoria de Segurança (NPM Audit)
+      run: npm audit --audit-level=high > relatorio-seguranca.txt
+      # Salvamos a saída em um arquivo .txt para anexar como evidência depois
+
+    # -------------------------------------------------------------------
+    # BARREIRA 3: ERROS DE LÓGICA (TESTES AUTOMATIZADOS)
+    # Roda seus testes Unitários/Integração e gera a porcentagem de cobertura
+    # -------------------------------------------------------------------
+    - name: 🧪 Testes de Lógica e Cobertura
+      run: npm test -- --coverage
+      # O Jest/Vitest vai gerar uma pasta chamada 'coverage' com o relatório
+
+    # -------------------------------------------------------------------
+    # GERAÇÃO DE ARTEFATOS (AUDITORIA E COMPLIANCE)
+    # Salva os relatórios na nuvem do GitHub para download pelo Administrador
+    # -------------------------------------------------------------------
+    - name: 📁 Salvar Artefatos de Auditoria
+      if: always() # Roda mesmo se um teste falhar lá em cima, para sabermos o motivo
+      uses: actions/upload-artifact@v4
+      with:
+        name: Relatorios-Auditoria-Sistema
+        path: |
+          relatorio-seguranca.txt
+          coverage/
+        retention-days: 30 # Mantém o arquivo guardado por 30 dias para auditoria
