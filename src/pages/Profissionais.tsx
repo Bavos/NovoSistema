@@ -9,7 +9,7 @@ import { collection, query, where, orderBy, onSnapshot, doc, getDoc, updateDoc, 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { profissionalSchema } from '../schemas/validationSchemas';
 import { mascaraCPF, mascaraCNPJ, mascaraTelefone, mascaraCEP } from '../lib/masks';
-
+import { fetchCep, fetchBanks } from '../lib/brasilApi';
 
 export const Profissionais: React.FC = () => {
   const { profissionais, pacientes, addProfissional, updateProfissional, deleteProfissional, uploadLogo, uploadProfissionalFoto, uploadPdf, userRole } = useFirebase();
@@ -21,6 +21,32 @@ export const Profissionais: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'dados' | 'agenda' | 'cracha' | 'ocorrencias'>('dados');
   const [agendamentosProf, setAgendamentosProf] = useState<Agendamento[]>([]);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [bankList, setBankList] = useState<{code: string; name: string}[]>([]);
+
+  useEffect(() => {
+    fetchBanks().then(banks => setBankList(banks.filter((b: any) => !!b.code).map((b: any) => ({ code: String(b.code), name: b.fullName || '' }))));
+  }, []);
+
+  const handleCepChange = async (cep: string) => {
+    const masked = mascaraCEP(cep);
+    setFormData(prev => ({...prev, endereco: {...prev.endereco, cep: masked}}));
+
+    if (masked.length === 9) {
+      const data = await fetchCep(masked);
+      if (data && !data.errors) {
+        setFormData(prev => ({
+          ...prev,
+          endereco: {
+            ...prev.endereco,
+            rua: data.street || prev.endereco.rua,
+            bairro: data.neighborhood || prev.endereco.bairro,
+            cidade: data.city || prev.endereco.cidade,
+            estado: data.state || prev.endereco.estado
+          }
+        }));
+      }
+    }
+  };
 
   // Estados para Gestão de Ocorrências e Bloqueio
   const [ocorrencias, setOcorrencias] = useState<Ocorrencia[]>([]);
@@ -878,7 +904,7 @@ export const Profissionais: React.FC = () => {
           <tbody className="divide-y divide-gray-50 text-gray-700 text-sm">
             {filteredAndSortedProfissionais.map((prof, index) => (
               <tr 
-                key={prof.id} 
+                key={`prof.id.tr.${prof.id || index}-${index}`} 
                 className={`transition-colors duration-150 hover:bg-gray-50/80 ${prof.status !== 'Ativo' ? 'bg-rose-50/30 text-slate-700' : index % 2 === 0 ? 'bg-white' : 'bg-[#faf9f6]/40'}`}
               >
                 <td className="py-3.5 px-4 font-semibold text-gray-900 text-left text-sm">{prof.nome}</td>
@@ -929,7 +955,7 @@ export const Profissionais: React.FC = () => {
                 </h3>
               </div>
               <div className="flex items-center gap-4">
-                 {editingProf && (
+                 {editingProf && userRole === 'Administrador' && (
                    <div className="flex items-center gap-2">
                      <button
                        type="button"
@@ -947,14 +973,14 @@ export const Profissionais: React.FC = () => {
               </div>
             </div>
             
-            <div className="flex gap-4 border-b pb-1.5 mb-2 print:hidden">
+            <nav className="flex overflow-x-auto whitespace-nowrap gap-2 pb-2 w-full no-scrollbar md:overflow-x-visible md:flex-wrap">
               <button
                 type="button"
                 onClick={() => setActiveTab('dados')}
-                className={`font-black pb-1.5 text-xs uppercase tracking-wider transition-colors border-b-2 ${
+                className={`shrink-0 flex items-center space-x-1.5 px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
                   activeTab === 'dados'
-                    ? 'border-[#1a3c2e] text-[#1a3c2e]'
-                    : 'border-transparent text-slate-400 hover:text-slate-600'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
                 Dados Pessoais
@@ -964,39 +990,39 @@ export const Profissionais: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setActiveTab('agenda')}
-                    className={`font-black pb-1.5 text-xs uppercase tracking-wider transition-colors flex items-center gap-1.5 flex-row border-b-2 ${
+                    className={`shrink-0 flex items-center space-x-1.5 px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
                       activeTab === 'agenda'
-                        ? 'border-[#1a3c2e] text-[#1a3c2e]'
-                        : 'border-transparent text-slate-400 hover:text-slate-600'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-gray-600 hover:bg-gray-100'
                     }`}
                   >
-                    <CalendarDays size={13} /> Agenda do Profissional
+                    <CalendarDays size={13} /> Agenda
                   </button>
                   <button
                     type="button"
                     onClick={() => setActiveTab('cracha')}
-                    className={`font-black pb-1.5 text-xs uppercase tracking-wider transition-colors border-b-2 ${
+                    className={`shrink-0 flex items-center space-x-1.5 px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
                       activeTab === 'cracha'
-                        ? 'border-[#1a3c2e] text-[#1a3c2e]'
-                        : 'border-transparent text-slate-400 hover:text-slate-600'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-gray-600 hover:bg-gray-100'
                     }`}
                   >
-                    Gerar Crachá
+                    Crachá
                   </button>
                   <button
                     type="button"
                     onClick={() => setActiveTab('ocorrencias')}
-                    className={`font-black pb-1.5 text-xs uppercase tracking-wider transition-colors border-b-2 ${
+                    className={`shrink-0 flex items-center space-x-1.5 px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
                       activeTab === 'ocorrencias'
-                        ? 'border-[#1a3c2e] text-[#1a3c2e]'
-                        : 'border-transparent text-slate-400 hover:text-slate-600'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-gray-600 hover:bg-gray-100'
                     }`}
                   >
                     Ocorrências
                   </button>
                 </>
               )}
-            </div>
+            </nav>
 
             {(() => {
               switch (activeTab) {
@@ -1112,8 +1138,8 @@ export const Profissionais: React.FC = () => {
                               </tr>
                             </thead>
                             <tbody>
-                              {ocorrencias.map((oc) => (
-                                <tr key={oc.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                              {ocorrencias.map((oc, index) => (
+                                <tr key={`oc-${oc.id || index}-${index}`} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                                   <td className="p-3 font-mono text-slate-600 whitespace-nowrap">
                                     {oc.data.split('-').reverse().join('/')}
                                   </td>
@@ -1286,7 +1312,7 @@ export const Profissionais: React.FC = () => {
                     {/* Bloco 2: Endereço */}
                     <CardBase className="grid grid-cols-1 md:grid-cols-4 gap-4">
                        <span className="md:col-span-4 font-bold text-xs text-[#1a3c2e] uppercase border-b border-gray-50 pb-2 mb-1">Endereço</span>
-                       <input type="text" placeholder="CEP" value={formData.endereco.cep} onChange={e => setFormData({...formData, endereco: {...formData.endereco, cep: mascaraCEP(e.target.value)}})} maxLength={9} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
+                       <input type="text" placeholder="CEP" value={formData.endereco.cep} onChange={e => handleCepChange(e.target.value)} maxLength={9} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
                        <input type="text" placeholder="Logradouro" value={formData.endereco.rua} onChange={e => setFormData({...formData, endereco: {...formData.endereco, rua: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs md:col-span-2 text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
                        <input type="text" placeholder="Nº" value={formData.endereco.numero} onChange={e => setFormData({...formData, endereco: {...formData.endereco, numero: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
                        <input type="text" placeholder="Bairro" value={formData.endereco.bairro} onChange={e => setFormData({...formData, endereco: {...formData.endereco, bairro: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
@@ -1353,7 +1379,12 @@ export const Profissionais: React.FC = () => {
                             </div>
                           </div>
                        )}
-                       <input type="text" placeholder="Banco" value={formData.dadosBancarios.banco} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, banco: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]" />
+                       <select value={formData.dadosBancarios.banco} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, banco: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]">
+                          <option value="">Selecione um banco...</option>
+                          {bankList.map(b => (
+                            <option key={b.code} value={`[${b.code}] - ${b.name}`}>[{b.code}] - {b.name}</option>
+                          ))}
+                       </select>
                        <input type="text" placeholder="Agência" value={formData.dadosBancarios.agencia} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, agencia: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]" />
                        <input type="text" placeholder="Conta" value={formData.dadosBancarios.conta} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, conta: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]" />
                        <input type="text" placeholder="PIX" value={formData.dadosBancarios.pix} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, pix: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]" />
@@ -1432,8 +1463,8 @@ export const Profissionais: React.FC = () => {
                                 <p className="text-xs text-slate-400 italic p-2">Nenhum documento anexado ainda.</p>
                               ) : (
                                 <div className="grid grid-cols-1 gap-2">
-                                  {(formData.documentosAnexos || []).map((docItem) => (
-                                    <div key={docItem.id} className="flex justify-between items-center bg-white p-2.5 rounded-lg border border-slate-100 shadow-sm text-xs">
+                                  {(formData.documentosAnexos || []).map((docItem, idx) => (
+                                    <div key={`doc-${docItem.id || idx}-${idx}`} className="flex justify-between items-center bg-white p-2.5 rounded-lg border border-slate-100 shadow-sm text-xs">
                                       <div className="flex items-center gap-2 min-w-0 mr-4">
                                         <div className="p-1.5 bg-slate-100 rounded text-[#1a3c2e]">
                                           <Paperclip className="w-3.5 h-3.5" strokeWidth={2.5} />

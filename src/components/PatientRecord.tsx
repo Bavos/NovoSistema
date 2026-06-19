@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { updateDoc, doc } from 'firebase/firestore';
+import { fetchCep, fetchBanks, getHolidays } from '../lib/brasilApi';
 import { Paciente, Plantao, CancelingReason, EscalacaoPlano, Agendamento } from '../types';
 import { useFirebase } from '../context/FirebaseContext';
 import { usePacienteData } from '../hooks/usePacienteData';
@@ -407,6 +408,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
     }
   };
 
+  // Estado para Feriados e busca
+  const [feriados, setFeriados] = useState<any[]>([]);
+  useEffect(() => {
+    getHolidays(new Date().getFullYear()).then(setFeriados);
+  }, []);
+
   // Local state for Patient Forms
   const [nome, setNome] = useState('');
   const [dataNascimento, setDataNascimento] = useState('');
@@ -431,6 +438,25 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
   const [cidade, setCidade] = useState('');
   const [estado, setEstado] = useState('');
   const [logisticaChegada, setLogisticaChegada] = useState('');
+
+  const handleCepBlur = async (cepValue: string) => {
+    const rawCep = cepValue.replace(/\D/g, '');
+    if (rawCep.length === 8) {
+      try {
+        const data = await fetchCep(rawCep);
+        if (data && !data.errors) {
+          setRua(data.street || rua);
+          setBairro(data.neighborhood || bairro);
+          setCidade(data.city || cidade);
+          setEstado(data.state || estado);
+        } else {
+            alert("CEP não encontrado.");
+        }
+      } catch (err) {
+        console.error("Erro ao buscar CEP:", err);
+      }
+    }
+  };
 
   // Informações Médica
   const [diagnosticoPrincipal, setDiagnosticoPrincipal] = useState('');
@@ -654,10 +680,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
   ];
 
   // Handle Form Save
-  const handleSave = async (e: React.FormEvent) => {
-    console.log("handleSave chamado");
+  const handleSave = async (e: React.MouseEvent) => {
+    console.log("handleSave chamado", { isNew, paciente });
     e.preventDefault();
-    if (isCurrentlyDeactivated) return;
+    if (isCurrentlyDeactivated) {
+      console.log("isCurrentlyDeactivated é verdadeiro, retornando");
+      return;
+    }
 
     const validation = pacienteSchema.safeParse({ nome, cpf, nomeResponsavel, telefoneResponsavel });
     
@@ -731,10 +760,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
     };
 
     try {
+      console.log("Tentando salvar paciente", { isNew, patientPayload });
       if (isNew) {
+        console.log("Chamando addPaciente");
         const result = await addPaciente(patientPayload);
         alert(`Paciente ${result.nome} cadastrado com sucesso!`);
       } else if (paciente) {
+        console.log("Chamando updatePaciente", paciente.id);
         const updatedObj: Paciente = {
           ...paciente,
           ...patientPayload,
@@ -744,9 +776,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
         };
         await updatePaciente(updatedObj);
         alert('Alterações salvas com sucesso!');
+      } else {
+        console.warn("Nem novo nem paciente existente?");
       }
       onBack();
     } catch (err: any) {
+      console.error('Erro ao tentar salvar o prontuário:', err);
       alert('Erro ao tentar salvar o prontuário: ' + err.message);
     }
   };
@@ -1389,7 +1424,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
         <div className="space-y-2 text-left">
           <div className="flex flex-wrap items-center gap-2.5">
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight" id="prontuario-title-novo">
-              {isNew ? 'Cadastrar Novo Paciente' : nome || 'Nome do Paciente'}
+              {nome}
             </h1>
             <div className="flex-shrink-0">
               {pStatus === 'Ativo' ? (
@@ -1441,7 +1476,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
           )}
           {!isCurrentlyDeactivated ? (
             <>
-              {!isNew && (
+              {!isNew && userRole === 'Administrador' && (
                 <button
                   type="button"
                   onClick={() => setAlertDeactivateOpen(true)}
@@ -1463,15 +1498,17 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
               </button>
             </>
           ) : (
-            <button
-              type="button"
-              onClick={handleReactivate}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white h-9 px-4.5 rounded-lg text-xs font-bold shadow-md transition-colors flex items-center space-x-1.5"
-              id="btn-reativar-paciente"
-            >
-              <Unlock size={15} className="animate-bounce" />
-              <span>Reativar Paciente</span>
-            </button>
+            userRole === 'Administrador' && (
+              <button
+                type="button"
+                onClick={handleReactivate}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white h-9 px-4.5 rounded-lg text-xs font-bold shadow-md transition-colors flex items-center space-x-1.5"
+                id="btn-reativar-paciente"
+              >
+                <Unlock size={15} className="animate-bounce" />
+                <span>Reativar Paciente</span>
+              </button>
+            )
           )}
         </div>
       </div>
@@ -1481,13 +1518,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
         {/* Right side form view containing horizontals sub tabs */}
         <div className="space-y-4">
           {/* sub-tabs header block */}
-          <div className="flex border-b border-slate-100 bg-slate-50/50 p-2.5 rounded-xl border border-slate-200/80 shadow-sm gap-2 overflow-x-auto shrink-0 select-none">
+          <nav className="flex overflow-x-auto whitespace-nowrap gap-2 pb-2 w-full no-scrollbar md:overflow-x-visible md:flex-wrap">
             <button
               onClick={() => setActiveTab('geral')}
-              className={`flex items-center space-x-1.5 px-4 py-2.5 rounded-md text-sm font-semibold whitespace-nowrap transition-all ${
+              className={`shrink-0 flex items-center space-x-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === 'geral'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
               <User size={16} />
@@ -1495,10 +1532,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
             </button>
             <button
               onClick={() => setActiveTab('endereco')}
-              className={`flex items-center space-x-1.5 px-4 py-2.5 rounded-md text-sm font-semibold whitespace-nowrap transition-all ${
+              className={`shrink-0 flex items-center space-x-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === 'endereco'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
               <MapPin size={16} />
@@ -1506,10 +1543,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
             </button>
             <button
               onClick={() => setActiveTab('medico')}
-              className={`flex items-center space-x-1.5 px-4 py-2.5 rounded-md text-sm font-semibold whitespace-nowrap transition-all ${
+              className={`shrink-0 flex items-center space-x-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === 'medico'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
               <Stethoscope size={16} />
@@ -1517,10 +1554,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
             </button>
             <button
               onClick={() => setActiveTab('plano')}
-              className={`flex items-center space-x-1.5 px-4 py-2.5 rounded-md text-sm font-semibold whitespace-nowrap transition-all ${
+              className={`shrink-0 flex items-center space-x-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === 'plano'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
               <Clock size={16} />
@@ -1529,10 +1566,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
             <button
               type="button"
               onClick={() => setActiveTab('agendamento')}
-              className={`flex items-center space-x-1.5 px-4 py-2.5 rounded-md text-sm font-semibold whitespace-nowrap transition-all ${
+              className={`shrink-0 flex items-center space-x-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === 'agendamento'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
               <CalendarDays size={16} />
@@ -1541,17 +1578,17 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
             <button
               type="button"
               onClick={() => setActiveTab('ocorrencias')}
-              className={`flex items-center space-x-1.5 px-4 py-2.5 rounded-md text-sm font-semibold whitespace-nowrap transition-all ${
+              className={`shrink-0 flex items-center space-x-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === 'ocorrencias'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
               }`}
               id="tab-btn-ocorrencias"
             >
               <AlertOctagon size={16} />
               <span>Ocorrências</span>
             </button>
-          </div>
+          </nav>
 
           {/* Form input sections */}
           <form onSubmit={handleSave} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm min-h-[380px]">
@@ -1768,6 +1805,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       disabled={isCurrentlyDeactivated}
                       value={cep}
                       onChange={(e) => setCep(mascaraCEP(e.target.value))}
+                      onBlur={(e) => handleCepBlur(e.target.value)}
                       maxLength={9}
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-550 focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed"
                       placeholder="Ex: 22000-000"
@@ -2132,7 +2170,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       </thead>
                       <tbody className="divide-y divide-slate-100 text-gray-900 text-sm md:text-base">
                         {allRows.map((tp, index) => (
-                          <tr key={tp.id} className={`transition-colors hover:bg-slate-50 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
+                          <tr key={`tp-${tp.id}-${index}`} className={`transition-colors hover:bg-slate-50 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
                             <td className="py-3 px-4 font-normal text-gray-905 text-gray-900 flex items-center space-x-2">
                               <span>{tp.tipoEscala}</span>
                               {tp.isPrincipal && (
@@ -2368,8 +2406,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                         <button
                           type="button"
                           onClick={() => {
-                            setCalendarMonth(5); // June
-                            setCalendarYear(2026);
+                            const today = new Date();
+                            setCalendarMonth(today.getMonth());
+                            setCalendarYear(today.getFullYear());
                           }}
                           className="px-2.5 py-1 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer"
                         >
@@ -2385,20 +2424,21 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       <div className="flex rounded-md shadow-xs bg-slate-100 p-0.5" role="group">
                         <button
                           type="button"
-                          className="px-3.5 py-1 text-[11px] font-bold text-blue-700 bg-white rounded-md shadow-xs border border-slate-200"
+                          onClick={() => setCalendarView('calendario')}
+                          className={`px-3.5 py-1 text-[11px] font-bold ${calendarView === 'calendario' ? 'text-blue-700 bg-white rounded-md shadow-xs border border-slate-200' : 'text-slate-500 hover:text-slate-800'}`}
                         >
                           Mês
                         </button>
                         <button
                           type="button"
-                          onClick={() => alert('Modo Semana em desenvolvimento de UX.')}
+                          onClick={() => alert('Modo Semana ainda não disponível.')}
                           className="px-3.5 py-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
                         >
                           Semana
                         </button>
                         <button
                           type="button"
-                          onClick={() => alert('Modo Dia em desenvolvimento de UX.')}
+                          onClick={() => alert('Modo Dia ainda não disponível.')}
                           className="px-3.5 py-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
                         >
                           Dia
@@ -3118,7 +3158,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                         </thead>
                         <tbody className="divide-y divide-slate-100 text-gray-900 text-sm md:text-base">
                           {(pacientes.find(p => p.id === paciente?.id)?.ocorrencias || []).map((oc, index) => (
-                            <tr key={oc.id} className={`transition-colors hover:bg-slate-50 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
+                            <tr key={`oc-${oc.id || index}-${index}`} className={`transition-colors hover:bg-slate-50 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
                               <td className="py-3 px-4 whitespace-nowrap font-normal text-slate-500">
                                 {oc.data ? oc.data.split('-').reverse().join('/') : '-'}
                               </td>
@@ -3517,23 +3557,24 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                   {/* Day Names Grid */}
                   <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-gray-400 mb-1.5">
                     {["D", "S", "T", "Q", "Q", "S", "S"].map((d, index) => (
-                      <div key={index} className="py-0.5">{d}</div>
+                      <div key={`cal-header-${index}`} className="py-0.5">{d}</div>
                     ))}
                   </div>
 
                   {/* Days Grid */}
                   <div className="grid grid-cols-7 gap-1">
                     {Array.from({ length: new Date(agnCalendarYear, agnCalendarMonth, 1).getDay() }).map((_, i) => (
-                      <div key={`empty-${i}`} className="h-8 w-8" />
+                      <div key={`empty-${agnCalendarMonth}-${agnCalendarYear}-${i}`} className="h-8 w-8" />
                     ))}
                     {Array.from({ length: new Date(agnCalendarYear, agnCalendarMonth + 1, 0).getDate() }, (_, i) => i + 1).map((dayNum) => {
                       const formattedDate = `${agnCalendarYear}-${String(agnCalendarMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
                       const isSelected = datasSelecionadas.includes(formattedDate);
                       const isToday = new Date().toDateString() === new Date(agnCalendarYear, agnCalendarMonth, dayNum).toDateString();
+                      const isHoliday = feriados.some(f => f.date === formattedDate);
                       
                       return (
                         <button
-                          key={dayNum}
+                          key={`${agnCalendarMonth}-${agnCalendarYear}-${dayNum}`}
                           type="button"
                           onClick={() => {
                             if (isSelected) {
@@ -3545,9 +3586,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                           className={`h-8 w-8 text-xs font-semibold flex items-center justify-center transition-all cursor-pointer select-none mx-auto rounded-full
                             ${isSelected 
                               ? 'bg-[#1a3c2e] text-white font-bold hover:bg-[#1a3c2e]/90 shadow-sm transform scale-105' 
-                              : isToday
-                                ? 'bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100/50'
-                                : 'text-gray-700 hover:bg-gray-150/50 hover:text-gray-900'
+                              : isHoliday
+                                ? 'bg-rose-100 text-rose-900 border border-rose-200 hover:bg-rose-200'
+                                : isToday
+                                  ? 'bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100/50'
+                                  : 'text-gray-700 hover:bg-gray-150/50 hover:text-gray-900'
                             }`}
                         >
                           {dayNum}
@@ -4122,7 +4165,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                 {/* Sub grid de Junho 2026 */}
                 <div className="grid grid-cols-7 gap-1 bg-white p-2 border border-slate-200 rounded-xl shadow-xs">
                   {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((dw, i) => (
-                    <div key={i} className="text-center font-extrabold text-[9px] text-slate-400 py-1">{dw}</div>
+                    <div key={`cal2-header-${i}`} className="text-center font-extrabold text-[9px] text-slate-400 py-1">{dw}</div>
                   ))}
                   {/* Padding de Maio - Junho começa numa segunda-feira (1 dia de padding) */}
                   <div className="text-center text-[10px] text-slate-200 py-2 select-none font-mono">31</div>
@@ -4847,7 +4890,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                             taxaCalculada = baseTaxa * 1.50;
                           }
                           return (
-                            <tr key={item.id} className={`transition-colors hover:bg-slate-50 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
+                            <tr key={`shift-${item.id || index}-${index}`} className={`transition-colors hover:bg-slate-50 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
                               <td className="py-3 px-3 border-r border-slate-200 font-sans font-medium text-gray-900 text-sm md:text-base">
                                 {new Date(item.data + 'T12:00:00').toLocaleDateString('pt-BR')} ({item.diaSemana})
                               </td>

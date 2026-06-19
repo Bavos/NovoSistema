@@ -317,7 +317,7 @@ export const PatientList: React.FC<PatientListProps> = ({
 
                   return (
                     <tr
-                      key={p.id}
+                      key={`pac-${p.id || index}-${index}`}
                       className={`hover:bg-slate-50/70 transition-colors group ${
                         isSelected ? 'bg-blue-50/40 hover:bg-blue-50/60' : index % 2 === 0 ? 'bg-white' : 'bg-slate-50/20'
                       }`}
