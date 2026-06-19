@@ -37,12 +37,13 @@ import {
   Sun,
   Moon,
   Crown,
-  Info
+  Info,
+  History
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 // Helper to compute calendar positions matching the layout provided
-const getDaysInMonthGrid = (monthIndex: number, year: number) => {
+const getDaysInMonthGrid = (monthIndex: number, year: number, customHolidays?: Record<string, string>) => {
   const labelHolidays: Record<string, string> = {
     "06-04": "Corpus Christi",
     "01-01": "Confrat. Universal",
@@ -81,7 +82,7 @@ const getDaysInMonthGrid = (monthIndex: number, year: number) => {
       dateStr: fullDateStr,
       dayNumber: dVal,
       isCurrentMonth: false,
-      holiday: labelHolidays[hKey],
+      holiday: (customHolidays && customHolidays[fullDateStr]) ? customHolidays[fullDateStr] : labelHolidays[hKey],
     });
   }
   
@@ -96,7 +97,7 @@ const getDaysInMonthGrid = (monthIndex: number, year: number) => {
       dateStr: fullDateStr,
       dayNumber: dVal,
       isCurrentMonth: true,
-      holiday: labelHolidays[hKey],
+      holiday: (customHolidays && customHolidays[fullDateStr]) ? customHolidays[fullDateStr] : labelHolidays[hKey],
     });
   }
   
@@ -114,7 +115,7 @@ const getDaysInMonthGrid = (monthIndex: number, year: number) => {
       dateStr: fullDateStr,
       dayNumber: dVal,
       isCurrentMonth: false,
-      holiday: labelHolidays[hKey],
+      holiday: (customHolidays && customHolidays[fullDateStr]) ? customHolidays[fullDateStr] : labelHolidays[hKey],
     });
   }
   
@@ -144,7 +145,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
     addAgendamento,
     updateAgendamento,
     deleteAgendamento,
-    userRole
+    userRole,
+    logsAuditoria
   } = useFirebase();
 
   const isBlockedBidirectional = (prof: any) => {
@@ -161,7 +163,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
   };
 
   // Basic layout tab states
-  const [activeTab, setActiveTab] = useState<'geral' | 'endereco' | 'medico' | 'plano' | 'agendamento' | 'ocorrencias'>('geral');
+  const [activeTab, setActiveTab] = useState<'geral' | 'endereco' | 'medico' | 'plano' | 'agendamento' | 'ocorrencias' | 'auditoria'>('geral');
   const [alertDeactivateOpen, setAlertDeactivateOpen] = useState(false);
   const [deactivateReasonInput, setDeactivateReasonInput] = useState('');
 
@@ -489,6 +491,56 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
   const [calendarMonth, setCalendarMonth] = useState<number>(new Date().getMonth());
   const [calendarYear, setCalendarYear] = useState<number>(new Date().getFullYear());
   const [calendarView, setCalendarView] = useState<'lista' | 'calendario'>('calendario'); // default to visual calendar view
+
+  // Dynamic holidays fetched from BrasilAPI + custom RJ municipal/state holidays
+  const [brasilApiHolidays, setBrasilApiHolidays] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchHolidays = async () => {
+      try {
+        const resp = await fetch(`https://brasilapi.com.br/api/feriados/v1/${calendarYear}`);
+        if (!resp.ok) throw new Error("Erro ao carregar feriados");
+        const data = await resp.json() as { date: string; name: string }[];
+        
+        const holidayMap: Record<string, string> = {};
+        data.forEach((item) => {
+          holidayMap[item.date] = item.name;
+        });
+
+        // Add Rio de Janeiro municipal and state holidays
+        holidayMap[`${calendarYear}-01-20`] = "São Sebastião (Municipal RJ)";
+        holidayMap[`${calendarYear}-04-23`] = "São Jorge (Estadual RJ)";
+
+        if (isMounted) {
+          setBrasilApiHolidays(holidayMap);
+        }
+      } catch (err) {
+        console.error("Erro carregando BrasilAPI feriados:", err);
+        // Fallback
+        const holidayMap: Record<string, string> = {
+          [`${calendarYear}-01-01`]: "Confraternização Universal",
+          [`${calendarYear}-01-20`]: "São Sebastião (Municipal RJ)",
+          [`${calendarYear}-04-21`]: "Tiradentes",
+          [`${calendarYear}-04-23`]: "São Jorge (Estadual RJ)",
+          [`${calendarYear}-05-01`]: "Dia do Trabalho",
+          [`${calendarYear}-09-07`]: "Independência do Brasil",
+          [`${calendarYear}-10-12`]: "Nossa Senhora Aparecida",
+          [`${calendarYear}-11-02`]: "Finados",
+          [`${calendarYear}-11-15`]: "Proclamação da República",
+          [`${calendarYear}-11-20`]: "Dia Nacional de Zumbi e da Consciência Negra",
+          [`${calendarYear}-12-25`]: "Natal",
+        };
+        if (isMounted) {
+          setBrasilApiHolidays(holidayMap);
+        }
+      }
+    };
+    fetchHolidays();
+    return () => {
+      isMounted = false;
+    };
+  }, [calendarYear]);
   
   // Modals
   const [avulsoModalOpen, setAvulsoModalOpen] = useState(false);
@@ -691,31 +743,32 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
       return;
     }
 
-    const validation = pacienteSchema.safeParse({ nome, cpf, nomeResponsavel, telefoneResponsavel });
-    
+    const cleanCpfVal = (cpf || '').replace(/\D/g, '');
+    const validation = pacienteSchema.safeParse({ nome, cpf: cleanCpfVal, nomeResponsavel, telefoneResponsavel });
+
     if (!validation.success) {
-      alert(validation.error.issues[0].message);
+      toast.error(validation.error.issues[0].message);
       return;
     }
 
     // Validation for Billing Details
     if (responsavelPagamento === 'Outro Responsável') {
       if (!nomePagador.trim() || !cpfPagador.trim()) {
-        alert('Por favor, preencha os dados obrigatórios do Responsável pelo Pagamento (Nome Completo e CPF do Pagador).');
+        toast.error('Por favor, preencha os dados obrigatórios do Responsável pelo Pagamento (Nome Completo e CPF do Pagador).');
         return;
       }
     }
 
     if (opcaoEnvio === 'WhatsApp' || opcaoEnvio === 'Ambos') {
       if (!whatsappFaturamento.trim()) {
-        alert('Por favor, preencha o WhatsApp para Faturamento.');
+        toast.error('Por favor, preencha o WhatsApp para Faturamento.');
         return;
       }
     }
 
     if (opcaoEnvio === 'E-mail' || opcaoEnvio === 'Ambos') {
       if (!emailFaturamento.trim()) {
-        alert('Por favor, preencha o E-mail para Faturamento.');
+        toast.error('Por favor, preencha o E-mail para Faturamento.');
         return;
       }
     }
@@ -1603,190 +1656,223 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
               <AlertOctagon size={16} />
               <span>Ocorrências</span>
             </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('auditoria')}
+              className={`shrink-0 flex items-center space-x-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === 'auditoria'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+              id="tab-btn-auditoria"
+            >
+              <History size={16} />
+              <span>Histórico</span>
+            </button>
           </nav>
 
           {/* Form input sections */}
-          <form onSubmit={handleSave} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm min-h-[380px]">
+          <form onSubmit={handleSave} className="w-full min-h-[380px]">
             {activeTab === 'geral' && (
-              <div className="w-full max-w-3xl mx-auto space-y-4 animate-in fade-in-30 slide-in-from-right-3">
-                <h4 className="text-sm font-semibold text-gray-800 border-b border-slate-200 pb-2 uppercase tracking-wider">DADOS PRINCIPAIS DO PACIENTE</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="block text-sm font-medium text-gray-700">Nome Completo *</label>
-                    <input
-                      type="text"
-                      required
-                      disabled={isCurrentlyDeactivated}
-                      value={nome}
-                      onChange={(e) => setNome(e.target.value)}
-                      className="w-full text-sm p-2.5 border border-slate-3 rounded-lg text-gray-900 bg-white border-slate-300 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
-                      placeholder="Nome completo do paciente"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="block text-sm font-medium text-gray-700">CPF do Paciente *</label>
-                    <input
-                      type="text"
-                      required
-                      disabled={isCurrentlyDeactivated}
-                      value={cpf}
-                      onChange={(e) => setCpf(mascaraCPF(e.target.value))}
-                      maxLength={14}
-                      className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
-                      placeholder="Ex: 000.000.000-00"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="block text-sm font-medium text-gray-700">Data de Nascimento *</label>
-                    <input
-                      type="date"
-                      required
-                      disabled={isCurrentlyDeactivated}
-                      value={dataNascimento}
-                      onChange={(e) => setDataNascimento(e.target.value)}
-                      className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="block text-sm font-medium text-gray-700">E-mail de Contato (Opcional)</label>
-                    <input
-                      type="email"
-                      disabled={isCurrentlyDeactivated}
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
-                      placeholder="email@exemplo.com"
-                    />
-                  </div>
-                </div>
-
-                <h4 className="text-sm font-semibold text-gray-800 border-b border-slate-200 pb-2 pt-3 uppercase tracking-wider">CONTATO DO RESPONSÁVEL FAMILIAR</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="block text-sm font-medium text-gray-700">Representante Responsável *</label>
-                    <input
-                      type="text"
-                      required
-                      disabled={isCurrentlyDeactivated}
-                      value={nomeResponsavel}
-                      onChange={(e) => setNomeResponsavel(e.target.value)}
-                      className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
-                      placeholder="Nome do parente / responsável formal"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="block text-sm font-medium text-gray-700">Telefone do Responsável *</label>
-                    <input
-                      type="text"
-                      required
-                      disabled={isCurrentlyDeactivated}
-                      value={telefoneResponsavel}
-                      onChange={(e) => setTelefoneResponsavel(mascaraTelefone(e.target.value))}
-                      maxLength={15}
-                      className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-blue-550 focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
-                      placeholder="Ex: (21) 90000-0000"
-                    />
-                  </div>
-                </div>
-
-                <h4 className="text-sm font-semibold text-gray-800 border-b border-slate-200 pb-2 pt-3 uppercase tracking-wider">DADOS DE FATURAMENTO E PAGAMENTO</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="block text-sm font-medium text-gray-700">Responsável pelo Pagamento? *</label>
-                    <select
-                      disabled={isCurrentlyDeactivated}
-                      value={responsavelPagamento}
-                      onChange={(e) => setResponsavelPagamento(e.target.value as any)}
-                      className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
-                    >
-                      <option value="O próprio Paciente">O próprio Paciente</option>
-                      <option value="Outro Responsável">Outro Responsável</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="block text-sm font-medium text-gray-700">Canal de Envio da Fatura/Boleto *</label>
-                    <select
-                      disabled={isCurrentlyDeactivated}
-                      value={opcaoEnvio}
-                      onChange={(e) => setOpcaoEnvio(e.target.value as any)}
-                      className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
-                    >
-                      <option value="WhatsApp">WhatsApp</option>
-                      <option value="E-mail">E-mail</option>
-                      <option value="Ambos">Ambos</option>
-                    </select>
-                  </div>
-
-                  {responsavelPagamento === 'Outro Responsável' && (
-                    <>
-                      <div className="space-y-1.5">
-                        <label className="block text-sm font-medium text-gray-700">Nome Completo do Pagador *</label>
+              <div className="w-full max-w-4xl mx-auto mt-6 mb-12 animate-in fade-in-30 slide-in-from-right-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Cartão Central (Destaque Principal - Identidade) */}
+                  <div className="md:col-span-2 bg-white rounded-2xl border border-[#113224]/10 p-6 md:p-8 shadow-sm space-y-4">
+                    <h4 className="text-[#113224] text-lg font-bold border-b border-[#113224]/10 pb-2 uppercase tracking-wider">
+                      DADOS PRINCIPAIS DO PACIENTE
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="block text-sm font-medium text-gray-750">Nome *</label>
                         <input
                           type="text"
                           required
                           disabled={isCurrentlyDeactivated}
-                          value={nomePagador}
-                          onChange={(e) => setNomePagador(e.target.value)}
-                          className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
-                          placeholder="Nome completo do portador da conta"
+                          value={nome}
+                          onChange={(e) => setNome(e.target.value)}
+                          className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
+                          placeholder="Nome do paciente"
                         />
                       </div>
-                      <div className="space-y-1.5">
-                        <label className="block text-sm font-medium text-gray-700">CPF do Pagador *</label>
+
+                      <div className="space-y-1">
+                        <label className="block text-sm font-medium text-gray-750">CPF do Paciente *</label>
                         <input
                           type="text"
                           required
                           disabled={isCurrentlyDeactivated}
-                          value={cpfPagador}
-                          onChange={(e) => setCpfPagador(mascaraCPF(e.target.value))}
+                          value={cpf}
+                          onChange={(e) => setCpf(mascaraCPF(e.target.value))}
                           maxLength={14}
-                          className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-blue-550 focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
+                          className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
                           placeholder="Ex: 000.000.000-00"
                         />
                       </div>
-                    </>
-                  )}
 
-                  {(opcaoEnvio === 'WhatsApp' || opcaoEnvio === 'Ambos') && (
-                    <div className="space-y-1.5">
-                      <label className="block text-sm font-medium text-gray-700">WhatsApp para Faturamento *</label>
-                      <input
-                        type="text"
-                        required
-                        disabled={isCurrentlyDeactivated}
-                        value={whatsappFaturamento}
-                        onChange={(e) => setWhatsappFaturamento(e.target.value)}
-                        className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
-                        placeholder="Ex: (21) 90000-0000"
-                      />
-                    </div>
-                  )}
+                      <div className="space-y-1">
+                        <label className="block text-sm font-medium text-gray-750">Data de Nascimento *</label>
+                        <input
+                          type="date"
+                          required
+                          disabled={isCurrentlyDeactivated}
+                          value={dataNascimento}
+                          onChange={(e) => setDataNascimento(e.target.value)}
+                          className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
+                        />
+                      </div>
 
-                  {(opcaoEnvio === 'E-mail' || opcaoEnvio === 'Ambos') && (
-                    <div className="space-y-1.5">
-                      <label className="block text-sm font-medium text-gray-700">E-mail para Faturamento *</label>
-                      <input
-                        type="email"
-                        required
-                        disabled={isCurrentlyDeactivated}
-                        value={emailFaturamento}
-                        onChange={(e) => setEmailFaturamento(e.target.value)}
-                        className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
-                        placeholder="faturamento@exemplo.com"
-                      />
+                      <div className="space-y-1">
+                        <label className="block text-sm font-medium text-gray-750">E-mail de Contato (Opcional)</label>
+                        <input
+                          type="email"
+                          disabled={isCurrentlyDeactivated}
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
+                          placeholder="email@exemplo.com"
+                        />
+                      </div>
                     </div>
-                  )}
+                  </div>
+
+                  {/* Cartão Lateral (Responsável / Emergência) */}
+                  <div className="md:col-span-1 bg-slate-50 rounded-2xl border border-[#113224]/10 p-6 md:p-8 shadow-sm flex flex-col h-full space-y-4">
+                    <div>
+                      <h4 className="text-sm font-bold text-[#113224] uppercase tracking-wider flex items-center gap-2">
+                        <span className="text-[#C09A6D] text-lg">👤</span> CONTATO DO RESPONSÁVEL
+                      </h4>
+                      <div className="w-10 h-1 bg-[#C09A6D] rounded mt-1.5" />
+                    </div>
+                    <div className="space-y-4 flex-1">
+                      <div className="space-y-1">
+                        <label className="block text-xs font-semibold text-gray-600">Representante Responsável *</label>
+                        <input
+                          type="text"
+                          required
+                          disabled={isCurrentlyDeactivated}
+                          value={nomeResponsavel}
+                          onChange={(e) => setNomeResponsavel(e.target.value)}
+                          className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
+                          placeholder="Nome do parente / responsável formal"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="block text-xs font-semibold text-gray-600">Telefone do Responsável *</label>
+                        <input
+                          type="text"
+                          required
+                          disabled={isCurrentlyDeactivated}
+                          value={telefoneResponsavel}
+                          onChange={(e) => setTelefoneResponsavel(mascaraTelefone(e.target.value))}
+                          maxLength={15}
+                          className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#C09A6D] focus:border-[#C09A6D] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
+                          placeholder="Ex: (21) 90000-0000"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Cartão Inferior (Faturamento) */}
+                  <div className="md:col-span-3 bg-white rounded-2xl border border-[#113224]/10 p-6 shadow-sm space-y-4">
+                    <h4 className="text-[#113224] text-sm font-bold border-b border-[#113224]/10 pb-2 uppercase tracking-wider">
+                      DADOS DE FATURAMENTO E PAGAMENTO
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="space-y-1">
+                        <label className="block text-xs font-medium text-gray-700">Responsável pelo Pagamento? *</label>
+                        <select
+                          disabled={isCurrentlyDeactivated}
+                          value={responsavelPagamento}
+                          onChange={(e) => setResponsavelPagamento(e.target.value as any)}
+                          className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
+                        >
+                          <option value="O próprio Paciente">O próprio Paciente</option>
+                          <option value="Outro Responsável">Outro Responsável</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="block text-xs font-medium text-gray-700">Canal de Envio da Fatura/Boleto *</label>
+                        <select
+                          disabled={isCurrentlyDeactivated}
+                          value={opcaoEnvio}
+                          onChange={(e) => setOpcaoEnvio(e.target.value as any)}
+                          className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
+                        >
+                          <option value="WhatsApp">WhatsApp</option>
+                          <option value="E-mail">E-mail</option>
+                          <option value="Ambos">Ambos</option>
+                        </select>
+                      </div>
+
+                      {responsavelPagamento === 'Outro Responsável' && (
+                        <>
+                          <div className="space-y-1">
+                            <label className="block text-xs font-medium text-gray-700">Nome do Pagador *</label>
+                            <input
+                              type="text"
+                              required
+                              disabled={isCurrentlyDeactivated}
+                              value={nomePagador}
+                              onChange={(e) => setNomePagador(e.target.value)}
+                              className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
+                              placeholder="Nome do portador da conta"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="block text-xs font-medium text-gray-700">CPF do Pagador *</label>
+                            <input
+                              type="text"
+                              required
+                              disabled={isCurrentlyDeactivated}
+                              value={cpfPagador}
+                              onChange={(e) => setCpfPagador(mascaraCPF(e.target.value))}
+                              maxLength={14}
+                              className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
+                              placeholder="Ex: 000.000.000-00"
+                            />
+                          </div>
+                        </>
+                      )}
+
+                      {(opcaoEnvio === 'WhatsApp' || opcaoEnvio === 'Ambos') && (
+                        <div className="space-y-1">
+                          <label className="block text-xs font-medium text-gray-700">WhatsApp para Faturamento *</label>
+                          <input
+                            type="text"
+                            required
+                            disabled={isCurrentlyDeactivated}
+                            value={whatsappFaturamento}
+                            onChange={(e) => setWhatsappFaturamento(e.target.value)}
+                            className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#C09A6D] focus:border-[#C09A6D] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
+                            placeholder="Ex: (21) 90000-0000"
+                          />
+                        </div>
+                      )}
+
+                      {(opcaoEnvio === 'E-mail' || opcaoEnvio === 'Ambos') && (
+                        <div className="space-y-1">
+                          <label className="block text-xs font-medium text-gray-700">E-mail para Faturamento *</label>
+                          <input
+                            type="email"
+                            required
+                            disabled={isCurrentlyDeactivated}
+                            value={emailFaturamento}
+                            onChange={(e) => setEmailFaturamento(e.target.value)}
+                            className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#C09A6D] focus:border-[#C09A6D] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
+                            placeholder="faturamento@exemplo.com"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
 
             {activeTab === 'endereco' && (
-              <div className="w-full max-w-3xl mx-auto space-y-4 animate-in fade-in-30 slide-in-from-right-3">
+              <div className="w-full max-w-xl mx-auto bg-white rounded-2xl shadow-xl border border-gray-200 p-6 md:p-8 mt-6 mb-12 space-y-4 animate-in fade-in-30 slide-in-from-right-3">
                 <h4 className="text-xs font-bold text-slate-700 border-b border-slate-100 pb-2 uppercase tracking-wider italic">ENDEREÇO DE ATENDIMENTO</h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="md:col-span-2 space-y-1">
@@ -1881,7 +1967,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
             )}
 
             {activeTab === 'medico' && (
-              <div className="w-full max-w-3xl mx-auto space-y-4 animate-in fade-in-30 slide-in-from-right-3">
+              <div className="w-full max-w-xl mx-auto bg-white rounded-2xl shadow-xl border border-gray-200 p-6 md:p-8 mt-6 mb-12 space-y-4 animate-in fade-in-30 slide-in-from-right-3">
                 <h4 className="text-sm font-semibold text-gray-800 border-b border-slate-200 pb-2 uppercase tracking-wider">HISTÓRICO CLÍNICO & PRONTUÁRIO DOMICILIAR</h4>
 
                 {/* Replicating the Visual Card/Grid format from the reference standard */}
@@ -1968,7 +2054,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
             )}
 
             {activeTab === 'plano' && (
-              <div className="w-full max-w-3xl mx-auto space-y-4 animate-in fade-in-30 slide-in-from-right-3">
+              <div className="w-full max-w-xl mx-auto bg-white rounded-2xl shadow-xl border border-gray-200 p-6 md:p-8 mt-6 mb-12 space-y-4 animate-in fade-in-30 slide-in-from-right-3">
                 <h4 className="text-xs font-bold text-slate-700 border-b border-slate-100 pb-2 uppercase tracking-wider italic">CONFIGURAÇÃO DE ESCALA (PLANTÃO PRINCIPAL)</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
                   <div className="space-y-1 col-span-1 md:col-span-1">
@@ -2275,7 +2361,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
             )}
 
             {activeTab === 'agendamento' && (
-              <div className="w-full max-w-3xl mx-auto space-y-4 animate-in fade-in-30 slide-in-from-right-3">
+              <div className="w-full max-w-xl mx-auto bg-white rounded-2xl shadow-xl border border-gray-200 p-6 md:p-8 mt-6 mb-12 space-y-4 animate-in fade-in-30 slide-in-from-right-3">
                 {/* Operations Header Buttons Deck - RH Cuidado Domiciliar */}
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 shadow-xs space-y-2.5">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block font-sans">🛠️ Controles de Escala Operacional</span>
@@ -2470,7 +2556,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       ))}
 
                        {(() => {
-                        const gridDays = getDaysInMonthGrid(calendarMonth, calendarYear);
+                        const gridDays = getDaysInMonthGrid(calendarMonth, calendarYear, brasilApiHolidays);
                         return gridDays.map((cell, idx) => {
                           const today = new Date();
                           const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -2493,17 +2579,22 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                                     ? 'bg-white border-slate-200/60'
                                     : 'bg-slate-50/40 opacity-40 border-slate-200/30'
                               } ${
-                                isSpecialHoliday && !isToday ? 'bg-rose-50/50 border-rose-100' : ''
+                                isSpecialHoliday && !isToday ? 'bg-rose-50/70 border-rose-200 ring-1 ring-rose-100 shadow-xs' : ''
                               }`}
                             >
                               <div className="flex items-center justify-between p-0.5">
                                 <span className={`text-[9px] font-bold select-none px-1.5 py-0.5 rounded-full ${
                                   isToday
                                     ? 'bg-amber-600 text-white font-extrabold flex items-center justify-center'
-                                    : cell.isCurrentMonth ? 'text-slate-700' : 'text-slate-300'
+                                    : cell.isCurrentMonth ? (isSpecialHoliday ? 'text-rose-900 bg-rose-100/70' : 'text-slate-700') : 'text-slate-300'
                                 }`}>
                                   {cell.dayNumber} {isToday && 'Hoje'}
                                 </span>
+                                {isSpecialHoliday && (
+                                  <span className="text-[7.5px] font-bold text-rose-700 bg-rose-100/90 border border-rose-200 px-1 py-0.2 rounded max-w-[65px] truncate select-none" title={cell.holiday}>
+                                    🎉 {cell.holiday}
+                                  </span>
+                                )}
                               </div>
 
                               <div className="space-y-1 mt-1 flex-1 w-full">
@@ -3063,8 +3154,37 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
               </div>
             )}
 
+            {activeTab === 'auditoria' && (
+              <div className="w-full max-w-xl mx-auto bg-white rounded-2xl shadow-xl border border-gray-200 p-6 md:p-8 mt-6 mb-12 space-y-6 animate-in fade-in-30 slide-in-from-right-3">
+                <h4 className="text-xs font-bold text-slate-700 border-b border-slate-100 pb-2 uppercase tracking-wider italic">HISTÓRICO DE AUDITORIA</h4>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-100">
+                        <th className="text-left py-2 text-slate-500">Data</th>
+                        <th className="text-left py-2 text-slate-500">Ação</th>
+                        <th className="text-left py-2 text-slate-500">Descrição</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {logsAuditoria
+                        .filter(log => log.documentId === paciente?.id)
+                        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                        .map(log => (
+                          <tr key={log.id} className="border-b border-slate-50">
+                            <td className="py-2 text-slate-700">{new Date(log.timestamp).toLocaleString()}</td>
+                            <td className="py-2 text-slate-700 font-semibold">{log.action}</td>
+                            <td className="py-2 text-slate-700">{log.description}</td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             {activeTab === 'ocorrencias' && (
-              <div className="w-full max-w-3xl mx-auto space-y-6 animate-in fade-in-30 slide-in-from-right-3">
+              <div className="w-full max-w-xl mx-auto bg-white rounded-2xl shadow-xl border border-gray-200 p-6 md:p-8 mt-6 mb-12 space-y-6 animate-in fade-in-30 slide-in-from-right-3">
                 <div>
                   <h4 className="text-xs font-bold text-slate-700 border-b border-slate-100 pb-2 uppercase tracking-wider italic">
                     {editingOcorrenciaId ? 'EDITAR OCORRÊNCIA' : 'CADASTRAR NOVA OCORRÊNCIA'}

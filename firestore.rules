@@ -25,5 +25,9 @@ service cloud.firestore {
     match /debitos_profissionais/{debitoId} {
       allow read, write: if true;
     }
+
+    match /backups_prontuarios/{backupId} {
+      allow read, write: if true;
+    }
   }
 }

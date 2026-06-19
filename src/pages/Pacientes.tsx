@@ -41,7 +41,7 @@ export const Pacientes: React.FC<PacientesProps> = ({ globalSearchQuery, onViewC
   useEffect(() => {
     if (onViewChange) {
       if (selectedPaciente) {
-        onViewChange(true, `Prontuário: ${selectedPaciente.nome}`);
+        onViewChange(true, 'Prontuário');
       } else if (isNewPatient) {
         onViewChange(true, 'Novo Paciente');
       } else {

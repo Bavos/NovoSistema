@@ -40,6 +40,19 @@ export const GestaoAcessos: React.FC = () => {
     setNome(user.nome);
     setEmail(user.email);
     setNivel(user.nivelAcesso);
+    
+    // Smooth scroll to form element
+    const formElement = document.getElementById('gestao-acessos-form');
+    if (formElement) {
+      formElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setNome('');
+    setEmail('');
+    setNivel('Colaborador');
   };
 
   const deleteUser = async (id: string) => {
@@ -54,8 +67,25 @@ export const GestaoAcessos: React.FC = () => {
     <div className="space-y-6 animate-in fade-in-30">
       
       {/* FORM CARD */}
-      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-        <h2 className="text-sm font-bold text-slate-800">Equipa e Acessos ao Sistema</h2>
+      <div 
+        id="gestao-acessos-form" 
+        className={`p-6 rounded-xl border transition-all duration-300 space-y-4 bg-white ${
+          editingId ? 'border-amber-400 ring-2 ring-amber-400/20 shadow-md' : 'border-slate-200 shadow-sm'
+        }`}
+      >
+        <div className="flex justify-between items-center">
+          <h2 className="text-sm font-bold text-slate-800">
+            {editingId ? '📝 Editar Colaborador e Nível de Acesso' : 'Equipa e Acessos ao Sistema'}
+          </h2>
+          {editingId && (
+            <button 
+              onClick={cancelEdit}
+              className="text-[10px] font-bold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 px-2 py-1 rounded border border-red-200 transition-colors uppercase"
+            >
+              Cancelar Edição
+            </button>
+          )}
+        </div>
         
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
           <div className="space-y-1">
@@ -73,12 +103,14 @@ export const GestaoAcessos: React.FC = () => {
                 <option value="Colaborador">Colaborador</option>
              </select>
           </div>
-          <button
-            onClick={handleAddOrEditUser}
-            className="px-4 py-2 bg-[#1A3626] text-white hover:bg-[#254A34] rounded-full text-xs font-semibold shadow-md transition-colors cursor-pointer flex items-center justify-center gap-2"
-          >
-            <Plus size={16} /> {editingId ? 'Atualizar Utilizador' : 'Adicionar Utilizador'}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleAddOrEditUser}
+              className="flex-1 px-4 py-2 bg-[#1A3626] text-white hover:bg-[#254A34] rounded-full text-xs font-semibold shadow-md transition-colors cursor-pointer flex items-center justify-center gap-2"
+            >
+              <Plus size={16} /> {editingId ? 'Atualizar Utilizador' : 'Adicionar Utilizador'}
+            </button>
+          </div>
         </div>
       </div>
 

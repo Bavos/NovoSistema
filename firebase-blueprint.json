@@ -65,6 +65,20 @@
         "motivo": { "type": "string", "enum": ["Curinga", "Passagem", "Outros"] }
       },
       "required": ["idProfissional", "nomeProfissional", "data", "valor", "motivo"]
+    },
+    "BackupProntuario": {
+      "title": "Backup Prontuário",
+      "description": "Log de histórico de backups periódicos ou manuais contendo cópia integral dos prontuários de pacientes",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "tipo": { "type": "string", "enum": ["Automático", "Manual"] },
+        "itemsCount": { "type": "number" },
+        "dadosPacientes": { "type": "string", "description": "String JSON comprimida com a listagem inteira de pacientes" },
+        "usuarioExecutou": { "type": "string" }
+      },
+      "required": ["id", "timestamp", "tipo", "itemsCount", "dadosPacientes", "usuarioExecutou"]
     }
   },
   "firestore": {
@@ -79,6 +93,10 @@
     "/debitos_profissionais/{debitoId}": {
       "schema": "DebitoProfissional",
       "description": "Lista de ocorrências de débitos e deduções registradas para profissionais"
+    },
+    "/backups_prontuarios/{backupId}": {
+      "schema": "BackupProntuario",
+      "description": "Log e dados comprimidos de todos os backups realizados no prontuário"
     }
   }
 }

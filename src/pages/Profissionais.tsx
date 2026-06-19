@@ -14,7 +14,7 @@ import { toast } from 'react-hot-toast';
 
 export const Profissionais: React.FC = () => {
   const { profissionais, pacientes, addProfissional, updateProfissional, deleteProfissional, uploadLogo, uploadProfissionalFoto, uploadPdf, userRole } = useFirebase();
-  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedProfId, setSelectedProfId] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -859,31 +859,28 @@ export const Profissionais: React.FC = () => {
 
   const filteredAndSortedProfissionais = (profissionais || [])
     .filter(prof => {
-      const query = searchTerm.trim().toLowerCase();
-      if (!query) {
-        return prof.status === 'Ativo';
+      if (!selectedProfId) {
+        return true;
       }
-      const nomeMatch = (prof.nome || '').toLowerCase().includes(query);
-      const cpfMatch = (prof.cpf || '').toLowerCase().includes(query);
-      return nomeMatch || cpfMatch;
+      return prof.id === selectedProfId;
     })
     .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
 
   return (
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row items-center justify-between bg-white p-4 rounded-xl border border-slate-200 print:hidden gap-4">
-        {/* Lado Esquerdo: Campo de busca estilizado com lupa interna */}
+        {/* Lado Esquerdo: Dropdown de seleção */}
         <div className="relative w-full max-w-md">
-          <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-            <Search size={16} className="text-slate-400" />
-          </span>
-          <input
-            type="text"
-            placeholder="Buscar por Nome ou CPF..."
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1a3c2e] outline-none"
-          />
+          <select
+            value={selectedProfId}
+            onChange={e => setSelectedProfId(e.target.value)}
+            className="w-full px-4 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1a3c2e] outline-none"
+          >
+            <option value="">Todos os profissionais (Ativos e Inativos)</option>
+            {(profissionais || []).sort((a,b) => (a.nome || '').localeCompare(b.nome || '')).map(prof => (
+              <option key={prof.id} value={prof.id}>{prof.nome} - {prof.cpf || 'Sem CPF'} {prof.status === 'Inativo' ? '(Inativo)' : ''}</option>
+            ))}
+          </select>
         </div>
 
         {/* Lado Direito: Botão para incluir */}

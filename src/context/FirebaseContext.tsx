@@ -73,6 +73,7 @@ interface FirebaseContextType {
   uploadLogo: (file: File) => Promise<string>;
   uploadProfissionalFoto: (file: File) => Promise<string>;
   uploadPdf: (file: File, path: string) => Promise<string>;
+  logsAuditoria: AuditLog[];
 }
 
 const FirebaseContext = createContext<FirebaseContextType | undefined>(undefined);
@@ -85,6 +86,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [debitosProfissionais, setDebitosProfissionais] = useState<DebitoProfissional[]>([]);
   const [faturasPacientes, setFaturasPacientes] = useState<FaturaPaciente[]>([]);
   const [folhasPagamento, setFolhasPagamento] = useState<FolhaPagamento[]>([]);
+  const [logsAuditoria, setLogsAuditoria] = useState<AuditLog[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -252,32 +254,20 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     let unsubscribeDebitosProfissionais: (() => void) | null = null;
     let unsubscribeFaturasPacientes: (() => void) | null = null;
     let unsubscribeFolhasPagamento: (() => void) | null = null;
+    let unsubscribeLogsAuditoria: (() => void) | null = null;
 
     const initFirebaseSync = async () => {
-      // 1. Let the onAuthStateChanged observer handle the email credentials.
-      // We removed signInAnonymously to ensure that existing user login sessions are not disrupted on reload/refresh.
-
-      // 2. Validate connection on initial boot
+      // 1. Validate connection on initial boot
       try {
         await getDocFromServer(doc(db, 'test', 'connection'));
       } catch (connErr) {
-        const errorMsg = connErr instanceof Error ? connErr.message : String(connErr);
-        if (
-          errorMsg.toLowerCase().includes('offline') ||
-          errorMsg.toLowerCase().includes('could not reach') ||
-          errorMsg.toLowerCase().includes('unavailable') ||
-          errorMsg.toLowerCase().includes('network') ||
-          errorMsg.toLowerCase().includes('timeout')
-        ) {
-          console.error("Please check your Firebase configuration.");
-        }
+        console.error("Please check your Firebase configuration.");
       }
 
-      // 3. Seed Firestore database automatically if empty
+      // 2. Seed Firestore database automatically if empty
       try {
         const pSnap = await getDocs(collection(db, 'pacientes'));
         if (pSnap.empty) {
-          console.log("Seeding Firestore with default pacientes data records...");
           for (const item of INITIAL_PACIENTES) {
             await setDoc(doc(db, 'pacientes', item.id), item);
           }
@@ -285,164 +275,69 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
         const plSnap = await getDocs(collection(db, 'plantoes'));
         if (plSnap.empty) {
-          console.log("Seeding Firestore with default plantões logs...");
           for (const item of INITIAL_PLANTOES) {
             await setDoc(doc(db, 'plantoes', item.id), item);
           }
         }
       } catch (seedErr) {
-        console.warn("Skipped Firebase seeding (using client fallback or active existing base):", seedErr);
+        console.warn("Skipped Firebase seeding:", seedErr);
       }
 
-      // 4. Real-time Subscription to collections
-      const pacColl = collection(db, 'pacientes');
-      unsubscribePacientes = onSnapshot(
-        pacColl,
-        (snap) => {
-          const list: Paciente[] = [];
-          snap.forEach((d) => {
-            list.push(d.data() as Paciente);
-          });
-          setPacientes(list);
-          setLoading(false);
-        },
-        (error) => {
-          console.error("Paciente live sync error:", error);
-          // Fallback to local storage state if permissions rules block or offline
-          const fallbackPac = localStorage.getItem('firebase_simulated_pacientes');
-          if (fallbackPac) {
-            setPacientes(JSON.parse(fallbackPac));
-          } else {
-            setPacientes(INITIAL_PACIENTES);
-          }
-          setLoading(false);
-          handleFirestoreError(error, OperationType.GET, 'pacientes');
-        }
-      );
+      // 3. Real-time Subscription to collections
+      unsubscribePacientes = onSnapshot(collection(db, 'pacientes'), (snap) => {
+        const list: Paciente[] = [];
+        snap.forEach((d) => list.push(d.data() as Paciente));
+        setPacientes(list);
+        setLoading(false);
+      }, (error) => handleFirestoreError(error, OperationType.GET, 'pacientes'));
 
-      const plColl = collection(db, 'plantoes');
-      unsubscribePlantoes = onSnapshot(
-        plColl,
-        (snap) => {
-          const list: Plantao[] = [];
-          snap.forEach((d) => {
-            list.push(d.data() as Plantao);
-          });
-          setPlantoes(list);
-        },
-        (error) => {
-          console.error("Plantoes live sync error:", error);
-          const fallbackPl = localStorage.getItem('firebase_simulated_plantoes');
-          if (fallbackPl) {
-            setPlantoes(JSON.parse(fallbackPl));
-          } else {
-            setPlantoes(INITIAL_PLANTOES);
-          }
-          handleFirestoreError(error, OperationType.GET, 'plantoes');
-        }
-      );
+      unsubscribePlantoes = onSnapshot(collection(db, 'plantoes'), (snap) => {
+        const list: Plantao[] = [];
+        snap.forEach((d) => list.push(d.data() as Plantao));
+        setPlantoes(list);
+      }, (error) => handleFirestoreError(error, OperationType.GET, 'plantoes'));
 
-      const agColl = collection(db, 'agendamentos');
-      unsubscribeAgendamentos = onSnapshot(
-        agColl,
-        (snap) => {
-          const list: Agendamento[] = [];
-          snap.forEach((d) => {
-            list.push({ ...d.data(), id: d.id } as Agendamento);
-          });
-          setAgendamentos(list);
-        },
-        (error) => {
-          console.error('Error fetching agendamentos:', error);
-          handleFirestoreError(error, OperationType.GET, 'agendamentos');
-        }
-      );
+      unsubscribeAgendamentos = onSnapshot(collection(db, 'agendamentos'), (snap) => {
+        const list: Agendamento[] = [];
+        snap.forEach((d) => list.push({ ...d.data(), id: d.id } as Agendamento));
+        setAgendamentos(list);
+      }, (error) => handleFirestoreError(error, OperationType.GET, 'agendamentos'));
 
-      const profColl = collection(db, 'profissionais');
-      unsubscribeProfissionais = onSnapshot(
-        profColl,
-        (snap) => {
-          const list: Profissional[] = [];
-          snap.forEach((d) => {
-            list.push({ ...d.data(), id: d.id } as Profissional);
-          });
-          setProfissionais(list);
-        },
-        (error) => {
-          console.error("Profissionais live sync error:", error);
-          const fallbackProf = localStorage.getItem('firebase_simulated_profissionais');
-          if (fallbackProf) {
-            setProfissionais(JSON.parse(fallbackProf));
-          } else {
-            setProfissionais([]);
-          }
-          handleFirestoreError(error, OperationType.GET, 'profissionais');
-        }
-      );
+      unsubscribeProfissionais = onSnapshot(collection(db, 'profissionais'), (snap) => {
+        const list: Profissional[] = [];
+        snap.forEach((d) => list.push({ ...d.data(), id: d.id } as Profissional));
+        setProfissionais(list);
+      }, (error) => handleFirestoreError(error, OperationType.GET, 'profissionais'));
       
-      const usColl = collection(db, 'usuarios_sistema');
-      unsubscribeUsuariosSistema = onSnapshot(
-        usColl,
-        (snap) => {
-          const list: UsuarioSistema[] = [];
-          snap.forEach((d) => {
-            list.push({ ...d.data(), id: d.id } as UsuarioSistema);
-          });
-          setUsuariosSistema(list);
-        },
-        (error) => {
-          console.error("UsuariosSistema live sync error:", error);
-          handleFirestoreError(error, OperationType.GET, 'usuarios_sistema');
-        }
-      );
+      unsubscribeUsuariosSistema = onSnapshot(collection(db, 'usuarios_sistema'), (snap) => {
+        const list: UsuarioSistema[] = [];
+        snap.forEach((d) => list.push({ ...d.data(), id: d.id } as UsuarioSistema));
+        setUsuariosSistema(list);
+      }, (error) => handleFirestoreError(error, OperationType.GET, 'usuarios_sistema'));
 
-      const debColl = collection(db, 'debitos_profissionais');
-      unsubscribeDebitosProfissionais = onSnapshot(
-        debColl,
-        (snap) => {
-          const list: DebitoProfissional[] = [];
-          snap.forEach((d) => {
-            list.push({ ...d.data(), id: d.id } as DebitoProfissional);
-          });
-          setDebitosProfissionais(list);
-        },
-        (error) => {
-          console.error("DebitosProfissionais live sync error:", error);
-          handleFirestoreError(error, OperationType.GET, 'debitos_profissionais');
-        }
-      );
+      unsubscribeDebitosProfissionais = onSnapshot(collection(db, 'debitos_profissionais'), (snap) => {
+        const list: DebitoProfissional[] = [];
+        snap.forEach((d) => list.push({ ...d.data(), id: d.id } as DebitoProfissional));
+        setDebitosProfissionais(list);
+      }, (error) => handleFirestoreError(error, OperationType.GET, 'debitos_profissionais'));
 
-      const fatColl = collection(db, 'faturas_pacientes');
-      unsubscribeFaturasPacientes = onSnapshot(
-        fatColl,
-        (snap) => {
-          const list: FaturaPaciente[] = [];
-          snap.forEach((d) => {
-            list.push({ ...d.data(), id: d.id } as FaturaPaciente);
-          });
-          setFaturasPacientes(list);
-        },
-        (error) => {
-          console.error("FaturasPacientes live sync error:", error);
-          handleFirestoreError(error, OperationType.GET, 'faturas_pacientes');
-        }
-      );
+      unsubscribeFaturasPacientes = onSnapshot(collection(db, 'faturas_pacientes'), (snap) => {
+        const list: FaturaPaciente[] = [];
+        snap.forEach((d) => list.push({ ...d.data(), id: d.id } as FaturaPaciente));
+        setFaturasPacientes(list);
+      }, (error) => handleFirestoreError(error, OperationType.GET, 'faturas_pacientes'));
 
-      const folColl = collection(db, 'folhas_pagamento');
-      unsubscribeFolhasPagamento = onSnapshot(
-        folColl,
-        (snap) => {
-          const list: FolhaPagamento[] = [];
-          snap.forEach((d) => {
-            list.push({ ...d.data(), id: d.id } as FolhaPagamento);
-          });
-          setFolhasPagamento(list);
-        },
-        (error) => {
-          console.error("FolhasPagamento live sync error:", error);
-          handleFirestoreError(error, OperationType.GET, 'folhas_pagamento');
-        }
-      );
+      unsubscribeFolhasPagamento = onSnapshot(collection(db, 'folhas_pagamento'), (snap) => {
+        const list: FolhaPagamento[] = [];
+        snap.forEach((d) => list.push({ ...d.data(), id: d.id } as FolhaPagamento));
+        setFolhasPagamento(list);
+      }, (error) => handleFirestoreError(error, OperationType.GET, 'folhas_pagamento'));
+
+      unsubscribeLogsAuditoria = onSnapshot(collection(db, 'LogsAuditoria'), (snap) => {
+        const list: AuditLog[] = [];
+        snap.forEach((d) => list.push({ ...d.data(), id: d.id } as AuditLog));
+        setLogsAuditoria(list);
+      }, (error) => handleFirestoreError(error, OperationType.GET, 'LogsAuditoria'));
     };
 
     initFirebaseSync();
@@ -456,6 +351,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (unsubscribeDebitosProfissionais) unsubscribeDebitosProfissionais();
       if (unsubscribeFaturasPacientes) unsubscribeFaturasPacientes();
       if (unsubscribeFolhasPagamento) unsubscribeFolhasPagamento();
+      if (unsubscribeLogsAuditoria) unsubscribeLogsAuditoria();
     };
   }, []);
 
@@ -1012,6 +908,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         addFaturaPaciente,
         folhasPagamento,
         addFolhaPagamento,
+        logsAuditoria,
       }}
     >
       {children}

@@ -71,7 +71,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <motion.div
             animate={{ opacity: effectiveExpanded ? 1 : 0 }}
             transition={{ duration: 0.2 }}
-            className="flex flex-col whitespace-nowrap"
+            className="flex flex-col whitespace-nowrap pl-3"
           >
             <span className="font-extrabold text-off-white text-sm tracking-wide uppercase">RH CS</span>
             <span className="text-[10px] text-mustard-gold font-mono tracking-widest font-medium">SISTEMA</span>

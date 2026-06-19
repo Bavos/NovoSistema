@@ -32,6 +32,7 @@ import { Agendamento, DebitoProfissional } from '../types';
 import { db } from '../lib/firebase';
 import { collection, query, where, getDocs, doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { mascaraCNPJ } from '../lib/masks';
+import { toast } from 'react-hot-toast';
 
 /* ----------------------------------------------------
  * Tab 2: Profissionais Co-curators
@@ -3128,6 +3129,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
  * Tab 5: Empresa e Configurações Corporativas
  * ---------------------------------------------------- */
 import { GestaoAcessos } from './GestaoAcessos';
+import { BackupProntuarios } from './BackupProntuarios';
 
 export const EmpresaDashboard: React.FC = () => {
   const { userRole, setNotification, uploadLogo } = useFirebase();
@@ -3177,6 +3179,7 @@ export const EmpresaDashboard: React.FC = () => {
   }, []);
 
   const startEditing = () => {
+    console.log("startEditing triggered");
     setTempRazao(razaoSocial);
     setTempCnpj(cnpj);
     setTempUnidade(unidadeOperacao);
@@ -3268,14 +3271,16 @@ export const EmpresaDashboard: React.FC = () => {
     }
   };
 
+
   const handleSaveMatriz = async () => {
     if (!isAdmin) {
-      alert("Apenas administradores podem alterar as informações.");
+      toast.error("Apenas administradores podem alterar as informações.");
       return;
     }
     setUploadDiagnostics([]);
     setDiagnosticError(null);
     setIsUploading(true);
+    const loadingToast = toast.loading("Salvando dados organizacionais...");
 
     try {
       setUploadDiagnostics(prev => [...prev, `[LOG 4/4] Atualizando dados cadastrais no Firestore: coleção "configuracoes_empresa"...`]);
@@ -3292,11 +3297,14 @@ export const EmpresaDashboard: React.FC = () => {
       setCnpj(tempCnpj);
       setUnidadeOperacao(tempUnidade);
       setIsEditingMatriz(false);
-      setUploadDiagnostics([]);
-      setShouldClearLogo(false);
+      
+      toast.dismiss(loadingToast);
+      toast.success('Dados organizacionais salvos com sucesso.');
       setNotification('Dados organizacionais salvos com sucesso.');
     } catch (err: any) {
       console.error("[Diagnóstico de Erro] Erro geral ao salvar dados da matriz:", err);
+      toast.dismiss(loadingToast);
+      toast.error(`Falha ao gravar no Firestore: ${err.message || String(err)}`);
       setDiagnosticError(`Falha ao gravar no Firestore: ${err.message || String(err)}`);
     } finally {
       setIsUploading(false);
@@ -3493,8 +3501,12 @@ export const EmpresaDashboard: React.FC = () => {
                     {logoUrl && <img src={logoUrl} alt="Logo" className="w-24 h-16 object-contain border rounded bg-white shadow-sm" />}
                     {isAdmin && (
                       <button 
-                        onClick={startEditing}
-                        className="px-2 py-0.5 text-[10px] uppercase font-bold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer bg-white border border-slate-200 rounded-md shadow-sm"
+                        type="button"
+                        onClick={() => {
+                          console.log("Edit button clicked!");
+                          startEditing();
+                        }}
+                        className="px-4 py-2 text-xs uppercase font-bold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer bg-white border border-slate-200 rounded-md shadow-sm"
                       >
                         Editar
                       </button>
@@ -3529,6 +3541,8 @@ export const EmpresaDashboard: React.FC = () => {
 
         </div>
       </div>
+      
+      {isAdmin && <BackupProntuarios />}
       
       {isAdmin && <GestaoAcessos />}
 
