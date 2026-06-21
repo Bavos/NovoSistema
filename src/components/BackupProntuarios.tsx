@@ -51,6 +51,7 @@ export const BackupProntuarios: React.FC = () => {
   const [loadingBackups, setLoadingBackups] = useState(true);
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [showFullHistoryModal, setShowFullHistoryModal] = useState(false);
 
   // Load backups list & configuration on mount
   useEffect(() => {
@@ -160,7 +161,7 @@ export const BackupProntuarios: React.FC = () => {
         usuarioExecutou: isAutomatic ? 'Sistema' : (user?.email || 'Administrador'),
       };
 
-      // Create doc in Firestore
+       // Create doc in Firestore
       const docRef = await addDoc(collection(db, 'backups_prontuarios'), backupObj);
 
       // Output to system logs too
@@ -179,7 +180,35 @@ export const BackupProntuarios: React.FC = () => {
         ...backupObj
       };
 
-      setBackups(prev => [newRecord, ...prev]);
+      // SIMULATION OF RETENTION POLICY - Runs on Cloud Function in production
+      // Check total number of backups on Firestore: if it exceeds 15, delete oldest keeping only 10.
+      const querySnap = await getDocs(query(collection(db, 'backups_prontuarios'), orderBy('timestamp', 'desc')));
+      if (querySnap.size > 15) {
+        const backupsArray: { id: string; ref: any; timestamp: string }[] = [];
+        querySnap.forEach(d => {
+          backupsArray.push({ id: d.id, ref: d.ref, timestamp: d.data().timestamp });
+        });
+
+        const obsoleteBackups = backupsArray.slice(10);
+        for (const obsolete of obsoleteBackups) {
+          await deleteDoc(obsolete.ref);
+          
+          await addDoc(collection(db, 'logs_auditoria'), {
+            timestamp: new Date().toISOString(),
+            userId: 'sistema-simulado',
+            action: 'DELETE',
+            collection: 'backups_prontuarios',
+            documentId: obsolete.id,
+            description: `[Política de Retenção - Simulado] Descarte automático pós-backup para otimização de espaço. Backup ID: ${obsolete.id} de ${obsolete.timestamp} removido via trigger de servidor.`
+          });
+        }
+        
+        const obsoleteIds = obsoleteBackups.map(o => o.id);
+        setBackups(prev => [newRecord, ...prev].filter(b => !obsoleteIds.includes(b.id)));
+      } else {
+        setBackups(prev => [newRecord, ...prev]);
+      }
+
       setNotification(`Backup de prontuários em nuvem criado com sucesso! Documento ID: ${docRef.id}`);
 
       if (!isAutomatic) {
@@ -484,9 +513,19 @@ export const BackupProntuarios: React.FC = () => {
 
       {/* Backup Logs History */}
       <div className="space-y-2 text-xs">
-        <h4 className="font-bold text-slate-700 flex items-center gap-1 border-b border-slate-50 pb-1.5">
-          <Clock size={13} className="text-slate-400" />
-          <span>Histórico de Proteções Realizadas ({backups.length})</span>
+        <h4 className="font-bold text-slate-700 flex items-center gap-1 border-b border-slate-50 pb-1.5 flex justify-between">
+          <span className="flex items-center gap-1">
+            <Clock size={13} className="text-slate-400" />
+            <span>Painel de Proteções Recentes (Mostrando {Math.min(backups.length, 3)} de {backups.length})</span>
+          </span>
+          {backups.length > 3 && (
+            <button
+              onClick={() => setShowFullHistoryModal(true)}
+              className="text-xs text-blue-600 hover:text-blue-800 font-bold hover:underline cursor-pointer"
+            >
+              Ver Histórico Completo &rarr;
+            </button>
+          )}
         </h4>
 
         {loadingBackups ? (
@@ -500,58 +539,165 @@ export const BackupProntuarios: React.FC = () => {
             <p className="text-[10px] text-slate-400">Clique no botão acima ou configure a frequência automática para começar.</p>
           </div>
         ) : (
-          <div className="border border-slate-150 rounded-xl overflow-hidden divide-y divide-slate-100">
-            {backups.map((bk) => (
-              <div key={bk.id} className="flex flex-col sm:flex-row justify-between sm:items-center p-3 bg-white hover:bg-slate-50/50 transition-colors gap-2">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-semibold text-slate-800">{formatTimestamp(bk.timestamp)}</span>
-                    <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
-                      bk.tipo === 'Automático' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                    }`}>
-                      {bk.tipo}
-                    </span>
+          <div className="space-y-2">
+            <div className="border border-slate-150 rounded-xl overflow-hidden divide-y divide-slate-100">
+              {backups.slice(0, 3).map((bk) => (
+                <div key={bk.id} className="flex flex-col sm:flex-row justify-between sm:items-center p-3 bg-white hover:bg-slate-50/50 transition-colors gap-2">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-semibold text-slate-800">{formatTimestamp(bk.timestamp)}</span>
+                      <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
+                        bk.tipo === 'Automático' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                      }`}>
+                        {bk.tipo}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                      <span className="flex items-center gap-0.5">
+                        <Calendar size={10} />
+                        <span>{bk.itemsCount} registros de prontuários</span>
+                      </span>
+                      <span>•</span>
+                      <span className="italic">Por: {bk.usuarioExecutou}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 text-[10px] text-slate-400">
-                    <span className="flex items-center gap-0.5">
-                      <Calendar size={10} />
-                      <span>{bk.itemsCount} registros de prontuários</span>
-                    </span>
-                    <span>•</span>
-                    <span className="italic">Por: {bk.usuarioExecutou}</span>
-                  </div>
-                </div>
 
-                <div className="flex items-center gap-1.5 self-end sm:self-auto">
-                  <button
-                    onClick={() => handleExportJSON(bk)}
-                    className="p-1 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-bold text-[10px] flex items-center gap-1 cursor-pointer transition-colors"
-                    title="Exportar dados para arquivo JSON"
-                  >
-                    <Download size={10} />
-                    <span>Exportar JSON</span>
-                  </button>
-                  <button
-                    onClick={() => handleExportCSV(bk)}
-                    className="p-1 px-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-md font-bold text-[10px] flex items-center gap-1 cursor-pointer transition-colors"
-                    title="Exportar tabela de prontuários para CSV"
-                  >
-                    <Download size={10} />
-                    <span>Exportar CSV</span>
-                  </button>
-                  <button
-                    onClick={() => handleDeleteBackup(bk.id)}
-                    className="p-1 px-2 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-800 rounded-md cursor-pointer transition-colors"
-                    title="Excluir do histórico"
-                  >
-                    <Trash2 size={11} />
-                  </button>
+                  <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                    <button
+                      onClick={() => handleExportJSON(bk)}
+                      className="p-1 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-bold text-[10px] flex items-center gap-1 cursor-pointer transition-colors"
+                      title="Exportar dados para arquivo JSON"
+                    >
+                      <Download size={10} />
+                      <span>Exportar JSON</span>
+                    </button>
+                    <button
+                      onClick={() => handleExportCSV(bk)}
+                      className="p-1 px-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-md font-bold text-[10px] flex items-center gap-1 cursor-pointer transition-colors"
+                      title="Exportar tabela de prontuários para CSV"
+                    >
+                      <Download size={10} />
+                      <span>Exportar CSV</span>
+                    </button>
+                    <button
+                      onClick={() => handleDeleteBackup(bk.id)}
+                      className="p-1 px-2 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-800 rounded-md cursor-pointer transition-colors"
+                      title="Excluir do histórico"
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                  </div>
                 </div>
+              ))}
+            </div>
+
+            {backups.length > 3 && (
+              <div className="flex justify-center pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowFullHistoryModal(true)}
+                  className="px-4 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-xl text-slate-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
+                >
+                  <Clock size={13} className="text-slate-500" />
+                  <span>Ver Histórico Completo ({backups.length})</span>
+                </button>
               </div>
-            ))}
+            )}
           </div>
         )}
       </div>
+
+      {/* Modal - Histórico Técnico de Backups Completo */}
+      {showFullHistoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[85vh] flex flex-col border border-slate-100 overflow-hidden scale-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50/50">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
+                  <Database size={16} />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-tight">Histórico de Backups na Nuvem</h3>
+                  <p className="text-[10px] text-slate-400">Relação integral de pontos de contingência salvos no Firestore.</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowFullHistoryModal(false)}
+                className="p-1 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 overflow-y-auto space-y-3 flex-1">
+              <div className="border border-slate-150 rounded-xl overflow-hidden divide-y divide-slate-100 max-h-[50vh] overflow-y-auto">
+                {backups.map((bk) => (
+                  <div key={bk.id} className="flex flex-col sm:flex-row justify-between sm:items-center p-3 bg-white hover:bg-slate-50/50 transition-colors gap-2">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-slate-850 text-xs">{formatTimestamp(bk.timestamp)}</span>
+                        <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
+                          bk.tipo === 'Automático' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                        }`}>
+                          {bk.tipo}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                        <span className="flex items-center gap-0.5">
+                          <Calendar size={10} />
+                          <span>{bk.itemsCount} prontuários</span>
+                        </span>
+                        <span>•</span>
+                        <span className="italic">Executor: {bk.usuarioExecutou}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                      <button
+                        onClick={() => handleExportJSON(bk)}
+                        className="p-1 px-2 bg-slate-100 hover:bg-slate-200 text-slate-750 rounded-md font-bold text-[9px] flex items-center gap-0.5 cursor-pointer transition-colors"
+                        title="Exportar dados para arquivo JSON"
+                      >
+                        <Download size={9} />
+                        <span>JSON</span>
+                      </button>
+                      <button
+                        onClick={() => handleExportCSV(bk)}
+                        className="p-1 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-750 rounded-md font-bold text-[9px] flex items-center gap-0.5 cursor-pointer transition-colors"
+                        title="Exportar tabela de prontuários para CSV"
+                      >
+                        <Download size={9} />
+                        <span>CSV</span>
+                      </button>
+                      <button
+                        onClick={() => handleDeleteBackup(bk.id)}
+                        className="p-1 px-1.5 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-800 rounded-md cursor-pointer transition-colors"
+                        title="Excluir do histórico"
+                      >
+                        <Trash2 size={10} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 border-t border-slate-100 bg-slate-50 flex justify-between items-center text-[10px] text-slate-400">
+              <span>* Política de retenção ativa: Limite de 15 pontos de contingência.</span>
+              <button
+                type="button"
+                onClick={() => setShowFullHistoryModal(false)}
+                className="px-4 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-lg text-xs transition-all cursor-pointer shadow-xs"
+              >
+                Voltar ao Painel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="text-[10px] text-slate-400 flex items-start gap-1 p-2.5 bg-yellow-50/40 border border-yellow-100 rounded-lg">
         <Info size={12} className="text-yellow-600 mt-0.5 shrink-0" />

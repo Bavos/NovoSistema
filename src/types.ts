@@ -62,6 +62,9 @@ export interface Ocorrencia {
   descricao: string;
   bloquearEscala: boolean;
   createdAt?: string;
+  tipo?: string;
+  paciente?: string;
+  timestamp?: any;
 }
 
 export interface DocumentoAnexo {
@@ -202,6 +205,9 @@ export interface Agendamento {
   escalaCongelada?: boolean;
   tipoDia?: 'Normal' | 'Feriado 20%' | 'Feriado 50%';
   isCuringa?: boolean;
+  considerarFalta?: boolean;
+  motivoFalta?: string;
+  atendimentoRealizado?: string;
 }
 
 export type CancelingReason =

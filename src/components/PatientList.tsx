@@ -6,6 +6,7 @@
 import React, { useState, useMemo } from 'react';
 import { Paciente } from '../types';
 import { Edit, Trash, Plus, Filter, Check, EyeOff, ShieldCheck, AlertCircle, Search } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 
 interface PatientListProps {
   pacientes: Paciente[];
@@ -28,7 +29,7 @@ export const PatientList: React.FC<PatientListProps> = ({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('Ativo');
   const [filterDependence, setFilterDependence] = useState<string>('todos');
-  const [filterBairro, setFilterBairro] = useState<string>('todos');
+  const [filterPacienteId, setFilterPacienteId] = useState<string>('todos');
   const [showFilters, setShowFilters] = useState(false);
 
   // Deactivation confirmation modal for list bulk actions
@@ -36,10 +37,9 @@ export const PatientList: React.FC<PatientListProps> = ({
   const [bulkDeactivateReason, setBulkDeactivateReason] = useState('Desligamento corporativo');
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
-  // Gather unique Bairros for filters
-  const uniqueBairros = useMemo(() => {
-    const list = pacientes.map((p) => p.bairro || p.endereco?.bairro).filter(Boolean);
-    return Array.from(new Set(list));
+  // Sorted list of patients for filter dropdown
+  const sortedPacientes = useMemo(() => {
+    return [...pacientes].sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
   }, [pacientes]);
 
   // Combined Search and Filters
@@ -57,11 +57,11 @@ export const PatientList: React.FC<PatientListProps> = ({
       const matchStatus = filterStatus === 'todos' ? true : p.status === filterStatus;
       const matchDependence =
         filterDependence === 'todos' ? true : p.informacoesMedicas.grauDependencia === filterDependence;
-      const matchBairro = filterBairro === 'todos' ? true : p.bairro === filterBairro;
+      const matchPaciente = filterPacienteId === 'todos' ? true : p.id === filterPacienteId;
 
-      return matchSearch && matchStatus && matchDependence && matchBairro;
+      return matchSearch && matchStatus && matchDependence && matchPaciente;
     });
-  }, [pacientes, localSearch, globalSearchQuery, filterStatus, filterDependence, filterBairro]);
+  }, [pacientes, localSearch, globalSearchQuery, filterStatus, filterDependence, filterPacienteId]);
 
   // Checkbox functions
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -83,26 +83,35 @@ export const PatientList: React.FC<PatientListProps> = ({
   const isAllSelected =
     filteredPacientes.length > 0 && selectedIds.length === filteredPacientes.length;
 
-  const handleBulkDeactivate = () => {
+  const handleBulkDeactivate = async () => {
     if (selectedIds.length === 0) return;
-    selectedIds.forEach((id) => {
-      onDeactivatePatient(id, bulkDeactivateReason);
-    });
-    alert(`${selectedIds.length} paciente(s) desativado(s) com sucesso.`);
-    setSelectedIds([]);
-    setBulkDeactivateOpen(false);
+    try {
+      await Promise.all(selectedIds.map(async (id) => {
+        await onDeactivatePatient(id, bulkDeactivateReason);
+      }));
+      toast.success(`${selectedIds.length} paciente(s) desativado(s) com sucesso.`, {
+        icon: '✅',
+      });
+      setSelectedIds([]);
+      setBulkDeactivateOpen(false);
+    } catch (error: any) {
+      console.error("Erro na desativação em lote:", error);
+      toast.error("Erro ao desativar pacientes: " + (error.message || error));
+    }
   };
 
   const handleBulkDelete = async () => {
     if (selectedIds.length === 0) return;
     try {
       await Promise.all(selectedIds.map((id) => onDeletePatient(id)));
-      alert(`${selectedIds.length} paciente(s) excluído(s) de forma lógica com sucesso.`);
+      toast.success(`${selectedIds.length} paciente(s) excluído(s) de forma lógica com sucesso.`, {
+        icon: '🗑️',
+      });
       setSelectedIds([]);
       setBulkDeleteOpen(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro na exclusão em lote:", error);
-      alert("Erro ao excluir pacientes. Verifique o console.");
+      toast.error("Erro ao excluir pacientes: " + (error.message || error));
     }
   };
 
@@ -160,25 +169,25 @@ export const PatientList: React.FC<PatientListProps> = ({
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={`flex items-center space-x-1 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
-              showFilters || filterStatus !== 'todos' || filterDependence !== 'todos' || filterBairro !== 'todos'
+              showFilters || filterStatus !== 'todos' || filterDependence !== 'todos' || filterPacienteId !== 'todos'
                 ? 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100'
                 : 'bg-white hover:bg-slate-50 text-slate-600 border-slate-200'
             }`}
           >
             <Filter size={14} />
             <span>Filtros</span>
-            {(filterStatus !== 'todos' || filterDependence !== 'todos' || filterBairro !== 'todos') && (
+            {(filterStatus !== 'todos' || filterDependence !== 'todos' || filterPacienteId !== 'todos') && (
               <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
             )}
           </button>
 
-          {(filterStatus !== 'todos' || filterDependence !== 'todos' || filterBairro !== 'todos' || localSearch) && (
+          {(filterStatus !== 'todos' || filterDependence !== 'todos' || filterPacienteId !== 'todos' || localSearch) && (
             <button
               onClick={() => {
                 setLocalSearch('');
                 setFilterStatus('todos');
                 setFilterDependence('todos');
-                setFilterBairro('todos');
+                setFilterPacienteId('todos');
               }}
               className="text-xs text-slate-400 hover:text-blue-600 underline font-medium cursor-pointer"
             >
@@ -256,16 +265,16 @@ export const PatientList: React.FC<PatientListProps> = ({
           </div>
 
           <div>
-            <label className="block font-medium text-gray-700 mb-1.5 text-sm">Bairro:</label>
+            <label className="block font-medium text-gray-700 mb-1.5 text-sm">Nome do paciente:</label>
             <select
-              value={filterBairro}
-              onChange={(e) => setFilterBairro(e.target.value)}
+              value={filterPacienteId}
+              onChange={(e) => setFilterPacienteId(e.target.value)}
               className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm text-gray-900 focus:outline-none focus:border-blue-500"
             >
-              <option value="todos">Qualquer Bairro</option>
-              {uniqueBairros.map((b) => (
-                <option key={b} value={b}>
-                  {b}
+              <option value="todos">Qualquer Paciente</option>
+              {sortedPacientes.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nome}
                 </option>
               ))}
             </select>

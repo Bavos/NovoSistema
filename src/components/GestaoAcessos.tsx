@@ -4,6 +4,7 @@ import { Trash2, Plus, Edit, AlertCircle } from 'lucide-react';
 import { UsuarioSistema } from '../types';
 import { auth } from '../lib/firebase';
 import { sendPasswordResetEmail } from 'firebase/auth';
+import { toast } from 'react-hot-toast';
 
 export const GestaoAcessos: React.FC = () => {
   const { usuariosSistema, userRole, addUsuarioSistema, deleteUsuarioSistema, updateUsuarioSistema, forgotPassword } = useFirebase();
@@ -12,6 +13,7 @@ export const GestaoAcessos: React.FC = () => {
   const [nivel, setNivel] = useState<'Administrador' | 'Colaborador'>('Colaborador');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [sendingResetId, setSendingResetId] = useState<string | null>(null);
 
   if (userRole?.toLowerCase() !== 'administrador') {
     return <div className="p-4 text-xs text-red-500 bg-red-50 rounded-lg flex items-center gap-2">
@@ -88,25 +90,27 @@ export const GestaoAcessos: React.FC = () => {
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase font-bold text-slate-400">Nome Colaborador</label>
-            <input value={nome} onChange={e => setNome(e.target.value)} type="text" className="w-full p-2 border border-slate-200 rounded-lg text-xs" placeholder="Ex: João Silva" />
+          <div className="space-y-1.5">
+            <label htmlFor="gestao-nome" className="text-[10px] uppercase font-bold text-slate-700 tracking-wider">Nome Colaborador</label>
+            <input id="gestao-nome" value={nome} onChange={e => setNome(e.target.value)} type="text" className="w-full h-11 px-3 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#1A3626]/20 focus:outline-none transition-all" placeholder="Ex: João Silva" />
           </div>
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase font-bold text-slate-400">E-mail</label>
-            <input value={email} onChange={e => setEmail(e.target.value)} type="text" className="w-full p-2 border border-slate-200 rounded-lg text-xs" placeholder="Ex: joao@email.com" />
+          <div className="space-y-1.5">
+            <label htmlFor="gestao-email" className="text-[10px] uppercase font-bold text-slate-700 tracking-wider">E-mail</label>
+            <input id="gestao-email" value={email} onChange={e => setEmail(e.target.value)} type="text" className="w-full h-11 px-3 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#1A3626]/20 focus:outline-none transition-all" placeholder="Ex: joao@email.com" />
           </div>
-          <div className="space-y-1">
-             <label className="text-[10px] uppercase font-bold text-slate-400">Nível de Acesso</label>
-             <select value={nivel} onChange={e => setNivel(e.target.value as any)} className="w-full p-2 border border-slate-200 rounded-lg text-xs bg-white">
+          <div className="space-y-1.5">
+             <label htmlFor="gestao-nivel" className="text-[10px] uppercase font-bold text-slate-700 tracking-wider">Nível de Acesso</label>
+             <select id="gestao-nivel" value={nivel} onChange={e => setNivel(e.target.value as any)} className="w-full h-11 px-3 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#1A3626]/20 focus:outline-none transition-all">
                 <option value="Administrador">Administrador</option>
                 <option value="Colaborador">Colaborador</option>
              </select>
           </div>
-          <div className="flex gap-2">
+          <div>
             <button
+              type="button"
+              id="gestao-submit-user-btn"
               onClick={handleAddOrEditUser}
-              className="flex-1 px-4 py-2 bg-[#1A3626] text-white hover:bg-[#254A34] rounded-full text-xs font-semibold shadow-md transition-colors cursor-pointer flex items-center justify-center gap-2"
+              className="w-full h-12 bg-[#1A3626] text-white hover:bg-[#254A34] active:scale-[0.98] rounded-xl text-xs font-semibold shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
             >
               <Plus size={16} /> {editingId ? 'Atualizar Utilizador' : 'Adicionar Utilizador'}
             </button>
@@ -132,24 +136,29 @@ export const GestaoAcessos: React.FC = () => {
                 <td className="py-3 px-4">
                   <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                     <span className="text-slate-500">{user.email}</span>
-                    <button
+                     <button
                       type="button"
+                      disabled={sendingResetId !== null}
                       onClick={async () => {
                         if (window.confirm('Deseja enviar um link de redefinição de senha para o e-mail deste colaborador?')) {
+                          setSendingResetId(user.id);
+                          const loadingToast = toast.loading('Enviando e-mail de redefinição...');
                           try {
                             const emailDoColaborador = user.email;
                             await sendPasswordResetEmail(auth, emailDoColaborador);
-                            alert('E-mail de redefinição enviado com sucesso para ' + emailDoColaborador);
+                            toast.success('E-mail enviado!', { id: loadingToast });
                           } catch (error: any) {
-                            console.error(error);
-                            alert('Erro ao enviar: ' + error.message);
+                            console.error("Erro ao enviar redefinição de senha:", error);
+                            toast.error('Erro ao processar', { id: loadingToast });
+                          } finally {
+                            setSendingResetId(null);
                           }
                         }
                       }}
-                      className="inline-flex items-center justify-center px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 hover:text-[#1a3c2e] hover:bg-slate-50 border border-slate-200 hover:border-slate-350 rounded-md transition-all duration-150 cursor-pointer select-none whitespace-nowrap"
+                      className="inline-flex items-center justify-center px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 hover:text-[#1a3c2e] hover:bg-slate-50 border border-slate-200 hover:border-slate-350 rounded-md transition-all duration-150 cursor-pointer select-none whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                       id={`reset-${user.id}`}
                     >
-                      🔑 Enviar Redefinição de Senha
+                      {sendingResetId === user.id ? '⏳ Enviando...' : '🔑 Enviar Redefinição de Senha'}
                     </button>
                   </div>
                 </td>

@@ -3151,6 +3151,8 @@ export const EmpresaDashboard: React.FC = () => {
   const [tempLogo, setTempLogo] = useState<File | null>(null);
   const [shouldClearLogo, setShouldClearLogo] = useState(false);
   const [isResettingDatabase, setIsResettingDatabase] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState('');
 
   // Diagnostic states
   const [uploadDiagnostics, setUploadDiagnostics] = useState<string[]>([]);
@@ -3311,26 +3313,28 @@ export const EmpresaDashboard: React.FC = () => {
     }
   };
 
-  const handleHardReset = async () => {
+  const handleHardReset = () => {
     if (!isAdmin) {
-      alert("Acesso negado. Apenas o administrador tem permissão para realizar o Hard Reset.");
+      toast.error("Acesso negado. Apenas o administrador tem permissão para realizar o Hard Reset.");
+      return;
+    }
+    setResetConfirmText('');
+    setShowResetModal(true);
+  };
+
+  const executeHardReset = async () => {
+    if (resetConfirmText.trim().toUpperCase() !== 'ZERAR') {
+      toast.error("Para prosseguir, você deve digitar 'ZERAR'.");
       return;
     }
 
-    const confirmRep = window.prompt(
-      'AÇÃO DESTRUTIVA: Isso apagará TODOS os cadastros, escalas e histórico financeiro do sistema de forma irreversível. Para confirmar, digite exatamente a palavra: ZERAR'
-    );
-
-    if (!confirmRep || confirmRep.trim().toUpperCase() !== 'ZERAR') {
-      alert("Operação cancelada pelo usuário.");
-      return;
-    }
-
+    setShowResetModal(false);
     setIsResettingDatabase(true);
+    const loadingToast = toast.loading("Zerando banco de dados...");
     try {
       setNotification("Iniciando Hard Reset...");
 
-      // 1º - Coleções de Movimentação: faturas, folhas_pagamento, escalas, debitos, ocorrencias.
+      // 1. Coleções de Movimentação e Escalas
       
       // A. Faturas Pacientes
       const faturasSnap = await getDocs(collection(db, 'faturas_pacientes'));
@@ -3352,7 +3356,30 @@ export const EmpresaDashboard: React.FC = () => {
       const debDocRefs = debSnap.docs.map(d => deleteDoc(doc(db, 'debitos_profissionais', d.id)));
       await Promise.all(debDocRefs);
 
-      // E. Ocorrencias (subcoleção de profissionais)
+      // E. Plantoes
+      const plantoesSnap = await getDocs(collection(db, 'plantoes'));
+      const plantoesDocRefs = plantoesSnap.docs.map(d => deleteDoc(doc(db, 'plantoes', d.id)));
+      await Promise.all(plantoesDocRefs);
+
+      // F. Backups Prontuários
+      const backupsSnap = await getDocs(collection(db, 'backups_prontuarios'));
+      const backupsDocRefs = backupsSnap.docs.map(d => deleteDoc(doc(db, 'backups_prontuarios', d.id)));
+      await Promise.all(backupsDocRefs);
+
+      // G. Logs de Auditoria
+      const logs1Snap = await getDocs(collection(db, 'logs_auditoria'));
+      const logs1DocRefs = logs1Snap.docs.map(d => deleteDoc(doc(db, 'logs_auditoria', d.id)));
+      await Promise.all(logs1DocRefs);
+
+      const logs2Snap = await getDocs(collection(db, 'audit_logs'));
+      const logs2DocRefs = logs2Snap.docs.map(d => deleteDoc(doc(db, 'audit_logs', d.id)));
+      await Promise.all(logs2DocRefs);
+
+      const logs3Snap = await getDocs(collection(db, 'LogsAuditoria'));
+      const logs3DocRefs = logs3Snap.docs.map(d => deleteDoc(doc(db, 'LogsAuditoria', d.id)));
+      await Promise.all(logs3DocRefs);
+
+      // H. Ocorrencias (subcoleção de profissionais)
       const profSnap = await getDocs(collection(db, 'profissionais'));
       for (const profDoc of profSnap.docs) {
         const occColl = collection(db, 'profissionais', profDoc.id, 'ocorrencias');
@@ -3361,7 +3388,7 @@ export const EmpresaDashboard: React.FC = () => {
         await Promise.all(occDocRefs);
       }
 
-      // Agora, Coleções Base: profissionais, pacientes.
+      // 2. Coleções Base: profissionais, pacientes.
       const profDocRefs = profSnap.docs.map(d => deleteDoc(doc(db, 'profissionais', d.id)));
       await Promise.all(profDocRefs);
 
@@ -3370,11 +3397,14 @@ export const EmpresaDashboard: React.FC = () => {
       await Promise.all(pacDocRefs);
 
       setNotification("Hard Reset concluído com sucesso!");
-      alert("Sistema restaurado para o padrão de fábrica.");
-      window.location.reload();
+      toast.success('Banco de dados zerado com sucesso!', { id: loadingToast });
+      
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
     } catch (err: any) {
-      console.error("Erro no Hard Reset:", err);
-      alert("Erro ao realizar o Hard Reset: " + (err.message || String(err)));
+      console.error("Erro ao resetar banco:", err);
+      toast.error('Erro ao processar', { id: loadingToast });
     } finally {
       setIsResettingDatabase(false);
     }
@@ -3585,6 +3615,55 @@ export const EmpresaDashboard: React.FC = () => {
                 </>
               )}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Confirmation Modal for Hard Reset to avoid iframe sandbox prompt blocking */}
+      {showResetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 flex flex-col space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 text-red-600">
+              <div className="p-2 bg-red-50 rounded-full text-red-600">
+                <AlertTriangle size={24} />
+              </div>
+              <h3 className="text-base font-bold text-slate-900 font-sans">Ação Altamente Destrutiva</h3>
+            </div>
+            
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Você está prestes a realizar um <strong className="text-red-600">Hard Reset</strong>. Isso apagará permanentemente todos os cadastros de pacientes, profissionais, escalas, faturas, folhas de pagamento, logs de auditoria e ocorrências.
+            </p>
+            
+            <p className="text-xs text-slate-500 font-medium">
+              Esta ação é <strong className="text-red-600">irreversível</strong>. Para ter certeza absoluta, digite exatamente a palavra <span className="bg-red-50 text-red-700 px-1.5 py-0.5 rounded font-mono font-bold select-all">ZERAR</span> abaixo:
+            </p>
+            
+            <input 
+              type="text" 
+              value={resetConfirmText}
+              onChange={(e) => setResetConfirmText(e.target.value)}
+              placeholder="Digite ZERAR para confirmar"
+              className="w-full px-3 py-2 border border-slate-300 rounded-xl text-center text-xs font-bold uppercase tracking-wider text-slate-700 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-red-500 focus:outline-none transition-all"
+            />
+            
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowResetModal(false)}
+                className="px-3.5 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-full text-[11px] font-semibold transition-colors cursor-pointer bg-white"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={executeHardReset}
+                disabled={resetConfirmText.trim().toUpperCase() !== 'ZERAR'}
+                className="px-3.5 py-2 bg-red-600 hover:bg-red-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-full text-[11px] font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 size={13} />
+                <span>Confirmar Hard Reset</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

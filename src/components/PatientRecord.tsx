@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { updateDoc, doc } from 'firebase/firestore';
+import { updateDoc, doc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { fetchCep, fetchBanks, getHolidays } from '../lib/brasilApi';
 import { Paciente, Plantao, CancelingReason, EscalacaoPlano, Agendamento } from '../types';
 import { useFirebase } from '../context/FirebaseContext';
@@ -258,6 +258,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
   const [detailsCuringa, setDetailsCuringa] = useState(false);
   const [detailsTipoDia, setDetailsTipoDia] = useState<'Normal' | 'Feriado 20%' | 'Feriado 50%'>('Normal');
   const [showDetailsProfDropdown, setShowDetailsProfDropdown] = useState(false);
+  const [considerarFalta, setConsiderarFalta] = useState<boolean>(false);
+  const [motivoFalta, setMotivoFalta] = useState<string>('Não Informado');
+  const [atendimentoRealizado, setAtendimentoRealizado] = useState<string>('Sim');
 
   // Shift Audit Inspector Modal state
   const [inspectedShiftJson, setInspectedShiftJson] = useState<any>(null);
@@ -407,9 +410,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
       };
 
       await updatePaciente(updatedObj);
-      alert('Ocorrência excluída com sucesso!');
+      toast.success('Ocorrência excluída com sucesso!', {
+        icon: '✅',
+      });
     } catch (err: any) {
-      alert('Erro ao excluir ocorrência: ' + err.message);
+      toast.error('Erro ao excluir ocorrência: ' + err.message);
     }
   };
 
@@ -842,7 +847,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
       onBack();
     } catch (err: any) {
       console.error('Erro ao tentar salvar o prontuário:', err);
-      alert('Erro ao tentar salvar o prontuário: ' + err.message);
+      toast.error('Erro ao tentar salvar o prontuário: ' + err.message);
     }
   };
 
@@ -2624,7 +2629,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                                       title={ag.observacao || 'Inspecionar Plantão'}
                                     >
                                         <div className="flex justify-between items-center w-full gap-1">
-                                          <span className="font-extrabold text-slate-800 shrink-0">
+                                          <span className={`font-extrabold shrink-0 ${ag.considerarFalta ? 'text-slate-500 line-through decoration-red-500 decoration-2 opacity-80' : 'text-slate-800'}`}>
                                             {ag.horario}
                                             {ag.status === 'Concluido' && ' 🔒'}
                                           </span>
@@ -2632,7 +2637,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                                             <span className="px-1 py-[1px] text-[7px] font-black uppercase tracking-wider bg-amber-200 text-amber-900 rounded-sm">Curinga</span>
                                           )}
                                         </div>
-                                        <span className="truncate block font-medium opacity-90">{ag.nomeProfissional}</span>
+                                        <span 
+                                          className={`truncate block font-medium ${ag.considerarFalta ? 'text-slate-500 line-through decoration-red-500 decoration-2 opacity-80' : 'text-slate-950 opacity-90'}`}
+                                          title={ag.considerarFalta ? `Falta registrada: ${ag.motivoFalta || 'Não Informado'}` : undefined}
+                                        >
+                                          {ag.nomeProfissional}
+                                        </span>
                                     </div>
                                   );
                                 })}
@@ -3974,6 +3984,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                         </span>
                       </div>
 
+                      {selectedShiftForDetails.considerarFalta && (
+                        <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex flex-col gap-1">
+                          <span className="text-xs font-bold text-red-700 uppercase tracking-wider">Status: Falta Registrada</span>
+                          <span className="text-sm text-red-800 font-medium">Motivo: {selectedShiftForDetails.motivoFalta || 'Não informado'}</span>
+                        </div>
+                      )}
+
                       <div className="bg-slate-50 p-3.5 border border-slate-150 rounded-xl space-y-1.5">
                         <span className="text-[9px] uppercase font-black text-slate-400 tracking-wider">Detalhamento Financeiro</span>
                         <div className="grid grid-cols-2 text-xs text-slate-600 space-y-1 font-sans">
@@ -4040,6 +4057,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                               setDetailsDate(selectedShiftForDetails.data);
                               setDetailsCuringa(!!selectedShiftForDetails.isCuringa || selectedShiftForDetails.observacao === 'CURINGA');
                               setDetailsTipoDia(selectedShiftForDetails.tipoDia || 'Normal');
+                              setConsiderarFalta(selectedShiftForDetails.considerarFalta ?? false);
+                              setMotivoFalta(selectedShiftForDetails.motivoFalta ?? 'Não Informado');
+                              setAtendimentoRealizado(selectedShiftForDetails.atendimentoRealizado ?? 'Sim');
                               
                               // Infer the best shift template matching first hour block or default
                               const matchOpt = availableShifts.find(opt => selectedShiftForDetails.horario?.startsWith(opt.horaInicio)) || availableShifts[0];
@@ -4141,6 +4161,72 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                       <option value="Feriado 50%">Feriado (+50%)</option>
                     </select>
                   </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-xs font-bold text-slate-700">Atendimento Realizado</label>
+                    <select
+                      value={atendimentoRealizado}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setAtendimentoRealizado(val);
+                        if (val === 'Não') {
+                          setConsiderarFalta(true);
+                        } else {
+                          setConsiderarFalta(false);
+                        }
+                      }}
+                      className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none min-h-[48px]"
+                    >
+                      <option value="Sim">Sim</option>
+                      <option value="Não">Não</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5 p-1 border border-slate-100 rounded-lg bg-slate-50/50">
+                    <span className="block text-xs font-bold text-slate-700">Considerar Falta</span>
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center space-x-2 cursor-pointer min-h-[48px] px-3 border border-slate-200 rounded-lg bg-white flex-1 hover:bg-slate-50">
+                        <input
+                          type="radio"
+                          name="considerarFaltaRadio"
+                          checked={considerarFalta === true}
+                          onChange={() => setConsiderarFalta(true)}
+                          className="w-4 h-4 text-sky-600 focus:ring-sky-500 cursor-pointer"
+                        />
+                        <span className="text-xs font-semibold text-slate-700">Sim</span>
+                      </label>
+                      <label className="flex items-center space-x-2 cursor-pointer min-h-[48px] px-3 border border-slate-200 rounded-lg bg-white flex-1 hover:bg-slate-50">
+                        <input
+                          type="radio"
+                          name="considerarFaltaRadio"
+                          checked={considerarFalta === false}
+                          onChange={() => {
+                            setConsiderarFalta(false);
+                            setMotivoFalta('Não Informado');
+                          }}
+                          className="w-4 h-4 text-sky-600 focus:ring-sky-500 cursor-pointer"
+                        />
+                        <span className="text-xs font-semibold text-slate-700">Não</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {considerarFalta && (
+                    <div className="space-y-1 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <label className="block text-xs font-bold text-slate-700">Motivo</label>
+                      <select
+                        value={motivoFalta}
+                        onChange={(e) => setMotivoFalta(e.target.value)}
+                        className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none min-h-[48px]"
+                      >
+                        {['Não Informado', 'Cansaço', 'Compromisso', 'Consulta Médica', 'Doença', 'Falecimento de parente', 'Familiar Passou Mal', 'Filho (a) Doente', 'Greve de transporte', 'Mal Estar', 'Não compareceu', 'Pediu para sair da escala', 'Plantão Confirmado', 'Problema de Chuva', 'Problemas de Tiros', 'Profissional Doente', 'Profissional passou mal', 'Sem Transporte para o local', 'Serviço Suspenso pela Família', 'Solicitaram a Substituição', 'Trajeto iniciado', 'Troca na Escala', 'Viagem'].map((opt) => (
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   <div className="flex items-center space-x-2 py-1">
                     <input
@@ -4250,10 +4336,31 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                             taxaAdm: taxaAdmFinal,
                             tipoDia: detailsTipoDia,
                             isCuringa: detailsCuringa,
-                            observacao: detailsCuringa ? 'CURINGA' : (selectedShiftForDetails.observacao === 'CURINGA' ? '' : selectedShiftForDetails.observacao)
+                            observacao: detailsCuringa ? 'CURINGA' : (selectedShiftForDetails.observacao === 'CURINGA' ? '' : selectedShiftForDetails.observacao),
+                            considerarFalta,
+                            motivoFalta: considerarFalta ? motivoFalta : 'Não Informado',
+                            atendimentoRealizado
                           };
 
                           await updateAgendamento(updatedAg);
+
+                          if (considerarFalta && updatedAg.idProfissional && updatedAg.idProfissional !== 'n/a') {
+                            try {
+                              await addDoc(collection(db, 'profissionais', updatedAg.idProfissional, 'ocorrencias'), {
+                                data: updatedAg.data,
+                                paciente: paciente?.nome || 'Não Informado',
+                                pacienteNome: paciente?.nome || 'Não Informado',
+                                pacienteId: paciente?.id || 'n/a',
+                                descricao: 'Falta registrada via Agenda. Motivo: ' + (updatedAg.motivoFalta || 'Não Informado'),
+                                tipo: 'automatica',
+                                bloquearEscala: false,
+                                timestamp: serverTimestamp()
+                              });
+                            } catch (errOc) {
+                              console.error("Erro ao gerar ocorrência de Falta automática para profissional:", errOc);
+                            }
+                          }
+
                           setSelectedShiftForDetails(updatedAg);
                           setIsEditingDetails(false);
                           alert('Plantão atualizado com sucesso!');

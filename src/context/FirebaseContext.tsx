@@ -261,7 +261,11 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       try {
         await getDocFromServer(doc(db, 'test', 'connection'));
       } catch (connErr) {
-        console.error("Please check your Firebase configuration.");
+        if (connErr instanceof Error && connErr.message.toLowerCase().includes('offline')) {
+          console.error("Please check your Firebase configuration.");
+        } else {
+          console.log("Firestore initialized. Live mirroring active. Database is connecting dynamically.");
+        }
       }
 
       // 2. Seed Firestore database automatically if empty

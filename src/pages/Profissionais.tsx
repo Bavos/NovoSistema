@@ -326,13 +326,14 @@ export const Profissionais: React.FC = () => {
     setSavingOcorrencia(true);
     try {
       const chosenPaciente = pacientes.find(p => p.id === ocPacienteId);
-      const payload = {
+      const payload: any = {
         data: ocData,
         pacienteId: ocPacienteId,
         pacienteNome: chosenPaciente ? chosenPaciente.nome : 'Paciente Desconhecido',
         descricao: ocDescricao.trim(),
         bloquearEscala: ocBloquear,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        tipo: 'manual'
       };
 
       if (editingOcorrenciaId) {
@@ -1145,34 +1146,43 @@ export const Profissionais: React.FC = () => {
                                   <td className="p-3 font-mono text-slate-600 whitespace-nowrap">
                                     {oc.data.split('-').reverse().join('/')}
                                   </td>
-                                  <td className="p-3 font-bold text-slate-800">{oc.pacienteNome}</td>
+                                  <td className="p-3 font-bold text-slate-800">{oc.pacienteNome || oc.paciente || 'Não Informado'}</td>
                                   <td className="p-3">
-                                    {oc.bloquearEscala ? (
-                                      <span className="inline-block bg-red-100 text-red-750 px-2.5 py-1 rounded-full text-[10px] font-extrabold border border-red-200 uppercase tracking-wide">
-                                        BLOQUEADO
-                                      </span>
-                                    ) : (
-                                      <span className="inline-block bg-slate-50 text-slate-500 px-2.5 py-1 rounded-full text-[10px] font-bold border border-slate-200 uppercase tracking-wide">
-                                        Sem Bloqueio
-                                      </span>
-                                    )}
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                      {oc.bloquearEscala ? (
+                                        <span className="inline-block bg-red-100 text-red-750 px-2 py-0.5 rounded-full text-[10px] font-extrabold border border-red-200 uppercase tracking-wide">
+                                          BLOQUEADO
+                                        </span>
+                                      ) : (
+                                        <span className="inline-block bg-slate-50 text-slate-500 px-2 py-0.5 rounded-full text-[10px] font-bold border border-slate-200 uppercase tracking-wide">
+                                          Sem Bloqueio
+                                        </span>
+                                      )}
+                                      {oc.tipo === 'automatica' && (
+                                        <span className="inline-block bg-sky-50 text-sky-700 px-2 py-0.5 rounded-full text-[10px] font-black border border-sky-200 uppercase tracking-wide">
+                                          Sistema / Falta
+                                        </span>
+                                      )}
+                                    </div>
                                   </td>
                                   <td className="p-3 text-slate-600 break-words max-w-[200px]">{oc.descricao}</td>
                                   <td className="p-3 text-center">
-                                    <div className="flex items-center justify-center gap-2">
+                                    <div className="flex items-center justify-center gap-1.5">
                                       <button
                                         type="button"
                                         onClick={() => handleEditOcorrenciaClick(oc)}
-                                        className="text-blue-600 hover:text-blue-800 px-2 py-1 hover:bg-blue-50 rounded transition font-semibold"
+                                        title="Editar Ocorrência"
+                                        className="p-1.5 text-blue-600 hover:text-white hover:bg-blue-600 rounded-lg border border-blue-200 hover:border-blue-600 transition-all cursor-pointer"
                                       >
-                                        Editar
+                                        <Edit2 size={14} />
                                       </button>
                                       <button
                                         type="button"
                                         onClick={() => handleDeleteOcorrencia(oc)}
-                                        className="text-red-600 hover:text-red-800 px-2 py-1 hover:bg-red-50 rounded transition font-semibold"
+                                        title="Excluir Ocorrência"
+                                        className="p-1.5 text-red-600 hover:text-white hover:bg-red-600 rounded-lg border border-red-200 hover:border-red-600 transition-all cursor-pointer"
                                       >
-                                        Excluir
+                                        <Trash2 size={14} />
                                       </button>
                                     </div>
                                   </td>
