@@ -156,7 +156,7 @@ export const EscalasDashboard: React.FC = () => {
               onClick={handlePrint}
               className="text-xs bg-[#1a3c2e] text-[#b8860b] hover:bg-[#122b21] px-4 py-1.5 rounded-lg font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer hover:scale-[1.01]"
             >
-              <Printer className="w-3.5 h-3.5" /> Exportar para PDF
+              <Printer className="w-3.5 h-3.5" /> Imprimir Relatório
             </button>
           </div>
         </div>
@@ -1665,7 +1665,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                         onClick={handlePrint}
                         className="px-3.5 py-2 bg-[#1a3c2e] hover:bg-[#122b21] hover:scale-[1.01] active:scale-[0.99] text-[#b8860b] rounded-xl text-xs font-black tracking-tight transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
                       >
-                        <Printer className="w-4 h-4" /> Exportar para PDF (Imprimir)
+                        <Printer className="w-4 h-4" /> Imprimir Relatório
                       </button>
                       <button
                         onClick={exportExcel}
@@ -1723,7 +1723,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                           onClick={handlePrint}
                           className="px-3.5 py-2 bg-[#1a3c2e] hover:bg-[#122b21] hover:scale-[1.01] active:scale-[0.99] text-[#b8860b] rounded-xl text-xs font-black tracking-tight transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
                         >
-                          <Printer className="w-4 h-4" /> Exportar / Imprimir
+                          <Printer className="w-4 h-4" /> Imprimir Relatório
                         </button>
                       </div>
                     </div>
@@ -1790,7 +1790,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                                 <h3 className="font-bold text-slate-800">{pacNome}</h3>
                                 <p className="text-xs text-slate-500">Total de Plantões: {agends.length}</p>
                               </div>
-                              <div className="flex gap-4 items-center">
+                              <div className="flex gap-4 items-center print:hidden">
                                 <p className="text-xs font-black text-blue-700 bg-blue-50 px-2 py-1 rounded">Fatura Nº (Gerada ao salvar)</p>
                                 <button
                                   onClick={() => handleSalvarFaturaDefinitiva(pacId, agends)}
@@ -1952,7 +1952,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                       return (
                         <div className="space-y-4">
                           {/* Bulk action toolbar */}
-                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-indigo-50/50 border border-indigo-100/50 p-4 rounded-2xl">
+                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-indigo-50/50 border border-indigo-100/50 p-4 rounded-2xl print:hidden">
                             <div>
                               <p className="text-xs font-bold text-indigo-900">Fechamento em Lote (Lançamento Coletivo)</p>
                               <p className="text-[11px] text-indigo-700">Selecione profissionais na tabela para consolidar e fechar suas folhas de uma só vez.</p>
@@ -1976,7 +1976,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                             <table className="w-full text-left text-xs">
                               <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px] font-bold">
                                 <tr>
-                                  <th className="py-3 px-4 w-12 text-center select-none">
+                                  <th className="py-3 px-4 w-12 text-center select-none print:hidden">
                                     <input
                                       type="checkbox"
                                       checked={isAllSelected}
@@ -1990,7 +1990,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                                   <th className="py-3 px-4 text-right">Ajuda de Custo</th>
                                   <th className="py-3 px-4 text-right">Débitos</th>
                                   <th className="py-3 px-4 text-right font-black text-slate-700">Líquido a Receber</th>
-                                  <th className="py-3 px-4 text-center">Ações</th>
+                                  <th className="py-3 px-4 text-center print:hidden">Ações</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-100">
@@ -2001,7 +2001,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                                   return (
                                     <React.Fragment key={p.profId}>
                                       <tr className={`hover:bg-slate-50/50 transition-colors ${isSelected ? 'bg-indigo-50/10' : ''}`}>
-                                        <td className="py-4 px-4 text-center select-none">
+                                        <td className="py-4 px-4 text-center select-none print:hidden">
                                           <input
                                             type="checkbox"
                                             checked={isSelected}
@@ -2029,7 +2029,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                                         <td className="py-4 px-4 text-right font-mono font-black text-indigo-700 text-sm">
                                           R$ {p.valorLiquidoReceber.toFixed(2)}
                                         </td>
-                                        <td className="py-4 px-4">
+                                        <td className="py-4 px-4 print:hidden">
                                           <div className="flex items-center justify-center gap-2">
                                             <button
                                               type="button"
@@ -2244,7 +2244,13 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
               <h2 className="text-base font-bold text-slate-800">Lançamento & Gestão de Débitos</h2>
               <p className="text-xs text-slate-500">Registre adiantamentos, vales de passagem, descontos ou despesas extras no perfil dos cuidadores para abatimento automático em folha.</p>
             </div>
-            <div className="flex flex-wrap gap-2 self-start">
+            <div className="flex flex-wrap gap-2 self-start print:hidden">
+              <button
+                onClick={handlePrint}
+                className="px-4 py-2 bg-[#1a3c2e] hover:bg-[#122b21] hover:scale-[1.01] text-[#b8860b] rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Printer size={15} /> Imprimir Relatório
+              </button>
               <button
                 onClick={() => {
                   setEditingDebitId(null);
@@ -2277,7 +2283,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                     <th className="py-3 px-5">Motivo</th>
                     <th className="py-3 px-5 text-center">Status</th>
                     <th className="py-3 px-5 text-right font-bold">Valor</th>
-                    <th className="py-3 px-5 text-right w-[100px]">Ação</th>
+                    <th className="py-3 px-5 text-right w-[100px] print:hidden">Ação</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -2316,7 +2322,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                           </span>
                         </td>
                         <td className="py-3.5 px-5 text-right font-black text-red-600 text-sm font-mono">R$ {d.valor.toFixed(2)}</td>
-                        <td className="py-3.5 px-5 text-right">
+                        <td className="py-3.5 px-5 text-right print:hidden">
                           <button
                             onClick={() => {
                               setEditingDebitId(d.id);
@@ -2762,7 +2768,13 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
         <div className="bg-white p-6 border border-slate-200 rounded-2xl shadow-sm">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
             <h2 className="text-md font-black text-slate-800">📜 Histórico de Faturas</h2>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 print:hidden">
+              <button
+                onClick={() => window.print()}
+                className="px-3.5 py-1.5 bg-[#1a3c2e] hover:bg-[#122b21] hover:scale-[1.01] text-[#b8860b] rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Printer className="w-3.5 h-3.5" /> Imprimir Relatório
+              </button>
               <select
                 value={searchFaturaPaciente}
                 onChange={(e) => setSearchFaturaPaciente(e.target.value)}
@@ -2791,7 +2803,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                         <th className="p-3">Emissão</th>
                         <th className="p-3 text-right font-bold">Valor</th>
                         <th className="p-3 text-center">Status</th>
-                        <th className="p-3 text-center">Ações</th>
+                        <th className="p-3 text-center print:hidden">Ações</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -2809,7 +2821,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                 <td className="p-3">{new Date(f.dataEmissao).toLocaleDateString('pt-BR')}</td>
                                 <td className="p-3 text-right font-bold text-slate-700">R$ {f.valorTotal.toFixed(2)}</td>
                                 <td className="p-3 text-center"><span className="px-2 py-1 rounded-full text-[10px] bg-green-100 text-green-700 font-bold">{f.status}</span></td>
-                                <td className="p-3 text-center">
+                                <td className="p-3 text-center print:hidden">
                                     <div className="flex justify-center items-center gap-2">
                                         <button className="text-blue-600 hover:text-blue-800 cursor-pointer" onClick={() => setViewDoc({ data: f, type: 'fatura' })}>👁️</button>
                                         <button className="text-red-600 hover:text-red-800 cursor-pointer" onClick={() => {
@@ -2837,7 +2849,13 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                   Baixar Resumo para Pagamento
                 </button>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 print:hidden">
+                <button
+                  onClick={() => window.print()}
+                  className="px-3 py-1.5 bg-[#1a3c2e] hover:bg-[#122b21] hover:scale-[1.01] text-[#b8860b] rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" /> Imprimir Relatório
+                </button>
                 <select
                   value={searchFolhaProfissional}
                   onChange={(e) => setSearchFolhaProfissional(e.target.value)}
@@ -2861,7 +2879,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
               <table className="w-full text-xs text-left">
                   <thead className="text-slate-500 uppercase border-b border-slate-100">
                       <tr>
-                          <th className="p-3 w-10">
+                          <th className="p-3 w-10 print:hidden">
                               <input 
                                   type="checkbox"
                                   className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
@@ -2879,7 +2897,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                           <th className="p-3">Emissão</th>
                           <th className="p-3 text-right">Valor Líquido</th>
                           <th className="p-3 text-center">Status</th>
-                          <th className="p-3 text-center">Ações</th>
+                          <th className="p-3 text-center print:hidden">Ações</th>
                       </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
@@ -2892,7 +2910,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                       ) : (
                           filteredFolhas.map(f => (
                               <tr key={f.id}>
-                                  <td className="p-3 w-10">
+                                  <td className="p-3 w-10 print:hidden">
                                       <input 
                                           type="checkbox"
                                           className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
@@ -2910,7 +2928,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                   <td className="p-3">{new Date(f.dataEmissao).toLocaleDateString('pt-BR')}</td>
                                   <td className="p-3 text-right font-bold text-slate-700">R$ {f.valorLiquidoReceber.toFixed(2)}</td>
                                   <td className="p-3 text-center"><span className="px-2 py-1 rounded-full text-[10px] bg-blue-100 text-blue-700 font-bold">{f.status}</span></td>
-                                  <td className="p-3 text-center">
+                                  <td className="p-3 text-center print:hidden">
                                       <div className="flex justify-center items-center gap-2">
                                           <button className="text-blue-600 hover:text-blue-800 cursor-pointer" onClick={() => setViewDoc({ data: f, type: 'folha' })}>👁️</button>
                                           <button className="text-red-600 hover:text-red-800 cursor-pointer" onClick={() => {

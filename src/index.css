@@ -40,12 +40,14 @@ body {
   }
 
   /* Isolate print area and make it and its descendants visible */
-  #print-area, #print-area * {
+  #print-area, #print-area *,
+  #escalas-dashboard, #escalas-dashboard *,
+  #financeiro-dashboard, #financeiro-dashboard * {
     visibility: visible !important;
   }
 
   /* Precision position of the printed document on the physical sheet */
-  #print-area {
+  #print-area, #escalas-dashboard, #financeiro-dashboard {
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;

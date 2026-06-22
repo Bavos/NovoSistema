@@ -52,6 +52,7 @@ export const BackupProntuarios: React.FC = () => {
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [showFullHistoryModal, setShowFullHistoryModal] = useState(false);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
 
   // Load backups list & configuration on mount
   useEffect(() => {
@@ -261,10 +262,6 @@ export const BackupProntuarios: React.FC = () => {
 
   // Delete older backup
   const handleDeleteBackup = async (id: string) => {
-    if (!window.confirm('Tem certeza de que deseja excluir este registro de backup do histórico técnico? Os dados guardados nesta data serão removidos.')) {
-      return;
-    }
-
     try {
       await deleteDoc(doc(db, 'backups_prontuarios', id));
       setBackups(prev => prev.filter(b => b.id !== id));
@@ -562,30 +559,63 @@ export const BackupProntuarios: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                  <div className="flex items-center gap-1.5 self-end sm:self-auto flex-wrap sm:flex-nowrap">
                     <button
-                      onClick={() => handleExportJSON(bk)}
-                      className="p-1 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-bold text-[10px] flex items-center gap-1 cursor-pointer transition-colors"
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleExportJSON(bk); }}
+                      className="min-h-[38px] p-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
                       title="Exportar dados para arquivo JSON"
                     >
-                      <Download size={10} />
+                      <Download size={13} />
                       <span>Exportar JSON</span>
                     </button>
                     <button
-                      onClick={() => handleExportCSV(bk)}
-                      className="p-1 px-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-md font-bold text-[10px] flex items-center gap-1 cursor-pointer transition-colors"
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleExportCSV(bk); }}
+                      className="min-h-[38px] p-2 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
                       title="Exportar tabela de prontuários para CSV"
                     >
-                      <Download size={10} />
+                      <Download size={13} />
                       <span>Exportar CSV</span>
                     </button>
-                    <button
-                      onClick={() => handleDeleteBackup(bk.id)}
-                      className="p-1 px-2 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-800 rounded-md cursor-pointer transition-colors"
-                      title="Excluir do histórico"
-                    >
-                      <Trash2 size={11} />
-                    </button>
+                    {confirmingDeleteId === bk.id ? (
+                      <div className="flex items-center gap-1.5 transition-all animate-in fade-in zoom-in-95 bg-red-50 p-1 rounded-lg border border-red-100">
+                        <span className="text-[10px] text-red-600 font-bold uppercase select-none px-1">Excluir?</span>
+                        <button
+                          type="button"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            await handleDeleteBackup(bk.id);
+                            setConfirmingDeleteId(null);
+                          }}
+                          className="min-h-[38px] min-w-[42px] px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-black cursor-pointer transition-all shadow-xs"
+                        >
+                          Sim
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmingDeleteId(null);
+                          }}
+                          className="min-h-[38px] min-w-[42px] px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-bold cursor-pointer transition-all"
+                        >
+                          Não
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmingDeleteId(bk.id);
+                        }}
+                        className="min-h-[38px] min-w-[38px] p-2 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-800 rounded-lg cursor-pointer transition-colors flex items-center justify-center border border-red-100/30"
+                        title="Excluir do histórico"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -654,30 +684,63 @@ export const BackupProntuarios: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                    <div className="flex items-center gap-1.5 self-end sm:self-auto flex-wrap sm:flex-nowrap">
                       <button
-                        onClick={() => handleExportJSON(bk)}
-                        className="p-1 px-2 bg-slate-100 hover:bg-slate-200 text-slate-750 rounded-md font-bold text-[9px] flex items-center gap-0.5 cursor-pointer transition-colors"
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleExportJSON(bk); }}
+                        className="p-1.5 px-2.5 min-h-[36px] bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-[10px] flex items-center gap-1 cursor-pointer transition-colors"
                         title="Exportar dados para arquivo JSON"
                       >
-                        <Download size={9} />
+                        <Download size={11} />
                         <span>JSON</span>
                       </button>
                       <button
-                        onClick={() => handleExportCSV(bk)}
-                        className="p-1 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-750 rounded-md font-bold text-[9px] flex items-center gap-0.5 cursor-pointer transition-colors"
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleExportCSV(bk); }}
+                        className="p-1.5 px-2.5 min-h-[36px] bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg font-bold text-[10px] flex items-center gap-1 cursor-pointer transition-colors"
                         title="Exportar tabela de prontuários para CSV"
                       >
-                        <Download size={9} />
+                        <Download size={11} />
                         <span>CSV</span>
                       </button>
-                      <button
-                        onClick={() => handleDeleteBackup(bk.id)}
-                        className="p-1 px-1.5 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-800 rounded-md cursor-pointer transition-colors"
-                        title="Excluir do histórico"
-                      >
-                        <Trash2 size={10} />
-                      </button>
+                      {confirmingDeleteId === bk.id ? (
+                        <div className="flex items-center gap-1.5 transition-all animate-in fade-in zoom-in-95 bg-red-50 p-1 rounded-lg border border-red-100">
+                          <span className="text-[9px] text-red-600 font-bold uppercase select-none px-1">Excluir?</span>
+                          <button
+                            type="button"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              await handleDeleteBackup(bk.id);
+                              setConfirmingDeleteId(null);
+                            }}
+                            className="min-h-[36px] min-w-[38px] px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-black cursor-pointer transition-all shadow-xs"
+                          >
+                            Sim
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmingDeleteId(null);
+                            }}
+                            className="min-h-[36px] min-w-[38px] px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-bold cursor-pointer transition-all"
+                          >
+                            Não
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmingDeleteId(bk.id);
+                          }}
+                          className="min-h-[36px] min-w-[36px] p-2 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-800 rounded-lg cursor-pointer transition-colors flex items-center justify-center border border-red-100/30"
+                          title="Excluir do histórico"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
