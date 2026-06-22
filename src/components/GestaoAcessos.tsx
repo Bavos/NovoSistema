@@ -14,6 +14,7 @@ export const GestaoAcessos: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [sendingResetId, setSendingResetId] = useState<string | null>(null);
+  const [confirmingResetId, setConfirmingResetId] = useState<string | null>(null);
 
   if (userRole?.toLowerCase() !== 'administrador') {
     return <div className="p-4 text-xs text-red-500 bg-red-50 rounded-lg flex items-center gap-2">
@@ -135,31 +136,58 @@ export const GestaoAcessos: React.FC = () => {
                 <td className="py-3 px-4 font-bold text-slate-700">{user.nome}</td>
                 <td className="py-3 px-4">
                   <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                    <span className="text-slate-500">{user.email}</span>
-                     <button
-                      type="button"
-                      disabled={sendingResetId !== null}
-                      onClick={async () => {
-                        if (window.confirm('Deseja enviar um link de redefinição de senha para o e-mail deste colaborador?')) {
-                          setSendingResetId(user.id);
-                          const loadingToast = toast.loading('Enviando e-mail de redefinição...');
-                          try {
-                            const emailDoColaborador = user.email;
-                            await sendPasswordResetEmail(auth, emailDoColaborador);
-                            toast.success('E-mail enviado!', { id: loadingToast });
-                          } catch (error: any) {
-                            console.error("Erro ao enviar redefinição de senha:", error);
-                            toast.error('Erro ao processar', { id: loadingToast });
-                          } finally {
-                            setSendingResetId(null);
-                          }
-                        }
-                      }}
-                      className="inline-flex items-center justify-center px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 hover:text-[#1a3c2e] hover:bg-slate-50 border border-slate-200 hover:border-slate-350 rounded-md transition-all duration-150 cursor-pointer select-none whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
-                      id={`reset-${user.id}`}
-                    >
-                      {sendingResetId === user.id ? '⏳ Enviando...' : '🔑 Enviar Redefinição de Senha'}
-                    </button>
+                    <span className="text-slate-500 font-medium select-all">{user.email}</span>
+                    {sendingResetId === user.id ? (
+                      <span className="inline-flex items-center gap-1 text-[9px] text-slate-400 font-bold bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-200">
+                        <span className="animate-pulse">⏳</span> Enviando...
+                      </span>
+                    ) : confirmingResetId === user.id ? (
+                      <div className="inline-flex items-center gap-1.5 transition-all animate-in fade-in zoom-in-95 bg-amber-50 p-1 px-1.5 rounded-lg border border-amber-200">
+                        <span className="text-[9px] text-amber-800 font-black uppercase select-none px-1">Enviar link de redefinição?</span>
+                        <button
+                          type="button"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            setSendingResetId(user.id);
+                            setConfirmingResetId(null);
+                            const loadingToast = toast.loading('Enviando e-mail de redefinição...');
+                            try {
+                              const emailDoColaborador = user.email;
+                              await sendPasswordResetEmail(auth, emailDoColaborador);
+                              toast.success('E-mail enviado!', { id: loadingToast });
+                            } catch (error: any) {
+                              console.error("Erro ao enviar redefinição de senha:", error);
+                              toast.error('Erro ao processar', { id: loadingToast });
+                            } finally {
+                              setSendingResetId(null);
+                            }
+                          }}
+                          className="px-2 py-0.5 bg-[#1A3626] hover:bg-[#254A34] text-white rounded text-[9px] font-bold uppercase cursor-pointer"
+                        >
+                          Sim
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmingResetId(null);
+                          }}
+                          className="px-2 py-0.5 bg-slate-200 hover:bg-slate-350 text-slate-700 rounded text-[9px] font-bold uppercase cursor-pointer border border-slate-200"
+                        >
+                          Não
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={sendingResetId !== null}
+                        onClick={() => setConfirmingResetId(user.id)}
+                        className="inline-flex items-center justify-center px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 hover:text-[#1a3c2e] hover:bg-slate-50 border border-slate-200 hover:border-slate-350 rounded-md transition-all duration-150 cursor-pointer select-none whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                        id={`reset-${user.id}`}
+                      >
+                        🔑 Enviar Redefinição de Senha
+                      </button>
+                    )}
                   </div>
                 </td>
                 <td className="py-3 px-4">

@@ -888,13 +888,37 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const uploadProfissionalFoto = async (file: File): Promise<string> => {
     try {
+      console.log(`[Diagnostic] Iniciando upload de foto do profissional para Firebase Storage: "profissional_fotos/${file.name}"`);
       const storageRef = ref(storage, `profissional_fotos/${Date.now()}_${file.name}`);
-      const uploadResult = await uploadBytes(storageRef, file);
+      
+      const uploadPromise = uploadBytes(storageRef, file);
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('TIMEOUT: Limite de tempo excedido no upload de foto para o Firebase Storage.')), 3500)
+      );
+
+      await Promise.race([uploadPromise, timeoutPromise]);
       const url = await getDownloadURL(storageRef);
       return url;
     } catch (error: any) {
-      console.error(`[Diagnostic] Erro no uploadProfissionalFoto:`, error);
-      throw new Error(`Erro ao enviar foto: ${error.message || String(error)}`);
+      console.warn("[Diagnostic] Upload via Firebase Storage falhou ou expirou, usando fallback Base64 comprimido:", error);
+      try {
+        // Comprime a imagem para manter o tamanho super reduzido e seguro para salvar no Firestore (largura max de 250px)
+        const compressedBlob = await compressImage(file, 250);
+        return new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(compressedBlob);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (e) => reject(e);
+        });
+      } catch (compressErr) {
+        console.error("[Diagnostic] Erro ao comprimir foto, convertendo arquivo bruto para Base64:", compressErr);
+        return new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(file);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (e) => reject(e);
+        });
+      }
     }
   };
 

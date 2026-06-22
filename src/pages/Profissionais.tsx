@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import html2canvas from 'html2canvas';
 import { useFirebase } from '../context/FirebaseContext';
 import { Profissional, Agendamento, DocumentoAnexo, Ocorrencia } from '../types';
-import { Plus, Edit2, Trash2, X, Check, CalendarDays, Paperclip, AlertCircle, Printer, Download, FileImage, Search } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Check, CalendarDays, Paperclip, AlertCircle, Printer, Download, FileImage, Search, Clock, User, Calendar } from 'lucide-react';
 import { CardBase, DataGrid, DataField, SoftBadge } from '../components/ui/DesignSystem';
 import { db, storage } from '../lib/firebase';
 import { collection, query, where, orderBy, onSnapshot, doc, getDoc, updateDoc, addDoc, deleteDoc, getDocs } from 'firebase/firestore';
@@ -21,6 +21,7 @@ export const Profissionais: React.FC = () => {
   const [editingProf, setEditingProf] = useState<Profissional | null>(null);
   const [activeTab, setActiveTab] = useState<'dados' | 'agenda' | 'cracha' | 'ocorrencias'>('dados');
   const [agendamentosProf, setAgendamentosProf] = useState<Agendamento[]>([]);
+  const [loadingAgenda, setLoadingAgenda] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [bankList, setBankList] = useState<{code: string; name: string}[]>([]);
 
@@ -51,6 +52,44 @@ export const Profissionais: React.FC = () => {
 
   // Estados para Gestão de Ocorrências e Bloqueio
   const [ocorrencias, setOcorrencias] = useState<Ocorrencia[]>([]);
+  const [termoBusca, setTermoBusca] = useState('');
+  const [mesFiltro, setMesFiltro] = useState('Todos');
+
+  const formatarMes = (mesAno: string) => {
+    if (!mesAno || mesAno.length < 7) return mesAno;
+    const [ano, mes] = mesAno.split('-');
+    const nomesMeses = [
+      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ];
+    const numMes = parseInt(mes, 10);
+    if (isNaN(numMes) || numMes < 1 || numMes > 12) return mesAno;
+    return `${nomesMeses[numMes - 1]} de ${ano}`;
+  };
+
+  const mesesDisponiveis = useMemo(() => {
+    const meses = ocorrencias.map(oc => {
+      return oc.mesAno || (oc.data ? oc.data.substring(0, 7) : '');
+    }).filter(Boolean);
+    return Array.from(new Set(meses)).sort((a, b) => b.localeCompare(a));
+  }, [ocorrencias]);
+
+  const ocorrenciasFiltradas = useMemo(() => {
+    return ocorrencias.filter(oc => {
+      if (mesFiltro !== 'Todos') {
+        const ocMonth = oc.mesAno || (oc.data ? oc.data.substring(0, 7) : '');
+        if (ocMonth !== mesFiltro) return false;
+      }
+      if (termoBusca.trim() !== '') {
+        const term = termoBusca.toLowerCase().trim();
+        const matchesPaciente = (oc.pacienteNome || oc.paciente || '').toLowerCase().includes(term);
+        const matchesDescricao = (oc.descricao || '').toLowerCase().includes(term);
+        const matchesTipo = (oc.tipo || '').toLowerCase().includes(term);
+        if (!matchesPaciente && !matchesDescricao && !matchesTipo) return false;
+      }
+      return true;
+    });
+  }, [ocorrencias, mesFiltro, termoBusca]);
 
   const totalFaltasMes = useMemo(() => {
     const currentMonth = new Date().toISOString().substring(0, 7); // e.g. "2026-06"
@@ -109,11 +148,14 @@ export const Profissionais: React.FC = () => {
 
   useEffect(() => {
     if (editingProf && activeTab === 'agenda') {
+      setLoadingAgenda(true);
       const q = query(
         collection(db, 'agendamentos'),
         where('idProfissional', '==', editingProf.id),
-        orderBy('data', 'asc')
+        orderBy('data', 'desc')
       );
+      
+      let unsubscribeFallback: (() => void) | null = null;
       
       const unsubscribe = onSnapshot(q, (snapshot) => {
         const agList: Agendamento[] = [];
@@ -121,13 +163,44 @@ export const Profissionais: React.FC = () => {
           agList.push({ ...doc.data(), id: doc.id } as Agendamento);
         });
         setAgendamentosProf(agList);
+        setLoadingAgenda(false);
       }, (err) => {
-        console.error('Error fetching agendamentos for profissional:', err);
+        console.warn('Erro ao buscar com orderBy (provável falta de índice), tentando fallback de ordenação em memória:', err);
+        const fallbackQ = query(
+          collection(db, 'agendamentos'),
+          where('idProfissional', '==', editingProf.id)
+        );
+        unsubscribeFallback = onSnapshot(fallbackQ, (snapshot) => {
+          const agList: Agendamento[] = [];
+          snapshot.forEach(doc => {
+            agList.push({ ...doc.data(), id: doc.id } as Agendamento);
+          });
+          // Sort in-memory from most recent to oldest
+          agList.sort((a, b) => {
+            const dateA = a.data || '';
+            const dateB = b.data || '';
+            if (dateA !== dateB) {
+              return dateB.localeCompare(dateA);
+            }
+            const timeA = a.horario || '';
+            const timeB = b.horario || '';
+            return timeB.localeCompare(timeA);
+          });
+          setAgendamentosProf(agList);
+          setLoadingAgenda(false);
+        }, (fallbackErr) => {
+          console.error('Erro total no fallback de agendamentos:', fallbackErr);
+          setLoadingAgenda(false);
+        });
       });
       
-      return () => unsubscribe();
+      return () => {
+        unsubscribe();
+        if (unsubscribeFallback) unsubscribeFallback();
+      };
     } else {
       setAgendamentosProf([]);
+      setLoadingAgenda(false);
     }
   }, [editingProf, activeTab]);
 
@@ -151,6 +224,8 @@ export const Profissionais: React.FC = () => {
       return () => unsubscribe();
     } else {
       setOcorrencias([]);
+      setTermoBusca('');
+      setMesFiltro('Todos');
     }
   }, [editingProf, activeTab]);
 
@@ -478,13 +553,14 @@ export const Profissionais: React.FC = () => {
     const file = e.target.files?.[0];
     if (file) {
       setUploading(true);
+      const loadingToast = toast.loading("Enviando foto do profissional...");
       try {
         const url = await uploadProfissionalFoto(file);
         setFormData(prev => ({ ...prev, foto: url }));
-        setSuccessMessage("Foto do profissional enviada com sucesso!");
+        toast.success("Foto do profissional atualizada com sucesso!", { id: loadingToast });
       } catch (err) {
         console.error("Erro ao subir foto:", err);
-        alert("Erro ao enviar foto. Tente novamente.");
+        toast.error("Erro ao enviar foto. Tente novamente.", { id: loadingToast });
       } finally {
         setUploading(false);
       }
@@ -1160,14 +1236,77 @@ export const Profissionais: React.FC = () => {
                       </div>
                     </div>
 
+                    {/* Barra de Ferramentas - Busca e Filtro */}
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-4 p-3 bg-slate-50/50 rounded-xl border border-slate-100">
+                      <div className="relative flex-1">
+                        <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+                          <Search size={14} />
+                        </span>
+                        <input
+                          type="text"
+                          id="input-busca-ocorrencia"
+                          placeholder="Buscar por motivo, paciente ou descrição..."
+                          value={termoBusca}
+                          onChange={(e) => setTermoBusca(e.target.value)}
+                          className="w-full pl-9 pr-3 py-1.5 text-xs text-slate-705 placeholder-slate-400 bg-white border border-slate-200 focus:outline-none focus:ring-1 focus:ring-[#1a3c2e] focus:border-[#1a3c2e] rounded-lg transition"
+                        />
+                        {termoBusca && (
+                          <button
+                            type="button"
+                            onClick={() => setTermoBusca('')}
+                            className="absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                          >
+                            <X size={12} />
+                          </button>
+                        )}
+                      </div>
+                      
+                      <div className="w-full sm:w-48 flex items-center gap-2">
+                        <label htmlFor="select-mes-filtro" className="text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                          Mês:
+                        </label>
+                        <select
+                          id="select-mes-filtro"
+                          value={mesFiltro}
+                          onChange={(e) => setMesFiltro(e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-xs text-slate-705 bg-white border border-slate-200 focus:outline-none focus:ring-1 focus:ring-[#1a3c2e] focus:border-[#1a3c2e] rounded-lg cursor-pointer transition font-medium"
+                        >
+                          <option value="Todos">Todos os Meses</option>
+                          {mesesDisponiveis.map(m => (
+                            <option key={`opt-mes-${m}`} value={m}>
+                              {formatarMes(m)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
                     {/* Histórico de Ocorrências */}
                     <div className="space-y-2">
-                      <h4 className="text-xs font-black text-[#1a3c2e] uppercase tracking-wider block">
-                        Histórico de Ocorrências ({ocorrencias.length})
-                      </h4>
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-black text-[#1a3c2e] uppercase tracking-wider block">
+                          Histórico de Ocorrências ({ocorrenciasFiltradas.length})
+                        </h4>
+                        {(termoBusca || mesFiltro !== 'Todos') && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTermoBusca('');
+                              setMesFiltro('Todos');
+                            }}
+                            className="text-[10px] font-extrabold text-red-600 hover:text-red-800 uppercase tracking-widest cursor-pointer transition-colors"
+                          >
+                            Limpar Filtros
+                          </button>
+                        )}
+                      </div>
                       {ocorrencias.length === 0 ? (
                         <p className="text-xs text-slate-400 italic text-center p-4 bg-slate-50 rounded-lg">
                           Nenhuma ocorrência registrada para este profissional.
+                        </p>
+                      ) : ocorrenciasFiltradas.length === 0 ? (
+                        <p className="text-xs text-slate-400 italic text-center p-4 bg-slate-50 rounded-lg">
+                          Nenhuma ocorrência atende aos filtros de busca selecionados.
                         </p>
                       ) : (
                         <div className="overflow-x-auto border border-slate-100 rounded-xl bg-white">
@@ -1182,7 +1321,7 @@ export const Profissionais: React.FC = () => {
                               </tr>
                             </thead>
                             <tbody>
-                              {ocorrencias.map((oc, index) => (
+                              {ocorrenciasFiltradas.map((oc, index) => (
                                 <tr key={`oc-${oc.id || index}-${index}`} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                                   <td className="p-3 font-mono text-slate-600 whitespace-nowrap">
                                     {oc.data.split('-').reverse().join('/')}
@@ -1277,7 +1416,99 @@ export const Profissionais: React.FC = () => {
                 case 'cracha': return <BadgeGerador profData={formData as any} />;
                 case 'agenda': return (
                   <div className="space-y-4">
-                     {/* ... (rest of the content from turn 2) ... */}
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                      <h4 className="text-xs font-black text-[#1a3c2e] uppercase tracking-wider">
+                        Plantões do Profissional ({agendamentosProf.length})
+                      </h4>
+                      <span className="text-[10px] bg-slate-100 text-slate-505 font-bold px-2 py-0.5 rounded-full text-slate-500">
+                        Escala Geral
+                      </span>
+                    </div>
+
+                    {loadingAgenda ? (
+                      <div className="flex flex-col items-center justify-center py-12 space-y-2">
+                        <span className="animate-spin text-xl text-[#1a3c2e]">⏳</span>
+                        <p className="text-xs text-slate-500 font-semibold animate-pulse">Carregando agenda...</p>
+                      </div>
+                    ) : agendamentosProf.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-10 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                        <Calendar className="text-slate-300 mb-2" size={24} />
+                        <p className="text-slate-500 text-xs text-center py-1 font-medium">
+                          Nenhum plantão agendado para este profissional.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {agendamentosProf.map((ag) => {
+                          const patientObj = pacientes.find(p => p.id === ag.idPaciente);
+                          const patientName = patientObj ? patientObj.nome : 'Paciente Desconhecido';
+                          
+                          // Formatar data em bloco "Dia / Mês"
+                          let day = "--";
+                          let month = "---";
+                          if (ag.data) {
+                            const [ano, mesStr, diaStr] = ag.data.split('-');
+                            if (diaStr && mesStr) {
+                              day = diaStr;
+                              const mesesShort = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+                              const mesIndex = parseInt(mesStr, 10) - 1;
+                              if (mesIndex >= 0 && mesIndex < 12) {
+                                month = mesesShort[mesIndex];
+                              }
+                            }
+                          }
+
+                          // Status Color Styling
+                          let statusBg = "bg-slate-105 text-slate-600 border-slate-200";
+                          if (ag.status === 'Confirmado') {
+                            statusBg = "bg-emerald-50 text-emerald-700 border-emerald-100";
+                          } else if (ag.status === 'Concluido') {
+                            statusBg = "bg-blue-50 text-blue-700 border-blue-100";
+                          } else if (ag.status === 'Cancelado') {
+                            statusBg = "bg-rose-50 text-rose-700 border-rose-100";
+                          } else if (ag.status === 'Aberta') {
+                            statusBg = "bg-amber-50 text-amber-700 border-amber-100";
+                          }
+
+                          return (
+                            <div 
+                              key={ag.id} 
+                              className="bg-white border border-slate-100 rounded-xl p-3 shadow-xs hover:shadow-md hover:border-slate-300 transition-all flex items-start gap-3 relative overflow-hidden"
+                            >
+                              {/* Calendário Bento Left */}
+                              <div className="flex-shrink-0 w-11 h-11 bg-slate-50 rounded-lg border border-slate-100 flex flex-col items-center justify-center p-1">
+                                <span className="text-xs font-black text-slate-705 leading-none">{day}</span>
+                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-0.5">{month}</span>
+                              </div>
+
+                              {/* Conteúdo Meio */}
+                              <div className="flex-1 min-w-0 space-y-1">
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className="text-[10px] font-mono text-slate-400 flex items-center gap-1">
+                                    <Clock size={11} /> {ag.horario || 'Horário não definido'}
+                                  </span>
+                                  <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded border ${statusBg}`}>
+                                    {ag.status}
+                                  </span>
+                                </div>
+
+                                <h5 className="text-xs font-bold text-slate-800 truncate flex items-center gap-1.5 pt-0.5">
+                                  <User size={12} className="text-slate-400 flex-shrink-0" />
+                                  <span className="truncate">{patientName}</span>
+                                </h5>
+
+                                <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-100">
+                                  <span>Repasse: <strong className="font-semibold text-slate-750">R$ {ag.valorRepasse?.toFixed(2) || '0.00'}</strong></span>
+                                  {ag.tipoDia && ag.tipoDia !== 'Normal' && (
+                                    <span className="text-[9px] bg-amber-50 text-amber-800 px-1 py-0.2 rounded font-bold">{ag.tipoDia}</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
                 default: return (
@@ -1285,11 +1516,21 @@ export const Profissionais: React.FC = () => {
                     {/* Bloco 1: Dados Pessoais */}
                     <CardBase className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="md:col-span-3 flex justify-center mb-2">
-                        <label className="relative cursor-pointer group">
-                          <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
+                        <label className={`relative cursor-pointer group ${uploading ? 'pointer-events-none opacity-80' : ''}`}>
+                          <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" disabled={uploading} />
                           <div className="w-24 h-24 rounded-full border-2 border-dashed border-gray-200 flex flex-col items-center justify-center overflow-hidden bg-white hover:border-[#1a3c2e] hover:bg-gray-50 transition-all shadow-inner">
-                            {formData.foto ? (
-                              <img src={formData.foto} alt="Foto" className="w-full h-full object-cover"/>
+                            {uploading ? (
+                              <div className="flex flex-col items-center justify-center space-y-1">
+                                <span className="animate-spin text-[#1a3c2e] text-sm">⏳</span>
+                                <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Subindo...</span>
+                              </div>
+                            ) : formData.foto ? (
+                              <div className="relative w-full h-full group">
+                                <img src={formData.foto} alt="Foto" className="w-full h-full object-cover"/>
+                                <div className="absolute inset-0 bg-[#1a3c2e]/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[9px] font-bold uppercase transition-all">
+                                  Alterar
+                                </div>
+                              </div>
                             ) : (
                               <span className="text-[10px] font-semibold text-gray-450 uppercase tracking-widest text-gray-400">Add Foto</span>
                             )}
