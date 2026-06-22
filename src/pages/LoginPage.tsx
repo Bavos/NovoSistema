@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
 import logo from '../assets/images/rh_logo_v2_1781470281009.jpg';
+import { validarDominioCorporativo } from '../types';
+import { toast } from 'react-hot-toast';
 
 export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ onNavigateToFirstAccess }) => {
     const [email, setEmail] = useState('');
@@ -13,6 +15,14 @@ export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ o
         e.preventDefault();
         setIsLoading(true);
         setError(null);
+
+        const domainAllowed = await validarDominioCorporativo(email);
+        if (!domainAllowed) {
+            toast.error('Acesso restrito. O domínio do seu e-mail não está autorizado nas configurações da empresa.');
+            setIsLoading(false);
+            return;
+        }
+
         try {
             await login(email, password);
         } catch (err: any) {

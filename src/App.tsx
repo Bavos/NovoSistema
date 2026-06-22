@@ -12,7 +12,6 @@ import { TopHeader } from './components/TopHeader';
 import { Pacientes } from './pages/Pacientes';
 import { Profissionais } from './pages/Profissionais';
 import {
-  EscalasDashboard,
   FinanceiroDashboard,
   EmpresaDashboard
 } from './components/SimulatedDashboards';
@@ -71,7 +70,6 @@ function DashboardContent() {
       return pacientesTitleOverride;
     }
     if (activeSidebarTab === 'profissionais') return 'Gestão de Profissionais';
-    if (activeSidebarTab === 'escalas') return 'Escalas Diárias de Plantões';
     if (activeSidebarTab === 'financeiro') return 'Financeiro';
     if (activeSidebarTab === 'empresa') return 'Informações Gerais';
     return 'CuidarHome';
@@ -192,8 +190,6 @@ function DashboardContent() {
                   />
                 ) : activeSidebarTab === 'profissionais' ? (
                   <Profissionais />
-                ) : activeSidebarTab === 'escalas' ? (
-                  <EscalasDashboard />
                 ) : activeSidebarTab === 'financeiro' ? (
                   userRole?.toLowerCase() === 'colaborador' ? (
                     <AccessDeniedView />

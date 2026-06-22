@@ -674,7 +674,11 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
         periodoApurado: { inicio: dataInicial, fim: dataFinal },
         valorTotal: totalFatura,
         status: 'Fechada',
-        plantoesCongelados: agends
+        plantoesCongelados: agends.map(ag => ({
+          ...ag,
+          profissional: ag.nomeProfissional || 'Não atribuído',
+          nomeProfissional: ag.nomeProfissional || 'Não atribuído'
+        }))
       });
       alert(`Fatura Nº ${numero} salva com sucesso!`);
     } catch (err) {
@@ -3086,7 +3090,12 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                               return (
                                 <tr key={i} className="border-b border-[#b8860b]/30">
                                   <td className="p-2">{formatDateBR(p.data)}</td>
-                                  <td className="p-2">{viewDoc.type === 'fatura' ? p.nomeProfissional : p.nomePaciente}</td>
+                                  <td className="p-2">
+                                    {viewDoc.type === 'fatura' 
+                                      ? (p.profissional || p.nomeProfissional || 'A Definir') 
+                                      : (p.nomePaciente || 'A Definir')
+                                    }
+                                  </td>
                                   <td className="p-2">{p.tipoDia || 'Plantão Normal'}</td>
                                   <td className="p-2 text-right text-[#1a3c2e] font-bold font-mono">R$ {valorLinha.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                 </tr>
@@ -3158,6 +3167,7 @@ export const EmpresaDashboard: React.FC = () => {
   const [unidadeOperacao, setUnidadeOperacao] = useState('Rio de Janeiro - RJ (Zona Sul & Barra)');
   const [direcaoGeral, setDirecaoGeral] = useState('Renato B. Z.');
   const [logoUrl, setLogoUrl] = useState('');
+  const [dominiosAutorizados, setDominiosAutorizados] = useState('@vallidare.com.br, @cuidarhome.com.br, @rhcuidado.com.br');
   const [isEditingMatriz, setIsEditingMatriz] = useState(false);
   const [loadingConfig, setLoadingConfig] = useState(true);
 
@@ -3166,6 +3176,7 @@ export const EmpresaDashboard: React.FC = () => {
   const [tempCnpj, setTempCnpj] = useState('');
   const [tempUnidade, setTempUnidade] = useState('');
   const [tempDirecao, setTempDirecao] = useState('');
+  const [tempDominios, setTempDominios] = useState('');
   const [tempLogo, setTempLogo] = useState<File | null>(null);
   const [shouldClearLogo, setShouldClearLogo] = useState(false);
   const [isResettingDatabase, setIsResettingDatabase] = useState(false);
@@ -3188,6 +3199,9 @@ export const EmpresaDashboard: React.FC = () => {
           if (data.cnpj) setCnpj(data.cnpj);
           if (data.endereco) setUnidadeOperacao(data.endereco);
           if (data.logoUrl) setLogoUrl(data.logoUrl);
+          if (data.dominiosAutorizados) {
+            setDominiosAutorizados(Array.isArray(data.dominiosAutorizados) ? data.dominiosAutorizados.join(', ') : data.dominiosAutorizados);
+          }
         }
       } catch (err) {
         console.error("Erro ao carregar dados da matriz:", err);
@@ -3204,6 +3218,7 @@ export const EmpresaDashboard: React.FC = () => {
     setTempCnpj(cnpj);
     setTempUnidade(unidadeOperacao);
     setTempDirecao(direcaoGeral);
+    setTempDominios(dominiosAutorizados);
     setTempLogo(null);
     setShouldClearLogo(false);
     setUploadDiagnostics([]);
@@ -3302,6 +3317,12 @@ export const EmpresaDashboard: React.FC = () => {
     setIsUploading(true);
     const loadingToast = toast.loading("Salvando dados organizacionais...");
 
+    const cleanDomains = tempDominios
+      .split(',')
+      .map(d => d.trim().toLowerCase())
+      .filter(d => d.length > 0)
+      .map(d => d.startsWith('@') ? d : `@${d}`);
+
     try {
       setUploadDiagnostics(prev => [...prev, `[LOG 4/4] Atualizando dados cadastrais no Firestore: coleção "configuracoes_empresa"...`]);
       const docRef = doc(db, 'configuracoes_empresa', 'empresa');
@@ -3310,12 +3331,14 @@ export const EmpresaDashboard: React.FC = () => {
         cnpj: tempCnpj,
         endereco: tempUnidade,
         logoUrl: logoUrl,
+        dominiosAutorizados: cleanDomains,
         updatedAt: new Date().toISOString()
       }, { merge: true });
 
       setRazaoSocial(tempRazao);
       setCnpj(tempCnpj);
       setUnidadeOperacao(tempUnidade);
+      setDominiosAutorizados(cleanDomains.join(', '));
       setIsEditingMatriz(false);
       
       toast.dismiss(loadingToast);
@@ -3542,6 +3565,17 @@ export const EmpresaDashboard: React.FC = () => {
                       className="w-full p-1.5 border border-slate-200 rounded-lg text-xs" 
                     />
                   </div>
+                  <div className="space-y-0.5">
+                    <label className="text-[9px] uppercase font-bold text-slate-400">Domínios de E-mail Autorizados</label>
+                    <input 
+                      value={tempDominios} 
+                      onChange={e => setTempDominios(e.target.value)} 
+                      type="text" 
+                      placeholder="@vallidare.com.br, @cuidarhome.com.br, @rhcuidado.com.br"
+                      className="w-full p-1.5 border border-slate-200 rounded-lg text-xs" 
+                    />
+                    <p className="text-[10px] text-slate-400">Separe os domínios por vírgula. Ex: @vallidare.com.br, @rhcuidado.com.br</p>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -3563,6 +3597,7 @@ export const EmpresaDashboard: React.FC = () => {
                   <p>Razão Social: <strong className="text-slate-700">{razaoSocial}</strong></p>
                   <p>CNPJ: <strong className="text-slate-700">{cnpj}</strong></p>
                   <p>Endereço: <strong className="text-slate-700 text-blue-600">{unidadeOperacao}</strong></p>
+                  <p>Domínios de E-mail Autorizados: <strong className="text-slate-700">{dominiosAutorizados || 'Nenhum domínio configurado'}</strong></p>
                 </div>
               )}
             </div>

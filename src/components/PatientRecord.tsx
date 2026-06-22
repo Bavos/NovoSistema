@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { updateDoc, doc, addDoc, collection, serverTimestamp, getDocs, query, where, deleteDoc } from 'firebase/firestore';
+import { updateDoc, doc, getDoc, addDoc, collection, serverTimestamp, getDocs, query, where, deleteDoc } from 'firebase/firestore';
 import { fetchCep, fetchBanks, getHolidays } from '../lib/brasilApi';
 import { Paciente, Plantao, CancelingReason, EscalacaoPlano, Agendamento } from '../types';
 import { useFirebase } from '../context/FirebaseContext';
@@ -38,7 +38,8 @@ import {
   Moon,
   Crown,
   Info,
-  History
+  History,
+  Receipt
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
@@ -146,7 +147,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
     updateAgendamento,
     deleteAgendamento,
     userRole,
-    logsAuditoria
+    logsAuditoria,
+    faturasPacientes
   } = useFirebase();
 
   const isBlockedBidirectional = (prof: any) => {
@@ -496,6 +498,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
   const [calendarMonth, setCalendarMonth] = useState<number>(new Date().getMonth());
   const [calendarYear, setCalendarYear] = useState<number>(new Date().getFullYear());
   const [calendarView, setCalendarView] = useState<'lista' | 'calendario'>('calendario'); // default to visual calendar view
+  const [isFaturaModalOpen, setIsFaturaModalOpen] = useState(false);
 
   // Dynamic holidays fetched from BrasilAPI + custom RJ municipal/state holidays
   const [brasilApiHolidays, setBrasilApiHolidays] = useState<Record<string, string>>({});
@@ -1292,6 +1295,113 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
     }
   };
 
+  const handleGerarFatura = async () => {
+    if (!paciente) return;
+
+    const monthPrefix = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}`;
+    const agendamentosPacienteMes = agendamentos.filter(
+      (a) => a.idPaciente === paciente?.id && a.data && a.data.startsWith(monthPrefix)
+    );
+
+    if (agendamentosPacienteMes.length === 0) {
+      toast.error('Não há plantões agendados para este paciente no mês selecionado.');
+      return;
+    }
+
+    // 1. Trava de Segurança (Validação de Escala)
+    const temAtivosNaoConcluidos = agendamentosPacienteMes.some(
+      (a) => a.status !== 'Concluido' && a.status !== 'Cancelado'
+    );
+
+    if (temAtivosNaoConcluidos) {
+      toast.error('Atenção: É necessário fechar/concluir a escala deste mês antes de gerar a fatura.');
+      return;
+    }
+
+    const mesDaEscalaAtual = monthPrefix;
+
+    try {
+      // 2. Correção da Query (A Trava Real de Duplicidade)
+      const faturasColl = collection(db, 'faturas_pacientes');
+      const qDuplicidade = query(
+        faturasColl,
+        where('pacienteId', '==', paciente.id),
+        where('mesReferencia', '==', mesDaEscalaAtual)
+      );
+      const querySnapshot = await getDocs(qDuplicidade);
+      if (!querySnapshot.empty) {
+        toast.error('Emissão bloqueada: A fatura de ' + mesDaEscalaAtual + ' para este paciente já foi emitida.');
+        return;
+      }
+
+      // 3. Consolidação e Integração com "Histórico Financeiro" (Firestore)
+      let sumRepasse = 0;
+      let sumTaxa = 0;
+      agendamentosPacienteMes.forEach(s => {
+        if (s.status !== 'Cancelado') {
+          let base = Number(s.valorPlantao) || Number(paciente?.planoAtendimento?.valorSugeridoPlantao) || 150;
+          let extra = Number(s.ajudaCusto) || Number(paciente?.planoAtendimento?.ajudaCusto) || 0;
+          let baseTaxa = Number(s.taxaAdm) || Number(paciente?.planoAtendimento?.taxaAdm) || 0;
+          if (s.tipoDia === 'Feriado 20%') {
+            sumRepasse += (base * 1.20) + extra;
+            sumTaxa += baseTaxa * 1.20;
+          } else if (s.tipoDia === 'Feriado 50%') {
+            sumRepasse += (base * 1.50) + extra;
+            sumTaxa += baseTaxa * 1.50;
+          } else {
+            sumRepasse += base + extra;
+            sumTaxa += baseTaxa;
+          }
+        }
+      });
+
+      const valorTotalFatura = sumRepasse + sumTaxa;
+
+      const nomePaciente = nome || paciente?.nome || 'Não definido';
+      const numFatSuffix = Math.floor(1000 + Math.random() * 9000);
+      const numeroFatura = `FAT-${calendarYear}${String(calendarMonth + 1).padStart(2, '0')}-${numFatSuffix}`;
+
+      await addDoc(collection(db, 'faturas_pacientes'), {
+        idPaciente: paciente.id,
+        pacienteId: paciente.id,
+        pacienteNome: nomePaciente,
+        nomePaciente: nomePaciente,
+        numeroFatura: numeroFatura,
+        mesReferencia: mesDaEscalaAtual,
+        valorTotalFatura: valorTotalFatura,
+        valorTotal: valorTotalFatura,
+        dataEmissao: new Date().toISOString(), // Compatible with other new Date(f.dataEmissao) parses
+        dataEmissaoTimestamp: serverTimestamp(), // Match server timestamp required by the prompt
+        statusPagamento: 'Pendente',
+        status: 'Aberta',
+        periodoApurado: { 
+          inicio: `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-01`, 
+          fim: `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-30` 
+        },
+        plantoesCongelados: agendamentosPacienteMes.map(a => ({
+          id: a.id,
+          data: a.data || '',
+          horario: a.horario || '',
+          valorPlantao: a.valorPlantao || 0,
+          valorRepasse: a.valorRepasse || 0,
+          status: a.status || '',
+          profissional: a.nomeProfissional || 'Não atribuído',
+          nomeProfissional: a.nomeProfissional || 'Não atribuído',
+          taxaAdm: a.taxaAdm || 0,
+          ajudaCusto: a.ajudaCusto || 0,
+          tipoDia: a.tipoDia || ''
+        }))
+      });
+
+      // 3. Feedback Real para o Usuário
+      toast.success('Fatura gerada e enviada para o Histórico Financeiro!');
+      setIsFaturaModalOpen(false);
+    } catch (error) {
+      console.error('Erro ao gerar fatura:', error);
+      toast.error('Erro ao gerar a fatura. Tente novamente.');
+    }
+  };
+
   const handleConfirmReabrir = async () => {
     if (!paciente) return;
     if (!reabrirStartDate || !reabrirEndDate) {
@@ -1322,6 +1432,574 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
     } catch (err) {
       alert('Erro ao reabrir escala.');
     }
+  };
+
+  const handleBaixarFaturaExcel = async () => {
+    if (!paciente || !paciente.id) {
+      toast.error('Paciente não identificado.');
+      return;
+    }
+
+    const faturasDoPaciente = (faturasPacientes || []).filter(
+      (f: any) => f.idPaciente === paciente.id || f.pacienteId === paciente.id
+    );
+
+    if (faturasDoPaciente.length === 0) {
+      toast.error('Nenhuma fatura encontrada no histórico para este paciente.');
+      return;
+    }
+
+    // Ordenar por dataEmissao descendente para pegar a mais recente
+    const faturaMaisRecenteRaw = [...faturasDoPaciente].sort((a, b) => {
+      const dateA = a.dataEmissao ? new Date(a.dataEmissao).getTime() : 0;
+      const dateB = b.dataEmissao ? new Date(b.dataEmissao).getTime() : 0;
+      return dateB - dateA;
+    })[0];
+
+    const faturaMaisRecente = faturaMaisRecenteRaw as any;
+
+    let empresaNome = 'RH Cuidado Domiciliar';
+    let empresaCnpj = '12.345.678/0001-99';
+    let empresaEndereco = 'Rua Martins Ferreira, 71';
+    try {
+      const docRef = doc(db, 'configuracoes_empresa', 'empresa');
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.razaoSocial) empresaNome = data.razaoSocial;
+        if (data.cnpj) empresaCnpj = data.cnpj;
+        if (data.endereco) empresaEndereco = data.endereco;
+      }
+    } catch (err) {
+      console.warn("Erro ao buscar dados da empresa para exportação, usando fallbacks:", err);
+    }
+
+    try {
+      const ExcelJS = (await import('exceljs')).default;
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Fatura', {
+        views: [{ showGridLines: true }]
+      });
+
+      worksheet.columns = [
+        { key: 'A', width: 15 },
+        { key: 'B', width: 30 },
+        { key: 'C', width: 30 },
+        { key: 'D', width: 18 }
+      ];
+
+      // Logo block: "RH"
+      worksheet.mergeCells('A2:A4');
+      const logoCell = worksheet.getCell('A2');
+      logoCell.value = 'RH';
+      logoCell.font = { name: 'Arial', size: 18, bold: true, color: { argb: 'FFFFFFFF' } };
+      logoCell.alignment = { vertical: 'middle', horizontal: 'center' };
+      logoCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF1A4231' }
+      };
+
+      // Company info
+      const nameCell = worksheet.getCell('B2');
+      nameCell.value = empresaNome;
+      nameCell.font = { name: 'Arial', size: 12, bold: true, color: { argb: 'FF1A4231' } };
+
+      const cnpjCell = worksheet.getCell('B3');
+      cnpjCell.value = `CNPJ: ${empresaCnpj}`;
+      cnpjCell.font = { name: 'Arial', size: 10, color: { argb: 'FF4B5563' } };
+
+      const addressCell = worksheet.getCell('B4');
+      addressCell.value = `Endereço: ${empresaEndereco}`;
+      addressCell.font = { name: 'Arial', size: 9, color: { argb: 'FF6B7280' } };
+
+      // Invoice header on the right
+      const titleCell = worksheet.getCell('D2');
+      titleCell.value = 'FATURA';
+      titleCell.font = { name: 'Arial', size: 16, bold: true, color: { argb: 'FF1A4231' } };
+      titleCell.alignment = { horizontal: 'right' };
+
+      const numCell = worksheet.getCell('D3');
+      const invoiceNumber = faturaMaisRecente.numeroFatura || 'FAT-' + Number(faturaMaisRecente.id).toString().substring(0, 6);
+      numCell.value = `Nº: ${invoiceNumber}`;
+      numCell.font = { name: 'Arial', size: 10, italic: true, color: { argb: 'FF1F2937' } };
+      numCell.alignment = { horizontal: 'right' };
+
+      // Separator line
+      worksheet.getRow(5).height = 10;
+      for (let c = 1; c <= 4; c++) {
+        worksheet.getCell(5, c).border = {
+          bottom: { style: 'medium', color: { argb: 'FFD1D5DB' } }
+        };
+      }
+
+      // Format Date
+      const formatDateBR = (dateStr: string) => {
+        if (!dateStr) return '';
+        if (dateStr.includes('-')) {
+          return dateStr.split('-').reverse().join('/');
+        }
+        return dateStr;
+      };
+
+      // Patient/Invoice details in Grid
+      // Row 7
+      worksheet.getCell('A7').value = 'Emissão:';
+      worksheet.getCell('B7').value = formatDateBR(faturaMaisRecente.dataEmissao || '');
+      worksheet.getCell('C7').value = 'Status:';
+      worksheet.getCell('D7').value = faturaMaisRecente.status || 'Aberta';
+
+      // Row 8
+      worksheet.getCell('A8').value = 'Paciente:';
+      worksheet.getCell('B8').value = faturaMaisRecente.nomePaciente || '---';
+      worksheet.getCell('C8').value = 'Valor Total:';
+      
+      const valTotalCell = worksheet.getCell('D8');
+      valTotalCell.value = faturaMaisRecente.valorTotal || faturaMaisRecente.valorTotalFatura || 0;
+      valTotalCell.numFmt = '"R$ "#,##0.00';
+
+      const detailRefs = ['A7', 'A8', 'B7', 'B8', 'C7', 'C8', 'D7', 'D8'];
+      detailRefs.forEach(ref => {
+        const c = worksheet.getCell(ref);
+        c.font = { name: 'Arial', size: 10 };
+      });
+
+      ['A7', 'A8', 'C7', 'C8'].forEach(ref => {
+        worksheet.getCell(ref).font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FF374151' } };
+      });
+
+      worksheet.getCell('D7').font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FF15803D' } };
+      valTotalCell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FF1A4231' } };
+
+      // Space
+      worksheet.getRow(9).height = 15;
+
+      // Service Table Header (Row 11)
+      const tableHeaderRow = worksheet.getRow(11);
+      tableHeaderRow.height = 24;
+      ['A11', 'B11', 'C11', 'D11'].forEach((cellRef, idx) => {
+        const hCell = worksheet.getCell(cellRef);
+        hCell.value = ['Data', 'Profissional', 'Serviço', 'Valor'][idx];
+        hCell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+        hCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF1A4231' } // Dark Green
+        };
+        hCell.alignment = { vertical: 'middle', horizontal: idx === 3 ? 'right' : 'left' };
+      });
+
+      // Calculate shift total
+      const calculateRowValue = (p: any) => {
+        const base = p.valorPlantao || 0;
+        const adm = p.taxaAdm || 0;
+        const ajuda = p.ajudaCusto || 0;
+        let mult = 1.0;
+        if (p.tipoDia === 'Feriado 20%') mult = 1.2;
+        else if (p.tipoDia === 'Feriado 50%') mult = 1.5;
+        return (base * mult) + (adm * mult) + ajuda;
+      };
+
+      const plantoes = faturaMaisRecente.plantoesCongelados || [];
+      let currentRow = 12;
+
+      plantoes.forEach((p: any) => {
+        worksheet.getCell(`A${currentRow}`).value = formatDateBR(p.data || '');
+        worksheet.getCell(`B${currentRow}`).value = p.nomeProfissional || p.profissional || '---';
+        worksheet.getCell(`C${currentRow}`).value = p.tipoDia || 'Plantão Normal';
+
+        const valCell = worksheet.getCell(`D${currentRow}`);
+        valCell.value = calculateRowValue(p);
+        valCell.numFmt = '"R$ "#,##0.00';
+        valCell.alignment = { horizontal: 'right' };
+
+        ['A', 'B', 'C', 'D'].forEach(col => {
+          const c = worksheet.getCell(`${col}${currentRow}`);
+          c.font = { name: 'Arial', size: 10 };
+          c.border = {
+            bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } }
+          };
+        });
+        currentRow++;
+      });
+
+      // Footer Row (Total)
+      worksheet.getCell(`C${currentRow}`).value = 'TOTAL';
+      worksheet.getCell(`C${currentRow}`).font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FF1A4231' } };
+      worksheet.getCell(`C${currentRow}`).alignment = { horizontal: 'right' };
+
+      const totValCell = worksheet.getCell(`D${currentRow}`);
+      totValCell.value = faturaMaisRecente.valorTotal || faturaMaisRecente.valorTotalFatura || 0;
+      totValCell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FF1A4231' } };
+      totValCell.numFmt = '"R$ "#,##0.00';
+      totValCell.alignment = { horizontal: 'right' };
+
+      ['A', 'B', 'C', 'D'].forEach(col => {
+        const c = worksheet.getCell(`${col}${currentRow}`);
+        c.border = {
+          top: { style: 'thin', color: { argb: 'FF1A4231' } },
+          bottom: { style: 'double', color: { argb: 'FF1A4231' } }
+        };
+      });
+
+      // Auto column widths
+      worksheet.columns.forEach(column => {
+        let maxLen = 12;
+        column.eachCell({ includeEmpty: true }, cell => {
+          const valStr = cell.value ? String(cell.value) : '';
+          if (valStr.length > maxLen) maxLen = valStr.length;
+        });
+        column.width = maxLen + 4;
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const safeNumber = invoiceNumber.replace(/\//g, '-');
+      link.download = `fatura_${safeNumber}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast.success(`Fatura ${invoiceNumber} baixada em Excel (.xlsx)!`);
+    } catch (err) {
+      console.error('Erro ao baixar excel:', err);
+      toast.error('Erro ao gerar o arquivo Excel.');
+    }
+  };
+
+  const handleBaixarFaturaWord = async () => {
+    if (!paciente || !paciente.id) {
+      toast.error('Paciente não identificado.');
+      return;
+    }
+
+    const faturasDoPaciente = (faturasPacientes || []).filter(
+      (f: any) => f.idPaciente === paciente.id || f.pacienteId === paciente.id
+    );
+
+    if (faturasDoPaciente.length === 0) {
+      toast.error('Nenhuma fatura encontrada no histórico para este paciente.');
+      return;
+    }
+
+    // Ordenar por dataEmissao descendente para pegar a mais recente
+    const faturaMaisRecenteRaw = [...faturasDoPaciente].sort((a, b) => {
+      const dateA = a.dataEmissao ? new Date(a.dataEmissao).getTime() : 0;
+      const dateB = b.dataEmissao ? new Date(b.dataEmissao).getTime() : 0;
+      return dateB - dateA;
+    })[0];
+
+    const faturaMaisRecente = faturaMaisRecenteRaw as any;
+
+    let empresaNome = 'RH Cuidado Domiciliar';
+    let empresaCnpj = '12.345.678/0001-99';
+    let empresaEndereco = 'Rua Martins Ferreira, 71';
+    try {
+      const docRef = doc(db, 'configuracoes_empresa', 'empresa');
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.razaoSocial) empresaNome = data.razaoSocial;
+        if (data.cnpj) empresaCnpj = data.cnpj;
+        if (data.endereco) empresaEndereco = data.endereco;
+      }
+    } catch (err) {
+      console.warn("Erro ao buscar dados da empresa para exportação, usando fallbacks:", err);
+    }
+
+    try {
+      const docx = await import('docx');
+      const {
+        Document,
+        Packer,
+        Paragraph,
+        TextRun,
+        Table,
+        TableRow,
+        TableCell,
+        AlignmentType,
+        WidthType,
+        BorderStyle
+      } = docx;
+
+      const formatDateBR = (dateStr: string) => {
+        if (!dateStr) return '';
+        if (dateStr.includes('-')) {
+          return dateStr.split('-').reverse().join('/');
+        }
+        return dateStr;
+      };
+
+      const calculateRowValue = (p: any) => {
+        const base = p.valorPlantao || 0;
+        const adm = p.taxaAdm || 0;
+        const ajuda = p.ajudaCusto || 0;
+        let mult = 1.0;
+        if (p.tipoDia === 'Feriado 20%') mult = 1.2;
+        else if (p.tipoDia === 'Feriado 50%') mult = 1.5;
+        return (base * mult) + (adm * mult) + ajuda;
+      };
+
+      const invoiceNumber = faturaMaisRecente.numeroFatura || 'FAT-' + Number(faturaMaisRecente.id).toString().substring(0, 6);
+      const totalGlobal = faturaMaisRecente.valorTotal || faturaMaisRecente.valorTotalFatura || 0;
+      const plantoes = faturaMaisRecente.plantoesCongelados || [];
+
+      // 1. Header Table
+      const headerTable = new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        borders: {
+          top: { style: BorderStyle.NONE },
+          bottom: { style: BorderStyle.NONE },
+          left: { style: BorderStyle.NONE },
+          right: { style: BorderStyle.NONE },
+          insideHorizontal: { style: BorderStyle.NONE },
+          insideVertical: { style: BorderStyle.NONE }
+        },
+        rows: [
+          new TableRow({
+            children: [
+              new TableCell({
+                width: { size: 60, type: WidthType.PERCENTAGE },
+                children: [
+                  new Paragraph({
+                    children: [
+                      new TextRun({ text: empresaNome, bold: true, size: 28, color: "1A4231", font: "Arial" })
+                    ]
+                  }),
+                  new Paragraph({
+                    children: [
+                      new TextRun({ text: `CNPJ: ${empresaCnpj}`, size: 18, color: "555555", font: "Arial" })
+                    ],
+                    spacing: { before: 80 }
+                  }),
+                  new Paragraph({
+                    children: [
+                      new TextRun({ text: `Endereço: ${empresaEndereco}`, size: 18, color: "777777", font: "Arial" })
+                    ],
+                    spacing: { before: 80 }
+                  })
+                ]
+              }),
+              new TableCell({
+                width: { size: 40, type: WidthType.PERCENTAGE },
+                children: [
+                  new Paragraph({
+                    children: [
+                      new TextRun({ text: "FATURA", bold: true, size: 36, color: "1A4231", font: "Arial" })
+                    ],
+                    alignment: AlignmentType.RIGHT
+                  }),
+                  new Paragraph({
+                    children: [
+                      new TextRun({ text: `Nº: ${invoiceNumber}`, size: 20, italics: true, font: "Arial" })
+                    ],
+                    alignment: AlignmentType.RIGHT,
+                    spacing: { before: 100 }
+                  })
+                ]
+              })
+            ]
+          })
+        ]
+      });
+
+      // 2. Horizontal divider
+      const separator = new Paragraph({
+        spacing: { before: 200, after: 200 },
+        border: {
+          bottom: { style: BorderStyle.SINGLE, size: 12, color: "D1D5DB" }
+        }
+      });
+
+      // 3. Info table Grid
+      const detailsTable = new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        borders: {
+          top: { style: BorderStyle.SINGLE, size: 4, color: "E5E7EB" },
+          bottom: { style: BorderStyle.SINGLE, size: 4, color: "E5E7EB" },
+          left: { style: BorderStyle.SINGLE, size: 4, color: "E5E7EB" },
+          right: { style: BorderStyle.SINGLE, size: 4, color: "E5E7EB" },
+          insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: "F3F4F6" },
+          insideVertical: { style: BorderStyle.SINGLE, size: 4, color: "F3F4F6" }
+        },
+        rows: [
+          new TableRow({
+            children: [
+              new TableCell({
+                width: { size: 50, type: WidthType.PERCENTAGE },
+                shading: { fill: "FAFAFA" },
+                margins: { top: 120, bottom: 120, left: 150, right: 150 },
+                children: [
+                  new Paragraph({
+                    children: [
+                      new TextRun({ text: "Emissão: ", bold: true, size: 18, color: "4B5563", font: "Arial" }),
+                      new TextRun({ text: formatDateBR(faturaMaisRecente.dataEmissao || ''), size: 18, font: "Arial" })
+                    ]
+                  }),
+                  new Paragraph({
+                    children: [
+                      new TextRun({ text: "Paciente: ", bold: true, size: 18, color: "4B5563", font: "Arial" }),
+                      new TextRun({ text: faturaMaisRecente.nomePaciente || '---', size: 18, font: "Arial" })
+                    ],
+                    spacing: { before: 100 }
+                  })
+                ]
+              }),
+              new TableCell({
+                width: { size: 50, type: WidthType.PERCENTAGE },
+                shading: { fill: "FAFAFA" },
+                margins: { top: 120, bottom: 120, left: 150, right: 150 },
+                children: [
+                  new Paragraph({
+                    children: [
+                      new TextRun({ text: "Status: ", bold: true, size: 18, color: "4B5563", font: "Arial" }),
+                      new TextRun({ text: faturaMaisRecente.status || 'Aberta', size: 18, bold: true, color: "15803D", font: "Arial" })
+                    ]
+                  }),
+                  new Paragraph({
+                    children: [
+                      new TextRun({ text: "Valor Total: ", bold: true, size: 18, color: "4B5563", font: "Arial" }),
+                      new TextRun({ text: `R$ ${totalGlobal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, size: 18, bold: true, color: "1A4231", font: "Arial" })
+                    ],
+                    spacing: { before: 100 }
+                  })
+                ]
+              })
+            ]
+          })
+        ]
+      });
+
+      // 4. Services Table Header Row
+      const servicesHeader = new TableRow({
+        children: [
+          new TableCell({
+            width: { size: 15, type: WidthType.PERCENTAGE },
+            shading: { fill: "1A4231" },
+            margins: { top: 150, bottom: 150, left: 150, right: 150 },
+            children: [new Paragraph({ children: [new TextRun({ text: "Data", bold: true, color: "FFFFFF", size: 18, font: "Arial" })] })]
+          }),
+          new TableCell({
+            width: { size: 35, type: WidthType.PERCENTAGE },
+            shading: { fill: "1A4231" },
+            margins: { top: 150, bottom: 150, left: 150, right: 150 },
+            children: [new Paragraph({ children: [new TextRun({ text: "Profissional", bold: true, color: "FFFFFF", size: 18, font: "Arial" })] })]
+          }),
+          new TableCell({
+            width: { size: 35, type: WidthType.PERCENTAGE },
+            shading: { fill: "1A4231" },
+            margins: { top: 150, bottom: 150, left: 150, right: 150 },
+            children: [new Paragraph({ children: [new TextRun({ text: "Serviço", bold: true, color: "FFFFFF", size: 18, font: "Arial" })] })]
+          }),
+          new TableCell({
+            width: { size: 15, type: WidthType.PERCENTAGE },
+            shading: { fill: "1A4231" },
+            margins: { top: 150, bottom: 150, left: 150, right: 150 },
+            children: [new Paragraph({ children: [new TextRun({ text: "Valor", bold: true, color: "FFFFFF", size: 18, font: "Arial" })], alignment: AlignmentType.RIGHT })]
+          })
+        ]
+      });
+
+      // Items Row
+      const serviceRows = plantoes.map((p: any) => {
+        const valorLinha = calculateRowValue(p);
+        return new TableRow({
+          children: [
+            new TableCell({
+              width: { size: 15, type: WidthType.PERCENTAGE },
+              margins: { top: 120, bottom: 120, left: 120, right: 120 },
+              children: [new Paragraph({ children: [new TextRun({ text: formatDateBR(p.data || ''), size: 18, font: "Arial" })] })]
+            }),
+            new TableCell({
+              width: { size: 35, type: WidthType.PERCENTAGE },
+              margins: { top: 120, bottom: 120, left: 120, right: 120 },
+              children: [new Paragraph({ children: [new TextRun({ text: p.nomeProfissional || p.profissional || '---', size: 18, font: "Arial" })] })]
+            }),
+            new TableCell({
+              width: { size: 35, type: WidthType.PERCENTAGE },
+              margins: { top: 120, bottom: 120, left: 120, right: 120 },
+              children: [new Paragraph({ children: [new TextRun({ text: p.tipoDia || 'Plantão Normal', size: 18, font: "Arial" })] })]
+            }),
+            new TableCell({
+              width: { size: 15, type: WidthType.PERCENTAGE },
+              margins: { top: 120, bottom: 120, left: 120, right: 120 },
+              children: [new Paragraph({ children: [new TextRun({ text: `R$ ${valorLinha.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, size: 18, font: "Arial" })], alignment: AlignmentType.RIGHT })]
+            })
+          ]
+        });
+      });
+
+      // Total Row
+      const totalRow = new TableRow({
+        children: [
+          new TableCell({
+            width: { size: 85, type: WidthType.PERCENTAGE },
+            columnSpan: 3,
+            margins: { top: 140, bottom: 140, left: 140, right: 140 },
+            children: [new Paragraph({ children: [new TextRun({ text: "TOTAL", bold: true, size: 20, color: "1A4231", font: "Arial" })], alignment: AlignmentType.RIGHT })]
+          }),
+          new TableCell({
+            width: { size: 15, type: WidthType.PERCENTAGE },
+            shading: { fill: "F3F4F6" },
+            margins: { top: 140, bottom: 140, left: 140, right: 140 },
+            children: [new Paragraph({ children: [new TextRun({ text: `R$ ${totalGlobal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, bold: true, size: 20, color: "1A4231", font: "Arial" })], alignment: AlignmentType.RIGHT })]
+          })
+        ]
+      });
+
+      const servicesTable = new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        borders: {
+          top: { style: BorderStyle.SINGLE, size: 6, color: "1A4231" },
+          bottom: { style: BorderStyle.SINGLE, size: 6, color: "1A4231" },
+          left: { style: BorderStyle.SINGLE, size: 4, color: "E5E7EB" },
+          right: { style: BorderStyle.SINGLE, size: 4, color: "E5E7EB" },
+          insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: "E5E7EB" },
+          insideVertical: { style: BorderStyle.SINGLE, size: 4, color: "E5E7EB" }
+        },
+        rows: [servicesHeader, ...serviceRows, totalRow]
+      });
+
+      // 5. Build Document
+      const doc = new Document({
+        sections: [{
+          properties: {},
+          children: [
+            headerTable,
+            separator,
+            new Paragraph({ children: [new TextRun({ text: "DADOS DA FATURA E PACIENTE", bold: true, size: 20, color: "1A4231", font: "Arial" })], spacing: { after: 120 } }),
+            detailsTable,
+            new Paragraph({ text: "", spacing: { before: 180, after: 180 } }),
+            new Paragraph({ children: [new TextRun({ text: "DETALHAMENTO DE SERVIÇOS PRESTADOS", bold: true, size: 20, color: "1A4231", font: "Arial" })], spacing: { after: 120 } }),
+            servicesTable
+          ]
+        }]
+      });
+
+      const packerBlob = await Packer.toBlob(doc);
+      const url = URL.createObjectURL(packerBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      const safeNumber = invoiceNumber.replace(/\//g, '-');
+      link.download = `fatura_${safeNumber}.docx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast.success(`Fatura ${invoiceNumber} baixada em Word (.docx)!`);
+    } catch (err) {
+      console.error('Erro ao baixar docx:', err);
+      toast.error('Erro ao gerar o arquivo Word.');
+    }
+  };
+
+  const handleBaixarFaturaRecente = async () => {
+    await handleBaixarFaturaExcel();
   };
 
   const handleConfirmExcluir = async () => {
@@ -2366,34 +3044,18 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
             )}
 
             {activeTab === 'agendamento' && (
-              <div className="w-full max-w-xl mx-auto bg-white rounded-2xl shadow-xl border border-gray-200 p-6 md:p-8 mt-6 mb-12 space-y-4 animate-in fade-in-30 slide-in-from-right-3">
+              <div className="w-full max-w-5xl mx-auto bg-white rounded-2xl shadow-xl border border-gray-200 p-6 md:p-8 mt-6 mb-12 space-y-4 animate-in fade-in-30 slide-in-from-right-3">
                 {/* Operations Header Buttons Deck - RH Cuidado Domiciliar */}
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 shadow-xs space-y-2.5">
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-xs space-y-2.5">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block font-sans">🛠️ Controles de Escala Operacional</span>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2.5 items-center justify-start">
                     <button
                       type="button"
-                      onClick={() => setCalendarView('calendario')}
-                      className={`flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold rounded-lg transition-all shadow-xs cursor-pointer ${
-                        calendarView === 'calendario'
-                          ? 'bg-blue-600 text-white font-extrabold ring-2 ring-blue-300'
-                          : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
-                      }`}
+                      onClick={() => setIsFaturaModalOpen(true)}
+                      className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-all shadow-xs cursor-pointer font-sans border border-emerald-500/20"
                     >
-                      <Calendar size={13.5} />
-                      <span>Programação (Mensal)</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setCalendarView('lista')}
-                      className={`flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold rounded-lg transition-all shadow-xs cursor-pointer ${
-                        calendarView === 'lista'
-                          ? 'bg-blue-600 text-white font-extrabold ring-2 ring-blue-300'
-                          : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
-                      }`}
-                    >
-                      <span>📋 Lista de Turnos</span>
+                      <Receipt size={13.5} />
+                      <span>Gerar Fatura</span>
                     </button>
 
                     <button
@@ -2460,13 +3122,20 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
 
                     <button
                       type="button"
-                      onClick={() => {
-                        setImprimirModalOpen(true);
-                      }}
-                      className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-all shadow-xs cursor-pointer font-sans"
+                      onClick={handleBaixarFaturaExcel}
+                      className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-all shadow-xs cursor-pointer font-sans"
+                    >
+                      <Receipt size={13.5} />
+                      <span>Excel (.xlsx)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleBaixarFaturaWord}
+                      className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all shadow-xs cursor-pointer font-sans"
                     >
                       <Printer size={13.5} />
-                      <span>Imprimir</span>
+                      <span>Word (.docx)</span>
                     </button>
                     
                   </div>
@@ -5559,6 +6228,196 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
           </div>
         </div>
       )}
+
+      {isFaturaModalOpen && (() => {
+        const monthPrefix = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}`;
+        const agMes = agendamentos.filter(
+          (a) => a.idPaciente === paciente?.id && a.data && a.data.startsWith(monthPrefix)
+        );
+
+        let sumRep = 0;
+        let sumTx = 0;
+        let countNormal = 0;
+        let countFeriado20 = 0;
+        let countFeriado50 = 0;
+        let concluidos = 0;
+        let cancelados = 0;
+        let ativos = 0;
+
+        agMes.forEach(s => {
+          if (s.status === 'Cancelado') {
+            cancelados++;
+          } else {
+            if (s.status === 'Concluido' || s.escalaCongelada) {
+              concluidos++;
+            } else {
+              ativos++;
+            }
+
+            let base = Number(s.valorPlantao) || Number(paciente?.planoAtendimento?.valorSugeridoPlantao) || 150;
+            let extra = Number(s.ajudaCusto) || Number(paciente?.planoAtendimento?.ajudaCusto) || 0;
+            let baseTaxa = Number(s.taxaAdm) || Number(paciente?.planoAtendimento?.taxaAdm) || 0;
+            if (s.tipoDia === 'Feriado 20%') {
+              countFeriado20++;
+              sumRep += (base * 1.20) + extra;
+              sumTx += baseTaxa * 1.20;
+            } else if (s.tipoDia === 'Feriado 50%') {
+              countFeriado50++;
+              sumRep += (base * 1.50) + extra;
+              sumTx += baseTaxa * 1.50;
+            } else {
+              countNormal++;
+              sumRep += base + extra;
+              sumTx += baseTaxa;
+            }
+          }
+        });
+
+        const grandTotal = sumRep + sumTx;
+        const totalPlantõesValidos = concluidos + ativos;
+        const isEscalaAberta = ativos > 0 || totalPlantõesValidos === 0;
+
+        return (
+          <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-sm flex items-center justify-center z-[110] animate-in fade-in-30 p-4 font-sans text-left">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden max-w-lg w-full flex flex-col transform transition-all duration-300">
+              {/* Header com estilo financeiro */}
+              <div className="bg-gradient-to-r from-emerald-800 to-emerald-950 px-5 py-4 text-white flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="bg-emerald-700/50 p-1.5 rounded-lg border border-emerald-500/30 flex items-center justify-center">
+                    <Receipt size={18} className="text-emerald-300" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black uppercase tracking-wider leading-none">
+                      Faturamento - {['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][calendarMonth]} de {calendarYear}
+                    </h3>
+                    <p className="text-[10px] text-emerald-250/80 mt-1 font-medium leading-none">
+                      Fatura Individual do Paciente: {nome || paciente?.nome || 'Não definido'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsFaturaModalOpen(false)}
+                  className="text-emerald-100 hover:text-white bg-white/10 hover:bg-white/20 p-1.5 rounded-lg transition-colors cursor-pointer"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+
+              {/* Conteúdo Bento Grid */}
+              <div className="p-6 space-y-4 bg-slate-50/50">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-xs">
+                    <span className="text-[9px] font-bold text-slate-400 block uppercase tracking-wider">Paciente Atendido:</span>
+                    <p className="text-xs font-black text-slate-800 mt-1 truncate">{nome || paciente?.nome || '---'}</p>
+                  </div>
+                  <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-xs">
+                    <span className="text-[9px] font-bold text-slate-400 block uppercase tracking-wider">Período Operacional:</span>
+                    <p className="text-xs font-black text-emerald-800 mt-1 font-mono">
+                      {['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][calendarMonth]} / {calendarYear}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Box de Status do Faturamento */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3.5">
+                  <div className="flex justify-between items-center border-b border-slate-100 pb-2.5">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status da Cobertura de Plantões</span>
+                    {isEscalaAberta ? (
+                      <span className="text-[9px] bg-rose-50 text-rose-700 border border-rose-100 px-2 py-0.5 rounded font-black uppercase">
+                        Escala Aberta / Pendente
+                      </span>
+                    ) : (
+                      <span className="text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-100 px-2 py-0.5 rounded font-black uppercase">
+                        Escala Concluída 🔒
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-slate-50/70 p-2.5 rounded-xl border border-slate-100">
+                      <span className="block text-[8.5px] font-bold text-slate-400 uppercase">Turnos Totais</span>
+                      <strong className="block text-sm text-slate-700 mt-0.5">{totalPlantõesValidos}</strong>
+                    </div>
+                    <div className="bg-emerald-50/40 p-2.5 rounded-xl border border-emerald-100/50">
+                      <span className="block text-[8.5px] font-bold text-emerald-600 uppercase">Concluídos</span>
+                      <strong className="block text-sm text-emerald-700 mt-0.5">{concluidos}</strong>
+                    </div>
+                    <div className="bg-amber-50/40 p-2.5 rounded-xl border border-amber-100/50">
+                      <span className="block text-[8.5px] font-bold text-amber-600 uppercase">Abertos / Confirmados</span>
+                      <strong className="block text-sm text-amber-700 mt-0.5">{ativos}</strong>
+                    </div>
+                  </div>
+
+                  {totalPlantõesValidos > 0 && (
+                    <div className="bg-slate-50 border border-slate-150 rounded-xl p-3 font-mono text-[10px] text-slate-600 space-y-1">
+                      <div className="flex justify-between">
+                        <span>Turnos Normais:</span>
+                        <span>{countNormal}x</span>
+                      </div>
+                      {countFeriado20 > 0 && (
+                        <div className="flex justify-between">
+                          <span>Feriados (+20%):</span>
+                          <span>{countFeriado20}x</span>
+                        </div>
+                      )}
+                      {countFeriado50 > 0 && (
+                        <div className="flex justify-between">
+                          <span>Feriados (+50%):</span>
+                          <span>{countFeriado50}x</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between border-t border-slate-200 pt-1 font-bold text-slate-800">
+                        <span>Valor Consolidado:</span>
+                        <span className="text-emerald-700">R$ {grandTotal.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {isEscalaAberta ? (
+                    <div className="p-3 bg-red-50 text-red-900 border border-red-100 rounded-xl flex items-start gap-2.5">
+                      <span className="text-xs pt-0.5">⚠️</span>
+                      <p className="text-[10px] font-medium leading-relaxed font-sans">
+                        <strong>Bloqueio de Faturamento:</strong> Existem {ativos} turnos em status ativo/confirmado pendentes de fechamento. Você deve ir na barra de ações operacionais e clicar em <strong>&quot;Dar Baixa Período&quot;</strong> para finalizar o ciclo operacional antes de poder faturar.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-emerald-50/50 text-emerald-950 border border-emerald-100 rounded-xl flex items-start gap-2.5">
+                      <span className="text-xs pt-0.5">✨</span>
+                      <p className="text-[10px] font-semibold leading-relaxed font-sans">
+                        Consolidação financeira liberada! A escala foi totalmente fechada com assinatura eletrônica. O lançamento irá gerar uma fatura oficial do contas a receber.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer do Dialog */}
+              <div className="bg-white border-t border-slate-150 px-5 py-3.5 flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsFaturaModalOpen(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-extrabold rounded-lg transition-all cursor-pointer font-sans"
+                >
+                  Voltar
+                </button>
+                <button
+                  type="button"
+                  disabled={isEscalaAberta}
+                  onClick={handleGerarFatura}
+                  className={`px-4 py-2 text-white text-xs font-black rounded-lg transition-all shadow-md cursor-pointer font-sans ${
+                    isEscalaAberta 
+                      ? 'bg-slate-300 text-slate-400 border border-slate-200 cursor-not-allowed shadow-none' 
+                      : 'bg-emerald-600 hover:bg-emerald-700 border border-emerald-500/20'
+                  }`}
+                >
+                  Confirmar e Gerar Fatura
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {deleteRecordDialog?.isOpen && (
         <div className="fixed inset-0 bg-slate-900/60 z-[120] backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200 font-sans">

@@ -38,7 +38,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'dashboard', label: 'Início', icon: Activity, desc: 'Visão Executiva 360º' },
     { id: 'pacientes', label: 'Pacientes', icon: Users, desc: 'Gestão de Planos & Prontuários' },
     { id: 'profissionais', label: 'Profissionais', icon: Briefcase, desc: 'Cuidadores & Enfermagem' },
-    { id: 'escalas', label: 'Escalas', icon: Calendar, desc: 'Alocação diária' },
     { id: 'financeiro', label: 'Faturas & Pagamentos', icon: DollarSign, desc: 'Gestão Financeira' },
     { id: 'empresa', label: 'Empresa', icon: Building2, desc: 'Configurações corporativas' },
   ];

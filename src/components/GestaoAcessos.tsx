@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
 import { Trash2, Plus, Edit, AlertCircle } from 'lucide-react';
-import { UsuarioSistema } from '../types';
+import { UsuarioSistema, validarDominioCorporativo } from '../types';
 import { auth } from '../lib/firebase';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { toast } from 'react-hot-toast';
@@ -24,6 +24,13 @@ export const GestaoAcessos: React.FC = () => {
 
   const handleAddOrEditUser = async () => {
     if (!nome || !email) return alert('Preencha nome e email!');
+
+    const domainAllowed = await validarDominioCorporativo(email);
+    if (!domainAllowed) {
+      toast.error('Acesso restrito. O domínio do seu e-mail não está autorizado nas configurações da empresa.');
+      return;
+    }
+
     try {
       if (editingId) {
         await updateUsuarioSistema({ id: editingId, nome, email, nivelAcesso: nivel, status: 'Ativo' });

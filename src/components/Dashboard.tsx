@@ -136,7 +136,6 @@ export const Dashboard: React.FC<{
   const quickActions = [
     { id: 'btn-dash-cadastrar-paciente', title: 'Cadastrar Paciente', icon: UserPlus, tab: 'pacientes' },
     { id: 'btn-dash-cadastrar-profissional', title: 'Cadastrar Profissional', icon: Users, tab: 'profissionais' },
-    { id: 'btn-dash-novo-agendamento', title: 'Novo Agendamento', icon: Calendar, tab: 'escalas' },
     { id: 'btn-dash-cadastrar-debito', title: 'Cadastrar Débito', icon: Receipt, tab: 'financeiro', extra: { financeiroSubTab: 'debitos' } },
     { id: 'btn-dash-gerar-faturamento', title: 'Gerar Faturamento', icon: DollarSign, tab: 'financeiro' },
   ];

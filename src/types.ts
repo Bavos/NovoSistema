@@ -260,3 +260,15 @@ export interface FolhaPagamento {
   plantoesCongelados?: any[];
 }
 
+import { validarDominioCorporativo } from './lib/authUtils';
+
+export { validarDominioCorporativo };
+
+export const DOMINIOS_CORPORATIVOS_PERMITIDOS = ['@vallidare.com.br', '@cuidarhome.com.br', '@rhcuidado.com.br'];
+
+export async function isEmailAllowed(email: string): Promise<boolean> {
+  return await validarDominioCorporativo(email);
+}
+
+
+
