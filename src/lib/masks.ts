@@ -54,3 +54,14 @@ export const mascaraCEP = (value: string): string => {
   if (limited.length <= 5) return limited;
   return `${limited.slice(0, 5)}-${limited.slice(5)}`;
 };
+
+/**
+ * Aplica máscara de Mês/Ano: 00/00 (Máximo 5 caracteres)
+ */
+export const mascaraMesAno = (value: string): string => {
+  const clean = value.replace(/\D/g, '');
+  const limited = clean.slice(0, 4);
+  if (limited.length <= 2) return limited;
+  return `${limited.slice(0, 2)}/${limited.slice(2)}`;
+};
+

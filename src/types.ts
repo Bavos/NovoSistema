@@ -133,6 +133,7 @@ export interface DadosPagamento {
   opcaoEnvio: 'WhatsApp' | 'E-mail' | 'Ambos';
   whatsappFaturamento?: string;
   emailFaturamento?: string;
+  dataReajuste?: string;
 }
 
 export interface OcorrenciaPaciente {

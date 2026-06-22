@@ -43,8 +43,8 @@ interface FirebaseContextType {
   logout: () => Promise<void>;
   forgotPassword: (email: string) => Promise<void>;
   profissionais: Profissional[];
-  addPaciente: (paciente: Omit<Paciente, 'id' | 'createdAt' | 'status'>) => Promise<Paciente>;
-  updatePaciente: (paciente: Paciente) => Promise<void>;
+  addPaciente: (paciente: Omit<Paciente, 'id' | 'createdAt' | 'status'>, skipNotification?: boolean) => Promise<Paciente>;
+  updatePaciente: (paciente: Paciente, skipNotification?: boolean) => Promise<void>;
   deactivatePaciente: (id: string, motivo: string) => Promise<void>;
   reactivatePaciente: (id: string) => Promise<void>;
   cancelPlantao: (id: string, motivo: CancelingReason) => Promise<void>;
@@ -402,7 +402,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
-  const addPaciente = async (newPac: Omit<Paciente, 'id' | 'createdAt' | 'status'>) => {
+  const addPaciente = async (newPac: Omit<Paciente, 'id' | 'createdAt' | 'status'>, skipNotification?: boolean) => {
     const id = `pac-${Date.now()}`;
     const fullPaciente: Paciente = {
       ...newPac,
@@ -417,7 +417,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       console.log(`[Firebase] setDoc, paciente id: ${id}`);
       await setDoc(doc(db, 'pacientes', id), fullPaciente);
       await addAuditLog('CREATE', 'pacientes', id, `Paciente criado: ${fullPaciente.nome}`);
-      setNotification(`Paciente '${fullPaciente.nome}' criado com sucesso.`);
+      if (!skipNotification) {
+        setNotification(`Paciente '${fullPaciente.nome}' criado com sucesso.`);
+      }
       return fullPaciente;
     } catch (err) {
       console.error(`[Firebase] Erro setDoc: ${err}`);
@@ -426,11 +428,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
-  const updatePaciente = async (updatedPac: Paciente) => {
+  const updatePaciente = async (updatedPac: Paciente, skipNotification?: boolean) => {
     try {
       await setDoc(doc(db, 'pacientes', updatedPac.id), updatedPac);
       await addAuditLog('UPDATE', 'pacientes', updatedPac.id, `Paciente atualizado: ${updatedPac.nome}`);
-      setNotification(`Paciente '${updatedPac.nome}' atualizado com sucesso.`);
+      if (!skipNotification) {
+        setNotification(`Paciente '${updatedPac.nome}' atualizado com sucesso.`);
+      }
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `pacientes/${updatedPac.id}`);
       throw err;

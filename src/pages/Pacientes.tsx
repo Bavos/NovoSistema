@@ -56,6 +56,7 @@ export const Pacientes: React.FC<PacientesProps> = ({ globalSearchQuery, onViewC
         <PatientRecord
           paciente={selectedPaciente}
           onBack={handleBackToList}
+          onSelectPatient={handleSelectPatient}
         />
       </ErrorBoundary>
     );

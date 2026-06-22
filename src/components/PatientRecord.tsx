@@ -12,7 +12,7 @@ import { useFirebase } from '../context/FirebaseContext';
 import { usePacienteData } from '../hooks/usePacienteData';
 import { CardBase, DataGrid, DataField, SoftBadge } from './ui/DesignSystem';
 import { pacienteSchema } from '../schemas/validationSchemas';
-import { mascaraCPF, mascaraTelefone, mascaraCEP } from '../lib/masks';
+import { mascaraCPF, mascaraTelefone, mascaraCEP, mascaraMesAno } from '../lib/masks';
 import {
   Save,
   Lock,
@@ -126,9 +126,10 @@ const getDaysInMonthGrid = (monthIndex: number, year: number, customHolidays?: R
 interface PatientRecordProps {
   paciente: Paciente | null; // null represents "Novo Paciente"
   onBack: () => void;
+  onSelectPatient?: (paciente: Paciente) => void;
 }
 
-export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }) => {
+export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, onSelectPatient }) => {
   const {
     pacientes,
     addPaciente,
@@ -442,6 +443,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
   const [opcaoEnvio, setOpcaoEnvio] = useState<'WhatsApp' | 'E-mail' | 'Ambos'>('WhatsApp');
   const [whatsappFaturamento, setWhatsappFaturamento] = useState('');
   const [emailFaturamento, setEmailFaturamento] = useState('');
+  const [dataReajuste, setDataReajuste] = useState('');
 
   // Endereço block
   const [rua, setRua] = useState('');
@@ -629,6 +631,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
       setOpcaoEnvio(paciente.dadosPagamento?.opcaoEnvio || 'WhatsApp');
       setWhatsappFaturamento(paciente.dadosPagamento?.whatsappFaturamento || '');
       setEmailFaturamento(paciente.dadosPagamento?.emailFaturamento || '');
+      setDataReajuste(paciente.dadosPagamento?.dataReajuste || '');
 
       setRua(paciente.endereco.rua);
       setNumero(paciente.endereco.numero);
@@ -820,6 +823,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
         opcaoEnvio,
         whatsappFaturamento: (opcaoEnvio === 'WhatsApp' || opcaoEnvio === 'Ambos') ? whatsappFaturamento : '',
         emailFaturamento: (opcaoEnvio === 'E-mail' || opcaoEnvio === 'Ambos') ? emailFaturamento : '',
+        dataReajuste,
       },
     };
 
@@ -827,10 +831,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
       console.log("Tentando salvar paciente", { isNew, patientPayload });
       if (isNew) {
         console.log("Chamando addPaciente");
-        const result = await addPaciente(patientPayload);
+        const result = await addPaciente(patientPayload, true);
         toast.success(`Paciente ${result.nome} cadastrado com sucesso!`, {
           icon: '✅',
         });
+        if (onSelectPatient) {
+          onSelectPatient(result);
+        }
       } else if (paciente) {
         console.log("Chamando updatePaciente", paciente.id);
         const updatedObj: Paciente = {
@@ -840,14 +847,16 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
           desativadoEm: pDeactDate,
           desativadoMotivo: pDeactReason,
         };
-        await updatePaciente(updatedObj);
-        toast.success('Alterações salvas com sucesso!', {
+        await updatePaciente(updatedObj, true);
+        toast.success(`Paciente ${updatedObj.nome} atualizado com sucesso!`, {
           icon: '✅',
         });
+        if (onSelectPatient) {
+          onSelectPatient(updatedObj);
+        }
       } else {
         console.warn("Nem novo nem paciente existente?");
       }
-      onBack();
     } catch (err: any) {
       console.error('Erro ao tentar salvar o prontuário:', err);
       toast.error('Erro ao tentar salvar o prontuário: ' + err.message);
@@ -2548,6 +2557,19 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                           />
                         </div>
                       )}
+
+                      <div className="space-y-1">
+                        <label className="block text-xs font-medium text-gray-700">Data do reajuste (mm/aa)</label>
+                        <input
+                          type="text"
+                          disabled={isCurrentlyDeactivated}
+                          value={dataReajuste}
+                          onChange={(e) => setDataReajuste(mascaraMesAno(e.target.value))}
+                          maxLength={5}
+                          className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
+                          placeholder="Ex: 12/26"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -6079,6 +6101,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                     <div>
                       <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">E-mail p/ Faturamento:</span>
                       <p className="font-medium text-slate-750 mt-1 truncate">{emailFaturamento || '---'}</p>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Data do Reajuste:</span>
+                      <p className="font-medium text-slate-750 mt-1">{dataReajuste || '---'}</p>
                     </div>
                   </div>
                 </div>

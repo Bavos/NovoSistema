@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
 import { db } from '../lib/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { Users, UserPlus, Calendar, DollarSign, Receipt, Gift } from 'lucide-react';
+import { Users, UserPlus, Calendar, DollarSign, Receipt, Gift, Check } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import { DebitoProfissional } from '../types';
 
 export const Dashboard: React.FC<{
   setActiveTab: (tab: string, extraOptions?: { financeiroSubTab?: 'folhas' | 'debitos' }) => void;
 }> = ({ setActiveTab }) => {
-  const { pacientes, profissionais } = useFirebase();
+  const { pacientes, profissionais, updatePaciente } = useFirebase();
   const [debitosDoDia, setDebitosDoDia] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -133,6 +134,67 @@ export const Dashboard: React.FC<{
     return unsub;
   }, []);
 
+  const getTargetReadjustmentMonthYear = (): string => {
+    const today = new Date();
+    let nextMonth = today.getMonth() + 1;
+    let nextYear = today.getFullYear();
+    if (nextMonth > 11) {
+      nextMonth = 0;
+      nextYear += 1;
+    }
+    const mm = String(nextMonth + 1).padStart(2, '0');
+    const yy = String(nextYear).slice(-2);
+    return `${mm}/${yy}`;
+  };
+
+  const targetMonthYear = getTargetReadjustmentMonthYear();
+
+  const pacientesComReajuste = activePacientes.filter((p) => {
+    const rDate = p.dadosPagamento?.dataReajuste?.trim();
+    return rDate === targetMonthYear;
+  });
+
+  const handleConcluirReajuste = async (p: any) => {
+    try {
+      const currentData = p.dadosPagamento?.dataReajuste || '';
+      const parts = currentData.split('/');
+      let nextData = '';
+      if (parts.length === 2) {
+        const month = parts[0];
+        const yearNum = parseInt(parts[1], 10);
+        if (!isNaN(yearNum)) {
+          const nextYear = String(yearNum + 1).padStart(2, '0');
+          nextData = `${month}/${nextYear}`;
+        }
+      }
+      
+      if (!nextData) {
+        const today = new Date();
+        const nextMonth = today.getMonth() + 1;
+        const futureYear = today.getFullYear() + 1;
+        const mm = String(nextMonth > 11 ? 1 : nextMonth + 1).padStart(2, '0');
+        const yy = String(nextMonth > 11 ? futureYear + 1 : futureYear).slice(-2);
+        nextData = `${mm}/${yy}`;
+      }
+
+      const updatedPaciente = {
+        ...p,
+        dadosPagamento: {
+          ...(p.dadosPagamento || {}),
+          dataReajuste: nextData,
+        }
+      };
+
+      await updatePaciente(updatedPaciente, true);
+      toast.success(`Reajuste do paciente ${p.nome} registrado com sucesso para ${nextData}!`, {
+        icon: '✅',
+      });
+    } catch (err: any) {
+      console.error('Erro ao registrar reajuste:', err);
+      toast.error('Erro ao atualizar data de reajuste: ' + err.message);
+    }
+  };
+
   const quickActions = [
     { id: 'btn-dash-cadastrar-paciente', title: 'Cadastrar Paciente', icon: UserPlus, tab: 'pacientes' },
     { id: 'btn-dash-cadastrar-profissional', title: 'Cadastrar Profissional', icon: Users, tab: 'profissionais' },
@@ -242,6 +304,41 @@ export const Dashboard: React.FC<{
 
         {/* Shortcuts / Quick Actions Section */}
         <div className="lg:col-span-1 flex flex-col space-y-4" id="section-quick-actions">
+          {/* Avisos de Reajuste Section */}
+          {pacientesComReajuste.length > 0 && (
+            <div className="bg-white p-6 rounded-2xl border border-forest-green/10 shadow-sm flex flex-col" id="section-avisos-reajuste">
+              <div className="flex items-center gap-4 border-b border-forest-green/5 pb-4 mb-4">
+                <div className="p-3 bg-[#e8e4db] text-mustard-gold rounded-2xl shrink-0">
+                  <Calendar size={24} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-serif font-bold text-forest-green" id="title-avisos-reajuste">Avisos de Reajuste</h3>
+                  <p className="text-xs text-forest-green/70">Reajustes contratuais programados para o próximo mês ({targetMonthYear})</p>
+                </div>
+              </div>
+
+              <div className="space-y-3" id="readjustment-list">
+                {pacientesComReajuste.map((pac) => (
+                  <div key={pac.id} className="flex items-center justify-between p-3 rounded-xl bg-[#faf9f6] hover:bg-[#e8e4db]/40 border border-forest-green/5 transition-all duration-150" id={`readjustment-id-${pac.id}`}>
+                    <div className="min-w-0 pr-2">
+                      <p className="text-xs font-bold text-forest-green truncate">{pac.nome}</p>
+                      <p className="text-[10px] text-forest-green/60 font-medium whitespace-nowrap">Reajuste em: <span className="font-bold text-red-800">{pac.dadosPagamento?.dataReajuste}</span></p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleConcluirReajuste(pac)}
+                      title="Concluir reajuste"
+                      className="p-1.5 bg-[#e8f0ec] hover:bg-forest-green text-forest-green hover:text-white rounded-lg border border-forest-green/10 transition-all cursor-pointer flex items-center justify-center shrink-0"
+                      id={`btn-concluir-reajuste-${pac.id}`}
+                    >
+                      <Check size={14} className="stroke-[3]" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="bg-white p-6 rounded-2xl border border-forest-green/10 shadow-sm flex flex-col h-full">
             <h3 className="text-md font-serif font-bold text-forest-green mb-5 border-b border-forest-green/5 pb-4" id="title-quick-actions">Ações Rápidas</h3>
             <div className="grid grid-cols-1 gap-4 flex-1">
