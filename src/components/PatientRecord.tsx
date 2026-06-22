@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { updateDoc, doc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { updateDoc, doc, addDoc, collection, serverTimestamp, getDocs, query, where, deleteDoc } from 'firebase/firestore';
 import { fetchCep, fetchBanks, getHolidays } from '../lib/brasilApi';
 import { Paciente, Plantao, CancelingReason, EscalacaoPlano, Agendamento } from '../types';
 import { useFirebase } from '../context/FirebaseContext';
@@ -4330,19 +4330,31 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                             nomeProfissional: detailsProfName,
                             data: detailsDate,
                             horario: `${chosenHoraInicio}-${getTerminoTime(chosenHoraInicio, durationHrs)}`,
-                            valorPlantao: plantaoFinal,
-                            valorRepasse: plantaoFinal,
-                            ajudaCusto: finalAjuda,
-                            taxaAdm: taxaAdmFinal,
+                            valorPlantao: considerarFalta ? 0 : plantaoFinal,
+                            valorRepasse: considerarFalta ? 0 : plantaoFinal,
+                            ajudaCusto: considerarFalta ? 0 : finalAjuda,
+                            taxaAdm: considerarFalta ? 0 : taxaAdmFinal,
                             tipoDia: detailsTipoDia,
                             isCuringa: detailsCuringa,
                             observacao: detailsCuringa ? 'CURINGA' : (selectedShiftForDetails.observacao === 'CURINGA' ? '' : selectedShiftForDetails.observacao),
                             considerarFalta,
-                            motivoFalta: considerarFalta ? motivoFalta : 'Não Informado',
+                            motivoFalta: considerarFalta ? motivoFalta : '',
                             atendimentoRealizado
                           };
 
                           await updateAgendamento(updatedAg);
+
+                          const hadAbsence = !!selectedShiftForDetails.considerarFalta;
+                          const hasNoAbsence = !considerarFalta;
+                          if (hadAbsence && hasNoAbsence && selectedShiftForDetails.idProfissional && selectedShiftForDetails.idProfissional !== 'n/a') {
+                            const oclRef = collection(db, 'profissionais', selectedShiftForDetails.idProfissional, 'ocorrencias');
+                            const q = query(oclRef, where('data', '==', selectedShiftForDetails.data), where('tipo', '==', 'automatica'));
+                            getDocs(q).then((qSnap) => {
+                              qSnap.docs.forEach((docSnap) => {
+                                deleteDoc(doc(db, 'profissionais', selectedShiftForDetails.idProfissional, 'ocorrencias', docSnap.id)).catch(e => console.error(e));
+                              });
+                            }).catch(e => console.error("Erro ao remover ocorrência automática:", e));
+                          }
 
                           if (considerarFalta && updatedAg.idProfissional && updatedAg.idProfissional !== 'n/a') {
                             try {
@@ -4354,6 +4366,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack }
                                 descricao: 'Falta registrada via Agenda. Motivo: ' + (updatedAg.motivoFalta || 'Não Informado'),
                                 tipo: 'automatica',
                                 bloquearEscala: false,
+                                mesAno: updatedAg.data.substring(0, 7),
                                 timestamp: serverTimestamp()
                               });
                             } catch (errOc) {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import html2canvas from 'html2canvas';
 import { useFirebase } from '../context/FirebaseContext';
 import { Profissional, Agendamento, DocumentoAnexo, Ocorrencia } from '../types';
@@ -51,6 +51,22 @@ export const Profissionais: React.FC = () => {
 
   // Estados para Gestão de Ocorrências e Bloqueio
   const [ocorrencias, setOcorrencias] = useState<Ocorrencia[]>([]);
+
+  const totalFaltasMes = useMemo(() => {
+    const currentMonth = new Date().toISOString().substring(0, 7); // e.g. "2026-06"
+    return ocorrencias.filter(oc => {
+      const ocMonth = oc.mesAno || (oc.data ? oc.data.substring(0, 7) : '');
+      return oc.tipo === 'automatica' && ocMonth === currentMonth;
+    }).length;
+  }, [ocorrencias]);
+
+  const totalDebitosMes = useMemo(() => {
+    const currentMonth = new Date().toISOString().substring(0, 7); // e.g. "2026-06"
+    return ocorrencias.filter(oc => {
+      const ocMonth = oc.mesAno || (oc.data ? oc.data.substring(0, 7) : '');
+      return oc.tipo === 'automatica_debito' && ocMonth === currentMonth;
+    }).reduce((sum, oc) => sum + (Number((oc as any).valor) || 0), 0);
+  }, [ocorrencias]);
   const [ocData, setOcData] = useState(new Date().toISOString().split('T')[0]);
   const [ocPacienteId, setOcPacienteId] = useState('');
   const [ocDescricao, setOcDescricao] = useState('');
@@ -1119,6 +1135,31 @@ export const Profissionais: React.FC = () => {
                       </div>
                     </div>
 
+                    {/* Bento Grid Dashboard de Ocorrências Mensais */}
+                    <div className="grid grid-cols-2 gap-4 mb-6">
+                      <div className="p-4 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-between">
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-bold text-orange-700 uppercase tracking-widest block">Faltas neste mês</span>
+                          <span className="text-3xl font-black text-orange-900 block leading-none">{totalFaltasMes}</span>
+                        </div>
+                        <div className="p-3 bg-white/60 rounded-lg text-orange-700 border border-orange-200">
+                          <AlertCircle className="w-6 h-6" />
+                        </div>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-between">
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-bold text-rose-700 uppercase tracking-widest block">Débitos neste mês</span>
+                          <span className="text-3xl font-black text-rose-900 block leading-none">
+                            {totalDebitosMes.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                          </span>
+                        </div>
+                        <div className="p-3 bg-white/60 rounded-lg text-rose-700 border border-rose-200">
+                          <CalendarDays className="w-6 h-6" />
+                        </div>
+                      </div>
+                    </div>
+
                     {/* Histórico de Ocorrências */}
                     <div className="space-y-2">
                       <h4 className="text-xs font-black text-[#1a3c2e] uppercase tracking-wider block">
@@ -1161,6 +1202,11 @@ export const Profissionais: React.FC = () => {
                                       {oc.tipo === 'automatica' && (
                                         <span className="inline-block bg-sky-50 text-sky-700 px-2 py-0.5 rounded-full text-[10px] font-black border border-sky-200 uppercase tracking-wide">
                                           Sistema / Falta
+                                        </span>
+                                      )}
+                                      {oc.tipo === 'automatica_debito' && (
+                                        <span className="inline-block bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full text-[10px] font-black border border-rose-200 uppercase tracking-wide">
+                                          Sistema / Débito
                                         </span>
                                       )}
                                     </div>

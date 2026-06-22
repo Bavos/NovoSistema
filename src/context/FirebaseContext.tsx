@@ -20,6 +20,8 @@ import {
   onSnapshot,
   getDocs,
   getDocFromServer,
+  getDoc,
+  serverTimestamp,
   query,
   where,
   orderBy
@@ -689,6 +691,54 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       };
       const docRef = await addDoc(collection(db, 'debitos_profissionais'), dataToSave);
       await addAuditLog('CREATE', 'debitos_profissionais', docRef.id, `Débito adicionado para o profissional ${debito.nomeProfissional}: R$ ${debito.valor}`);
+
+      // Auto-create occurrence in professional's subcollection
+      try {
+        let dateStr = '';
+        if (!debito.data) {
+          dateStr = new Date().toISOString().split('T')[0];
+        } else {
+          try {
+            let dObj: Date;
+            if (typeof debito.data.toDate === 'function') {
+              dObj = debito.data.toDate();
+            } else if (debito.data instanceof Date) {
+              dObj = debito.data;
+            } else if (debito.data.seconds) {
+              dObj = new Date(debito.data.seconds * 1000);
+            } else if (typeof debito.data === 'string') {
+              dateStr = debito.data.includes('T') ? debito.data.split('T')[0] : debito.data;
+            } else {
+              dObj = new Date(debito.data);
+            }
+            if (!dateStr) {
+              const y = dObj.getFullYear();
+              const m = String(dObj.getMonth() + 1).padStart(2, '0');
+              const d = String(dObj.getDate()).padStart(2, '0');
+              dateStr = `${y}-${m}-${d}`;
+            }
+          } catch (e) {
+            dateStr = new Date().toISOString().split('T')[0];
+          }
+        }
+
+        await addDoc(collection(db, 'profissionais', debito.idProfissional, 'ocorrencias'), {
+          data: dateStr,
+          paciente: debito.nomePaciente || 'Não se aplica',
+          pacienteNome: debito.nomePaciente || 'Não se aplica',
+          pacienteId: debito.idPaciente || 'n/a',
+          descricao: 'Débito lançado via sistema. Motivo: ' + debito.motivo + ' | Valor: R$ ' + debito.valor,
+          tipo: 'automatica_debito',
+          bloquearEscala: false,
+          debitoIdOriginado: docRef.id,
+          valor: Number(debito.valor),
+          mesAno: dateStr.substring(0, 7),
+          timestamp: serverTimestamp()
+        });
+      } catch (errOc) {
+        console.error("Erro ao gerar ocorrência automática de débito:", errOc);
+      }
+
       setNotification(`Débito de R$ ${debito.valor} registrado com sucesso para ${debito.nomeProfissional}.`);
       return { id: docRef.id, ...dataToSave } as DebitoProfissional;
     } catch (err) {
@@ -700,6 +750,25 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const deleteDebitoProfissional = async (id: string) => {
     try {
+      // Fetch the debit first to find out which professional it belongs to
+      try {
+        const debSnap = await getDoc(doc(db, 'debitos_profissionais', id));
+        if (debSnap.exists()) {
+          const debData = debSnap.data();
+          if (debData && debData.idProfissional) {
+            // Find and delete the automatic ocorrencia for this debit
+            const oclRef = collection(db, 'profissionais', debData.idProfissional, 'ocorrencias');
+            const q = query(oclRef, where('debitoIdOriginado', '==', id));
+            const qSnap = await getDocs(q);
+            for (const docSnap of qSnap.docs) {
+              await deleteDoc(doc(db, 'profissionais', debData.idProfissional, 'ocorrencias', docSnap.id));
+            }
+          }
+        }
+      } catch (errRevert) {
+        console.error("Erro na reversão automática de ocorrência de débito:", errRevert);
+      }
+
       await deleteDoc(doc(db, 'debitos_profissionais', id));
       await addAuditLog('DELETE', 'debitos_profissionais', id, `Débito excluído`);
       setNotification('Débito removido com sucesso.');

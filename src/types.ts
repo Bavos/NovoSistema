@@ -64,6 +64,8 @@ export interface Ocorrencia {
   createdAt?: string;
   tipo?: string;
   paciente?: string;
+  valor?: number;
+  mesAno?: string;
   timestamp?: any;
 }
 
