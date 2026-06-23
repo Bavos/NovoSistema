@@ -18,7 +18,8 @@ import {
   addDoc, 
   deleteDoc, 
   limit,
-  Timestamp 
+  Timestamp,
+  writeBatch
 } from 'firebase/firestore';
 import { 
   Database, 
@@ -30,7 +31,9 @@ import {
   Check, 
   ShieldCheck, 
   Info,
-  AlertTriangle 
+  AlertTriangle,
+  Settings,
+  RotateCcw
 } from 'lucide-react';
 import { Paciente } from '../types';
 
@@ -55,6 +58,156 @@ export const BackupProntuarios: React.FC = () => {
   const [showFullHistoryModal, setShowFullHistoryModal] = useState(false);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+
+  const handleRestoreFromCloud = async (record: BackupRecord) => {
+    const isConfirmed = window.confirm(
+      'Atenção: Esta ação irá sobrescrever os prontuários ativos no Firestore com os dados salvos nesta data. Deseja continuar?'
+    );
+    if (!isConfirmed) return;
+
+    setIsRestoring(true);
+    try {
+      const patientsArray = JSON.parse(record.dadosPacientes) as Paciente[];
+      
+      // Get current patients to delete them to ensure full overwrite and no orphaned documents
+      const currentSnap = await getDocs(collection(db, 'pacientes'));
+      
+      const ops: { type: 'delete' | 'set'; id: string; data?: any }[] = [];
+      currentSnap.forEach(d => {
+        ops.push({ type: 'delete', id: d.id });
+      });
+      patientsArray.forEach(p => {
+        ops.push({ type: 'set', id: p.id, data: p });
+      });
+
+      // Write in batches of 400
+      const chunkSize = 400;
+      for (let i = 0; i < ops.length; i += chunkSize) {
+        const chunk = ops.slice(i, i + chunkSize);
+        const batch = writeBatch(db);
+        chunk.forEach(op => {
+          const docRef = doc(db, 'pacientes', op.id);
+          if (op.type === 'delete') {
+            batch.delete(docRef);
+          } else {
+            batch.set(docRef, op.data);
+          }
+        });
+        await batch.commit();
+      }
+
+      // Add audit log
+      await addDoc(collection(db, 'logs_auditoria'), {
+        timestamp: new Date().toISOString(),
+        userId: user?.uid || 'admin',
+        action: 'RESTORE',
+        collection: 'pacientes',
+        documentId: record.id,
+        description: `Restauração de backup realizada a partir do ponto de restauração de ${formatTimestamp(record.timestamp)}. Total de ${patientsArray.length} prontuários restaurados.`
+      });
+
+      toast.success('Banco de dados restaurado com sucesso a partir do backup!');
+      setShowFullHistoryModal(false);
+    } catch (err: any) {
+      console.error('Erro ao restaurar backup:', err);
+      toast.error('Erro ao restaurar backup: ' + (err.message || String(err)));
+    } finally {
+      setIsRestoring(false);
+    }
+  };
+
+  const handleImportBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsRestoring(true);
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const content = event.target?.result as string;
+        const parsed = JSON.parse(content);
+
+        // Validation rule to verify if structure matches medical records (array of patients)
+        if (!Array.isArray(parsed)) {
+          throw new Error('O arquivo JSON deve conter um array de pacientes.');
+        }
+
+        if (parsed.length > 0) {
+          const first = parsed[0];
+          // Prontuários medical records have fields like nome, status, and typically informacoesMedicas or planoAtendimento
+          if (!first.nome || !first.status) {
+            throw new Error('Estrutura inválida de prontuário de paciente. Campos nome e status são obrigatórios.');
+          }
+        } else {
+          throw new Error('O arquivo JSON está vazio ou não possui registros.');
+        }
+
+        const confirmRestore = window.confirm(
+          `Atenção: Esta ação irá importar ${parsed.length} prontuário(s) e sobrescrever os prontuários ativos no Firestore. Deseja continuar?`
+        );
+        if (!confirmRestore) {
+          setIsRestoring(false);
+          // Reset file input
+          e.target.value = '';
+          return;
+        }
+
+        // Perform overwrite logic
+        const currentSnap = await getDocs(collection(db, 'pacientes'));
+        const ops: { type: 'delete' | 'set'; id: string; data?: any }[] = [];
+        currentSnap.forEach(d => {
+          ops.push({ type: 'delete', id: d.id });
+        });
+        parsed.forEach((p: any) => {
+          const id = p.id || doc(collection(db, 'pacientes')).id;
+          ops.push({ type: 'set', id, data: p });
+        });
+
+        // Write in batches of 400
+        const chunkSize = 400;
+        for (let i = 0; i < ops.length; i += chunkSize) {
+          const chunk = ops.slice(i, i + chunkSize);
+          const batch = writeBatch(db);
+          chunk.forEach(op => {
+            const docRef = doc(db, 'pacientes', op.id);
+            if (op.type === 'delete') {
+              batch.delete(docRef);
+            } else {
+              batch.set(docRef, op.data);
+            }
+          });
+          await batch.commit();
+        }
+
+        // Add audit log
+        await addDoc(collection(db, 'logs_auditoria'), {
+          timestamp: new Date().toISOString(),
+          userId: user?.uid || 'admin',
+          action: 'RESTORE_MANUAL',
+          collection: 'pacientes',
+          documentId: 'import_manual',
+          description: `Restauração de backup manual via arquivo JSON executada por ${user?.email || 'Administrador'}. Total de ${parsed.length} prontuários restaurados.`
+        });
+
+        toast.success('Banco de dados restaurado com sucesso a partir do backup!');
+      } catch (err: any) {
+        console.error('Erro na importação manual:', err);
+        toast.error('Falha na importação: ' + (err.message || String(err)));
+      } finally {
+        setIsRestoring(false);
+        e.target.value = ''; // Reset file input
+      }
+    };
+
+    reader.onerror = () => {
+      toast.error('Erro ao ler o arquivo selecionado.');
+      setIsRestoring(false);
+      e.target.value = ''; // Reset file input
+    };
+
+    reader.readAsText(file);
+  };
 
   // Load backups list & configuration on mount
   useEffect(() => {
@@ -588,6 +741,15 @@ export const BackupProntuarios: React.FC = () => {
                   <div className="flex items-center gap-1.5 self-end sm:self-auto flex-wrap sm:flex-nowrap">
                     <button
                       type="button"
+                      onClick={(e) => { e.stopPropagation(); handleRestoreFromCloud(bk); }}
+                      className="min-h-[38px] p-2 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-colors border border-blue-200/50"
+                      title="Restaurar este Backup no banco de dados ativo"
+                    >
+                      <RotateCcw size={13} className="text-blue-600" />
+                      <span>Restaurar este Backup</span>
+                    </button>
+                    <button
+                      type="button"
                       onClick={(e) => { e.stopPropagation(); handleExportJSON(bk); }}
                       className="min-h-[38px] p-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
                       title="Exportar dados para arquivo JSON"
@@ -713,6 +875,15 @@ export const BackupProntuarios: React.FC = () => {
                     <div className="flex items-center gap-1.5 self-end sm:self-auto flex-wrap sm:flex-nowrap">
                       <button
                         type="button"
+                        onClick={(e) => { e.stopPropagation(); handleRestoreFromCloud(bk); }}
+                        className="p-1.5 px-2.5 min-h-[36px] bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg font-bold text-[10px] flex items-center gap-1 cursor-pointer transition-colors border border-blue-200/50"
+                        title="Restaurar este Backup no banco de dados ativo"
+                      >
+                        <RotateCcw size={11} className="text-blue-600" />
+                        <span>Restaurar</span>
+                      </button>
+                      <button
+                        type="button"
                         onClick={(e) => { e.stopPropagation(); handleExportJSON(bk); }}
                         className="p-1.5 px-2.5 min-h-[36px] bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-[10px] flex items-center gap-1 cursor-pointer transition-colors"
                         title="Exportar dados para arquivo JSON"
@@ -788,12 +959,48 @@ export const BackupProntuarios: React.FC = () => {
         </div>
       )}
 
+      {/* Seção de Recuperação Manual via Arquivo */}
+      <div className="bg-slate-50 p-4 border border-slate-200 rounded-xl space-y-3" id="manual-restore-section">
+        <h4 className="font-bold text-slate-750 flex items-center gap-1 text-xs">
+          <span>📂 Recuperação Manual via Arquivo</span>
+        </h4>
+        <p className="text-[11px] text-slate-500 leading-normal">
+          Selecione e envie um arquivo de backup em formato <strong className="text-slate-700">.json</strong> exportado anteriormente pelo sistema para restaurar todos os prontuários ativos no Firestore.
+        </p>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 px-3 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 hover:border-slate-300 rounded-lg font-bold text-xs cursor-pointer shadow-xs transition-colors">
+            <Settings size={13} className="text-blue-600 animate-pulse" />
+            <span>Selecionar Arquivo JSON</span>
+            <input 
+              type="file" 
+              accept=".json" 
+              onChange={handleImportBackup} 
+              className="hidden" 
+            />
+          </label>
+          <span className="text-[10px] text-slate-400">Somente arquivos .json válidos de exportação de prontuários.</span>
+        </div>
+      </div>
+
       <div className="text-[10px] text-slate-400 flex items-start gap-1 p-2.5 bg-yellow-50/40 border border-yellow-100 rounded-lg">
         <Info size={12} className="text-yellow-600 mt-0.5 shrink-0" />
         <p className="leading-relaxed">
           <strong>Segurança e Privacidade de Dados:</strong> O arquivo CSV exportado está configurado para incluir cabeçalhos estruturados e marca de ordem de byte UTF-8 (BOM), garantindo perfeita exibição de acentuação e caracteres especiais da língua portuguesa no Microsoft Excel, OpenOffice e Google Planilhas.
         </p>
       </div>
+
+      {/* Fullscreen Backdrop Lock Screen when isRestoring is true */}
+      {isRestoring && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-900/75 backdrop-blur-xs transition-opacity duration-300">
+          <div className="bg-white p-6 rounded-2xl shadow-xl flex flex-col items-center max-w-sm text-center border border-slate-100 animate-in zoom-in-95">
+            <RefreshCw className="w-10 h-10 text-blue-600 animate-spin mb-4" />
+            <h3 className="text-sm font-bold text-slate-800">Restaurando Banco de Dados...</h3>
+            <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+              Os prontuários ativos estão sendo sincronizados e recarregados no Firestore. Por favor, não feche a página ou interrompa a operação.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

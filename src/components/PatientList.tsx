@@ -111,11 +111,10 @@ export const PatientList: React.FC<PatientListProps> = ({
     if (selectedIds.length === 0) return;
     try {
       await Promise.all(selectedIds.map((id) => onDeletePatient(id)));
-      toast.success(`${selectedIds.length} paciente(s) excluído(s) de forma lógica com sucesso.`, {
-        icon: '🗑️',
-      });
+      toast.success('Exclusão lógica realizada com sucesso! Registros desativados.');
       setSelectedIds([]);
       setBulkDeleteOpen(false);
+      setDeleteConfirmText('');
     } catch (error: any) {
       console.error("Erro na exclusão em lote:", error);
       toast.error("Erro ao excluir pacientes: " + (error.message || error));
@@ -525,7 +524,7 @@ export const PatientList: React.FC<PatientListProps> = ({
               </button>
               <button
                 onClick={handleBulkDelete}
-                disabled={deleteConfirmText !== 'CONFIRMAR'}
+                disabled={deleteConfirmText.trim().toUpperCase() !== 'CONFIRMAR'}
                 className="px-3.5 py-1.5 text-xs text-white bg-red-600 hover:bg-red-700 rounded-lg cursor-pointer font-bold shadow-md shadow-red-100 transition-colors disabled:opacity-45 disabled:cursor-not-allowed"
               >
                 Excluir permanentemente

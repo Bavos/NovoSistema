@@ -149,26 +149,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               </div>
 
               <div className="p-1 space-y-0.5">
-                <button
-                  onClick={() => {
-                    alert('Visualizando perfil simulado!');
-                    setShowDropdown(false);
-                  }}
-                  className="w-full flex items-center space-x-2 px-3 py-2 text-xs text-forest-green hover:bg-[#e8e4db] rounded-lg transition-colors text-left"
-                >
-                  <User size={14} className="text-mustard-gold" />
-                  <span>Meu Perfil</span>
-                </button>
-                <button
-                  onClick={() => {
-                    alert('Configurações do sistema!');
-                    setShowDropdown(false);
-                  }}
-                  className="w-full flex items-center space-x-2 px-3 py-2 text-xs text-forest-green hover:bg-[#e8e4db] rounded-lg transition-colors text-left"
-                >
-                  <Settings size={14} className="text-mustard-gold" />
-                  <span>Configurações</span>
-                </button>
                 <div className="border-t border-forest-green/5 my-1"></div>
                 <button
                   onClick={handleSair}

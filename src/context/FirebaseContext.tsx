@@ -235,6 +235,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           }).catch(err => console.error("Error bootstrapping admin user in Firestore:", err));
         } else if (found && (found.nivelAcesso !== 'Administrador' || found.status !== 'Ativo')) {
           updateDoc(doc(db, 'usuarios_sistema', found.id), {
+            id: found.id,
             nivelAcesso: 'Administrador',
             status: 'Ativo'
           }).catch(err => console.error("Error correcting admin user level in Firestore:", err));
@@ -388,10 +389,19 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     description: string
   ) => {
     try {
+      const currentUserEmail = auth.currentUser?.email?.toLowerCase() || '';
+      const usuario = usuariosSistema.find(u => u.email?.toLowerCase() === currentUserEmail);
+      
+      // Capture the logged-in user's identifier resiliently.
+      // If the user object does not have the internal .id field, use fallback to usuario.id || usuario.uid or auth.currentUser?.uid
+      const userId = usuario
+        ? (usuario.id || (usuario as any).uid || (usuario as any).idDoc || auth.currentUser?.uid || currentUserEmail)
+        : (auth.currentUser?.uid || auth.currentUser?.email || 'anonymous');
+
       const log: AuditLog = {
         id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         timestamp: new Date().toISOString(),
-        userId: auth.currentUser?.email || auth.currentUser?.uid || 'anonymous',
+        userId,
         action,
         collection: collectionName,
         documentId,
@@ -605,8 +615,11 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const addUsuarioSistema = async (newUser: Omit<UsuarioSistema, 'id'>) => {
     try {
-      const docRef = await addDoc(collection(db, 'usuarios_sistema'), newUser);
-      const fullUser: UsuarioSistema = { ...newUser, id: docRef.id };
+      // Generate document reference and id in advance to guarantee the id field is explicitly saved inside the document
+      const docRef = doc(collection(db, 'usuarios_sistema'));
+      const id = docRef.id;
+      const fullUser: UsuarioSistema = { ...newUser, id };
+      await setDoc(docRef, fullUser);
       setNotification(`Utilizador '${newUser.nome}' adicionado com sucesso.`);
       return fullUser;
     } catch (err) {
@@ -641,7 +654,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const updateUsuarioSistema = async (user: UsuarioSistema) => {
     try {
-      await setDoc(doc(db, 'usuarios_sistema', user.id), user);
+      // Ensure that the id field is explicitly saved inside the document upon updating
+      const updatedUser = { ...user, id: user.id };
+      await setDoc(doc(db, 'usuarios_sistema', user.id), updatedUser);
       setNotification(`Utilizador '${user.nome}' atualizado com sucesso.`);
     } catch (err) {
       console.error("Erro ao atualizar utilizador:", err);
