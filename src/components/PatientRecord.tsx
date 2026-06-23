@@ -12,7 +12,7 @@ import { useFirebase } from '../context/FirebaseContext';
 import { usePacienteData } from '../hooks/usePacienteData';
 import { CardBase, DataGrid, DataField, SoftBadge } from './ui/DesignSystem';
 import { pacienteSchema } from '../schemas/validationSchemas';
-import { mascaraCPF, mascaraTelefone, mascaraCEP, mascaraMesAno } from '../lib/masks';
+import { mascaraCPF, mascaraTelefone, mascaraCEP, mascaraMesAno, validarCPF } from '../lib/masks';
 import {
   Save,
   Lock,
@@ -149,7 +149,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     deleteAgendamento,
     userRole,
     logsAuditoria,
-    faturasPacientes
+    faturasPacientes,
+    addAuditLog
   } = useFirebase();
 
   const isBlockedBidirectional = (prof: any) => {
@@ -169,6 +170,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const [activeTab, setActiveTab] = useState<'geral' | 'endereco' | 'medico' | 'plano' | 'agendamento' | 'ocorrencias' | 'auditoria'>('geral');
   const [alertDeactivateOpen, setAlertDeactivateOpen] = useState(false);
   const [deactivateReasonInput, setDeactivateReasonInput] = useState('');
+  const [deactivateConfirmInput, setDeactivateConfirmInput] = useState('');
 
   // Cancel shift modal state
   const [cancelShiftModalOpen, setCancelShiftModalOpen] = useState(false);
@@ -253,6 +255,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     confirmText?: string;
     cancelText?: string;
   } | null>(null);
+  const [deleteRecordConfirmInput, setDeleteRecordConfirmInput] = useState('');
 
   // Editable details form fields (synchronized when we enter edit mode):
   const [detailsProfName, setDetailsProfName] = useState('');
@@ -358,6 +361,16 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       };
 
       await updatePaciente(updatedObj);
+      if (userRole === 'Administrador' && paciente) {
+        await addAuditLog(
+          'UPDATE',
+          'pacientes',
+          paciente.id,
+          editingOcorrenciaId
+            ? `Administrador atualizou ocorrência para o paciente ${paciente.nome}`
+            : `Administrador cadastrou nova ocorrência para o paciente ${paciente.nome}`
+        );
+      }
       
       // Clean up fields
       setOcData(new Date().toISOString().split('T')[0]);
@@ -413,6 +426,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       };
 
       await updatePaciente(updatedObj);
+      if (userRole === 'Administrador' && paciente) {
+        await addAuditLog('UPDATE', 'pacientes', paciente.id, `Administrador excluiu ocorrência do paciente ${paciente.nome}`);
+      }
       toast.success('Ocorrência excluída com sucesso!', {
         icon: '✅',
       });
@@ -722,6 +738,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
   // Is patient currently deactivated?
   const isCurrentlyDeactivated = pStatus === 'Desativado';
+  const isColaborador = userRole?.toLowerCase() === 'colaborador';
 
   // Get active shifts for this patient
   const filteredShiftsForPatient = plantoes.filter(
@@ -762,10 +779,20 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       return;
     }
 
+    if (!validarCPF(cleanCpfVal)) {
+      toast.error('O CPF do paciente é inválido. Por favor, verifique os dígitos verificadores.');
+      return;
+    }
+
     // Validation for Billing Details
     if (responsavelPagamento === 'Outro Responsável') {
       if (!nomePagador.trim() || !cpfPagador.trim()) {
         toast.error('Por favor, preencha os dados obrigatórios do Responsável pelo Pagamento (Nome Completo e CPF do Pagador).');
+        return;
+      }
+      const cleanCpfPagVal = (cpfPagador || '').replace(/\D/g, '');
+      if (!validarCPF(cleanCpfPagVal)) {
+        toast.error('O CPF do pagador é inválido. Por favor, verifique os dígitos verificadores.');
         return;
       }
     }
@@ -832,6 +859,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       if (isNew) {
         console.log("Chamando addPaciente");
         const result = await addPaciente(patientPayload, true);
+        if (userRole === 'Administrador') {
+          await addAuditLog('CREATE', 'pacientes', result.id, `Administrador cadastrou o prontuário do paciente ${result.nome}`);
+        }
         toast.success(`Paciente ${result.nome} cadastrado com sucesso!`, {
           icon: '✅',
         });
@@ -848,6 +878,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
           desativadoMotivo: pDeactReason,
         };
         await updatePaciente(updatedObj, true);
+        if (userRole === 'Administrador') {
+          await addAuditLog('UPDATE', 'pacientes', paciente.id, `Administrador atualizou o prontuário do paciente ${updatedObj.nome}`);
+        }
         toast.success(`Paciente ${updatedObj.nome} atualizado com sucesso!`, {
           icon: '✅',
         });
@@ -899,6 +932,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       };
 
       await updatePaciente(updatedObj);
+      if (userRole === 'Administrador') {
+        await addAuditLog('UPDATE', 'pacientes', paciente.id, `Administrador atualizou o Plano de Atendimento do paciente ${paciente.nome}`);
+      }
       toast.success('Plano de Atendimento e referências base salvas com sucesso!', {
         icon: '✅',
       });
@@ -909,6 +945,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
   // New Handler for deleting a single shift
   const handleDeleteAgendamento = (id: string) => {
+    setDeleteRecordConfirmInput('');
     setDeleteRecordDialog({
       isOpen: true,
       title: 'Confirmar Exclusão',
@@ -940,6 +977,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       return;
     }
 
+    setDeleteRecordConfirmInput('');
     setDeleteRecordDialog({
       isOpen: true,
       title: 'Remover Configuração de Plantão',
@@ -1014,6 +1052,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const handleDeactivateConfirm = async () => {
     if (!deactivateReasonInput.trim()) {
       toast.error('Obrigatório preencher a justificativa da desativação do paciente.');
+      return;
+    }
+    if (deactivateConfirmInput !== 'CONFIRMAR') {
+      toast.error("Por favor, digite 'CONFIRMAR' para confirmar a ação.");
       return;
     }
     if (paciente) {
@@ -2045,6 +2087,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       return;
     }
 
+    setDeleteRecordConfirmInput('');
     setDeleteRecordDialog({
       isOpen: true,
       title: 'Confirmar Exclusão em Lote',
@@ -2139,6 +2182,18 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const computedRepasse = baseRepasseValue * multiplier;
   const computedTaxa = baseTaxaValue * multiplier;
   const computedAjuda = baseAjudaValue;
+
+  const cleanCpfValLocal = (cpf || '').replace(/\D/g, '');
+  const isCpfLoaded = cleanCpfValLocal.length > 0;
+  const isCpfFullLength = cleanCpfValLocal.length === 11;
+  const isCpfValid = isCpfFullLength && validarCPF(cleanCpfValLocal);
+  const isCpfInvalid = isCpfFullLength && !isCpfValid;
+
+  const cleanCpfPagadorValLocal = (cpfPagador || '').replace(/\D/g, '');
+  const isCpfPagadorLoaded = cleanCpfPagadorValLocal.length > 0;
+  const isCpfPagadorFullLength = cleanCpfPagadorValLocal.length === 11;
+  const isCpfPagadorValid = isCpfPagadorFullLength && validarCPF(cleanCpfPagadorValLocal);
+  const isCpfPagadorInvalid = isCpfPagadorFullLength && !isCpfPagadorValid;
 
   return (
     <div className="space-y-6" id="patient-record-container">
@@ -2239,7 +2294,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               {!isNew && userRole === 'Administrador' && (
                 <button
                   type="button"
-                  onClick={() => setAlertDeactivateOpen(true)}
+                  onClick={() => {
+                    setDeactivateConfirmInput('');
+                    setAlertDeactivateOpen(true);
+                  }}
                   className="bg-transparent text-red-650 hover:bg-red-50 hover:text-red-700 h-9 px-3.5 rounded-lg text-xs font-semibold transition-colors flex items-center space-x-1.5 cursor-pointer"
                   id="btn-desativar-paciente"
                 >
@@ -2247,15 +2305,17 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   <span>Desativar Paciente</span>
                 </button>
               )}
-              <button
-                type="button"
-                onClick={handleSave}
-                className="bg-forest-green hover:bg-hover-green text-white h-9 px-4.5 rounded-lg text-xs font-semibold shadow-md transition-colors flex items-center space-x-1.5 cursor-pointer"
-                id="btn-salvar-alteracoes"
-              >
-                <Save size={15} />
-                <span>Salvar Alterações</span>
-              </button>
+              {userRole === 'Administrador' && (
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  className="bg-forest-green hover:bg-hover-green text-white h-9 px-4.5 rounded-lg text-xs font-semibold shadow-md transition-colors flex items-center space-x-1.5 cursor-pointer"
+                  id="btn-salvar-alteracoes"
+                >
+                  <Save size={15} />
+                  <span>Salvar Alterações</span>
+                </button>
+              )}
             </>
           ) : (
             userRole === 'Administrador' && (
@@ -2379,7 +2439,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         <input
                           type="text"
                           required
-                          disabled={isCurrentlyDeactivated}
+                          disabled={isCurrentlyDeactivated || isColaborador}
                           value={nome}
                           onChange={(e) => setNome(e.target.value)}
                           className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
@@ -2392,13 +2452,41 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         <input
                           type="text"
                           required
-                          disabled={isCurrentlyDeactivated}
+                          disabled={isCurrentlyDeactivated || isColaborador}
                           value={cpf}
                           onChange={(e) => setCpf(mascaraCPF(e.target.value))}
                           maxLength={14}
-                          className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
+                          className={`w-full text-sm p-2.5 border rounded-lg bg-white focus:outline-none focus:ring-1 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal transition-all ${
+                            isCpfInvalid
+                              ? 'border-red-500 text-red-900 focus:ring-red-500 focus:border-red-500 bg-red-50/10'
+                              : isCpfValid
+                              ? 'border-emerald-500 text-emerald-950 focus:ring-emerald-500 focus:border-emerald-500 bg-emerald-50/10'
+                              : 'border-slate-300 text-gray-900 focus:ring-[#113224] focus:border-[#113224]'
+                          }`}
                           placeholder="Ex: 000.000.000-00"
                         />
+                        {isCpfInvalid && (
+                          <p className="text-[11px] text-red-600 font-semibold flex items-center space-x-1 mt-1 animate-in fade-in duration-200">
+                            <AlertOctagon size={13} className="text-red-500 flex-shrink-0" />
+                            <span>CPF inválido (dígito verificador incorreto).</span>
+                          </p>
+                        )}
+                        {isCpfValid && (
+                          <p className="text-[11px] text-emerald-600 font-semibold flex items-center space-x-1 mt-1 animate-in fade-in duration-200">
+                            <svg className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span>CPF válido!</span>
+                          </p>
+                        )}
+                        {isCpfLoaded && !isCpfFullLength && (
+                          <p className="text-[11px] text-amber-600 font-medium flex items-center space-x-1 mt-1 animate-in fade-in duration-200">
+                            <svg className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            <span>Insira os 11 dígitos do CPF</span>
+                          </p>
+                        )}
                       </div>
 
                       <div className="space-y-1">
@@ -2406,7 +2494,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         <input
                           type="date"
                           required
-                          disabled={isCurrentlyDeactivated}
+                          disabled={isCurrentlyDeactivated || isColaborador}
                           value={dataNascimento}
                           onChange={(e) => setDataNascimento(e.target.value)}
                           className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
@@ -2417,7 +2505,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         <label className="block text-sm font-medium text-gray-750">E-mail de Contato (Opcional)</label>
                         <input
                           type="email"
-                          disabled={isCurrentlyDeactivated}
+                          disabled={isCurrentlyDeactivated || isColaborador}
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
@@ -2441,7 +2529,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         <input
                           type="text"
                           required
-                          disabled={isCurrentlyDeactivated}
+                          disabled={isCurrentlyDeactivated || isColaborador}
                           value={nomeResponsavel}
                           onChange={(e) => setNomeResponsavel(e.target.value)}
                           className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
@@ -2454,7 +2542,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         <input
                           type="text"
                           required
-                          disabled={isCurrentlyDeactivated}
+                          disabled={isCurrentlyDeactivated || isColaborador}
                           value={telefoneResponsavel}
                           onChange={(e) => setTelefoneResponsavel(mascaraTelefone(e.target.value))}
                           maxLength={15}
@@ -2472,9 +2560,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                       <div className="space-y-1">
-                        <label className="block text-xs font-medium text-gray-700">Responsável pelo Pagamento? *</label>
+                        <label className="block text-xs font-medium text-gray-750">Responsável pelo Pagamento? *</label>
                         <select
-                          disabled={isCurrentlyDeactivated}
+                          disabled={isCurrentlyDeactivated || isColaborador}
                           value={responsavelPagamento}
                           onChange={(e) => setResponsavelPagamento(e.target.value as any)}
                           className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
@@ -2485,9 +2573,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       </div>
 
                       <div className="space-y-1">
-                        <label className="block text-xs font-medium text-gray-700">Canal de Envio da Fatura/Boleto *</label>
+                        <label className="block text-xs font-medium text-gray-750">Canal de Envio da Fatura/Boleto *</label>
                         <select
-                          disabled={isCurrentlyDeactivated}
+                          disabled={isCurrentlyDeactivated || isColaborador}
                           value={opcaoEnvio}
                           onChange={(e) => setOpcaoEnvio(e.target.value as any)}
                           className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
@@ -2501,11 +2589,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       {responsavelPagamento === 'Outro Responsável' && (
                         <>
                           <div className="space-y-1">
-                            <label className="block text-xs font-medium text-gray-700">Nome do Pagador *</label>
+                            <label className="block text-xs font-medium text-gray-750">Nome do Pagador *</label>
                             <input
                               type="text"
                               required
-                              disabled={isCurrentlyDeactivated}
+                              disabled={isCurrentlyDeactivated || isColaborador}
                               value={nomePagador}
                               onChange={(e) => setNomePagador(e.target.value)}
                               className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
@@ -2513,28 +2601,56 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                             />
                           </div>
                           <div className="space-y-1">
-                            <label className="block text-xs font-medium text-gray-700">CPF do Pagador *</label>
+                            <label className="block text-xs font-medium text-gray-750">CPF do Pagador *</label>
                             <input
                               type="text"
                               required
-                              disabled={isCurrentlyDeactivated}
+                              disabled={isCurrentlyDeactivated || isColaborador}
                               value={cpfPagador}
                               onChange={(e) => setCpfPagador(mascaraCPF(e.target.value))}
                               maxLength={14}
-                              className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
+                              className={`w-full text-sm p-2.5 border rounded-lg bg-white focus:outline-none focus:ring-1 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal transition-all ${
+                                isCpfPagadorInvalid
+                                  ? 'border-red-500 text-red-900 focus:ring-red-500 focus:border-red-500 bg-red-50/10'
+                                  : isCpfPagadorValid
+                                  ? 'border-emerald-500 text-emerald-950 focus:ring-emerald-500 focus:border-emerald-500 bg-emerald-50/10'
+                                  : 'border-slate-300 text-gray-900 focus:ring-[#113224] focus:border-[#113224]'
+                              }`}
                               placeholder="Ex: 000.000.000-00"
                             />
+                            {isCpfPagadorInvalid && (
+                              <p className="text-[11px] text-red-600 font-semibold flex items-center space-x-1 mt-1 animate-in fade-in duration-200">
+                                <AlertOctagon size={13} className="text-red-500 flex-shrink-0" />
+                                <span>CPF do pagador inválido (dígito verificador incorreto).</span>
+                              </p>
+                            )}
+                            {isCpfPagadorValid && (
+                              <p className="text-[11px] text-emerald-600 font-semibold flex items-center space-x-1 mt-1 animate-in fade-in duration-200">
+                                <svg className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                                <span>CPF do pagador válido!</span>
+                              </p>
+                            )}
+                            {isCpfPagadorLoaded && !isCpfPagadorFullLength && (
+                              <p className="text-[11px] text-amber-600 font-medium flex items-center space-x-1 mt-1 animate-in fade-in duration-200">
+                                <svg className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                                <span>Insira os 11 dígitos do CPF</span>
+                              </p>
+                            )}
                           </div>
                         </>
                       )}
 
                       {(opcaoEnvio === 'WhatsApp' || opcaoEnvio === 'Ambos') && (
                         <div className="space-y-1">
-                          <label className="block text-xs font-medium text-gray-700">WhatsApp para Faturamento *</label>
+                          <label className="block text-xs font-medium text-gray-750">WhatsApp para Faturamento *</label>
                           <input
                             type="text"
                             required
-                            disabled={isCurrentlyDeactivated}
+                            disabled={isCurrentlyDeactivated || isColaborador}
                             value={whatsappFaturamento}
                             onChange={(e) => setWhatsappFaturamento(e.target.value)}
                             className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#C09A6D] focus:border-[#C09A6D] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
@@ -2545,11 +2661,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
                       {(opcaoEnvio === 'E-mail' || opcaoEnvio === 'Ambos') && (
                         <div className="space-y-1">
-                          <label className="block text-xs font-medium text-gray-700">E-mail para Faturamento *</label>
+                          <label className="block text-xs font-medium text-gray-750">E-mail para Faturamento *</label>
                           <input
                             type="email"
                             required
-                            disabled={isCurrentlyDeactivated}
+                            disabled={isCurrentlyDeactivated || isColaborador}
                             value={emailFaturamento}
                             onChange={(e) => setEmailFaturamento(e.target.value)}
                             className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#C09A6D] focus:border-[#C09A6D] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
@@ -2559,10 +2675,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       )}
 
                       <div className="space-y-1">
-                        <label className="block text-xs font-medium text-gray-700">Data do reajuste (mm/aa)</label>
+                        <label className="block text-xs font-medium text-gray-750">Data do reajuste (mm/aa)</label>
                         <input
                           type="text"
-                          disabled={isCurrentlyDeactivated}
+                          disabled={isCurrentlyDeactivated || isColaborador}
                           value={dataReajuste}
                           onChange={(e) => setDataReajuste(mascaraMesAno(e.target.value))}
                           maxLength={5}
@@ -2584,7 +2700,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     <label className="block text-xs font-normal text-slate-700">Rua / Logradouro</label>
                     <input
                       type="text"
-                      disabled={isCurrentlyDeactivated}
+                      disabled={isCurrentlyDeactivated || isColaborador}
                       value={rua}
                       onChange={(e) => setRua(e.target.value)}
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed"
@@ -2596,7 +2712,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     <label className="block text-xs font-normal text-slate-700">Número</label>
                     <input
                       type="text"
-                      disabled={isCurrentlyDeactivated}
+                      disabled={isCurrentlyDeactivated || isColaborador}
                       value={numero}
                       onChange={(e) => setNumero(e.target.value)}
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed"
@@ -2608,7 +2724,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     <label className="block text-xs font-normal text-slate-700">CEP</label>
                     <input
                       type="text"
-                      disabled={isCurrentlyDeactivated}
+                      disabled={isCurrentlyDeactivated || isColaborador}
                       value={cep}
                       onChange={(e) => setCep(mascaraCEP(e.target.value))}
                       onBlur={(e) => handleCepBlur(e.target.value)}
@@ -2622,7 +2738,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     <label className="block text-xs font-normal text-slate-700">Bairro</label>
                     <input
                       type="text"
-                      disabled={isCurrentlyDeactivated}
+                      disabled={isCurrentlyDeactivated || isColaborador}
                       value={bairro}
                       onChange={(e) => setBairro(e.target.value)}
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed"
@@ -2635,7 +2751,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     <div className="flex space-x-2">
                       <input
                         type="text"
-                        disabled={isCurrentlyDeactivated}
+                        disabled={isCurrentlyDeactivated || isColaborador}
                         value={cidade}
                         onChange={(e) => setCidade(e.target.value)}
                         className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed"
@@ -2643,7 +2759,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       />
                       <input
                         type="text"
-                        disabled={isCurrentlyDeactivated}
+                        disabled={isCurrentlyDeactivated || isColaborador}
                         value={estado}
                         maxLength={2}
                         onChange={(e) => setEstado(e.target.value)}
@@ -2660,7 +2776,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     Informações Gerais / Logística de Chegada (Acesso, Portaria, Referências de Localização):
                   </label>
                   <textarea
-                    disabled={isCurrentlyDeactivated}
+                    disabled={isCurrentlyDeactivated || isColaborador}
                     value={logisticaChegada}
                     onChange={(e) => setLogisticaChegada(e.target.value)}
                     rows={4}
@@ -2688,7 +2804,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         <input
                           type="text"
                           required
-                          disabled={isCurrentlyDeactivated}
+                          disabled={isCurrentlyDeactivated || isColaborador}
                           value={diagnosticoPrincipal}
                           onChange={(e) => setDiagnosticoPrincipal(e.target.value)}
                           className="w-full text-sm p-2.5 bg-white border border-slate-300 rounded-lg text-gray-900 font-normal focus:outline-none focus:border-blue-550 focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
@@ -2699,7 +2815,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         <label className="block text-sm font-medium text-gray-700">Comorbidades Associadas</label>
                         <input
                           type="text"
-                          disabled={isCurrentlyDeactivated}
+                          disabled={isCurrentlyDeactivated || isColaborador}
                           value={comorbidades}
                           onChange={(e) => setComorbidades(e.target.value)}
                           className="w-full text-sm p-2.5 bg-white border border-slate-300 rounded-lg text-gray-900 font-normal focus:outline-none focus:border-blue-550 focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
@@ -2719,7 +2835,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         <label className="block text-sm font-medium text-gray-700">Alergias Conhecidas</label>
                         <input
                           type="text"
-                          disabled={isCurrentlyDeactivated}
+                          disabled={isCurrentlyDeactivated || isColaborador}
                           value={alergias}
                           onChange={(e) => setAlergias(e.target.value)}
                           className="w-full text-sm p-2.5 bg-white border border-slate-300 rounded-lg text-gray-900 font-normal focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
@@ -2729,7 +2845,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       <div className="space-y-1">
                         <label className="block text-sm font-medium text-gray-700">Grau de Dependência *</label>
                         <select
-                          disabled={isCurrentlyDeactivated}
+                          disabled={isCurrentlyDeactivated || isColaborador}
                           value={grauDependencia}
                           onChange={(e) => setGrauDependencia(e.target.value as any)}
                           className="w-full text-sm p-2.5 bg-white border border-slate-300 rounded-lg text-gray-900 font-normal focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
@@ -2747,7 +2863,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 <div className="space-y-1">
                   <label className="block text-sm font-medium text-gray-700">Observações Clínicas Gerais:</label>
                   <textarea
-                    disabled={isCurrentlyDeactivated}
+                    disabled={isCurrentlyDeactivated || isColaborador}
                     value={observacoesClinicas}
                     onChange={(e) => setObservacoesClinicas(e.target.value)}
                     rows={3}
@@ -3863,8 +3979,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     <thead>
                       <tr className="border-b border-slate-100">
                         <th className="text-left py-2 text-slate-500">Data</th>
+                        <th className="text-left py-2 text-slate-500">Usuário</th>
                         <th className="text-left py-2 text-slate-500">Ação</th>
-                        <th className="text-left py-2 text-slate-500">Descrição</th>
+                        <th className="text-left py-2 text-slate-500 font-medium">Descrição</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -3873,8 +3990,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
                         .map(log => (
                           <tr key={log.id} className="border-b border-slate-50">
-                            <td className="py-2 text-slate-700">{new Date(log.timestamp).toLocaleString()}</td>
-                            <td className="py-2 text-slate-700 font-semibold">{log.action}</td>
+                            <td className="py-2 text-slate-700 whitespace-nowrap">{new Date(log.timestamp).toLocaleString()}</td>
+                            <td className="py-2 text-slate-700 max-w-[120px] truncate" title={log.userId}>{log.userId || 'Sistema'}</td>
+                            <td className="py-2 text-slate-705 font-semibold text-emerald-750">{log.action}</td>
                             <td className="py-2 text-slate-700">{log.description}</td>
                           </tr>
                         ))}
@@ -3895,18 +4013,20 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       <label className="block text-xs font-normal text-slate-700">Data da Ocorrência *</label>
                       <input
                         type="date"
+                        disabled={isColaborador}
                         value={ocData}
                         onChange={(e) => setOcData(e.target.value)}
-                        className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500"
+                        className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed font-sans"
                       />
                     </div>
 
                     <div className="space-y-1">
                       <label className="block text-xs font-normal text-slate-700">Profissional Envolvido *</label>
                       <select
+                        disabled={isColaborador}
                         value={ocProfId}
                         onChange={(e) => setOcProfId(e.target.value)}
-                        className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500"
+                        className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed font-sans"
                       >
                         <option value="">Selecione um profissional</option>
                         {profissionais.map(p => (
@@ -3921,10 +4041,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       <label className="block text-xs font-normal text-slate-700">Descrição do Motivo *</label>
                       <textarea
                         rows={3}
+                        disabled={isColaborador}
                         value={ocDescricao}
                         onChange={(e) => setOcDescricao(e.target.value)}
                         placeholder="Relate detalhadamente os fatos ocorridos..."
-                        className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500"
+                        className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed font-sans"
                       />
                     </div>
 
@@ -3932,42 +4053,45 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       <input
                         type="checkbox"
                         id="check-bloquear-prof"
+                        disabled={isColaborador}
                         checked={ocBloquear}
                         onChange={(e) => setOcBloquear(e.target.checked)}
-                        className="h-4 w-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500 cursor-pointer"
+                        className="h-4 w-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                       />
-                      <label htmlFor="check-bloquear-prof" className="text-xs font-semibold text-rose-700 cursor-pointer select-none">
+                      <label htmlFor="check-bloquear-prof" className="text-xs font-semibold text-rose-700 cursor-pointer select-none disabled:opacity-50">
                         Bloquear este profissional para este paciente
                       </label>
                     </div>
                   </div>
 
-                  <div className="flex gap-2 justify-end mt-4">
-                    {editingOcorrenciaId && (
+                  {!isColaborador && (
+                    <div className="flex gap-2 justify-end mt-4">
+                      {editingOcorrenciaId && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingOcorrenciaId(null);
+                            setOcData(new Date().toISOString().split('T')[0]);
+                            setOcProfId('');
+                            setOcDescricao('');
+                            setOcBloquear(false);
+                          }}
+                          className="px-4 py-2 hover:bg-slate-100 font-medium text-xs text-slate-600 rounded-lg transition-colors cursor-pointer"
+                        >
+                          Cancelar Edição
+                        </button>
+                      )}
                       <button
                         type="button"
-                        onClick={() => {
-                          setEditingOcorrenciaId(null);
-                          setOcData(new Date().toISOString().split('T')[0]);
-                          setOcProfId('');
-                          setOcDescricao('');
-                          setOcBloquear(false);
-                        }}
-                        className="px-4 py-2 hover:bg-slate-100 font-medium text-xs text-slate-600 rounded-lg transition-colors cursor-pointer"
+                        disabled={savingOcorrencia}
+                        onClick={handleSaveOcorrencia}
+                        className="bg-blue-600 text-white px-5 py-2 rounded-lg text-xs font-semibold shadow-md shadow-blue-200 hover:bg-blue-700 transition-colors flex items-center space-x-1.5 cursor-pointer disabled:bg-blue-400 font-sans"
                       >
-                        Cancelar Edição
+                        <Save size={14} />
+                        <span>{savingOcorrencia ? 'Salvando...' : 'Salvar Ocorrência'}</span>
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      disabled={savingOcorrencia}
-                      onClick={handleSaveOcorrencia}
-                      className="bg-blue-600 text-white px-5 py-2 rounded-lg text-xs font-semibold shadow-md shadow-blue-200 hover:bg-blue-700 transition-colors flex items-center space-x-1.5 cursor-pointer disabled:bg-blue-400 font-sans"
-                    >
-                      <Save size={14} />
-                      <span>{savingOcorrencia ? 'Salvando...' : 'Salvar Ocorrência'}</span>
-                    </button>
-                  </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Histórico list */}
@@ -3989,7 +4113,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                             <th className="py-3 px-4 text-sm font-semibold text-slate-800">Profissional</th>
                             <th className="py-3 px-4 text-sm font-semibold text-slate-800">Descrição / Relato</th>
                             <th className="py-3 px-4 text-center text-sm font-semibold text-slate-800">Status</th>
-                            <th className="py-3 px-4 text-right text-sm font-semibold text-slate-800">Ações</th>
+                            {!isColaborador && <th className="py-3 px-4 text-right text-sm font-semibold text-slate-800">Ações</th>}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 text-gray-900 text-sm md:text-base">
@@ -4015,24 +4139,19 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                   </span>
                                 )}
                               </td>
-                              <td className="py-3 px-4 text-right whitespace-nowrap">
-                                <div className="flex justify-end gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleEditOcorrenciaClick(oc)}
-                                    className="py-1 px-2.5 bg-slate-55 bg-slate-50 text-slate-605 border border-slate-205 hover:bg-slate-105 rounded transition-colors text-xs font-medium cursor-pointer"
-                                  >
-                                    Editar
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteOcorrencia(oc.id)}
-                                    className="py-1 px-2.5 bg-red-54 bg-red-50 text-red-700 border border-red-200 hover:bg-red-105 rounded transition-colors text-xs font-medium cursor-pointer"
-                                  >
-                                    Excluir
-                                  </button>
-                                </div>
-                              </td>
+                              {!isColaborador && (
+                                <td className="py-3 px-4 text-right whitespace-nowrap">
+                                  <div className="flex justify-end gap-2">
+                                         <button
+                                      type="button"
+                                      onClick={() => handleDeleteOcorrencia(oc.id)}
+                                      className="py-1 px-2.5 bg-red-54 bg-red-50 text-red-700 border border-red-200 hover:bg-red-105 rounded transition-colors text-xs font-medium cursor-pointer"
+                                    >
+                                      Excluir
+                                    </button>
+                                  </div>
+                                </td>
+                              )}
                             </tr>
                           ))}
                         </tbody>
@@ -4054,7 +4173,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               <AlertOctagon size={24} className="mt-0.5 flex-shrink-0" />
               <div>
                 <h3 className="font-bold text-sm text-slate-800">Confirmar Desativação do Paciente</h3>
-                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed font-sans">
                   Atenção: A desativação fará com que o prontuário de <strong>{nome}</strong> fique bloqueado para qualquer nova edição, e todas as suas escalas ativas futuras serão sinalizadas como suspensas.
                 </p>
               </div>
@@ -4072,18 +4191,33 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               />
             </div>
 
+            {/* Confirmation textbox */}
+            <div className="bg-slate-50 border border-slate-150 rounded-xl p-3.5 space-y-2">
+              <label className="block text-xs font-semibold text-slate-700">
+                Para autorizar, digite <span className="font-extrabold text-red-650 font-mono select-all">'CONFIRMAR'</span> abaixo:
+              </label>
+              <input
+                type="text"
+                value={deactivateConfirmInput}
+                onChange={(e) => setDeactivateConfirmInput(e.target.value)}
+                placeholder="Digite CONFIRMAR"
+                className="w-full text-xs font-mono font-bold tracking-widest px-3 py-2 border border-slate-200 rounded-lg text-slate-800 bg-white uppercase focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-red-500"
+              />
+            </div>
+
             <div className="flex justify-end gap-3 pt-2">
               <button
                 type="button"
                 onClick={() => setAlertDeactivateOpen(false)}
-                className="px-3.5 py-2 text-xs text-slate-500 hover:bg-slate-100 rounded-lg font-medium"
+                className="px-3.5 py-2 text-xs text-slate-500 hover:bg-slate-100 rounded-lg font-medium cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={handleDeactivateConfirm}
-                className="px-4 py-2 text-xs text-white bg-red-600 hover:bg-red-700 rounded-lg font-bold shadow-md shadow-red-500/10 cursor-pointer"
+                disabled={deactivateConfirmInput !== 'CONFIRMAR'}
+                className="px-4 py-2 text-xs text-white bg-red-600 hover:bg-red-700 rounded-lg font-bold shadow-md shadow-red-500/10 cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed transition-all"
               >
                 Confirmar Suspensão
               </button>
@@ -6459,6 +6593,21 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 {deleteRecordDialog.message}
               </p>
             </div>
+
+            {/* Confirmation textbox */}
+            <div className="bg-white border border-slate-250 rounded-xl p-3.5 space-y-2 text-left">
+              <label className="block text-xs font-semibold text-slate-700">
+                Para confirmar, digite <span className="font-extrabold text-red-650 font-mono select-all">'CONFIRMAR'</span> abaixo:
+              </label>
+              <input
+                type="text"
+                value={deleteRecordConfirmInput}
+                onChange={(e) => setDeleteRecordConfirmInput(e.target.value)}
+                placeholder="Digite CONFIRMAR"
+                className="w-full text-xs font-mono font-bold tracking-widest px-3 py-2 border border-slate-200 rounded-lg text-slate-800 bg-slate-50 uppercase focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-red-500"
+              />
+            </div>
+
             <div className="flex gap-3 pt-2">
               <button
                 type="button"
@@ -6470,6 +6619,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               <button
                 type="button"
                 onClick={async () => {
+                  if (deleteRecordConfirmInput !== 'CONFIRMAR') {
+                    toast.error("Por favor, digite 'CONFIRMAR' para prosseguir.");
+                    return;
+                  }
                   try {
                     await deleteRecordDialog.onConfirm();
                   } catch (e) {
@@ -6478,7 +6631,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     setDeleteRecordDialog(null);
                   }
                 }}
-                className="flex-1 py-2 text-xs font-black text-white bg-red-600 hover:bg-red-700 rounded-full transition-all text-center cursor-pointer shadow-md"
+                disabled={deleteRecordConfirmInput !== 'CONFIRMAR'}
+                className="flex-1 py-2 text-xs font-black text-white bg-red-600 hover:bg-red-700 rounded-full transition-all text-center cursor-pointer shadow-md disabled:opacity-45 disabled:cursor-not-allowed"
               >
                 {deleteRecordDialog.confirmText || 'Confirmar e Excluir'}
               </button>

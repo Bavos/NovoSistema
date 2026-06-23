@@ -56,11 +56,11 @@ interface FirebaseContextType {
   updateAgendamento: (agendamento: Agendamento) => Promise<void>;
   deleteAgendamento: (id: string) => Promise<void>;
   deletePaciente: (id: string) => Promise<void>;
-  addProfissional: (profissional: Omit<Profissional, 'id' | 'createdAt' | 'status'>) => Promise<Profissional>;
+  addProfissional: (profissional: Omit<Profissional, 'id' | 'createdAt' | 'status'>, skipNotification?: boolean) => Promise<Profissional>;
   addUsuarioSistema: (user: Omit<UsuarioSistema, 'id'>) => Promise<UsuarioSistema>;
   deleteUsuarioSistema: (id: string) => Promise<void>;
   updateUsuarioSistema: (user: UsuarioSistema) => Promise<void>;
-  updateProfissional: (profissional: Profissional) => Promise<void>;
+  updateProfissional: (profissional: Profissional, skipNotification?: boolean) => Promise<void>;
   deleteProfissional: (id: string) => Promise<void>;
   debitosProfissionais: DebitoProfissional[];
   addDebitoProfissional: (debito: Omit<DebitoProfissional, 'id'>) => Promise<DebitoProfissional>;
@@ -76,6 +76,7 @@ interface FirebaseContextType {
   uploadProfissionalFoto: (file: File) => Promise<string>;
   uploadPdf: (file: File, path: string) => Promise<string>;
   logsAuditoria: AuditLog[];
+  addAuditLog: (action: AuditLog['action'], collectionName: string, documentId: string, description: string) => Promise<void>;
 }
 
 const FirebaseContext = createContext<FirebaseContextType | undefined>(undefined);
@@ -390,7 +391,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const log: AuditLog = {
         id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         timestamp: new Date().toISOString(),
-        userId: auth.currentUser?.uid || 'anonymous',
+        userId: auth.currentUser?.email || auth.currentUser?.uid || 'anonymous',
         action,
         collection: collectionName,
         documentId,
@@ -580,7 +581,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
-  const addProfissional = async (newProf: Omit<Profissional, 'id' | 'createdAt' | 'status'>) => {
+  const addProfissional = async (newProf: Omit<Profissional, 'id' | 'createdAt' | 'status'>, skipNotification?: boolean) => {
     const id = `prof-${Date.now()}`;
     const fullProfissional: Profissional = {
       ...newProf,
@@ -592,7 +593,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     try {
       await setDoc(doc(db, 'profissionais', id), fullProfissional);
       await addAuditLog('CREATE', 'profissionais', id, `Profissional criado: ${fullProfissional.nome}`);
-      setNotification(`Cuidador '${fullProfissional.nome}' cadastrado com sucesso.`);
+      if (!skipNotification) {
+        setNotification(`Cuidador '${fullProfissional.nome}' cadastrado com sucesso.`);
+      }
       return fullProfissional;
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, `profissionais/${id}`);
@@ -647,11 +650,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
-  const updateProfissional = async (updatedProf: Profissional) => {
+  const updateProfissional = async (updatedProf: Profissional, skipNotification?: boolean) => {
     try {
       await setDoc(doc(db, 'profissionais', updatedProf.id), updatedProf);
       await addAuditLog('UPDATE', 'profissionais', updatedProf.id, `Profissional atualizado: ${updatedProf.nome}`);
-      setNotification(`Cuidador '${updatedProf.nome}' atualizado com sucesso.`);
+      if (!skipNotification) {
+        setNotification(`Cuidador '${updatedProf.nome}' atualizado com sucesso.`);
+      }
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `profissionais/${updatedProf.id}`);
       throw err;
@@ -1010,6 +1015,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         folhasPagamento,
         addFolhaPagamento,
         logsAuditoria,
+        addAuditLog,
       }}
     >
       {children}

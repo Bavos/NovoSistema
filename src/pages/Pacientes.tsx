@@ -12,12 +12,29 @@ import { ErrorBoundary } from '../components/ErrorBoundary';
 interface PacientesProps {
   globalSearchQuery?: string;
   onViewChange?: (isForm: boolean, title: string) => void;
+  initialSelectedPatient?: any;
+  clearInitialSelectedPatient?: () => void;
 }
 
-export const Pacientes: React.FC<PacientesProps> = ({ globalSearchQuery, onViewChange }) => {
+export const Pacientes: React.FC<PacientesProps> = ({ 
+  globalSearchQuery, 
+  onViewChange,
+  initialSelectedPatient,
+  clearInitialSelectedPatient
+}) => {
   const [selectedPaciente, setSelectedPaciente] = useState<any>(null);
   const [isNewPatient, setIsNewPatient] = useState<boolean>(false);
   const { pacientes, deletePaciente, deactivatePaciente } = useFirebase();
+
+  useEffect(() => {
+    if (initialSelectedPatient) {
+      setSelectedPaciente(initialSelectedPatient);
+      setIsNewPatient(false);
+      if (clearInitialSelectedPatient) {
+        clearInitialSelectedPatient();
+      }
+    }
+  }, [initialSelectedPatient, clearInitialSelectedPatient]);
 
   const handleBackToList = () => {
     setSelectedPaciente(null);

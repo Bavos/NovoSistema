@@ -7,6 +7,8 @@ import React, { useState, useMemo } from 'react';
 import { Paciente } from '../types';
 import { Edit, Trash, Plus, Filter, Check, EyeOff, ShieldCheck, AlertCircle, Search } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { useFirebase } from '../context/FirebaseContext';
+import { ConfirmModal } from './ConfirmModal';
 
 interface PatientListProps {
   pacientes: Paciente[];
@@ -25,6 +27,9 @@ export const PatientList: React.FC<PatientListProps> = ({
   onDeactivatePatient,
   globalSearchQuery,
 }) => {
+  const { userRole } = useFirebase();
+  const isColaborador = userRole?.toLowerCase() === 'colaborador';
+
   const [localSearch, setLocalSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('Ativo');
@@ -36,6 +41,8 @@ export const PatientList: React.FC<PatientListProps> = ({
   const [bulkDeactivateOpen, setBulkDeactivateOpen] = useState(false);
   const [bulkDeactivateReason, setBulkDeactivateReason] = useState('Desligamento corporativo');
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [deactivateConfirmText, setDeactivateConfirmText] = useState('');
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
   // Sorted list of patients for filter dropdown
   const sortedPacientes = useMemo(() => {
@@ -198,22 +205,28 @@ export const PatientList: React.FC<PatientListProps> = ({
 
         {/* Right side primary action */}
         <div className="flex items-center gap-2">
-          {selectedIds.length > 0 && (
+          {selectedIds.length > 0 && !isColaborador && (
             <div className="flex items-center space-x-1.5 animate-in fade-in-30 slide-in-from-right-5">
               <span className="text-xs text-slate-500 mr-2 font-medium">
                 {selectedIds.length} selecionado(s):
               </span>
               <button
-                onClick={() => setBulkDeactivateOpen(true)}
-                className="flex items-center space-x-1 px-2.5 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-colors"
+                onClick={() => {
+                  setDeactivateConfirmText('');
+                  setBulkDeactivateOpen(true);
+                }}
+                className="flex items-center space-x-1 px-2.5 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-colors cursor-pointer"
                 title="Desativar selecionados"
               >
                 <EyeOff size={13} />
                 <span>Desativar</span>
               </button>
               <button
-                onClick={() => setBulkDeleteOpen(true)}
-                className="flex items-center space-x-1 px-2.5 py-1.5 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors"
+                onClick={() => {
+                  setDeleteConfirmText('');
+                  setBulkDeleteOpen(true);
+                }}
+                className="flex items-center space-x-1 px-2.5 py-1.5 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors cursor-pointer"
                 title="Excluir selecionados"
               >
                 <Trash size={13} />
@@ -435,16 +448,32 @@ export const PatientList: React.FC<PatientListProps> = ({
                 placeholder="Exemplo: Fim do contrato de acompanhamento domiciliar..."
               />
             </div>
+
+            {/* Confirmation textbox */}
+            <div className="bg-slate-50 border border-slate-150 rounded-xl p-3.5 space-y-2">
+              <label className="block text-xs font-semibold text-slate-700">
+                Para autorizar, digite <span className="font-extrabold text-red-650 font-mono select-all">'CONFIRMAR'</span> abaixo:
+              </label>
+              <input
+                type="text"
+                value={deactivateConfirmText}
+                onChange={(e) => setDeactivateConfirmText(e.target.value)}
+                placeholder="Digite CONFIRMAR"
+                className="w-full text-xs font-mono font-bold tracking-widest px-3 py-2 border border-slate-200 rounded-lg text-slate-800 bg-white uppercase focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-red-500"
+              />
+            </div>
+
             <div className="flex justify-end gap-3 pt-2">
               <button
                 onClick={() => setBulkDeactivateOpen(false)}
-                className="px-3.5 py-1.5 text-xs text-slate-500 hover:bg-slate-100 rounded-lg"
+                className="px-3.5 py-1.5 text-xs text-slate-500 hover:bg-slate-100 rounded-lg cursor-pointer font-medium"
               >
                 Voltar
               </button>
               <button
                 onClick={handleBulkDeactivate}
-                className="px-3.5 py-1.5 text-xs text-white bg-red-600 hover:bg-red-700 rounded-lg"
+                disabled={deactivateConfirmText !== 'CONFIRMAR'}
+                className="px-3.5 py-1.5 text-xs text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-45 disabled:cursor-not-allowed font-bold shadow-md shadow-red-100 transition-colors"
               >
                 Confirmar Desativação Múltipla
               </button>
@@ -473,6 +502,20 @@ export const PatientList: React.FC<PatientListProps> = ({
               Essa ação de exclusão realizará a <strong>desativação lógica</strong> do(s) registro(s), preservando o histórico legal de acompanhamentos domiciliares.
             </p>
 
+            {/* Confirmation textbox */}
+            <div className="bg-slate-50 border border-slate-150 rounded-xl p-3.5 space-y-2">
+              <label className="block text-xs font-semibold text-slate-700">
+                Para confirmar a exclusão lógica, digite <span className="font-extrabold text-red-650 font-mono select-all">'CONFIRMAR'</span> abaixo:
+              </label>
+              <input
+                type="text"
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder="Digite CONFIRMAR"
+                className="w-full text-xs font-mono font-bold tracking-widest px-3 py-2 border border-slate-200 rounded-lg text-slate-800 bg-white uppercase focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-red-500"
+              />
+            </div>
+
             <div className="flex justify-end gap-3 pt-2">
               <button
                 onClick={() => setBulkDeleteOpen(false)}
@@ -482,7 +525,8 @@ export const PatientList: React.FC<PatientListProps> = ({
               </button>
               <button
                 onClick={handleBulkDelete}
-                className="px-3.5 py-1.5 text-xs text-white bg-red-600 hover:bg-red-700 rounded-lg cursor-pointer font-bold shadow-md shadow-red-100 transition-colors"
+                disabled={deleteConfirmText !== 'CONFIRMAR'}
+                className="px-3.5 py-1.5 text-xs text-white bg-red-600 hover:bg-red-700 rounded-lg cursor-pointer font-bold shadow-md shadow-red-100 transition-colors disabled:opacity-45 disabled:cursor-not-allowed"
               >
                 Excluir permanentemente
               </button>

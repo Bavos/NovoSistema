@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
 import { db } from '../lib/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { Users, UserPlus, Calendar, DollarSign, Receipt, Gift, Check } from 'lucide-react';
+import { Users, UserPlus, Calendar, DollarSign, Receipt, Gift, Check, Search, X } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { DebitoProfissional } from '../types';
 
 export const Dashboard: React.FC<{
   setActiveTab: (tab: string, extraOptions?: { financeiroSubTab?: 'folhas' | 'debitos' }) => void;
-}> = ({ setActiveTab }) => {
+  onSelectPatientRedirect?: (paciente: any) => void;
+}> = ({ setActiveTab, onSelectPatientRedirect }) => {
   const { pacientes, profissionais, updatePaciente } = useFirebase();
   const [debitosDoDia, setDebitosDoDia] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,6 +59,23 @@ export const Dashboard: React.FC<{
   const activePacientes = (pacientes || []).filter(
     (p) => p.status === 'Ativo' || p.status?.toLowerCase() === 'ativo'
   );
+
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredActivePacientes = searchQuery.trim() === ''
+    ? []
+    : activePacientes.filter((p) => {
+        const queryClean = searchQuery.replace(/\D/g, '').trim();
+        const cpfClean = (p.cpf || '').replace(/\D/g, '').trim();
+        const nomeLower = (p.nome || '').toLowerCase();
+        const queryLower = searchQuery.toLowerCase();
+
+        const nameMatches = nomeLower.includes(queryLower);
+        const cpfMatches = cpfClean && queryClean && cpfClean.includes(queryClean);
+        const rawCpfMatches = p.cpf && p.cpf.toLowerCase().includes(queryLower);
+
+        return nameMatches || cpfMatches || rawCpfMatches;
+      });
   
   const activeProfissionais = (profissionais || []).filter(
     (p) => p.status === 'Ativo' || p.status?.toLowerCase() === 'ativo'
@@ -151,7 +169,37 @@ export const Dashboard: React.FC<{
 
   const pacientesComReajuste = activePacientes.filter((p) => {
     const rDate = p.dadosPagamento?.dataReajuste?.trim();
-    return rDate === targetMonthYear;
+    if (!rDate) return false;
+
+    const parts = rDate.split('/');
+    if (parts.length !== 2) return false;
+
+    const monthNum = parseInt(parts[0], 10);
+    const yearPart = parseInt(parts[1], 10);
+    if (isNaN(monthNum) || isNaN(yearPart)) return false;
+
+    const yearNum = 2000 + yearPart;
+    const readjustMonthIdx = monthNum - 1; // 0-11
+
+    const today = new Date();
+    const todayYear = today.getFullYear();
+    const todayMonth = today.getMonth(); // 0-11
+
+    // Do not show if the month of the readjustment has already passed.
+    if (todayYear > yearNum || (todayYear === yearNum && todayMonth > readjustMonthIdx)) {
+      return false;
+    }
+
+    // Assumindo o dia 1º do mês correspondente como data base.
+    const readjustDate = new Date(yearNum, readjustMonthIdx, 1, 0, 0, 0, 0);
+
+    // Calcule a diferença em dias entre a data de hoje e essa data de reajuste.
+    const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
+    const diffTime = readjustDate.getTime() - todayMidnight.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    // O paciente deve aparecer se faltarem 45 dias ou menos para a data de reajuste.
+    return diffDays <= 45;
   });
 
   const handleConcluirReajuste = async (p: any) => {
@@ -204,6 +252,75 @@ export const Dashboard: React.FC<{
 
   return (
     <div className="space-y-6 font-sans" id="dashboard-container">
+      {/* 🔍 Section: Barra de Busca Rápida de Pacientes */}
+      <div className="bg-white p-5 rounded-2xl border border-forest-green/10 shadow-sm flex flex-col space-y-2 relative" id="section-quick-search">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-[#e8f0ec] text-forest-green rounded-xl shrink-0">
+            <Search size={20} className="stroke-[2.5]" />
+          </div>
+          <div className="flex-1">
+            <h4 className="text-sm font-serif font-bold text-forest-green" id="title-quick-search">Busca Rápida de Paciente</h4>
+            <p className="text-[11px] text-forest-green/70">Digite o nome ou CPF para localizar e acessar prontuários de forma imediata</p>
+          </div>
+        </div>
+
+        <div className="relative mt-2" id="search-input-wrapper">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Buscar por nome ou CPF..."
+            className="w-full text-xs p-3 pl-11 pr-10 border border-slate-300 rounded-xl text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] shadow-xs"
+            id="input-dashboard-search"
+          />
+          <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400">
+            <Search size={16} />
+          </div>
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
+              id="btn-clear-search"
+            >
+              <X size={16} />
+            </button>
+          )}
+
+          {/* Suspensive Search Results Dropdown */}
+          {searchQuery.trim() !== '' && (
+            <div className="absolute z-50 left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto divide-y divide-slate-100" id="search-results-dropdown border">
+              {filteredActivePacientes.length === 0 ? (
+                <div className="p-4 text-center text-xs text-gray-500 italic">
+                  Nenhum paciente ativo encontrado com os termos digitados.
+                </div>
+              ) : (
+                filteredActivePacientes.map((pac) => (
+                  <button
+                    key={pac.id}
+                    onClick={() => {
+                      if (onSelectPatientRedirect) {
+                        onSelectPatientRedirect(pac);
+                      }
+                      setSearchQuery('');
+                    }}
+                    className="w-full text-left px-4 py-3 hover:bg-[#e8f0ec]/30 flex items-center justify-between transition-colors cursor-pointer"
+                    id={`search-result-patient-${pac.id}`}
+                  >
+                    <div className="min-w-0 pr-2">
+                      <p className="text-xs font-bold text-forest-green truncate">{pac.nome}</p>
+                      <p className="text-[10px] text-gray-500 font-mono">CPF: {pac.cpf || 'Não cadastrado'}</p>
+                    </div>
+                    <span className="text-[10px] bg-forest-green/10 text-forest-green px-2.5 py-1 rounded-full font-bold uppercase shrink-0">
+                      Abrir Prontuário
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* 🎂 Section: Aniversariantes do Dia */}
       <div className="bg-white p-6 rounded-2xl border border-forest-green/10 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4" id="section-aniversariantes">
         <div className="flex items-center gap-4">
@@ -313,7 +430,7 @@ export const Dashboard: React.FC<{
                 </div>
                 <div>
                   <h3 className="text-lg font-serif font-bold text-forest-green" id="title-avisos-reajuste">Avisos de Reajuste</h3>
-                  <p className="text-xs text-forest-green/70">Reajustes contratuais programados para o próximo mês ({targetMonthYear})</p>
+                  <p className="text-xs text-forest-green/70">Reajustes contratuais programados para os próximos 45 dias</p>
                 </div>
               </div>
 

@@ -8,9 +8,10 @@ import { db, storage } from '../lib/firebase';
 import { collection, query, where, orderBy, onSnapshot, doc, getDoc, updateDoc, addDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { profissionalSchema } from '../schemas/validationSchemas';
-import { mascaraCPF, mascaraCNPJ, mascaraTelefone, mascaraCEP } from '../lib/masks';
+import { mascaraCPF, mascaraCNPJ, mascaraTelefone, mascaraCEP, validarCPF } from '../lib/masks';
 import { fetchCep, fetchBanks } from '../lib/brasilApi';
 import { toast } from 'react-hot-toast';
+import { ConfirmModal } from '../components/ConfirmModal';
 
 export const Profissionais: React.FC = () => {
   const { profissionais, pacientes, addProfissional, updateProfissional, deleteProfissional, uploadLogo, uploadProfissionalFoto, uploadPdf, userRole } = useFirebase();
@@ -24,6 +25,7 @@ export const Profissionais: React.FC = () => {
   const [loadingAgenda, setLoadingAgenda] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [bankList, setBankList] = useState<{code: string; name: string}[]>([]);
+  const [deleteProfConfirmOpen, setDeleteProfConfirmOpen] = useState(false);
 
   useEffect(() => {
     fetchBanks().then(banks => setBankList(banks.filter((b: any) => !!b.code).map((b: any) => ({ code: String(b.code), name: b.fullName || '' }))));
@@ -289,6 +291,18 @@ export const Profissionais: React.FC = () => {
       }
     }
   }, [formData.dataNascimento]);
+
+  const cleanCpfValLocal = (formData.cpf || '').replace(/\D/g, '');
+  const isCpfLoaded = cleanCpfValLocal.length > 0;
+  const isCpfFullLength = cleanCpfValLocal.length === 11;
+  const isCpfValid = isCpfFullLength && validarCPF(cleanCpfValLocal);
+  const isCpfInvalid = isCpfFullLength && !isCpfValid;
+
+  const cleanCpfTitularValLocal = (formData.cpfTitularConta || '').replace(/\D/g, '');
+  const isCpfTitularLoaded = cleanCpfTitularValLocal.length > 0;
+  const isCpfTitularFullLength = cleanCpfTitularValLocal.length === 11;
+  const isCpfTitularValid = isCpfTitularFullLength && validarCPF(cleanCpfTitularValLocal);
+  const isCpfTitularInvalid = isCpfTitularFullLength && !isCpfTitularValid;
 
   const handleOpenModal = (prof: Profissional | null = null, initialTab: 'dados' | 'agenda' | 'cracha' | 'ocorrencias' = 'dados') => {
     setEditingProf(prof);
@@ -1029,6 +1043,19 @@ export const Profissionais: React.FC = () => {
       return;
     }
 
+    if (!validarCPF(cleanCpfVal)) {
+      toast.error('O CPF do profissional é inválido. Por favor, verifique os dígitos verificadores.');
+      return;
+    }
+
+    if (isTitularConta === 'Não') {
+      const cleanCpfTitularVal = (formData.cpfTitularConta || '').replace(/\D/g, '');
+      if (cleanCpfTitularVal && !validarCPF(cleanCpfTitularVal)) {
+        toast.error('O CPF do titular da conta bancária é inválido. Por favor, verifique os dígitos verificadores.');
+        return;
+      }
+    }
+
     setLoading(true); // O estado loading precisa ser definido no componente, adicionarei logo adiante
 
     try {
@@ -1052,17 +1079,95 @@ export const Profissionais: React.FC = () => {
       });
 
       if (editingProf) {
-        await updateProfissional({ ...editingProf, ...finalData } as any);
-        toast.success("Alterações do profissional salvas com sucesso!", {
+        const updated = { ...editingProf, ...finalData } as any;
+        await updateProfissional(updated, true);
+        setEditingProf(updated);
+        setFormData({
+          nome: updated.nome || '',
+          especialidade: updated.especialidade || '',
+          telefone: updated.telefone || '',
+          foto: updated.foto || '',
+          temMei: updated.temMei ?? false,
+          cnpj: updated.cnpj || '',
+          sexo: updated.sexo || 'Masculino',
+          dataNascimento: updated.dataNascimento || '',
+          idade: updated.idade,
+          profissao: updated.profissao || 'Cuidadora(o)',
+          rg: updated.rg || '',
+          cpf: updated.cpf || '',
+          conselho: updated.conselho || '',
+          status: updated.status || 'Ativo',
+          ativo: updated.ativo ?? (updated.status === 'Ativo'),
+          dadosBancarios: updated.dadosBancarios || { banco: '', agencia: '', conta: '', pix: '' },
+          endereco: updated.endereco ? {
+            rua: updated.endereco.rua || '',
+            numero: updated.endereco.numero || '',
+            cep: updated.endereco.cep || '',
+            bairro: updated.endereco.bairro || '',
+            cidade: updated.endereco.cidade || '',
+            estado: updated.endereco.estado || ''
+          } : { rua: '', numero: '', cep: '', bairro: '', cidade: '', estado: '' },
+          documentos: {
+            cracha: updated.documentos?.cracha || '',
+            certificados: updated.documentos?.certificados || '',
+            comprovanteResidencia: updated.documentos?.comprovanteResidencia || '',
+            vacinas: updated.documentos?.vacinas || '',
+            outros: updated.documentos?.outros || ''
+          },
+          documentosAnexos: updated.documentosAnexos || [],
+          nomeTitularConta: updated.nomeTitularConta || '',
+          cpfTitularConta: updated.cpfTitularConta || '',
+          grauParentescoTitular: updated.grauParentescoTitular || '',
+        } as any);
+
+        toast.success(`Profissional ${updated.nome} atualizado com sucesso!`, {
           icon: '✅',
         });
       } else {
-        await addProfissional(finalData as any);
-        toast.success("Novo profissional cadastrado com sucesso!", {
+        const created = await addProfissional(finalData as any, true);
+        setEditingProf(created);
+        setFormData({
+          nome: created.nome || '',
+          especialidade: created.especialidade || '',
+          telefone: created.telefone || '',
+          foto: created.foto || '',
+          temMei: created.temMei ?? false,
+          cnpj: created.cnpj || '',
+          sexo: created.sexo || 'Masculino',
+          dataNascimento: created.dataNascimento || '',
+          idade: created.idade,
+          profissao: created.profissao || 'Cuidadora(o)',
+          rg: created.rg || '',
+          cpf: created.cpf || '',
+          conselho: created.conselho || '',
+          status: created.status || 'Ativo',
+          ativo: created.ativo ?? (created.status === 'Ativo'),
+          dadosBancarios: created.dadosBancarios || { banco: '', agencia: '', conta: '', pix: '' },
+          endereco: created.endereco ? {
+            rua: created.endereco.rua || '',
+            numero: created.endereco.numero || '',
+            cep: created.endereco.cep || '',
+            bairro: created.endereco.bairro || '',
+            cidade: created.endereco.cidade || '',
+            estado: created.endereco.estado || ''
+          } : { rua: '', numero: '', cep: '', bairro: '', cidade: '', estado: '' },
+          documentos: {
+            cracha: created.documentos?.cracha || '',
+            certificados: created.documentos?.certificados || '',
+            comprovanteResidencia: created.documentos?.comprovanteResidencia || '',
+            vacinas: created.documentos?.vacinas || '',
+            outros: created.documentos?.outros || ''
+          },
+          documentosAnexos: created.documentosAnexos || [],
+          nomeTitularConta: created.nomeTitularConta || '',
+          cpfTitularConta: created.cpfTitularConta || '',
+          grauParentescoTitular: created.grauParentescoTitular || '',
+        } as any);
+
+        toast.success(`Profissional ${created.nome} cadastrado com sucesso!`, {
           icon: '✅',
         });
       }
-      setIsModalOpen(false);
     } catch (err) {
       console.error("Erro ao salvar:", err);
       toast.error("Erro ao salvar profissional. Tente novamente.");
@@ -2132,7 +2237,39 @@ export const Profissionais: React.FC = () => {
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">CPF (Obrigatório)</label>
-                        <input type="text" placeholder="000.000.000-00" value={formData.cpf} onChange={e => setFormData({...formData, cpf: mascaraCPF(e.target.value)})} maxLength={14} className="p-2 border border-gray-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-[#1a3c2e] focus:border-transparent outline-none bg-white text-gray-800" required />
+                        <input
+                          type="text"
+                          placeholder="000.000.000-00"
+                          value={formData.cpf}
+                          onChange={e => setFormData({...formData, cpf: mascaraCPF(e.target.value)})}
+                          maxLength={14}
+                          className={`p-2 border rounded-lg text-xs w-full focus:outline-none focus:ring-1 transition-all ${
+                            isCpfInvalid
+                              ? 'border-red-500 text-red-950 focus:ring-red-500 focus:border-red-500 bg-red-50/10'
+                              : isCpfValid
+                              ? 'border-emerald-500 text-emerald-950 focus:ring-emerald-500 focus:border-emerald-500 bg-emerald-50/10'
+                              : 'border-gray-200 text-gray-800 focus:ring-[#1a3c2e] focus:border-transparent'
+                          }`}
+                          required
+                        />
+                        {isCpfInvalid && (
+                          <p className="text-[10px] text-red-600 font-semibold flex items-center space-x-1 mt-0.5 animate-in fade-in duration-200">
+                            <AlertCircle size={12} className="text-red-500 flex-shrink-0" />
+                            <span>CPF inválido (dígito verificador incorreto).</span>
+                          </p>
+                        )}
+                        {isCpfValid && (
+                          <p className="text-[10px] text-emerald-600 font-semibold flex items-center space-x-1 mt-0.5 animate-in fade-in duration-200">
+                            <Check size={12} className="text-emerald-500 flex-shrink-0" strokeWidth={3} />
+                            <span>CPF válido!</span>
+                          </p>
+                        )}
+                        {isCpfLoaded && !isCpfFullLength && (
+                          <p className="text-[10px] text-amber-600 font-medium flex items-center space-x-1 mt-0.5 animate-in fade-in duration-200">
+                            <span className="text-amber-500 text-xs font-bold leading-none flex-shrink-0">⚠️</span>
+                            <span>Insira os 11 dígitos do CPF</span>
+                          </p>
+                        )}
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Profissão (Obrigatório)</label>
@@ -2197,9 +2334,33 @@ export const Profissionais: React.FC = () => {
                                 value={formData.cpfTitularConta || ''}
                                 onChange={e => setFormData({ ...formData, cpfTitularConta: mascaraCPF(e.target.value) })}
                                 maxLength={14}
-                                className="p-2 border border-gray-200 rounded-lg text-xs bg-white text-gray-800"
+                                className={`p-2 border rounded-lg text-xs bg-white transition-all ${
+                                  isCpfTitularInvalid
+                                    ? 'border-red-500 text-red-955 focus:ring-1 focus:ring-red-500 focus:border-red-500 bg-red-50/10'
+                                    : isCpfTitularValid
+                                    ? 'border-emerald-500 text-emerald-950 focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 bg-emerald-50/10'
+                                    : 'border-gray-200 text-gray-800 focus:ring-1 focus:ring-[#1a3c2e]'
+                                }`}
                                 required={isTitularConta === 'Não'}
                               />
+                              {isCpfTitularInvalid && (
+                                <p className="text-[10px] text-red-600 font-semibold flex items-center space-x-1 mt-0.5 animate-in fade-in duration-200">
+                                  <AlertCircle size={12} className="text-red-500 flex-shrink-0" />
+                                  <span>CPF do titular inválido.</span>
+                                </p>
+                              )}
+                              {isCpfTitularValid && (
+                                <p className="text-[10px] text-emerald-600 font-semibold flex items-center space-x-1 mt-0.5 animate-in fade-in duration-200">
+                                  <Check size={12} className="text-emerald-500 flex-shrink-0" strokeWidth={3} />
+                                  <span>CPF do titular válido!</span>
+                                </p>
+                              )}
+                              {isCpfTitularLoaded && !isCpfTitularFullLength && (
+                                <p className="text-[10px] text-amber-600 font-medium flex items-center space-x-1 mt-0.5 animate-in fade-in duration-200">
+                                  <span className="text-amber-500 text-xs font-bold leading-none flex-shrink-0">⚠️</span>
+                                  <span>Insira os 11 dígitos do CPF</span>
+                                </p>
+                              )}
                             </div>
                             <div className="flex flex-col gap-1">
                               <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Grau de Parentesco</label>
@@ -2355,19 +2516,7 @@ export const Profissionais: React.FC = () => {
                     {editingProf && userRole === 'Administrador' && activeTab === 'dados' && (
                         <button
                             type="button"
-                            onClick={async () => {
-                                if (!window.confirm('ATENÇÃO: Tem certeza que deseja excluir permanentemente este profissional? Esta ação não pode ser desfeita.')) return;
-                                    try {
-                                        await deleteProfissional(editingProf.id);
-                                        setIsModalOpen(false);
-                                        toast.success("Profissional excluído com sucesso!", {
-                                            icon: '✅',
-                                        });
-                                    } catch (err) {
-                                        console.error(err);
-                                        toast.error("Erro ao excluir profissional.");
-                                    }
-                            }}
+                            onClick={() => setDeleteProfConfirmOpen(true)}
                             className="px-5 py-2 font-bold text-sm text-red-600 border border-red-600 hover:bg-red-50 rounded-lg transition-all cursor-pointer w-full sm:w-auto"
                         >
                             Excluir Profissional
@@ -2486,6 +2635,32 @@ export const Profissionais: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Confirmation Modal for deleting Professional */}
+      {editingProf && (
+        <ConfirmModal
+          isOpen={deleteProfConfirmOpen}
+          onClose={() => setDeleteProfConfirmOpen(false)}
+          onConfirm={async () => {
+            try {
+              await deleteProfissional(editingProf.id);
+              setSelectedProfId('');
+              setEditingProf(null);
+              setIsModalOpen(false);
+              setDeleteProfConfirmOpen(false);
+              toast.success("Profissional excluído com sucesso!", {
+                icon: '✅',
+              });
+            } catch (err) {
+              console.error(err);
+              toast.error("Erro ao excluir profissional.");
+            }
+          }}
+          title="Excluir Profissional"
+          description={`Atenção: Você está prestes a excluir permanentemente o cadastro do profissional ${editingProf.nome}. Esta ação não pode ser desfeita e removerá seus registros.`}
+          confirmText="Confirmar Exclusão"
+        />
       )}
     </div>
   );

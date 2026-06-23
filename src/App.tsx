@@ -45,6 +45,7 @@ function DashboardContent() {
   const [isBrowsingForm, setIsBrowsingForm] = useState<boolean>(false);
   const [pacientesTitleOverride, setPacientesTitleOverride] = useState<string>('Gestão Integrada de Pacientes');
   const [showFirstAccess, setShowFirstAccess] = useState(false);
+  const [initialSelectedPatient, setInitialSelectedPatient] = useState<any>(null);
 
   const { pacientes, loading, userRole, notification, setNotification, user, usuariosSistema } = useFirebase();
 
@@ -173,16 +174,24 @@ function DashboardContent() {
                 transition={{ duration: 0.22 }}
               >
                 {activeSidebarTab === 'dashboard' ? (
-                  <Dashboard setActiveTab={(tab, extra) => {
-                    setActiveSidebarTab(tab);
-                    if (extra?.financeiroSubTab) {
-                      setFinanceiroSubTab(extra.financeiroSubTab);
-                    } else {
-                      setFinanceiroSubTab('folhas');
-                    }
-                  }} />
+                  <Dashboard 
+                    setActiveTab={(tab, extra) => {
+                      setActiveSidebarTab(tab);
+                      if (extra?.financeiroSubTab) {
+                        setFinanceiroSubTab(extra.financeiroSubTab);
+                      } else {
+                        setFinanceiroSubTab('folhas');
+                      }
+                    }} 
+                    onSelectPatientRedirect={(pac) => {
+                      setInitialSelectedPatient(pac);
+                      setActiveSidebarTab('pacientes');
+                    }}
+                  />
                 ) : activeSidebarTab === 'pacientes' ? (
                   <Pacientes
+                    initialSelectedPatient={initialSelectedPatient}
+                    clearInitialSelectedPatient={() => setInitialSelectedPatient(null)}
                     onViewChange={(isForm, title) => {
                       setIsBrowsingForm(isForm);
                       setPacientesTitleOverride(title);
