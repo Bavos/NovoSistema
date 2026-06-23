@@ -138,7 +138,7 @@ function DashboardContent() {
         )}
 
         {/* 3. Area de Conteúdo Main Body */}
-        <main className="flex-1 p-6 space-y-6 max-w-7xl w-full mx-auto">
+        <main className="flex-1 px-6 py-8 space-y-6 max-w-5xl w-full mx-auto">
           {/* Dashboard Page Header block */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-4 print:hidden">
             <div className="space-y-1">

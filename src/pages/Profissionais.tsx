@@ -1587,7 +1587,7 @@ export const Profissionais: React.FC = () => {
     .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
 
   return (
-    <div className="space-y-5 max-w-7xl mx-auto w-full px-4">
+    <div className="space-y-5">
       <div className="flex flex-col sm:flex-row items-center justify-between bg-white p-4 rounded-xl border border-slate-200 print:hidden gap-4">
         {/* Lado Esquerdo: Dropdown de seleção */}
         <div className="relative w-full max-w-md">
