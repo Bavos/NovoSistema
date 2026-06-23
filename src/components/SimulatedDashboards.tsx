@@ -3295,7 +3295,7 @@ export const EmpresaDashboard: React.FC = () => {
       setTempLogo(null);
       setShouldClearLogo(false);
       setUploadDiagnostics(prev => [...prev, `[LOG SUCESSO] Logo gravada e renderizada imediatamente na tela!`]);
-      setNotification('Logo da empresa atualizada e salva com sucesso.');
+      toast.success('Logo da empresa atualizada e salva com sucesso.');
     } catch (err: any) {
       console.error("[Diagnóstico de Erro] Erro retornado no uploadLogo ou Firestore:", err);
       const errMsg = err.message || String(err);
@@ -3343,7 +3343,6 @@ export const EmpresaDashboard: React.FC = () => {
       
       toast.dismiss(loadingToast);
       toast.success('Dados organizacionais salvos com sucesso.');
-      setNotification('Dados organizacionais salvos com sucesso.');
     } catch (err: any) {
       console.error("[Diagnóstico de Erro] Erro geral ao salvar dados da matriz:", err);
       toast.dismiss(loadingToast);
@@ -3373,8 +3372,6 @@ export const EmpresaDashboard: React.FC = () => {
     setIsResettingDatabase(true);
     const loadingToast = toast.loading("Zerando banco de dados...");
     try {
-      setNotification("Iniciando Hard Reset...");
-
       // 1. Coleções de Movimentação e Escalas
       
       // A. Faturas Pacientes
@@ -3437,7 +3434,6 @@ export const EmpresaDashboard: React.FC = () => {
       const pacDocRefs = pacSnap.docs.map(d => deleteDoc(doc(db, 'pacientes', d.id)));
       await Promise.all(pacDocRefs);
 
-      setNotification("Hard Reset concluído com sucesso!");
       toast.success('Banco de dados zerado com sucesso!', { id: loadingToast });
       
       setTimeout(() => {
@@ -3497,7 +3493,7 @@ export const EmpresaDashboard: React.FC = () => {
                                   setLogoUrl('');
                                   setTempLogo(null);
                                   setShouldClearLogo(true);
-                                  setNotification('Logotipo removido com sucesso.');
+                                  toast.success('Logotipo removido com sucesso.');
                                 } catch (err: any) {
                                   alert(`Erro ao excluir logotipo: ${err.message || String(err)}`);
                                 } finally {
@@ -3625,9 +3621,9 @@ export const EmpresaDashboard: React.FC = () => {
         </div>
       </div>
       
-      {isAdmin && <BackupProntuarios />}
-      
       {isAdmin && <GestaoAcessos />}
+      
+      {isAdmin && <BackupProntuarios />}
 
       {/* Danger Zone / Área de Risco */}
       {isAdmin && (

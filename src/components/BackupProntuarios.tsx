@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
 import { db } from '../lib/firebase';
+import { toast } from 'react-hot-toast';
 import { 
   collection, 
   query, 
@@ -53,6 +54,7 @@ export const BackupProntuarios: React.FC = () => {
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [showFullHistoryModal, setShowFullHistoryModal] = useState(false);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
 
   // Load backups list & configuration on mount
   useEffect(() => {
@@ -210,7 +212,7 @@ export const BackupProntuarios: React.FC = () => {
         setBackups(prev => [newRecord, ...prev]);
       }
 
-      setNotification(`Backup de prontuários em nuvem criado com sucesso! Documento ID: ${docRef.id}`);
+      toast.success(`Backup de prontuários em nuvem criado com sucesso! Documento ID: ${docRef.id}`);
 
       if (!isAutomatic) {
         alert(`Sucesso! Backup de segurança salvo na nuvem com ${patientsArray.length} prontuários incluídos.`);
@@ -237,7 +239,7 @@ export const BackupProntuarios: React.FC = () => {
       }, { merge: true });
 
       setIntervalo(selectedInterval);
-      setNotification(`Configuração de backup alterada para: ${
+      toast.success(`Configuração de backup alterada para: ${
         selectedInterval === 'diario' ? 'Diário' :
         selectedInterval === 'semanal' ? 'Semanal' :
         selectedInterval === 'mensal' ? 'Mensal' : 'Desativado'
@@ -265,7 +267,7 @@ export const BackupProntuarios: React.FC = () => {
     try {
       await deleteDoc(doc(db, 'backups_prontuarios', id));
       setBackups(prev => prev.filter(b => b.id !== id));
-      setNotification('Registro de backup removido com sucesso.');
+      toast.success('Registro de backup removido com sucesso.');
 
       // Audit Log
       await addDoc(collection(db, 'logs_auditoria'), {
@@ -434,6 +436,21 @@ export const BackupProntuarios: React.FC = () => {
     );
   }
 
+  if (!isOpen) {
+    return (
+      <div className="flex justify-center py-2 animate-in fade-in-30">
+        <button
+          type="button"
+          onClick={() => setIsOpen(true)}
+          className="flex items-center gap-2 px-5 py-3 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 hover:text-slate-900 font-bold rounded-xl text-xs transition-all duration-200 shadow-sm cursor-pointer hover:border-slate-350 active:scale-[0.98]"
+        >
+          <Database size={14} className="text-[#1A3626]" />
+          <span>Informações sobre Backup</span>
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white p-5 border border-slate-200 rounded-2xl shadow-sm space-y-5 animate-in fade-in-30" id="backup-prontuarios">
       <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -446,9 +463,18 @@ export const BackupProntuarios: React.FC = () => {
             <p className="text-[10px] text-slate-400">Guarda periódica automatizada e manual das fichas clínicas na nuvem para contingência externa.</p>
           </div>
         </div>
-        <div className="flex items-center space-x-1.5 text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-bold">
-          <ShieldCheck size={11} />
-          <span>Ativo / Criptografado</span>
+        <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-1.5 text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-bold">
+            <ShieldCheck size={11} />
+            <span>Ativo / Criptografado</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsOpen(false)}
+            className="text-[10px] font-bold text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2.5 py-1.5 rounded-lg border border-slate-200 transition-colors uppercase cursor-pointer"
+          >
+            Recolher
+          </button>
         </div>
       </div>
 
@@ -513,9 +539,9 @@ export const BackupProntuarios: React.FC = () => {
         <h4 className="font-bold text-slate-700 flex items-center gap-1 border-b border-slate-50 pb-1.5 flex justify-between">
           <span className="flex items-center gap-1">
             <Clock size={13} className="text-slate-400" />
-            <span>Painel de Proteções Recentes (Mostrando {Math.min(backups.length, 3)} de {backups.length})</span>
+            <span>Painel de Proteções Recentes (Último Backup Realizado)</span>
           </span>
-          {backups.length > 3 && (
+          {backups.length > 1 && (
             <button
               onClick={() => setShowFullHistoryModal(true)}
               className="text-xs text-blue-600 hover:text-blue-800 font-bold hover:underline cursor-pointer"
@@ -538,7 +564,7 @@ export const BackupProntuarios: React.FC = () => {
         ) : (
           <div className="space-y-2">
             <div className="border border-slate-150 rounded-xl overflow-hidden divide-y divide-slate-100">
-              {backups.slice(0, 3).map((bk) => (
+              {backups.slice(0, 1).map((bk) => (
                 <div key={bk.id} className="flex flex-col sm:flex-row justify-between sm:items-center p-3 bg-white hover:bg-slate-50/50 transition-colors gap-2">
                   <div className="space-y-1">
                     <div className="flex items-center gap-1.5">

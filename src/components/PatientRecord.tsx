@@ -3972,28 +3972,28 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             )}
 
             {activeTab === 'auditoria' && (
-              <div className="w-full max-w-xl mx-auto bg-white rounded-2xl shadow-xl border border-gray-200 p-6 md:p-8 mt-6 mb-12 space-y-6 animate-in fade-in-30 slide-in-from-right-3">
+              <div className="w-full max-w-3xl mx-auto bg-white rounded-2xl shadow-xl border border-gray-200 p-6 md:p-8 mt-6 mb-12 space-y-6 animate-in fade-in-30 slide-in-from-right-3">
                 <h4 className="text-xs font-bold text-slate-700 border-b border-slate-100 pb-2 uppercase tracking-wider italic">HISTÓRICO DE AUDITORIA</h4>
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto rounded-xl border border-slate-100 shadow-xs">
                   <table className="w-full text-xs">
                     <thead>
-                      <tr className="border-b border-slate-100">
-                        <th className="text-left py-2 text-slate-500">Data</th>
-                        <th className="text-left py-2 text-slate-500">Usuário</th>
-                        <th className="text-left py-2 text-slate-500">Ação</th>
-                        <th className="text-left py-2 text-slate-500 font-medium">Descrição</th>
+                      <tr className="border-b border-slate-200 bg-slate-50/50">
+                        <th className="text-left py-3.5 px-4 text-slate-500 font-bold uppercase tracking-wider text-[10px]">Data</th>
+                        <th className="text-left py-3.5 px-4 text-slate-500 font-bold uppercase tracking-wider text-[10px]">Usuário</th>
+                        <th className="text-left py-3.5 px-4 text-slate-500 font-bold uppercase tracking-wider text-[10px]">Ação</th>
+                        <th className="text-left py-3.5 px-4 text-slate-500 font-medium uppercase tracking-wider text-[10px]">Descrição</th>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-slate-100">
                       {logsAuditoria
                         .filter(log => log.documentId === paciente?.id)
                         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
                         .map(log => (
-                          <tr key={log.id} className="border-b border-slate-50">
-                            <td className="py-2 text-slate-700 whitespace-nowrap">{new Date(log.timestamp).toLocaleString()}</td>
-                            <td className="py-2 text-slate-700 max-w-[120px] truncate" title={log.userId}>{log.userId || 'Sistema'}</td>
-                            <td className="py-2 text-slate-705 font-semibold text-emerald-750">{log.action}</td>
-                            <td className="py-2 text-slate-700">{log.description}</td>
+                          <tr key={log.id} className="hover:bg-slate-50/60 transition-all duration-150 align-top">
+                            <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap font-medium">{new Date(log.timestamp).toLocaleString()}</td>
+                            <td className="py-3.5 px-4 text-slate-700 max-w-[130px] truncate leading-relaxed" title={log.userId}>{log.userId || 'Sistema'}</td>
+                            <td className="py-3.5 px-4 text-slate-705 font-bold text-emerald-700 leading-relaxed">{log.action}</td>
+                            <td className="py-3.5 px-4 text-slate-600 leading-relaxed">{log.description}</td>
                           </tr>
                         ))}
                     </tbody>

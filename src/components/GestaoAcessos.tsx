@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
-import { Trash2, Plus, Edit, AlertCircle } from 'lucide-react';
+import { Trash2, Plus, Edit, AlertCircle, Key } from 'lucide-react';
 import { UsuarioSistema, validarDominioCorporativo } from '../types';
 import { auth } from '../lib/firebase';
 import { sendPasswordResetEmail } from 'firebase/auth';
@@ -15,6 +15,8 @@ export const GestaoAcessos: React.FC = () => {
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [sendingResetId, setSendingResetId] = useState<string | null>(null);
   const [confirmingResetId, setConfirmingResetId] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
 
   if (userRole?.toLowerCase() !== 'administrador') {
     return <div className="p-4 text-xs text-red-500 bg-red-50 rounded-lg flex items-center gap-2">
@@ -23,9 +25,22 @@ export const GestaoAcessos: React.FC = () => {
   }
 
   const handleAddOrEditUser = async () => {
-    if (!nome || !email) return alert('Preencha nome e email!');
+    const cleanNome = nome.trim();
+    const cleanEmail = email.trim();
 
-    const domainAllowed = await validarDominioCorporativo(email);
+    if (!cleanNome || !cleanEmail) {
+      toast.error('Preencha todos os campos!');
+      return;
+    }
+
+    // Validation against malformed/malicious emails
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,63}$/;
+    if (!emailRegex.test(cleanEmail) || cleanEmail.includes('<') || cleanEmail.includes('>')) {
+      toast.error('E-mail inválido ou malicioso!');
+      return;
+    }
+
+    const domainAllowed = await validarDominioCorporativo(cleanEmail);
     if (!domainAllowed) {
       toast.error('Acesso restrito. O domínio do seu e-mail não está autorizado nas configurações da empresa.');
       return;
@@ -33,15 +48,18 @@ export const GestaoAcessos: React.FC = () => {
 
     try {
       if (editingId) {
-        await updateUsuarioSistema({ id: editingId, nome, email, nivelAcesso: nivel, status: 'Ativo' });
+        await updateUsuarioSistema({ id: editingId, nome: cleanNome, email: cleanEmail, nivelAcesso: nivel, status: 'Ativo' });
+        toast.success(`Acesso do colaborador ${cleanNome} atualizado com sucesso!`);
       } else {
-        await addUsuarioSistema({ nome, email, nivelAcesso: nivel, status: 'Ativo' });
+        await addUsuarioSistema({ nome: cleanNome, email: cleanEmail, nivelAcesso: nivel, status: 'Ativo' });
+        toast.success(`Acesso de ${cleanNome} cadastrado com sucesso!`);
       }
       setNome('');
       setEmail('');
       setEditingId(null);
+      setShowForm(false);
     } catch (err) {
-      alert('Erro ao salvar utilizador.');
+      toast.error('Erro ao salvar acesso.');
     }
   };
 
@@ -50,6 +68,8 @@ export const GestaoAcessos: React.FC = () => {
     setNome(user.nome);
     setEmail(user.email);
     setNivel(user.nivelAcesso);
+    setShowForm(true);
+    setIsOpen(true);
     
     // Smooth scroll to form element
     const formElement = document.getElementById('gestao-acessos-form');
@@ -63,6 +83,7 @@ export const GestaoAcessos: React.FC = () => {
     setNome('');
     setEmail('');
     setNivel('Colaborador');
+    setShowForm(false);
   };
 
   const deleteUser = async (id: string) => {
@@ -73,172 +94,239 @@ export const GestaoAcessos: React.FC = () => {
     }
   };
 
+  if (!isOpen) {
+    return (
+      <div className="flex justify-center py-2 animate-in fade-in-30">
+        <button
+          type="button"
+          onClick={() => setIsOpen(true)}
+          className="flex items-center gap-2 px-5 py-3 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 hover:text-slate-900 font-bold rounded-xl text-xs transition-all duration-200 shadow-sm cursor-pointer hover:border-slate-350 active:scale-[0.98]"
+        >
+          <Key size={14} className="text-[#1A3626]" />
+          <span>Informações sobre Acessos</span>
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 animate-in fade-in-30">
       
-      {/* FORM CARD */}
-      <div 
-        id="gestao-acessos-form" 
-        className={`p-6 rounded-xl border transition-all duration-300 space-y-4 bg-white ${
-          editingId ? 'border-amber-400 ring-2 ring-amber-400/20 shadow-md' : 'border-slate-200 shadow-sm'
-        }`}
-      >
-        <div className="flex justify-between items-center">
-          <h2 className="text-sm font-bold text-slate-800">
-            {editingId ? '📝 Editar Colaborador e Nível de Acesso' : 'Equipa e Acessos ao Sistema'}
-          </h2>
-          {editingId && (
-            <button 
-              onClick={cancelEdit}
-              className="text-[10px] font-bold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 px-2 py-1 rounded border border-red-200 transition-colors uppercase"
-            >
-              Cancelar Edição
-            </button>
-          )}
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-          <div className="space-y-1.5">
-            <label htmlFor="gestao-nome" className="text-[10px] uppercase font-bold text-slate-700 tracking-wider">Nome Colaborador</label>
-            <input id="gestao-nome" value={nome} onChange={e => setNome(e.target.value)} type="text" className="w-full h-11 px-3 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#1A3626]/20 focus:outline-none transition-all" placeholder="Ex: João Silva" />
-          </div>
-          <div className="space-y-1.5">
-            <label htmlFor="gestao-email" className="text-[10px] uppercase font-bold text-slate-700 tracking-wider">E-mail</label>
-            <input id="gestao-email" value={email} onChange={e => setEmail(e.target.value)} type="text" className="w-full h-11 px-3 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#1A3626]/20 focus:outline-none transition-all" placeholder="Ex: joao@email.com" />
-          </div>
-          <div className="space-y-1.5">
-             <label htmlFor="gestao-nivel" className="text-[10px] uppercase font-bold text-slate-700 tracking-wider">Nível de Acesso</label>
-             <select id="gestao-nivel" value={nivel} onChange={e => setNivel(e.target.value as any)} className="w-full h-11 px-3 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#1A3626]/20 focus:outline-none transition-all">
-                <option value="Administrador">Administrador</option>
-                <option value="Colaborador">Colaborador</option>
-             </select>
-          </div>
+      {/* INTEGRATED CARD FOR ACESSO AO SISTEMA */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+        {/* HEADER SECTION */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 p-5 border-b border-slate-100">
           <div>
+            <h2 className="text-sm font-bold text-slate-850">Acesso ao Sistema</h2>
+            <p className="text-[11px] text-slate-500 mt-0.5">Gerencie os colaboradores e níveis de acesso autorizados na plataforma.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {!showForm && !editingId && (
+              <button
+                type="button"
+                onClick={() => setShowForm(true)}
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-[#1A3626] text-white hover:bg-[#254A34] transition-all duration-200 rounded-xl text-xs font-semibold shadow-md cursor-pointer active:scale-[0.98]"
+              >
+                <Plus size={15} /> + Adicionar Acesso
+              </button>
+            )}
             <button
               type="button"
-              id="gestao-submit-user-btn"
-              onClick={handleAddOrEditUser}
-              className="w-full h-12 bg-[#1A3626] text-white hover:bg-[#254A34] active:scale-[0.98] rounded-xl text-xs font-semibold shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+              onClick={() => setIsOpen(false)}
+              className="text-[10px] font-bold text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-3 py-2.5 rounded-xl border border-slate-200 transition-colors uppercase cursor-pointer"
             >
-              <Plus size={16} /> {editingId ? 'Atualizar Utilizador' : 'Adicionar Utilizador'}
+              Recolher
             </button>
           </div>
         </div>
-      </div>
 
-      {/* TABLE CARD */}
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-        <table className="w-full text-left text-xs">
-          <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider text-[10px] border-b border-slate-100">
-            <tr>
-              <th className="py-3 px-4">Nome</th>
-              <th className="py-3 px-4">Email</th>
-              <th className="py-3 px-4">Acesso</th>
-              <th className="py-3 px-4 text-right">Acções</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-50">
-            {usuariosSistema.filter((user) => user.status !== 'Inativo').map((user) => (
-              <tr key={user.id} className="hover:bg-slate-50">
-                <td className="py-3 px-4 font-bold text-slate-700">{user.nome}</td>
-                <td className="py-3 px-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                    <span className="text-slate-500 font-medium select-all">{user.email}</span>
-                    {sendingResetId === user.id ? (
-                      <span className="inline-flex items-center gap-1 text-[9px] text-slate-400 font-bold bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-200">
-                        <span className="animate-pulse">⏳</span> Enviando...
-                      </span>
-                    ) : confirmingResetId === user.id ? (
-                      <div className="inline-flex items-center gap-1.5 transition-all animate-in fade-in zoom-in-95 bg-amber-50 p-1 px-1.5 rounded-lg border border-amber-200">
-                        <span className="text-[9px] text-amber-800 font-black uppercase select-none px-1">Enviar link de redefinição?</span>
+        {/* FORM (COLLAPSED BY DEFAULT, INLINE DRAWER INDENTED) */}
+        {(showForm || editingId) && (
+          <form
+            onSubmit={(e) => { e.preventDefault(); handleAddOrEditUser(); }}
+            id="gestao-acessos-form"
+            className={`p-6 border-b border-slate-100 transition-all duration-300 space-y-4 bg-slate-50/50 animate-in slide-in-from-top-4 duration-300 ${
+              editingId ? 'border-amber-400 ring-2 ring-amber-400/20 shadow-inner bg-amber-50/10' : ''
+            }`}
+          >
+            <div className="flex justify-between items-center pb-2 border-b border-slate-200/60">
+              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                {editingId ? '📝 Editar Configurações de Acesso' : '🔑 Preencha os Dados de Acesso'}
+              </h3>
+              <button 
+                type="button"
+                onClick={cancelEdit}
+                className="text-[10px] font-bold text-slate-500 hover:text-slate-800 bg-white hover:bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 transition-colors uppercase cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              <div className="space-y-1.5">
+                <label htmlFor="gestao-nome" className="text-[10px] uppercase font-bold text-slate-700 tracking-wider">Nome</label>
+                <input
+                  id="gestao-nome"
+                  value={nome}
+                  onChange={e => setNome(e.target.value)}
+                  type="text"
+                  required
+                  className="w-full h-11 px-3 border border-slate-200 rounded-xl text-xs bg-white focus:ring-2 focus:ring-[#1A3626]/20 focus:outline-none transition-all placeholder:text-slate-400"
+                  placeholder="Ex: João Silva"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor="gestao-email" className="text-[10px] uppercase font-bold text-slate-700 tracking-wider">Email</label>
+                <input
+                  id="gestao-email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  type="email"
+                  required
+                  className="w-full h-11 px-3 border border-slate-200 rounded-xl text-xs bg-white focus:ring-2 focus:ring-[#1A3626]/20 focus:outline-none transition-all placeholder:text-slate-400"
+                  placeholder="Ex: joao@email.com"
+                />
+              </div>
+              <div className="space-y-1.5">
+                 <label htmlFor="gestao-nivel" className="text-[10px] uppercase font-bold text-slate-700 tracking-wider">Nível de acesso</label>
+                 <select
+                   id="gestao-nivel"
+                   value={nivel}
+                   onChange={e => setNivel(e.target.value as any)}
+                   className="w-full h-11 px-3 border border-slate-200 rounded-xl text-xs bg-white focus:ring-2 focus:ring-[#1A3626]/20 focus:outline-none transition-all"
+                 >
+                    <option value="Administrador">Administrador</option>
+                    <option value="Colaborador">Colaborador</option>
+                 </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="submit"
+                id="gestao-submit-user-btn"
+                className="px-6 h-11 bg-[#1A3626] text-white hover:bg-[#254A34] active:scale-[0.98] rounded-xl text-xs font-semibold shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+              >
+                <Plus size={15} /> {editingId ? 'Salvar Alterações' : 'Salvar Acesso'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* TABLE AREA */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-[#1A3626]/5 text-slate-600 uppercase tracking-wider text-[10px] border-b border-slate-100">
+              <tr>
+                <th className="py-3 px-5">Nome</th>
+                <th className="py-3 px-5">Email</th>
+                <th className="py-3 px-5">Acesso</th>
+                <th className="py-3 px-5 text-right">Acções</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {usuariosSistema.filter((user) => user.status !== 'Inativo').map((user) => (
+                <tr key={user.id} className="hover:bg-slate-50/50">
+                  <td className="py-3 px-5 font-bold text-slate-700">{user.nome}</td>
+                  <td className="py-3 px-5">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                      <span className="text-slate-500 font-medium select-all">{user.email}</span>
+                      {sendingResetId === user.id ? (
+                        <span className="inline-flex items-center gap-1 text-[9px] text-slate-400 font-bold bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-200">
+                          <span className="animate-pulse">⏳</span> Enviando...
+                        </span>
+                      ) : confirmingResetId === user.id ? (
+                        <div className="inline-flex items-center gap-1.5 transition-all animate-in fade-in zoom-in-95 bg-amber-50 p-1 px-1.5 rounded-lg border border-amber-200">
+                          <span className="text-[9px] text-amber-800 font-black uppercase select-none px-1">Enviar link de redefinição?</span>
+                          <button
+                            type="button"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              setSendingResetId(user.id);
+                              setConfirmingResetId(null);
+                              const loadingToast = toast.loading('Enviando e-mail de redefinição...');
+                              try {
+                                const emailDoColaborador = user.email;
+                                await sendPasswordResetEmail(auth, emailDoColaborador);
+                                toast.success('E-mail enviado!', { id: loadingToast });
+                              } catch (error: any) {
+                                console.error("Erro ao enviar redefinição de senha:", error);
+                                toast.error('Erro ao processar', { id: loadingToast });
+                              } finally {
+                                setSendingResetId(null);
+                              }
+                            }}
+                            className="px-2 py-0.5 bg-[#1A3626] hover:bg-[#254A34] text-white rounded text-[9px] font-bold uppercase cursor-pointer"
+                          >
+                            Sim
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmingResetId(null);
+                            }}
+                            className="px-2 py-0.5 bg-slate-200 hover:bg-slate-350 text-slate-700 rounded text-[9px] font-bold uppercase cursor-pointer border border-slate-200"
+                          >
+                            Não
+                          </button>
+                        </div>
+                      ) : (
                         <button
                           type="button"
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            setSendingResetId(user.id);
-                            setConfirmingResetId(null);
-                            const loadingToast = toast.loading('Enviando e-mail de redefinição...');
-                            try {
-                              const emailDoColaborador = user.email;
-                              await sendPasswordResetEmail(auth, emailDoColaborador);
-                              toast.success('E-mail enviado!', { id: loadingToast });
-                            } catch (error: any) {
-                              console.error("Erro ao enviar redefinição de senha:", error);
-                              toast.error('Erro ao processar', { id: loadingToast });
-                            } finally {
-                              setSendingResetId(null);
-                            }
+                          disabled={sendingResetId !== null}
+                          onClick={() => setConfirmingResetId(user.id)}
+                          className="inline-flex items-center justify-center px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 hover:text-[#1a3c2e] hover:bg-slate-50 border border-slate-200 hover:border-slate-350 rounded-md transition-all duration-150 cursor-pointer select-none whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                          id={`reset-${user.id}`}
+                        >
+                          🔑 Enviar Redefinição de Senha
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                  <td className="py-3 px-5">
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      user.nivelAcesso === 'Administrador' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'
+                    }`}>
+                      {user.nivelAcesso}
+                    </span>
+                  </td>
+                  <td className="py-3 px-5 text-right flex gap-2 justify-end items-center min-h-[36px]">
+                    {confirmingDeleteId === user.id ? (
+                      <div className="flex items-center gap-1.5 transition-all animate-in fade-in zoom-in-95">
+                        <span className="text-[10px] text-red-600 font-bold uppercase select-none">Excluir?</span>
+                        <button
+                          onClick={async () => {
+                            await deleteUser(user.id);
+                            setConfirmingDeleteId(null);
                           }}
-                          className="px-2 py-0.5 bg-[#1A3626] hover:bg-[#254A34] text-white rounded text-[9px] font-bold uppercase cursor-pointer"
+                          className="px-2 py-0.5 bg-red-600 text-white rounded text-[10px] font-bold uppercase cursor-pointer hover:bg-red-700 transition-colors"
                         >
                           Sim
                         </button>
                         <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setConfirmingResetId(null);
-                          }}
-                          className="px-2 py-0.5 bg-slate-200 hover:bg-slate-350 text-slate-700 rounded text-[9px] font-bold uppercase cursor-pointer border border-slate-200"
+                          onClick={() => setConfirmingDeleteId(null)}
+                          className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-bold uppercase cursor-pointer hover:bg-slate-200 transition-colors border border-slate-200"
                         >
                           Não
                         </button>
                       </div>
                     ) : (
-                      <button
-                        type="button"
-                        disabled={sendingResetId !== null}
-                        onClick={() => setConfirmingResetId(user.id)}
-                        className="inline-flex items-center justify-center px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 hover:text-[#1a3c2e] hover:bg-slate-50 border border-slate-200 hover:border-slate-350 rounded-md transition-all duration-150 cursor-pointer select-none whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
-                        id={`reset-${user.id}`}
-                      >
-                        🔑 Enviar Redefinição de Senha
-                      </button>
+                      <div className="flex gap-2 justify-end items-center">
+                        <button onClick={() => { setConfirmingDeleteId(null); startEdit(user); }} className="text-blue-500 hover:text-blue-700 cursor-pointer">
+                          <Edit size={16} />
+                        </button>
+                        <button onClick={() => setConfirmingDeleteId(user.id)} className="text-red-500 hover:text-red-700 cursor-pointer">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     )}
-                  </div>
-                </td>
-                <td className="py-3 px-4">
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                    user.nivelAcesso === 'Administrador' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'
-                  }`}>
-                    {user.nivelAcesso}
-                  </span>
-                </td>
-                <td className="py-3 px-4 text-right flex gap-2 justify-end items-center min-h-[36px]">
-                  {confirmingDeleteId === user.id ? (
-                    <div className="flex items-center gap-1.5 transition-all animate-in fade-in zoom-in-95">
-                      <span className="text-[10px] text-red-600 font-bold uppercase select-none">Excluir?</span>
-                      <button
-                        onClick={async () => {
-                          await deleteUser(user.id);
-                          setConfirmingDeleteId(null);
-                        }}
-                        className="px-2 py-0.5 bg-red-600 text-white rounded text-[10px] font-bold uppercase cursor-pointer hover:bg-red-700 transition-colors"
-                      >
-                        Sim
-                      </button>
-                      <button
-                        onClick={() => setConfirmingDeleteId(null)}
-                        className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-bold uppercase cursor-pointer hover:bg-slate-200 transition-colors border border-slate-200"
-                      >
-                        Não
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex gap-2 justify-end items-center">
-                      <button onClick={() => { setConfirmingDeleteId(null); startEdit(user); }} className="text-blue-500 hover:text-blue-700 cursor-pointer">
-                        <Edit size={16} />
-                      </button>
-                      <button onClick={() => setConfirmingDeleteId(user.id)} className="text-red-500 hover:text-red-700 cursor-pointer">
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
