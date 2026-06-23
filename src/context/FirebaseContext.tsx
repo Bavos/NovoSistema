@@ -272,7 +272,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
       }
 
-      // 2. Seed Firestore database automatically if empty
+      // 2. Seed Firestore database automatically if empty (Disabled to prevent deleted mock documents from resurrecting)
+      /*
       try {
         const pSnap = await getDocs(collection(db, 'pacientes'));
         if (pSnap.empty) {
@@ -290,6 +291,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       } catch (seedErr) {
         console.warn("Skipped Firebase seeding:", seedErr);
       }
+      */
 
       // 3. Real-time Subscription to collections
       unsubscribePacientes = onSnapshot(collection(db, 'pacientes'), (snap) => {

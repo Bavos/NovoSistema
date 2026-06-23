@@ -46,6 +46,7 @@ function DashboardContent() {
   const [pacientesTitleOverride, setPacientesTitleOverride] = useState<string>('Gestão Integrada de Pacientes');
   const [showFirstAccess, setShowFirstAccess] = useState(false);
   const [initialSelectedPatient, setInitialSelectedPatient] = useState<any>(null);
+  const [initialSelectedProfId, setInitialSelectedProfId] = useState<string>('');
 
   const { pacientes, loading, userRole, notification, setNotification, user, usuariosSistema } = useFirebase();
 
@@ -198,7 +199,10 @@ function DashboardContent() {
                     }}
                   />
                 ) : activeSidebarTab === 'profissionais' ? (
-                  <Profissionais />
+                  <Profissionais
+                    initialSelectedProfId={initialSelectedProfId}
+                    clearInitialSelectedProfId={() => setInitialSelectedProfId('')}
+                  />
                 ) : activeSidebarTab === 'financeiro' ? (
                   userRole?.toLowerCase() === 'colaborador' ? (
                     <AccessDeniedView />

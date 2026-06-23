@@ -4672,16 +4672,32 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   <span className="font-semibold text-gray-900 text-right font-mono">R$ {computedRepasse.toFixed(2)}</span>
                   <span>Ajuda de Custo:</span>
                   <span className="font-semibold text-gray-900 text-right font-mono">R$ {computedAjuda.toFixed(2)}</span>
-                  <span>Taxa Adm / Faturamento:</span>
-                  <span className="font-semibold text-gray-900 text-right font-mono">R$ {computedTaxa.toFixed(2)}</span>
-                  <div className="col-span-2 border-t border-gray-100 pt-2 flex justify-between font-bold text-sky-700">
-                    <span>Faturamento Unid. Paciente:</span>
-                    <span>R$ {(computedRepasse + computedTaxa + computedAjuda).toFixed(2)}</span>
-                  </div>
+                  {userRole?.toLowerCase() === 'administrador' && (
+                    <>
+                      <span>Taxa Adm / Faturamento:</span>
+                      <span className="font-semibold text-gray-900 text-right font-mono">R$ {computedTaxa.toFixed(2)}</span>
+                    </>
+                  )}
+                  {userRole?.toLowerCase() === 'administrador' ? (
+                    <div className="col-span-2 border-t border-gray-100 pt-2 flex justify-between font-bold text-sky-700">
+                      <span>Faturamento Unid. Paciente:</span>
+                      <span>R$ {(computedRepasse + computedTaxa + computedAjuda).toFixed(2)}</span>
+                    </div>
+                  ) : (
+                    <div className="col-span-2 border-t border-gray-100 pt-2 flex justify-between font-bold text-emerald-700">
+                      <span>Total Repasse + Ajuda:</span>
+                      <span>R$ {(computedRepasse + computedAjuda).toFixed(2)}</span>
+                    </div>
+                  )}
                   {datasSelecionadas.length > 1 && (
                     <div className="col-span-2 border-t border-dashed border-indigo-100 pt-2 flex justify-between font-extrabold text-[#1a3c2e]">
                       <span>Total do Lote ({datasSelecionadas.length}x):</span>
-                      <span>R$ {((computedRepasse + computedTaxa + computedAjuda) * datasSelecionadas.length).toFixed(2)}</span>
+                      <span>
+                        R$ {userRole?.toLowerCase() === 'administrador'
+                          ? ((computedRepasse + computedTaxa + computedAjuda) * datasSelecionadas.length).toFixed(2)
+                          : ((computedRepasse + computedAjuda) * datasSelecionadas.length).toFixed(2)
+                        }
+                      </span>
                     </div>
                   )}
                 </div>
@@ -4823,12 +4839,23 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           <span className="text-right font-semibold text-slate-800 font-mono">R$ {viewRepasseValue.toFixed(2)}</span>
                           <span>Ajuda de Custo:</span>
                           <span className="text-right font-semibold text-slate-800 font-mono">R$ {viewAjudaValue.toFixed(2)}</span>
-                          <span>Taxa faturamento:</span>
-                          <span className="text-right font-semibold text-slate-800 font-mono">R$ {viewTaxaValue.toFixed(2)}</span>
-                          <div className="col-span-2 border-t border-slate-200 mt-1.5 pt-1.5 flex justify-between font-bold text-sky-850">
-                            <span>Faturamento total:</span>
-                            <span className="font-mono">R$ {viewTotalValue.toFixed(2)}</span>
-                          </div>
+                          {userRole?.toLowerCase() === 'administrador' && (
+                            <>
+                              <span>Taxa faturamento:</span>
+                              <span className="text-right font-semibold text-slate-800 font-mono">R$ {viewTaxaValue.toFixed(2)}</span>
+                            </>
+                          )}
+                          {userRole?.toLowerCase() === 'administrador' ? (
+                            <div className="col-span-2 border-t border-slate-200 mt-1.5 pt-1.5 flex justify-between font-bold text-sky-850">
+                              <span>Faturamento total:</span>
+                              <span className="font-mono">R$ {viewTotalValue.toFixed(2)}</span>
+                            </div>
+                          ) : (
+                            <div className="col-span-2 border-t border-slate-200 mt-1.5 pt-1.5 flex justify-between font-bold text-emerald-700">
+                              <span>Total do Repasse + Ajuda:</span>
+                              <span className="font-mono">R$ {(viewRepasseValue + viewAjudaValue).toFixed(2)}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -5076,12 +5103,23 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       <span className="font-semibold text-slate-800 text-right font-mono">R$ {dComputedRepasseValue.toFixed(2)}</span>
                       <span>Nova Ajuda:</span>
                       <span className="font-semibold text-slate-800 text-right font-mono">R$ {dComputedAjudaValue.toFixed(2)}</span>
-                      <span>Nova Taxa Adm:</span>
-                      <span className="font-semibold text-slate-800 text-right font-mono">R$ {dComputedTaxaValue.toFixed(2)}</span>
-                      <div className="col-span-2 border-t border-slate-150 pt-1 flex justify-between font-bold text-emerald-700">
-                        <span>Nova Fatura Paciente:</span>
-                        <span className="font-mono">R$ {(dComputedRepasseValue + dComputedTaxaValue + dComputedAjudaValue).toFixed(2)}</span>
-                      </div>
+                      {userRole?.toLowerCase() === 'administrador' && (
+                        <>
+                          <span>Nova Taxa Adm:</span>
+                          <span className="font-semibold text-slate-800 text-right font-mono">R$ {dComputedTaxaValue.toFixed(2)}</span>
+                        </>
+                      )}
+                      {userRole?.toLowerCase() === 'administrador' ? (
+                        <div className="col-span-2 border-t border-slate-150 pt-1 flex justify-between font-bold text-emerald-700">
+                          <span>Nova Fatura Paciente:</span>
+                          <span className="font-mono">R$ {(dComputedRepasseValue + dComputedTaxaValue + dComputedAjudaValue).toFixed(2)}</span>
+                        </div>
+                      ) : (
+                        <div className="col-span-2 border-t border-slate-150 pt-1 flex justify-between font-bold text-emerald-700">
+                          <span>Novo Total Repasse + Ajuda:</span>
+                          <span className="font-mono">R$ {(dComputedRepasseValue + dComputedAjudaValue).toFixed(2)}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -5418,16 +5456,18 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     />
                   </div>
 
-                  <div className="space-y-1 col-span-2">
-                    <label className="block text-[10px] font-bold text-slate-500">Taxa Administrativa (Bloqueado)</label>
-                    <input
-                      type="text"
-                      value={`R$ ${computedTaxa.toFixed(2)}${multiplier > 1.0 ? ` (+${Math.round((multiplier - 1) * 100)}%)` : ''}`}
-                      readOnly
-                      disabled
-                      className="w-full text-xs p-2.5 bg-slate-100 border border-slate-200 rounded-lg text-slate-705 text-slate-700 font-mono font-bold cursor-not-allowed"
-                    />
-                  </div>
+                  {userRole?.toLowerCase() === 'administrador' && (
+                    <div className="space-y-1 col-span-2">
+                      <label className="block text-[10px] font-bold text-slate-500">Taxa Administrativa (Bloqueado)</label>
+                      <input
+                        type="text"
+                        value={`R$ ${computedTaxa.toFixed(2)}${multiplier > 1.0 ? ` (+${Math.round((multiplier - 1) * 100)}%)` : ''}`}
+                        readOnly
+                        disabled
+                        className="w-full text-xs p-2.5 bg-slate-100 border border-slate-200 rounded-lg text-slate-705 text-slate-700 font-mono font-bold cursor-not-allowed"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1">
@@ -5856,10 +5896,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 {/* Resumo Consolidado de Custos (Conforme regra Arquiteto) */}
                 <CardBase className="bg-[#faf9f6]/40 border border-gray-100 p-5 space-y-4">
                   <span className="text-xs font-bold text-gray-500 uppercase tracking-wider block">📊 Demonstrativo Financeiro de Repasses & Taxas</span>
-                  <DataGrid cols={4} className="gap-4">
-                    <CardBase className="p-4 bg-white/80 border border-gray-150 shadow-none col-span-2 md:col-span-1">
+                  <DataGrid cols={userRole?.toLowerCase() === 'colaborador' ? 1 : 4} className="gap-4">
+                    <CardBase className={`p-4 bg-white/80 border border-gray-150 shadow-none ${userRole?.toLowerCase() === 'colaborador' ? 'col-span-1' : 'col-span-2 md:col-span-1'}`}>
                       <DataField 
-                        label="Total Repasse Profissionais" 
+                        label={userRole?.toLowerCase() === 'colaborador' ? "Total dos Meus Repasses" : "Total Repasse Profissionais"}
                         value={`R$ ${(() => {
                           let sum = 0;
                           filteredShiftsForPatient.forEach(s => {
@@ -5877,62 +5917,66 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           });
                           return sum.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         })()}`} 
-                        className="font-mono text-xs"
+                        className="font-mono text-xs font-bold text-emerald-800"
                       />
                     </CardBase>
 
-                    <CardBase className="p-4 bg-white/80 border border-gray-150 shadow-none col-span-2 md:col-span-1">
-                      <DataField 
-                        label="Total Faturamento Tx Adm" 
-                        value={`R$ ${(() => {
-                          let sum = 0;
-                          filteredShiftsForPatient.forEach(s => {
-                            if (s.status !== 'Cancelado') {
-                              let baseTaxa = Number(s.taxaAdm) || Number(paciente?.planoAtendimento?.taxaAdm) || 0;
-                              if (s.feriado === '20%') {
-                                sum += baseTaxa * 1.20;
-                              } else if (s.feriado === '50%') {
-                                sum += baseTaxa * 1.50;
-                              } else {
-                                sum += baseTaxa;
-                              }
-                            }
-                          });
-                          return sum.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                        })()}`} 
-                        className="font-mono text-xs"
-                      />
-                    </CardBase>
+                    {userRole?.toLowerCase() !== 'colaborador' && (
+                      <>
+                        <CardBase className="p-4 bg-white/80 border border-gray-150 shadow-none col-span-2 md:col-span-1">
+                          <DataField 
+                            label="Total Faturamento Tx Adm" 
+                            value={`R$ ${(() => {
+                              let sum = 0;
+                              filteredShiftsForPatient.forEach(s => {
+                                if (s.status !== 'Cancelado') {
+                                  let baseTaxa = Number(s.taxaAdm) || Number(paciente?.planoAtendimento?.taxaAdm) || 0;
+                                  if (s.feriado === '20%') {
+                                    sum += baseTaxa * 1.20;
+                                  } else if (s.feriado === '50%') {
+                                    sum += baseTaxa * 1.50;
+                                  } else {
+                                    sum += baseTaxa;
+                                  }
+                                }
+                              });
+                              return sum.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                            })()}`} 
+                            className="font-mono text-xs"
+                          />
+                        </CardBase>
 
-                    <CardBase className="p-4 col-span-4 md:col-span-2 bg-[#1a3c2e]/5 border border-[#1a3c2e]/10 flex flex-col justify-center shadow-none">
-                      <DataField 
-                        label="Valor Consolidado Líquido Estimado da Fatura" 
-                        value={`R$ ${(() => {
-                          let sumRepasse = 0;
-                          let sumTaxa = 0;
-                          filteredShiftsForPatient.forEach(s => {
-                            if (s.status !== 'Cancelado') {
-                              let base = Number(s.valorPlantao) || Number(paciente?.planoAtendimento?.valorSugeridoPlantao) || 150;
-                              let extra = Number(s.ajudaCusto) || Number(paciente?.planoAtendimento?.ajudaCusto) || 0;
-                              let baseTaxa = Number(s.taxaAdm) || Number(paciente?.planoAtendimento?.taxaAdm) || 0;
-                              if (s.feriado === '20%') {
-                                sumRepasse += (base * 1.20) + extra;
-                                sumTaxa += baseTaxa * 1.20;
-                              } else if (s.feriado === '50%') {
-                                sumRepasse += (base * 1.50) + extra;
-                                sumTaxa += baseTaxa * 1.50;
-                              } else {
-                                sumRepasse += base + extra;
-                                sumTaxa += baseTaxa;
-                              }
-                            }
-                          });
-                          const total = sumRepasse + sumTaxa;
-                          return total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                        })()}`} 
-                        className="font-mono text-emerald-800 text-sm"
-                      />
-                    </CardBase>
+                        <CardBase className="p-4 col-span-4 md:col-span-2 bg-[#1a3c2e]/5 border border-[#1a3c2e]/10 flex flex-col justify-center shadow-none">
+                          <DataField 
+                            label="Valor Consolidado Líquido Estimado da Fatura" 
+                            value={`R$ ${(() => {
+                              let sumRepasse = 0;
+                              let sumTaxa = 0;
+                              filteredShiftsForPatient.forEach(s => {
+                                if (s.status !== 'Cancelado') {
+                                  let base = Number(s.valorPlantao) || Number(paciente?.planoAtendimento?.valorSugeridoPlantao) || 150;
+                                  let extra = Number(s.ajudaCusto) || Number(paciente?.planoAtendimento?.ajudaCusto) || 0;
+                                  let baseTaxa = Number(s.taxaAdm) || Number(paciente?.planoAtendimento?.taxaAdm) || 0;
+                                  if (s.feriado === '20%') {
+                                    sumRepasse += (base * 1.20) + extra;
+                                    sumTaxa += baseTaxa * 1.20;
+                                  } else if (s.feriado === '50%') {
+                                    sumRepasse += (base * 1.50) + extra;
+                                    sumTaxa += baseTaxa * 1.50;
+                                  } else {
+                                    sumRepasse += base + extra;
+                                    sumTaxa += baseTaxa;
+                                  }
+                                }
+                              });
+                              const total = sumRepasse + sumTaxa;
+                              return total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                            })()}`} 
+                            className="font-mono text-emerald-800 text-sm"
+                          />
+                        </CardBase>
+                      </>
+                    )}
                   </DataGrid>
                 </CardBase>
 
@@ -5946,14 +5990,16 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         <th className="py-3 px-3 border-r border-slate-200">Horário</th>
                         <th className="py-3 px-3 border-r border-slate-200">Profissional Cuidador Credenciado</th>
                         <th className="py-3 px-3 border-r border-slate-200">Feriado / Encargo</th>
-                        <th className="py-3 px-3 border-r border-slate-200 text-right">Repasse Líquido</th>
-                        <th className="py-3 px-3 text-right">Taxa Adm</th>
+                        <th className={`py-3 px-3 text-right ${userRole?.toLowerCase() !== 'colaborador' ? 'border-r border-slate-200' : ''}`}>Repasse Líquido</th>
+                        {userRole?.toLowerCase() !== 'colaborador' && (
+                          <th className="py-3 px-3 text-right">Taxa Adm</th>
+                        )}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-150 text-gray-900 text-sm md:text-base">
                       {filteredShiftsForPatient.filter(x => x.status !== 'Cancelado').length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="py-8 text-center text-gray-500 italic font-normal">Nenhum plantão ativo no período fechado.</td>
+                          <td colSpan={userRole?.toLowerCase() === 'colaborador' ? 5 : 6} className="py-8 text-center text-gray-500 italic font-normal">Nenhum plantão ativo no período fechado.</td>
                         </tr>
                       ) : (
                         filteredShiftsForPatient.filter(x => x.status !== 'Cancelado').map((item, index) => {
@@ -5983,12 +6029,14 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                               <td className="py-3 px-3 border-r border-slate-200 font-sans font-normal text-gray-650 text-gray-600 text-sm">
                                 {item.feriado ? `Feriado (+${item.feriado})` : 'Normal'}
                               </td>
-                              <td className="py-3 px-3 border-r border-slate-200 text-right font-normal text-gray-900 text-base">
+                              <td className={`py-3 px-3 text-right font-normal text-gray-900 text-base ${userRole?.toLowerCase() !== 'colaborador' ? 'border-r border-slate-200' : ''}`}>
                                 R$ {(Number(repasseCalculado) || 0).toFixed(2)}
                               </td>
-                              <td className="py-3 px-3 text-right font-normal text-gray-700 text-base">
-                                R$ {(Number(taxaCalculada) || 0).toFixed(2)}
-                              </td>
+                              {userRole?.toLowerCase() !== 'colaborador' && (
+                                <td className="py-3 px-3 text-right font-normal text-gray-700 text-base">
+                                  R$ {(Number(taxaCalculada) || 0).toFixed(2)}
+                                </td>
+                              )}
                             </tr>
                           );
                         })

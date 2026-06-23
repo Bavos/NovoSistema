@@ -13,7 +13,15 @@ import { fetchCep, fetchBanks } from '../lib/brasilApi';
 import { toast } from 'react-hot-toast';
 import { ConfirmModal } from '../components/ConfirmModal';
 
-export const Profissionais: React.FC = () => {
+interface ProfissionaisProps {
+  initialSelectedProfId?: string;
+  clearInitialSelectedProfId?: () => void;
+}
+
+export const Profissionais: React.FC<ProfissionaisProps> = ({
+  initialSelectedProfId,
+  clearInitialSelectedProfId
+}) => {
   const { profissionais, pacientes, addProfissional, updateProfissional, deleteProfissional, uploadLogo, uploadProfissionalFoto, uploadPdf, userRole } = useFirebase();
   const [selectedProfId, setSelectedProfId] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -26,6 +34,57 @@ export const Profissionais: React.FC = () => {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [bankList, setBankList] = useState<{code: string; name: string}[]>([]);
   const [deleteProfConfirmOpen, setDeleteProfConfirmOpen] = useState(false);
+
+  const handleNavigateToProfile = (profId: string) => {
+    const found = (profissionais || []).find(p => p.id === profId);
+    if (found) {
+      handleOpenModal(found, 'dados');
+      window.location.hash = `/profissionais/${profId}`;
+    }
+  };
+
+  useEffect(() => {
+    if (initialSelectedProfId) {
+      const found = (profissionais || []).find(p => p.id === initialSelectedProfId);
+      if (found) {
+        handleOpenModal(found, 'dados');
+      }
+      if (clearInitialSelectedProfId) {
+        clearInitialSelectedProfId();
+      }
+    }
+  }, [initialSelectedProfId, profissionais, clearInitialSelectedProfId]);
+
+  useEffect(() => {
+    const checkRoute = () => {
+      const hash = window.location.hash || '';
+      if (hash.startsWith('#/profissionais/')) {
+        const id = hash.replace('#/profissionais/', '');
+        const found = (profissionais || []).find(p => p.id === id);
+        if (found) {
+          handleOpenModal(found, 'dados');
+        }
+      } else {
+        const params = new URLSearchParams(window.location.search);
+        const id = params.get('profId');
+        if (id) {
+          const found = (profissionais || []).find(p => p.id === id);
+          if (found) {
+            handleOpenModal(found, 'dados');
+          }
+        }
+      }
+    };
+
+    if (profissionais && profissionais.length > 0) {
+      checkRoute();
+    }
+    
+    window.addEventListener('hashchange', checkRoute);
+    return () => {
+      window.removeEventListener('hashchange', checkRoute);
+    };
+  }, [profissionais]);
 
   useEffect(() => {
     fetchBanks().then(banks => setBankList(banks.filter((b: any) => !!b.code).map((b: any) => ({ code: String(b.code), name: b.fullName || '' }))));
@@ -1629,7 +1688,15 @@ export const Profissionais: React.FC = () => {
                 key={`prof.id.tr.${prof.id || index}-${index}`} 
                 className={`transition-colors duration-150 hover:bg-gray-50/80 ${prof.status !== 'Ativo' ? 'bg-rose-50/30 text-slate-700' : index % 2 === 0 ? 'bg-white' : 'bg-[#faf9f6]/40'}`}
               >
-                <td className="py-3.5 px-4 font-semibold text-gray-900 text-left text-sm">{prof.nome}</td>
+                <td className="py-3.5 px-4 text-left">
+                  <button
+                    type="button"
+                    onClick={() => handleNavigateToProfile(prof.id)}
+                    className="font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer text-left transition-colors focus:outline-none text-sm"
+                  >
+                    {prof.nome}
+                  </button>
+                </td>
                 <td className="py-3.5 px-4 text-left text-xs font-normal">
                   {prof.especialidade ? (
                     <SoftBadge variant="indigo">{prof.especialidade}</SoftBadge>
