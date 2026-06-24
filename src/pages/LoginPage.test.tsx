@@ -88,7 +88,6 @@ describe('LoginPage Component Tests', () => {
   });
 
   it('deve simular o clique no botao Entrar e verificar se o estado de carregamento e ativado', async () => {
-    // Configure mock login response with a delay to verify loading state
     mockSignInWithEmailAndPassword.mockImplementation(
       async () =>
         new Promise((resolve) => {
@@ -108,30 +107,24 @@ describe('LoginPage Component Tests', () => {
     const passwordInput = screen.getByPlaceholderText('Senha');
     const submitButton = screen.getByRole('button', { name: 'Entrar' });
 
-    // fill form
     fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
     fireEvent.change(passwordInput, { target: { value: 'password123' } });
-
-    // Click submit button
     fireEvent.click(submitButton);
 
-    // Verify loading label "Carregando..." is rendered and disabled
     expect(screen.getByRole('button', { name: 'Carregando...' })).toBeDefined();
-    expect(screen.getByRole('button', { name: 'Carregando...' }).getAttribute('disabled')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Carregando...' }).hasAttribute('disabled')).toBe(true);
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Entrar' })).toBeDefined();
-    });
+    }, { timeout: 150 });
   });
 
   it('deve simular erro do Firebase auth/invalid-credential', async () => {
-    // Mude aqui para o texto em português que o seu LoginPage exibe real na tela:
     const errorMsg = 'E-mail ou senha incorretos'; 
     
+    // Configura o mock para lançar o erro técnico do Firebase
     mockSignInWithEmailAndPassword.mockRejectedValue(new Error('auth/invalid-credential'));
     
-    // ... resto do código do teste que faz o clique no botão
-
     render(
       <FirebaseProvider>
         <LoginPage onNavigateToFirstAccess={() => {}} />
@@ -144,10 +137,9 @@ describe('LoginPage Component Tests', () => {
 
     fireEvent.change(emailInput, { target: { value: 'wrong@example.com' } });
     fireEvent.change(passwordInput, { target: { value: 'wrongpass' } });
-
     fireEvent.click(submitButton);
 
-    // Wait for the simulated Firebase error display
+    // Valida se a frase amigável em português foi impressa na tela
     await waitFor(() => {
       const errorDiv = screen.queryByText(errorMsg);
       expect(errorDiv).not.toBeNull();
