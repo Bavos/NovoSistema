@@ -1,97 +1,125 @@
-import React, { useState } from 'react';
-import { useFirebase } from '../context/FirebaseContext';
-import logo from '../assets/images/rh_logo_v2_1781470281009.jpg';
-import { validarDominioCorporativo } from '../types';
-import { toast } from 'react-hot-toast';
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { LoginPage } from './LoginPage';
+import { FirebaseProvider } from '../context/FirebaseContext';
 
-export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ onNavigateToFirstAccess }) => {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const { login, setNotification } = useFirebase();
+// 1. Mocks de interceptação dos módulos do Firebase
+const mockSignInWithEmailAndPassword = vi.fn();
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setIsLoading(true);
-        setError(null);
+vi.mock('firebase/app', () => ({
+  initializeApp: vi.fn(() => ({})),
+}));
 
-        const domainAllowed = await validarDominioCorporativo(email);
-        if (!domainAllowed) {
-            toast.error('Acesso restrito. O domínio do seu e-mail não está autorizado nas configurações da empresa.');
-            setIsLoading(false);
-            return;
-        }
+vi.mock('firebase/auth', () => ({
+  getAuth: vi.fn(() => ({
+    currentUser: null,
+  })),
+  signInWithEmailAndPassword: (...args: any[]) => mockSignInWithEmailAndPassword(...args),
+  onAuthStateChanged: vi.fn((auth, callback) => {
+    callback(null);
+    return () => {};
+  }),
+  signOut: vi.fn(),
+  createUserWithEmailAndPassword: vi.fn(),
+  sendPasswordResetEmail: vi.fn(),
+  sendEmailVerification: vi.fn(),
+}));
 
-        try {
-            await login(email, password);
-        } catch (err: any) {
-            setError(err.message || 'auth/invalid-credential');
-            setNotification(`Erro: ${err.message || 'auth/invalid-credential'}`);
-        } finally {
-            setIsLoading(false);
-        }
-    };
+vi.mock('firebase/firestore', () => ({
+  initializeFirestore: vi.fn(() => ({})),
+  getFirestore: vi.fn(() => ({})),
+  collection: vi.fn(() => ({})),
+  doc: vi.fn(() => ({})),
+  setDoc: vi.fn(() => Promise.resolve()),
+  updateDoc: vi.fn(() => Promise.resolve()),
+  deleteDoc: vi.fn(() => Promise.resolve()),
+  addDoc: vi.fn(() => Promise.resolve({ id: 'mock-id' })),
+  writeBatch: vi.fn(() => ({
+    delete: vi.fn(),
+    commit: vi.fn(() => Promise.resolve()),
+  })),
+  onSnapshot: vi.fn((colRef, onNext) => {
+    onNext({
+      forEach: () => {},
+    });
+    return () => {};
+  }),
+  getDocs: vi.fn(() => Promise.resolve({
+    empty: true,
+    forEach: () => {},
+    docs: [],
+  })),
+  getDocFromServer: vi.fn(() => Promise.resolve({
+    exists: () => false,
+  })),
+  query: vi.fn(() => ({})),
+  where: vi.fn(() => ({})),
+  orderBy: vi.fn(() => ({})),
+}));
 
-    return (
-        <div className="flex justify-center items-center h-screen bg-slate-50">
-            <div className="bg-white p-10 rounded-2xl shadow-xl w-full max-w-sm border border-slate-100">
-                <div className="flex justify-center mb-6">
-                    <img src={logo} alt="Logo" className="h-20 w-auto" />
-                </div>
-                <h1 className="text-2xl font-serif font-bold text-slate-800 mb-6 text-center">Login</h1>
-                {error && (
-                    <div className="bg-red-50 text-red-600 p-3 rounded-xl text-xs mb-4 border border-red-100 text-center font-medium" id="login-error-message">
-                        {error}
-                    </div>
-                )}
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="space-y-1">
-                        <label htmlFor="login-email" className="block text-xs font-semibold text-slate-700 tracking-wide">
-                            E-mail
-                        </label>
-                        <input 
-                            id="login-email"
-                            type="email" 
-                            placeholder="E-mail" 
-                            value={email} 
-                            onChange={e => setEmail(e.target.value)} 
-                            className="w-full h-12 px-4 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#1A3626]/20 focus:border-[#1A3626] transition-all text-sm text-slate-800" 
-                            required 
-                        />
-                    </div>
-                    <div className="space-y-1">
-                        <label htmlFor="login-password" className="block text-xs font-semibold text-slate-700 tracking-wide">
-                            Senha
-                        </label>
-                        <input 
-                            id="login-password"
-                            type="password" 
-                            placeholder="Senha" 
-                            value={password} 
-                            onChange={e => setPassword(e.target.value)} 
-                            className="w-full h-12 px-4 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#1A3626]/20 focus:border-[#1A3626] transition-all text-sm text-slate-800" 
-                            required 
-                        />
-                    </div>
-                    <button 
-                        id="login-submit-btn"
-                        type="submit" 
-                        disabled={isLoading}
-                        className="w-full h-12 bg-[#1A3626] text-white rounded-xl font-semibold hover:bg-[#254A34] transition-all active:scale-[0.98] shadow-lg shadow-[#1A3626]/20 disabled:opacity-50 flex items-center justify-center text-sm cursor-pointer"
-                    >
-                        {isLoading ? 'Carregando...' : 'Entrar'}
-                    </button>
-                    <button 
-                        id="login-register-link-btn"
-                        type="button" 
-                        onClick={onNavigateToFirstAccess}
-                        className="w-full h-12 text-slate-600 hover:text-[#1A3626] text-xs font-semibold text-center hover:bg-slate-50 rounded-xl transition-colors flex items-center justify-center cursor-pointer"
-                    >
-                        Primeiro Acesso? Crie sua senha
-                    </button>
-                </form>
-            </div>
-        </div>
+vi.mock('firebase/storage', () => ({
+  getStorage: vi.fn(() => ({})),
+  ref: vi.fn(() => ({})),
+  uploadBytes: vi.fn(() => Promise.resolve({ metadata: {} })),
+  getDownloadURL: vi.fn(() => Promise.resolve('https://mock-url.com')),
+}));
+
+// 2. Mock da função de validação do domínio corporativo externa para não barrar o submit
+vi.mock('../types', () => ({
+  validarDominioCorporativo: vi.fn(() => Promise.resolve(true)),
+}));
+
+// Mock do asset de imagem para evitar falhas de resolução no ambiente de teste
+vi.mock('../assets/images/rh_logo_v2_1781470281009.jpg', () => ({
+  default: 'mock-logo-url',
+}));
+
+describe('LoginPage Component Tests', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('deve renderizar o formulario de login com email, senha e botao entrar', () => {
+    render(
+      <FirebaseProvider>
+        <LoginPage onNavigateToFirstAccess={() => {}} />
+      </FirebaseProvider>
     );
-};
+
+    expect(screen.getByPlaceholderText('E-mail')).toBeDefined();
+    expect(screen.getByPlaceholderText('Senha')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Entrar' })).toBeDefined();
+  });
+
+  it('deve simular o clique no botao Entrar e verificar se o estado de carregamento e ativado', async () => {
+    mockSignInWithEmailAndPassword.mockImplementation(
+      async () =>
+        new Promise((resolve) => {
+          setTimeout(() => {
+            resolve({ user: { email: 'admin@system.com', emailVerified: true } });
+          }, 100);
+        })
+    );
+
+    render(
+      <FirebaseProvider>
+        <FirebaseProvider>
+          <LoginPage onNavigateToFirstAccess={() => {}} />
+        </FirebaseProvider>
+      </FirebaseProvider>
+    );
+
+    const emailInput = screen.getByPlaceholderText('E-mail');
+    const passwordInput = screen.getByPlaceholderText('Senha');
+    const submitButton = screen.getByRole('button', { name: 'Entrar' });
+
+    fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
+    fireEvent.change(passwordInput, { target: { value: 'password123' } });
+    fireEvent.click(submitButton);
+
+    expect(screen.getByRole('button', { name: 'Carregando...' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Carregando...' }).hasAttribute('disabled')).toBe(true);
+
+    await waitFor(() => {
+      expect(screen.getByRole('
