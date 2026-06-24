@@ -36,9 +36,7 @@ jobs:
       # Valida as regras do eslint-plugin-security e react-hooks
 
     - name: Executar Suite de Testes Unitários
-      run: npm test -- --watchAll=false --ci
-      env:
-        CI: 'true'
+      run: npm test
 
     - name: Validar Compilação de Produção (Build)
       run: npm run build
