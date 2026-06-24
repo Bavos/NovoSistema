@@ -32,10 +32,7 @@ export const PatientList: React.FC<PatientListProps> = ({
 
   const [localSearch, setLocalSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [filterStatus, setFilterStatus] = useState<string>('Ativo');
-  const [filterDependence, setFilterDependence] = useState<string>('todos');
   const [filterPacienteId, setFilterPacienteId] = useState<string>('todos');
-  const [showFilters, setShowFilters] = useState(false);
 
   // Deactivation confirmation modal for list bulk actions
   const [bulkDeactivateOpen, setBulkDeactivateOpen] = useState(false);
@@ -44,9 +41,16 @@ export const PatientList: React.FC<PatientListProps> = ({
   const [deactivateConfirmText, setDeactivateConfirmText] = useState('');
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
-  // Sorted list of patients for filter dropdown
+  // Sorted list of patients for filter dropdown: active alphabetically first, then inactive alphabetically
   const sortedPacientes = useMemo(() => {
-    return [...pacientes].sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+    return [...pacientes].sort((a, b) => {
+      const statusA = a.status === 'Ativo' ? 0 : 1;
+      const statusB = b.status === 'Ativo' ? 0 : 1;
+      if (statusA !== statusB) {
+        return statusA - statusB;
+      }
+      return (a.nome || '').localeCompare(b.nome || '', 'pt-BR');
+    });
   }, [pacientes]);
 
   // Combined Search and Filters
@@ -61,14 +65,11 @@ export const PatientList: React.FC<PatientListProps> = ({
         (p.nomeResponsavel || '').toLowerCase().includes(query);
 
       // Filter logic
-      const matchStatus = filterStatus === 'todos' ? true : p.status === filterStatus;
-      const matchDependence =
-        filterDependence === 'todos' ? true : p.informacoesMedicas.grauDependencia === filterDependence;
       const matchPaciente = filterPacienteId === 'todos' ? true : p.id === filterPacienteId;
 
-      return matchSearch && matchStatus && matchDependence && matchPaciente;
+      return matchSearch && matchPaciente;
     });
-  }, [pacientes, localSearch, globalSearchQuery, filterStatus, filterDependence, filterPacienteId]);
+  }, [pacientes, localSearch, globalSearchQuery, filterPacienteId]);
 
   // Checkbox functions
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -160,7 +161,7 @@ export const PatientList: React.FC<PatientListProps> = ({
       {/* Top action bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
         {/* Local search, filter dropdown trigger */}
-        <div className="flex flex-wrap items-center gap-2 flex-1">
+        <div className="flex flex-wrap items-center gap-3 flex-1">
           <div className="relative max-w-xs w-full">
             <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
             <input
@@ -172,30 +173,28 @@ export const PatientList: React.FC<PatientListProps> = ({
             />
           </div>
 
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center space-x-1 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
-              showFilters || filterStatus !== 'todos' || filterDependence !== 'todos' || filterPacienteId !== 'todos'
-                ? 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100'
-                : 'bg-white hover:bg-slate-50 text-slate-600 border-slate-200'
-            }`}
-          >
-            <Filter size={14} />
-            <span>Filtros</span>
-            {(filterStatus !== 'todos' || filterDependence !== 'todos' || filterPacienteId !== 'todos') && (
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
-            )}
-          </button>
+          <div className="relative max-w-xs w-full">
+            <select
+              value={filterPacienteId}
+              onChange={(e) => setFilterPacienteId(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-700 font-medium focus:outline-none focus:border-blue-500 focus:bg-white transition-all shadow-inner cursor-pointer"
+            >
+              <option value="todos">Todos os Pacientes</option>
+              {sortedPacientes.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nome} ({p.status === 'Ativo' ? 'Ativo' : 'Inativo'})
+                </option>
+              ))}
+            </select>
+          </div>
 
-          {(filterStatus !== 'todos' || filterDependence !== 'todos' || filterPacienteId !== 'todos' || localSearch) && (
+          {(filterPacienteId !== 'todos' || localSearch) && (
             <button
               onClick={() => {
                 setLocalSearch('');
-                setFilterStatus('todos');
-                setFilterDependence('todos');
                 setFilterPacienteId('todos');
               }}
-              className="text-xs text-slate-400 hover:text-blue-600 underline font-medium cursor-pointer"
+              className="text-xs text-slate-400 hover:text-blue-600 underline font-semibold cursor-pointer"
             >
               Resetar Filtros
             </button>
@@ -244,55 +243,6 @@ export const PatientList: React.FC<PatientListProps> = ({
           </button>
         </div>
       </div>
-
-      {/* Advanced Filter Panel */}
-      {showFilters && (
-        <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-5 shadow-inner text-sm animate-in slide-in-from-top-3 duration-200">
-          <div>
-            <label className="block font-medium text-gray-700 mb-1.5 text-sm">Status:</label>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm text-gray-900 focus:outline-none focus:border-blue-500"
-            >
-              <option value="todos">Todos os Pacientes</option>
-              <option value="Ativo">Ativos</option>
-              <option value="Desativado">Desativados</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block font-medium text-gray-700 mb-1.5 text-sm">Grau de Dependência:</label>
-            <select
-              value={filterDependence}
-              onChange={(e) => setFilterDependence(e.target.value)}
-              className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm text-gray-900 focus:outline-none focus:border-blue-500"
-            >
-              <option value="todos">Qualquer dependência</option>
-              <option value="Baixo">Baixo</option>
-              <option value="Médio">Médio</option>
-              <option value="Alto">Alto</option>
-              <option value="Muito Alto">Muito Alto</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block font-medium text-gray-700 mb-1.5 text-sm">Nome do paciente:</label>
-            <select
-              value={filterPacienteId}
-              onChange={(e) => setFilterPacienteId(e.target.value)}
-              className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm text-gray-900 focus:outline-none focus:border-blue-500"
-            >
-              <option value="todos">Qualquer Paciente</option>
-              {sortedPacientes.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.nome}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      )}
 
       {/* Table Container */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden" id="patients-table-container">

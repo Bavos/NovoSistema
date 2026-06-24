@@ -103,6 +103,18 @@ function DashboardContent() {
             // Auto-reset state overrides
             setIsBrowsingForm(false);
             setPacientesTitleOverride('Gestão Integrada de Pacientes');
+
+            // Clear hash and query parameters when switching tabs to prevent auto-opening
+            try {
+              const url = new URL(window.location.href);
+              url.hash = '';
+              if (url.searchParams.has('profId')) {
+                url.searchParams.delete('profId');
+              }
+              window.history.replaceState({}, '', url.toString().replace(/#$/, ''));
+            } catch (err) {
+              console.warn('Erro ao limpar a URL:', err);
+            }
           }}
           isSidebarExpanded={isSidebarExpanded}
           setIsSidebarExpanded={setIsSidebarExpanded}

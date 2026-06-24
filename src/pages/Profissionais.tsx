@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import html2canvas from 'html2canvas';
 import { useFirebase } from '../context/FirebaseContext';
 import { Profissional, Agendamento, DocumentoAnexo, Ocorrencia } from '../types';
-import { Plus, Edit2, Trash2, X, Check, CalendarDays, Paperclip, AlertCircle, Printer, Download, FileImage, Search, Clock, User, Calendar, Receipt } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Check, CalendarDays, Paperclip, AlertCircle, Printer, Download, FileImage, Search, Clock, User, Calendar, Receipt, Phone } from 'lucide-react';
 import { CardBase, DataGrid, DataField, SoftBadge } from '../components/ui/DesignSystem';
 import { db, storage } from '../lib/firebase';
 import { collection, query, where, orderBy, onSnapshot, doc, getDoc, updateDoc, addDoc, deleteDoc, getDocs } from 'firebase/firestore';
@@ -453,6 +453,23 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
         grauParentescoTitular: '',
     });
     setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setEditingProf(null);
+    
+    // Clean hash and query parameters from URL to prevent auto-opening on next view
+    try {
+      const url = new URL(window.location.href);
+      url.hash = '';
+      if (url.searchParams.has('profId')) {
+        url.searchParams.delete('profId');
+      }
+      window.history.replaceState({}, '', url.toString().replace(/#$/, ''));
+    } catch (err) {
+      console.warn('Erro ao limpar URL ao fechar modal:', err);
+    }
   };
 
   // Funções de Gestão de Ocorrências e Sincronização de Bloqueios de Escala
@@ -1671,8 +1688,8 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
         </button>
       </div>
 
-      <div className="bg-white border border-gray-100 rounded-xl overflow-hidden shadow-sm print:hidden">
-        <table className="w-full text-sm">
+      <div className="bg-white border border-gray-100 rounded-xl overflow-hidden shadow-sm print:hidden hidden md:block">
+        <table className="w-full text-sm hidden md:table">
           <thead className="bg-[#fbfaf8] border-b border-gray-100 text-gray-400 text-xs uppercase tracking-wider font-semibold">
             <tr>
               <th className="py-3.5 px-4 text-left font-semibold text-gray-500 text-xs">Nome</th>
@@ -1734,6 +1751,60 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
         </table>
       </div>
 
+      {/* Visualização em Cards para Celular */}
+      <div className="block md:hidden print:hidden space-y-3 px-4">
+        {filteredAndSortedProfissionais.map((prof, index) => (
+          <div 
+            key={`prof.id.card.${prof.id || index}-${index}`}
+            onClick={() => handleNavigateToProfile(prof.id)}
+            className={`relative bg-white rounded-xl border border-gray-100 p-4 shadow-sm transition-colors cursor-pointer hover:bg-gray-50/80 active:bg-gray-100 ${prof.status !== 'Ativo' ? 'bg-rose-50/30 text-slate-700' : ''}`}
+          >
+            {/* Bloco de Informações - Distribuição vertical com gap-2 */}
+            <div className="flex flex-col gap-2">
+              {/* Nome e Badge de Status Alinhados Lado a Lado */}
+              <div className="flex items-center flex-wrap gap-2 pr-10">
+                <h4 className="text-base font-semibold text-gray-900 leading-tight break-words">{prof.nome}</h4>
+                <SoftBadge variant={prof.status === 'Ativo' ? 'green' : 'red'}>
+                  {prof.status || 'Inativo'}
+                </SoftBadge>
+              </div>
+              
+              {/* Especialidade e Telefone com Ícone Discreto */}
+              <div className="flex flex-wrap items-center gap-2">
+                {prof.especialidade ? (
+                  <SoftBadge variant="indigo">{prof.especialidade}</SoftBadge>
+                ) : (
+                  <span className="text-gray-300 italic text-xs">Geral</span>
+                )}
+                {prof.telefone && (
+                  <div className="text-xs text-slate-500 font-normal font-mono flex items-center gap-1">
+                    <Phone size={12} className="text-slate-400 flex-shrink-0" />
+                    <span>{prof.telefone}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Botão de Editar no Topo Direito (absolute) */}
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                handleOpenModal(prof, 'dados');
+              }} 
+              className="absolute top-4 right-4 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 active:bg-indigo-100/80 p-2 rounded-lg border border-indigo-100 bg-indigo-50/20 transition-all cursor-pointer flex items-center justify-center shadow-xs" 
+              title="Editar"
+            >
+              <Edit2 size={14} />
+            </button>
+          </div>
+        ))}
+        {filteredAndSortedProfissionais.length === 0 && (
+          <div className="bg-white rounded-xl border border-gray-100 p-8 text-center text-slate-400 text-sm font-normal shadow-sm">
+            Nenhum profissional encontrado.
+          </div>
+        )}
+      </div>
+
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-xs print:bg-white print:p-0 print:items-start">
           <form onSubmit={handleSave} className="bg-white p-6 rounded-2xl w-full max-w-3xl space-y-5 max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-100 print:shadow-none print:border-none print:max-h-full print:overflow-visible">
@@ -1756,7 +1827,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                      <span className={`text-xs font-bold ${formData.status === 'Ativo' ? 'text-[#1a3c2e]' : 'text-[#d1d1d1]'}`}>Status: {formData.status}</span>
                    </div>
                  )}
-                 <button type="button" onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-50 transition-colors">
+                 <button type="button" onClick={handleCloseModal} className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-50 transition-colors">
                     <X size={18} />
                  </button>
               </div>
@@ -2579,7 +2650,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
 
             <div className="flex flex-col sm:flex-row gap-3 justify-between items-center pt-4 border-t border-slate-100 mt-2 print:hidden">
                 <div className="flex gap-2 w-full sm:w-auto">
-                    <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2 hover:bg-gray-100 font-medium text-sm text-slate-600 rounded-lg transition-colors cursor-pointer w-full sm:w-auto">Fechar</button>
+                    <button type="button" onClick={handleCloseModal} className="px-5 py-2 hover:bg-gray-100 font-medium text-sm text-slate-600 rounded-lg transition-colors cursor-pointer w-full sm:w-auto">Fechar</button>
                     {editingProf && userRole === 'Administrador' && activeTab === 'dados' && (
                         <button
                             type="button"
@@ -2713,8 +2784,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
             try {
               await deleteProfissional(editingProf.id);
               setSelectedProfId('');
-              setEditingProf(null);
-              setIsModalOpen(false);
+              handleCloseModal();
               setDeleteProfConfirmOpen(false);
               toast.success("Profissional excluído com sucesso!", {
                 icon: '✅',

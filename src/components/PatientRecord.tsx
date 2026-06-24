@@ -740,6 +740,14 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const isCurrentlyDeactivated = pStatus === 'Desativado';
   const isColaborador = userRole?.toLowerCase() === 'colaborador';
 
+  // Guard for 'plano' tab - redirect and show alert/error if a colaborador tries to access it
+  useEffect(() => {
+    if (activeTab === 'plano' && isColaborador) {
+      toast.error('Acesso Negado: Usuários com perfil Colaborador não possuem permissão para acessar o Plano de Atendimento.');
+      setActiveTab('geral');
+    }
+  }, [activeTab, isColaborador]);
+
   // Get active shifts for this patient
   const filteredShiftsForPatient = plantoes.filter(
     (pl) => paciente && pl.pacienteId === paciente.id
@@ -2372,17 +2380,19 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               <Stethoscope size={16} />
               <span>Info Médica</span>
             </button>
-            <button
-              onClick={() => setActiveTab('plano')}
-              className={`shrink-0 flex items-center space-x-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === 'plano'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              <Clock size={16} />
-              <span>Plano de Atendimento</span>
-            </button>
+            {!isColaborador && (
+              <button
+                onClick={() => setActiveTab('plano')}
+                className={`shrink-0 flex items-center space-x-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  activeTab === 'plano'
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <Clock size={16} />
+                <span>Plano de Atendimento</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setActiveTab('agendamento')}
@@ -2874,7 +2884,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               </div>
             )}
 
-            {activeTab === 'plano' && (
+            {activeTab === 'plano' && !isColaborador && (
               <div className="w-full max-w-xl mx-auto bg-white rounded-2xl shadow-xl border border-gray-200 p-6 md:p-8 mt-6 mb-12 space-y-4 animate-in fade-in-30 slide-in-from-right-3">
                 <h4 className="text-xs font-bold text-slate-700 border-b border-slate-100 pb-2 uppercase tracking-wider italic">CONFIGURAÇÃO DE ESCALA (PLANTÃO PRINCIPAL)</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
@@ -3178,6 +3188,16 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     </button>
                   )}
                 </div>
+              </div>
+            )}
+
+            {activeTab === 'plano' && isColaborador && (
+              <div className="w-full max-w-xl mx-auto bg-rose-50/50 border border-rose-200 rounded-2xl p-6 text-center space-y-3 mt-6 mb-12">
+                <AlertOctagon className="w-10 h-10 text-rose-600 mx-auto animate-bounce" />
+                <h4 className="font-bold text-rose-800 text-sm">Acesso Negado</h4>
+                <p className="text-xs text-rose-600 leading-relaxed">
+                  Usuários com perfil Colaborador não possuem permissão para acessar o Plano de Atendimento deste paciente. Redirecionando...
+                </p>
               </div>
             )}
 
