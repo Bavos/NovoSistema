@@ -1110,8 +1110,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       alert('Você precisa primeiro salvar o cadastro do paciente para adicionar plantões na escala.');
       return;
     }
-    if (!newShiftProf.trim()) {
-      alert('Preencha o nome do profissional.');
+    if (!newShiftProf || newShiftProf.trim() === '') {
+      toast.error('Por favor, selecione um profissional para o agendamento.');
       return;
     }
 
@@ -1198,20 +1198,20 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   // NEW HANDLERS FOR ADVANCED SCHEDULER: Avulso, Concluir, Reabrir, Exclusão
 
   const handleConfirmAvulso = async () => {
-    if (!paciente) return;
+    if (!paciente) return false;
     if (datasSelecionadas.length === 0) {
       alert('Selecione ao menos uma data para o agendamento.');
-      return;
+      return false;
     }
-    if (!avulsoProf.trim()) {
-      alert('Por favor, indique o profissional responsável.');
-      return;
+    if (!avulsoProf || avulsoProf.trim() === '') {
+      toast.error('Por favor, selecione um profissional para o agendamento.');
+      return false;
     }
 
     const pickedProf = profissionais.find(p => p.nome === avulsoProf);
     if (pickedProf && isBlockedBidirectional(pickedProf)) {
       alert('Atenção: Este profissional possui uma restrição de atendimento (bloqueio) para este paciente devido a uma ocorrência passada.');
-      return;
+      return false;
     }
 
     try {
@@ -1317,8 +1317,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       setDatasSelecionadas([]);
       setAvulsoModalOpen(false);
       alert(totalQuantity > 1 ? `${totalQuantity} plantões agendados em lote com sucesso!` : 'Novo agendamento criado com sucesso!');
+      return true;
     } catch (err) {
       alert('Erro ao criar novo agendamento.');
+      return false;
     }
   };
 
@@ -2126,7 +2128,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   };
 
   const handleSaveEditShift = async () => {
-    if (!editShiftProfName.trim() || !editShiftDate) {
+    if (!editShiftProfName || editShiftProfName.trim() === '') {
+      toast.error('Por favor, selecione um profissional para o agendamento.');
+      return;
+    }
+    if (!editShiftDate) {
       alert('Preencha as informações obrigatórias.');
       return;
     }
@@ -4746,8 +4752,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               <button
                 type="button"
                 onClick={async () => {
-                  await handleConfirmAvulso();
-                  setAvulsoModalOpen(false);
+                  const success = await handleConfirmAvulso();
+                  if (success) {
+                    setAvulsoModalOpen(false);
+                  }
                 }}
                 className="px-4.5 py-2 text-xs font-extrabold bg-sky-600 hover:bg-sky-700 text-white rounded-lg transition-all shadow-sm cursor-pointer"
               >
@@ -5154,8 +5162,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     <button
                       type="button"
                       onClick={async () => {
-                        if (!detailsProfName.trim()) {
-                          alert('Por favor, informe um profissional.');
+                        if (!detailsProfName || detailsProfName.trim() === '') {
+                          toast.error('Por favor, selecione um profissional para o agendamento.');
                           return;
                         }
                         
@@ -5513,8 +5521,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 <button
                   type="button"
                   onClick={async () => {
-                    await handleConfirmAvulso();
-                    setAvulsoModalOpen(false);
+                    const success = await handleConfirmAvulso();
+                    if (success) {
+                      setAvulsoModalOpen(false);
+                    }
                   }}
                   className="px-4.5 py-2 text-xs font-extrabold bg-sky-600 hover:bg-sky-700 text-white rounded-lg transition-color shadow-sm cursor-pointer"
                 >

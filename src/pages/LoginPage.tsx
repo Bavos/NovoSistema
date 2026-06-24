@@ -27,9 +27,7 @@ export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ o
             await login(email, password);
         } catch (err: any) {
             setError(err.message || 'auth/invalid-credential');
-            if (setNotification) {
-                setNotification(`Erro: ${err.message || 'auth/invalid-credential'}`);
-            }
+            setNotification(`Erro: ${err.message || 'auth/invalid-credential'}`);
         } finally {
             setIsLoading(false);
         }
