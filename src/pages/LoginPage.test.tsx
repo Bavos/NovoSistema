@@ -4,8 +4,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { LoginPage } from './LoginPage';
 import { FirebaseProvider } from '../context/FirebaseContext';
 
-// Define mocks first to intercept Firebase modules
-const mockSignInWithEmailAndPassword = vi.fn();
+// Mock do Contexto customizado para controlar as ações da interface
+const mockLogin = vi.fn();
+const mockSetNotification = vi.fn();
+
+vi.mock('../context/FirebaseContext', () => ({
+  FirebaseProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  useFirebase: () => ({
+    login: mockLogin,
+    setNotification: mockSetNotification,
+  }),
+}));
 
 vi.mock('firebase/app', () => ({
   initializeApp: vi.fn(() => ({})),
