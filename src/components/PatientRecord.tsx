@@ -2209,8 +2209,24 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const isCpfPagadorValid = isCpfPagadorFullLength && validarCPF(cleanCpfPagadorValLocal);
   const isCpfPagadorInvalid = isCpfPagadorFullLength && !isCpfPagadorValid;
 
+  let idadeCalculada = '---';
+  if (dataNascimento) {
+    try {
+      const today = new Date();
+      const birth = new Date(dataNascimento);
+      let age = today.getFullYear() - birth.getFullYear();
+      const m = today.getMonth() - birth.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+        age--;
+      }
+      idadeCalculada = `${age} anos`;
+    } catch (e) {
+      idadeCalculada = '---';
+    }
+  }
+
   return (
-    <div className="space-y-6" id="patient-record-container">
+    <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 space-y-6" id="patient-record-container">
       {/* Return       <div className="flex items-center justify-between">
         <button
           onClick={onBack}
@@ -2352,89 +2368,89 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         {/* Right side form view containing horizontals sub tabs */}
         <div className="space-y-4">
           {/* sub-tabs header block */}
-          <nav className="flex overflow-x-auto whitespace-nowrap gap-2 pb-2 w-full no-scrollbar md:overflow-x-visible md:flex-wrap">
+          <nav className="flex overflow-x-auto whitespace-nowrap gap-1.5 pb-2 w-full no-scrollbar md:flex-nowrap md:overflow-x-auto">
             <button
               onClick={() => setActiveTab('geral')}
-              className={`shrink-0 flex items-center space-x-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`shrink-0 flex items-center space-x-1.5 px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-xs md:text-sm font-medium transition-colors ${
                 activeTab === 'geral'
-                  ? 'bg-blue-600 text-white'
+                  ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
-              <User size={16} />
+              <User size={15} />
               <span>Geral & Contato</span>
             </button>
             <button
               onClick={() => setActiveTab('endereco')}
-              className={`shrink-0 flex items-center space-x-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`shrink-0 flex items-center space-x-1.5 px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-xs md:text-sm font-medium transition-colors ${
                 activeTab === 'endereco'
-                  ? 'bg-blue-600 text-white'
+                  ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
-              <MapPin size={16} />
+              <MapPin size={15} />
               <span>Endereço</span>
             </button>
             <button
               onClick={() => setActiveTab('medico')}
-              className={`shrink-0 flex items-center space-x-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`shrink-0 flex items-center space-x-1.5 px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-xs md:text-sm font-medium transition-colors ${
                 activeTab === 'medico'
-                  ? 'bg-blue-600 text-white'
+                  ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
-              <Stethoscope size={16} />
+              <Stethoscope size={15} />
               <span>Info Médica</span>
             </button>
             {!isColaborador && (
               <button
                 onClick={() => setActiveTab('plano')}
-                className={`shrink-0 flex items-center space-x-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`shrink-0 flex items-center space-x-1.5 px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-xs md:text-sm font-medium transition-colors ${
                   activeTab === 'plano'
-                    ? 'bg-blue-600 text-white'
+                    ? 'bg-blue-600 text-white shadow-sm'
                     : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
-                <Clock size={16} />
+                <Clock size={15} />
                 <span>Plano de Atendimento</span>
               </button>
             )}
             <button
               type="button"
               onClick={() => setActiveTab('agendamento')}
-              className={`shrink-0 flex items-center space-x-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`shrink-0 flex items-center space-x-1.5 px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-xs md:text-sm font-medium transition-colors ${
                 activeTab === 'agendamento'
-                  ? 'bg-blue-600 text-white'
+                  ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
-              <CalendarDays size={16} />
+              <CalendarDays size={15} />
               <span>Agendamento</span>
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('ocorrencias')}
-              className={`shrink-0 flex items-center space-x-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`shrink-0 flex items-center space-x-1.5 px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-xs md:text-sm font-medium transition-colors ${
                 activeTab === 'ocorrencias'
-                  ? 'bg-blue-600 text-white'
+                  ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-gray-600 hover:bg-gray-100'
               }`}
               id="tab-btn-ocorrencias"
             >
-              <AlertOctagon size={16} />
+              <AlertOctagon size={15} />
               <span>Ocorrências</span>
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('auditoria')}
-              className={`shrink-0 flex items-center space-x-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`shrink-0 flex items-center space-x-1.5 px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-xs md:text-sm font-medium transition-colors ${
                 activeTab === 'auditoria'
-                  ? 'bg-blue-600 text-white'
+                  ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-gray-600 hover:bg-gray-100'
               }`}
               id="tab-btn-auditoria"
             >
-              <History size={16} />
+              <History size={15} />
               <span>Histórico</span>
             </button>
           </nav>
@@ -2442,266 +2458,273 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
           {/* Form input sections */}
           <form onSubmit={handleSave} className="w-full min-h-[380px]">
             {activeTab === 'geral' && (
-              <div className="w-full max-w-4xl mx-auto mt-6 mb-12 animate-in fade-in-30 slide-in-from-right-3">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {/* Cartão Central (Destaque Principal - Identidade) */}
-                  <div className="md:col-span-2 bg-white rounded-2xl border border-[#113224]/10 p-6 md:p-8 shadow-sm space-y-4">
-                    <h4 className="text-[#113224] text-lg font-bold border-b border-[#113224]/10 pb-2 uppercase tracking-wider">
-                      DADOS PRINCIPAIS DO PACIENTE
-                    </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <label className="block text-sm font-medium text-gray-750">Nome *</label>
-                        <input
-                          type="text"
-                          required
-                          disabled={isCurrentlyDeactivated || isColaborador}
-                          value={nome}
-                          onChange={(e) => setNome(e.target.value)}
-                          className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
-                          placeholder="Nome do paciente"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="block text-sm font-medium text-gray-750">CPF do Paciente *</label>
-                        <input
-                          type="text"
-                          required
-                          disabled={isCurrentlyDeactivated || isColaborador}
-                          value={cpf}
-                          onChange={(e) => setCpf(mascaraCPF(e.target.value))}
-                          maxLength={14}
-                          className={`w-full text-sm p-2.5 border rounded-lg bg-white focus:outline-none focus:ring-1 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal transition-all ${
-                            isCpfInvalid
-                              ? 'border-red-500 text-red-900 focus:ring-red-500 focus:border-red-500 bg-red-50/10'
-                              : isCpfValid
-                              ? 'border-emerald-500 text-emerald-950 focus:ring-emerald-500 focus:border-emerald-500 bg-emerald-50/10'
-                              : 'border-slate-300 text-gray-900 focus:ring-[#113224] focus:border-[#113224]'
-                          }`}
-                          placeholder="Ex: 000.000.000-00"
-                        />
-                        {isCpfInvalid && (
-                          <p className="text-[11px] text-red-600 font-semibold flex items-center space-x-1 mt-1 animate-in fade-in duration-200">
-                            <AlertOctagon size={13} className="text-red-500 flex-shrink-0" />
-                            <span>CPF inválido (dígito verificador incorreto).</span>
-                          </p>
-                        )}
-                        {isCpfValid && (
-                          <p className="text-[11px] text-emerald-600 font-semibold flex items-center space-x-1 mt-1 animate-in fade-in duration-200">
-                            <svg className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                            </svg>
-                            <span>CPF válido!</span>
-                          </p>
-                        )}
-                        {isCpfLoaded && !isCpfFullLength && (
-                          <p className="text-[11px] text-amber-600 font-medium flex items-center space-x-1 mt-1 animate-in fade-in duration-200">
-                            <svg className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                            </svg>
-                            <span>Insira os 11 dígitos do CPF</span>
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="block text-sm font-medium text-gray-750">Data de Nascimento *</label>
-                        <input
-                          type="date"
-                          required
-                          disabled={isCurrentlyDeactivated || isColaborador}
-                          value={dataNascimento}
-                          onChange={(e) => setDataNascimento(e.target.value)}
-                          className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="block text-sm font-medium text-gray-750">E-mail de Contato (Opcional)</label>
-                        <input
-                          type="email"
-                          disabled={isCurrentlyDeactivated || isColaborador}
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
-                          placeholder="email@exemplo.com"
-                        />
-                      </div>
+              <div className="w-full max-w-4xl mx-auto mt-6 mb-12 animate-in fade-in-30 slide-in-from-right-3 flex flex-col gap-6">
+                {/* Cartão Central (Destaque Principal - Identidade) */}
+                <div className="w-full bg-white rounded-2xl border border-[#113224]/10 p-6 md:p-8 shadow-sm space-y-4">
+                  <h4 className="text-[#113224] text-lg font-bold border-b border-[#113224]/10 pb-2 uppercase tracking-wider">
+                    DADOS PRINCIPAIS DO PACIENTE
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="space-y-1 col-span-1 md:col-span-3">
+                      <label className="block text-sm font-medium text-gray-750">Nome Completo *</label>
+                      <input
+                        type="text"
+                        required
+                        disabled={isCurrentlyDeactivated || isColaborador}
+                        value={nome}
+                        onChange={(e) => setNome(e.target.value)}
+                        className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
+                        placeholder="Nome do paciente"
+                      />
                     </div>
-                  </div>
 
-                  {/* Cartão Lateral (Responsável / Emergência) */}
-                  <div className="md:col-span-1 bg-slate-50 rounded-2xl border border-[#113224]/10 p-6 md:p-8 shadow-sm flex flex-col h-full space-y-4">
-                    <div>
-                      <h4 className="text-sm font-bold text-[#113224] uppercase tracking-wider flex items-center gap-2">
-                        <span className="text-[#C09A6D] text-lg">👤</span> CONTATO DO RESPONSÁVEL
-                      </h4>
-                      <div className="w-10 h-1 bg-[#C09A6D] rounded mt-1.5" />
-                    </div>
-                    <div className="space-y-4 flex-1">
-                      <div className="space-y-1">
-                        <label className="block text-xs font-semibold text-gray-600">Representante Responsável *</label>
-                        <input
-                          type="text"
-                          required
-                          disabled={isCurrentlyDeactivated || isColaborador}
-                          value={nomeResponsavel}
-                          onChange={(e) => setNomeResponsavel(e.target.value)}
-                          className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
-                          placeholder="Nome do parente / responsável formal"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="block text-xs font-semibold text-gray-600">Telefone do Responsável *</label>
-                        <input
-                          type="text"
-                          required
-                          disabled={isCurrentlyDeactivated || isColaborador}
-                          value={telefoneResponsavel}
-                          onChange={(e) => setTelefoneResponsavel(mascaraTelefone(e.target.value))}
-                          maxLength={15}
-                          className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#C09A6D] focus:border-[#C09A6D] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
-                          placeholder="Ex: (21) 90000-0000"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Cartão Inferior (Faturamento) */}
-                  <div className="md:col-span-3 bg-white rounded-2xl border border-[#113224]/10 p-6 shadow-sm space-y-4">
-                    <h4 className="text-[#113224] text-sm font-bold border-b border-[#113224]/10 pb-2 uppercase tracking-wider">
-                      DADOS DE FATURAMENTO E PAGAMENTO
-                    </h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="space-y-1">
-                        <label className="block text-xs font-medium text-gray-750">Responsável pelo Pagamento? *</label>
-                        <select
-                          disabled={isCurrentlyDeactivated || isColaborador}
-                          value={responsavelPagamento}
-                          onChange={(e) => setResponsavelPagamento(e.target.value as any)}
-                          className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
-                        >
-                          <option value="O próprio Paciente">O próprio Paciente</option>
-                          <option value="Outro Responsável">Outro Responsável</option>
-                        </select>
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="block text-xs font-medium text-gray-750">Canal de Envio da Fatura/Boleto *</label>
-                        <select
-                          disabled={isCurrentlyDeactivated || isColaborador}
-                          value={opcaoEnvio}
-                          onChange={(e) => setOpcaoEnvio(e.target.value as any)}
-                          className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
-                        >
-                          <option value="WhatsApp">WhatsApp</option>
-                          <option value="E-mail">E-mail</option>
-                          <option value="Ambos">Ambos</option>
-                        </select>
-                      </div>
-
-                      {responsavelPagamento === 'Outro Responsável' && (
-                        <>
-                          <div className="space-y-1">
-                            <label className="block text-xs font-medium text-gray-750">Nome do Pagador *</label>
-                            <input
-                              type="text"
-                              required
-                              disabled={isCurrentlyDeactivated || isColaborador}
-                              value={nomePagador}
-                              onChange={(e) => setNomePagador(e.target.value)}
-                              className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
-                              placeholder="Nome do portador da conta"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="block text-xs font-medium text-gray-750">CPF do Pagador *</label>
-                            <input
-                              type="text"
-                              required
-                              disabled={isCurrentlyDeactivated || isColaborador}
-                              value={cpfPagador}
-                              onChange={(e) => setCpfPagador(mascaraCPF(e.target.value))}
-                              maxLength={14}
-                              className={`w-full text-sm p-2.5 border rounded-lg bg-white focus:outline-none focus:ring-1 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal transition-all ${
-                                isCpfPagadorInvalid
-                                  ? 'border-red-500 text-red-900 focus:ring-red-500 focus:border-red-500 bg-red-50/10'
-                                  : isCpfPagadorValid
-                                  ? 'border-emerald-500 text-emerald-950 focus:ring-emerald-500 focus:border-emerald-500 bg-emerald-50/10'
-                                  : 'border-slate-300 text-gray-900 focus:ring-[#113224] focus:border-[#113224]'
-                              }`}
-                              placeholder="Ex: 000.000.000-00"
-                            />
-                            {isCpfPagadorInvalid && (
-                              <p className="text-[11px] text-red-600 font-semibold flex items-center space-x-1 mt-1 animate-in fade-in duration-200">
-                                <AlertOctagon size={13} className="text-red-500 flex-shrink-0" />
-                                <span>CPF do pagador inválido (dígito verificador incorreto).</span>
-                              </p>
-                            )}
-                            {isCpfPagadorValid && (
-                              <p className="text-[11px] text-emerald-600 font-semibold flex items-center space-x-1 mt-1 animate-in fade-in duration-200">
-                                <svg className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                </svg>
-                                <span>CPF do pagador válido!</span>
-                              </p>
-                            )}
-                            {isCpfPagadorLoaded && !isCpfPagadorFullLength && (
-                              <p className="text-[11px] text-amber-600 font-medium flex items-center space-x-1 mt-1 animate-in fade-in duration-200">
-                                <svg className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                </svg>
-                                <span>Insira os 11 dígitos do CPF</span>
-                              </p>
-                            )}
-                          </div>
-                        </>
+                    <div className="space-y-1 col-span-1 md:col-span-1">
+                      <label className="block text-sm font-medium text-gray-750">CPF do Paciente *</label>
+                      <input
+                        type="text"
+                        required
+                        disabled={isCurrentlyDeactivated || isColaborador}
+                        value={cpf}
+                        onChange={(e) => setCpf(mascaraCPF(e.target.value))}
+                        maxLength={14}
+                        className={`w-full text-sm p-2.5 border rounded-lg bg-white focus:outline-none focus:ring-1 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal transition-all ${
+                          isCpfInvalid
+                            ? 'border-red-500 text-red-900 focus:ring-red-500 focus:border-red-500 bg-red-50/10'
+                            : isCpfValid
+                            ? 'border-emerald-500 text-emerald-950 focus:ring-emerald-500 focus:border-emerald-500 bg-emerald-50/10'
+                            : 'border-slate-300 text-gray-900 focus:ring-[#113224] focus:border-[#113224]'
+                        }`}
+                        placeholder="Ex: 000.000.000-00"
+                      />
+                      {isCpfInvalid && (
+                        <p className="text-[11px] text-red-600 font-semibold flex items-center space-x-1 mt-1 animate-in fade-in duration-200">
+                          <AlertOctagon size={13} className="text-red-500 flex-shrink-0" />
+                          <span>CPF inválido (dígito verificador incorreto).</span>
+                        </p>
                       )}
+                      {isCpfValid && (
+                        <p className="text-[11px] text-emerald-600 font-semibold flex items-center space-x-1 mt-1 animate-in fade-in duration-200">
+                          <svg className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>CPF válido!</span>
+                        </p>
+                      )}
+                      {isCpfLoaded && !isCpfFullLength && (
+                        <p className="text-[11px] text-amber-600 font-medium flex items-center space-x-1 mt-1 animate-in fade-in duration-200">
+                          <svg className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          <span>Insira os 11 dígitos do CPF</span>
+                        </p>
+                      )}
+                    </div>
 
-                      {(opcaoEnvio === 'WhatsApp' || opcaoEnvio === 'Ambos') && (
-                        <div className="space-y-1">
-                          <label className="block text-xs font-medium text-gray-750">WhatsApp para Faturamento *</label>
+                    <div className="space-y-1 col-span-1 md:col-span-1">
+                      <label className="block text-sm font-medium text-gray-750">Data de Nascimento *</label>
+                      <input
+                        type="date"
+                        required
+                        disabled={isCurrentlyDeactivated || isColaborador}
+                        value={dataNascimento}
+                        onChange={(e) => setDataNascimento(e.target.value)}
+                        className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
+                      />
+                    </div>
+
+                    <div className="space-y-1 col-span-1 md:col-span-1">
+                      <label className="block text-sm font-medium text-gray-750">Idade</label>
+                      <input
+                        type="text"
+                        readOnly
+                        value={idadeCalculada}
+                        className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-500 bg-slate-50 cursor-default font-normal focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1 col-span-1 md:col-span-3">
+                      <label className="block text-sm font-medium text-gray-750">E-mail de Contato (Opcional)</label>
+                      <input
+                        type="email"
+                        disabled={isCurrentlyDeactivated || isColaborador}
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
+                        placeholder="email@exemplo.com"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Cartão de Contato do Responsável */}
+                <div className="w-full bg-slate-50 rounded-2xl border border-[#113224]/10 p-6 md:p-8 shadow-sm space-y-4">
+                  <div>
+                    <h4 className="text-sm font-bold text-[#113224] uppercase tracking-wider flex items-center gap-2">
+                      <span className="text-[#C09A6D] text-lg">👤</span> CONTATO DO RESPONSÁVEL
+                    </h4>
+                    <div className="w-10 h-1 bg-[#C09A6D] rounded mt-1.5" />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-1 col-span-1 md:col-span-2">
+                      <label className="block text-xs font-semibold text-gray-600">Representante Responsável *</label>
+                      <input
+                        type="text"
+                        required
+                        disabled={isCurrentlyDeactivated || isColaborador}
+                        value={nomeResponsavel}
+                        onChange={(e) => setNomeResponsavel(e.target.value)}
+                        className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
+                        placeholder="Nome do parente / responsável formal"
+                      />
+                    </div>
+
+                    <div className="space-y-1 col-span-1">
+                      <label className="block text-xs font-semibold text-gray-600">Telefone do Responsável (Opcional)</label>
+                      <input
+                        type="text"
+                        disabled={isCurrentlyDeactivated || isColaborador}
+                        value={telefoneResponsavel}
+                        onChange={(e) => setTelefoneResponsavel(mascaraTelefone(e.target.value))}
+                        maxLength={15}
+                        className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#C09A6D] focus:border-[#C09A6D] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
+                        placeholder="Ex: (21) 90000-0000"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Cartão de Faturamento */}
+                <div className="w-full bg-white rounded-2xl border border-[#113224]/10 p-6 shadow-sm space-y-4">
+                  <h4 className="text-[#113224] text-sm font-bold border-b border-[#113224]/10 pb-2 uppercase tracking-wider">
+                    DADOS DE FATURAMENTO E PAGAMENTO
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-1 col-span-1">
+                      <label className="block text-xs font-medium text-gray-750">Responsável pelo Pagamento? *</label>
+                      <select
+                        disabled={isCurrentlyDeactivated || isColaborador}
+                        value={responsavelPagamento}
+                        onChange={(e) => setResponsavelPagamento(e.target.value as any)}
+                        className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
+                      >
+                        <option value="O próprio Paciente">O próprio Paciente</option>
+                        <option value="Outro Responsável">Outro Responsável</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1 col-span-1">
+                      <label className="block text-xs font-medium text-gray-750">Canal de Envio da Fatura/Boleto *</label>
+                      <select
+                        disabled={isCurrentlyDeactivated || isColaborador}
+                        value={opcaoEnvio}
+                        onChange={(e) => setOpcaoEnvio(e.target.value as any)}
+                        className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
+                      >
+                        <option value="WhatsApp">WhatsApp</option>
+                        <option value="E-mail">E-mail</option>
+                        <option value="Ambos">Ambos</option>
+                      </select>
+                    </div>
+
+                    {responsavelPagamento === 'Outro Responsável' && (
+                      <>
+                        <div className="space-y-1 col-span-1 md:col-span-2">
+                          <label className="block text-xs font-medium text-gray-750">Nome do Pagador *</label>
                           <input
                             type="text"
                             required
                             disabled={isCurrentlyDeactivated || isColaborador}
-                            value={whatsappFaturamento}
-                            onChange={(e) => setWhatsappFaturamento(e.target.value)}
-                            className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#C09A6D] focus:border-[#C09A6D] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
-                            placeholder="Ex: (21) 90000-0000"
+                            value={nomePagador}
+                            onChange={(e) => setNomePagador(e.target.value)}
+                            className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
+                            placeholder="Nome do portador da conta"
                           />
                         </div>
-                      )}
-
-                      {(opcaoEnvio === 'E-mail' || opcaoEnvio === 'Ambos') && (
-                        <div className="space-y-1">
-                          <label className="block text-xs font-medium text-gray-750">E-mail para Faturamento *</label>
+                        <div className="space-y-1 col-span-1">
+                          <label className="block text-xs font-medium text-gray-750">CPF do Pagador *</label>
                           <input
-                            type="email"
+                            type="text"
                             required
                             disabled={isCurrentlyDeactivated || isColaborador}
-                            value={emailFaturamento}
-                            onChange={(e) => setEmailFaturamento(e.target.value)}
-                            className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#C09A6D] focus:border-[#C09A6D] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
-                            placeholder="faturamento@exemplo.com"
+                            value={cpfPagador}
+                            onChange={(e) => setCpfPagador(mascaraCPF(e.target.value))}
+                            maxLength={14}
+                            className={`w-full text-sm p-2.5 border rounded-lg bg-white focus:outline-none focus:ring-1 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal transition-all ${
+                              isCpfPagadorInvalid
+                                ? 'border-red-500 text-red-900 focus:ring-red-500 focus:border-red-500 bg-red-50/10'
+                                : isCpfPagadorValid
+                                ? 'border-emerald-500 text-emerald-950 focus:ring-emerald-500 focus:border-emerald-500 bg-emerald-50/10'
+                                : 'border-slate-300 text-gray-900 focus:ring-[#113224] focus:border-[#113224]'
+                            }`}
+                            placeholder="Ex: 000.000.000-00"
                           />
+                          {isCpfPagadorInvalid && (
+                            <p className="text-[11px] text-red-600 font-semibold flex items-center space-x-1 mt-1 animate-in fade-in duration-200">
+                              <AlertOctagon size={13} className="text-red-500 flex-shrink-0" />
+                              <span>CPF do pagador inválido (dígito verificador incorreto).</span>
+                            </p>
+                          )}
+                          {isCpfPagadorValid && (
+                            <p className="text-[11px] text-emerald-600 font-semibold flex items-center space-x-1 mt-1 animate-in fade-in duration-200">
+                              <svg className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span>CPF do pagador válido!</span>
+                            </p>
+                          )}
+                          {isCpfPagadorLoaded && !isCpfPagadorFullLength && (
+                            <p className="text-[11px] text-amber-600 font-medium flex items-center space-x-1 mt-1 animate-in fade-in duration-200">
+                              <svg className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                              <span>Insira os 11 dígitos do CPF</span>
+                            </p>
+                          )}
                         </div>
-                      )}
+                      </>
+                    )}
 
-                      <div className="space-y-1">
-                        <label className="block text-xs font-medium text-gray-750">Data do reajuste (mm/aa)</label>
+                    {(opcaoEnvio === 'WhatsApp' || opcaoEnvio === 'Ambos') && (
+                      <div className="space-y-1 col-span-1">
+                        <label className="block text-xs font-medium text-gray-750">WhatsApp para Faturamento *</label>
                         <input
                           type="text"
+                          required
                           disabled={isCurrentlyDeactivated || isColaborador}
-                          value={dataReajuste}
-                          onChange={(e) => setDataReajuste(mascaraMesAno(e.target.value))}
-                          maxLength={5}
-                          className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
-                          placeholder="Ex: 12/26"
+                          value={whatsappFaturamento}
+                          onChange={(e) => setWhatsappFaturamento(e.target.value)}
+                          className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#C09A6D] focus:border-[#C09A6D] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
+                          placeholder="Ex: (21) 90000-0000"
                         />
                       </div>
+                    )}
+
+                    {(opcaoEnvio === 'E-mail' || opcaoEnvio === 'Ambos') && (
+                      <div className="space-y-1 col-span-1 md:col-span-2">
+                        <label className="block text-xs font-medium text-gray-750">E-mail para Faturamento *</label>
+                        <input
+                          type="email"
+                          required
+                          disabled={isCurrentlyDeactivated || isColaborador}
+                          value={emailFaturamento}
+                          onChange={(e) => setEmailFaturamento(e.target.value)}
+                          className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#C09A6D] focus:border-[#C09A6D] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
+                          placeholder="faturamento@exemplo.com"
+                        />
+                      </div>
+                    )}
+
+                    <div className="space-y-1 col-span-1">
+                      <label className="block text-xs font-medium text-gray-750">Data do reajuste (mm/aa)</label>
+                      <input
+                        type="text"
+                        disabled={isCurrentlyDeactivated || isColaborador}
+                        value={dataReajuste}
+                        onChange={(e) => setDataReajuste(mascaraMesAno(e.target.value))}
+                        maxLength={5}
+                        className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
+                        placeholder="Ex: 12/26"
+                      />
                     </div>
                   </div>
                 </div>
@@ -5912,9 +5935,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
                 {/* Bloco de Faturamento / Resumo Financeiro */}
                 <CardBase className="bg-[#faf9f6]/30 p-4">
-                  <DataGrid cols={4} className="gap-4">
+                  <DataGrid cols={3} className="gap-4">
                     <DataField label="Paciente Assistido" value={nome || paciente?.nome} />
-                    <DataField label="CPF do Responsável" value={cpf || '---'} className="font-mono text-xs" />
                     <DataField label="Logística de Chegada" value={logisticaChegada || 'Não explicitado'} />
                     <div className="text-right flex flex-col justify-center">
                       <span className="text-xs font-semibold text-gray-550 text-gray-500 uppercase tracking-wider block leading-none">Total de Turnos:</span>
@@ -6095,7 +6117,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       Responsável / Família do Paciente:
                     </p>
                     <p className="text-[10px] font-semibold text-slate-650 truncate text-slate-700 leading-none">
-                      {nomeResponsavel || '---'} (CPF: {cpf || '---'})
+                      {nomeResponsavel || '---'}
                     </p>
                   </div>
                 </div>
@@ -6239,10 +6261,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     <div>
                       <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Nome Completo:</span>
                       <p className="font-extrabold text-slate-850 text-slate-800 mt-1">{nome || paciente?.nome || '---'}</p>
-                    </div>
-                    <div>
-                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">CPF:</span>
-                      <p className="font-mono font-bold text-slate-750 mt-1">{cpf || '---'}</p>
                     </div>
                     <div>
                       <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Data de Nascimento (Idade):</span>
@@ -6446,7 +6464,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       Responsável pelo Paciente / Família
                     </p>
                     <p className="text-[9px] text-slate-500 leading-none">
-                      {nomeResponsavel || '---'} (CPF: {cpf || '---'})
+                      {nomeResponsavel || '---'}
                     </p>
                   </div>
                 </div>

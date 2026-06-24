@@ -34,6 +34,8 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [bankList, setBankList] = useState<{code: string; name: string}[]>([]);
   const [deleteProfConfirmOpen, setDeleteProfConfirmOpen] = useState(false);
+  const [bankSearch, setBankSearch] = useState('');
+  const [isBankDropdownOpen, setIsBankDropdownOpen] = useState(false);
 
   const handleNavigateToProfile = (profId: string) => {
     const found = (profissionais || []).find(p => p.id === profId);
@@ -174,7 +176,18 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
   const [editingOcorrenciaId, setEditingOcorrenciaId] = useState<string | null>(null);
   const [savingOcorrencia, setSavingOcorrencia] = useState(false);
   const [deleteConfirmOc, setDeleteConfirmOc] = useState<Ocorrencia | null>(null);
+  const [exibindoFormOcorrencia, setExibindoFormOcorrencia] = useState(false);
+  const [plantaoSelecionado, setPlantaoSelecionado] = useState<Agendamento | null>(null);
   const occurrenceFormRef = useRef<HTMLDivElement>(null);
+
+  const handleCloseFormOcorrencia = () => {
+    setExibindoFormOcorrencia(false);
+    setEditingOcorrenciaId(null);
+    setOcData(new Date().toISOString().split('T')[0]);
+    setOcPacienteId('');
+    setOcDescricao('');
+    setOcBloquear(false);
+  };
 
   // Estados para documentos anexos reais (Storage + Firestore)
   const [tipoDocumentoAnexo, setTipoDocumentoAnexo] = useState<string>('');
@@ -310,7 +323,8 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
         banco: '',
         agencia: '',
         conta: '',
-        pix: ''
+        pix: '',
+        tipoConta: ''
     },
     endereco: {
         rua: '',
@@ -402,7 +416,13 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
         conselho: prof.conselho || '',
         status: prof.status || 'Ativo',
         ativo: prof.ativo ?? (prof.status === 'Ativo'),
-        dadosBancarios: prof.dadosBancarios || { banco: '', agencia: '', conta: '', pix: '' },
+        dadosBancarios: {
+          banco: prof.dadosBancarios?.banco || '',
+          agencia: prof.dadosBancarios?.agencia || '',
+          conta: prof.dadosBancarios?.conta || '',
+          pix: prof.dadosBancarios?.pix || '',
+          tipoConta: prof.dadosBancarios?.tipoConta || ''
+        },
         endereco: prof.endereco ? {
           rua: prof.endereco.rua || '',
           numero: prof.endereco.numero || '',
@@ -438,7 +458,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
         conselho: '',
         status: 'Ativo',
         ativo: true,
-        dadosBancarios: { banco: '', agencia: '', conta: '', pix: '' },
+        dadosBancarios: { banco: '', agencia: '', conta: '', pix: '', tipoConta: '' },
         endereco: { rua: '', numero: '', cep: '', bairro: '', cidade: '', estado: '' },
         documentos: {
           cracha: '',
@@ -536,6 +556,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
       setOcDescricao('');
       setOcBloquear(false);
       setEditingOcorrenciaId(null);
+      setExibindoFormOcorrencia(false);
     } catch (err) {
       console.error('Erro ao salvar ocorrencia:', err);
       setSuccessMessage('Erro ao salvar ocorrência.');
@@ -551,6 +572,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
     setOcPacienteId(oc.pacienteId);
     setOcDescricao(oc.descricao);
     setOcBloquear(oc.bloquearEscala);
+    setExibindoFormOcorrencia(true);
 
     // Form smooth scroll to view
     setTimeout(() => {
@@ -1174,7 +1196,13 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
           conselho: updated.conselho || '',
           status: updated.status || 'Ativo',
           ativo: updated.ativo ?? (updated.status === 'Ativo'),
-          dadosBancarios: updated.dadosBancarios || { banco: '', agencia: '', conta: '', pix: '' },
+          dadosBancarios: {
+            banco: updated.dadosBancarios?.banco || '',
+            agencia: updated.dadosBancarios?.agencia || '',
+            conta: updated.dadosBancarios?.conta || '',
+            pix: updated.dadosBancarios?.pix || '',
+            tipoConta: updated.dadosBancarios?.tipoConta || ''
+          },
           endereco: updated.endereco ? {
             rua: updated.endereco.rua || '',
             numero: updated.endereco.numero || '',
@@ -1218,7 +1246,13 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
           conselho: created.conselho || '',
           status: created.status || 'Ativo',
           ativo: created.ativo ?? (created.status === 'Ativo'),
-          dadosBancarios: created.dadosBancarios || { banco: '', agencia: '', conta: '', pix: '' },
+          dadosBancarios: {
+            banco: created.dadosBancarios?.banco || '',
+            agencia: created.dadosBancarios?.agencia || '',
+            conta: created.dadosBancarios?.conta || '',
+            pix: created.dadosBancarios?.pix || '',
+            tipoConta: created.dadosBancarios?.tipoConta || ''
+          },
           endereco: created.endereco ? {
             rua: created.endereco.rua || '',
             numero: created.endereco.numero || '',
@@ -1807,11 +1841,19 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
 
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-xs print:bg-white print:p-0 print:items-start">
-          <form onSubmit={handleSave} className="bg-white p-6 rounded-2xl w-full max-w-3xl space-y-5 max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-100 print:shadow-none print:border-none print:max-h-full print:overflow-visible">
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (activeTab === 'dados') {
+                handleSave(e);
+              }
+            }} 
+            className="bg-white p-6 rounded-2xl w-full max-w-3xl space-y-5 max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-100 print:shadow-none print:border-none print:max-h-full print:overflow-visible"
+          >
              <div className="flex justify-between items-center pb-2 border-b border-slate-100 print:hidden">
               <div className="flex flex-wrap items-center gap-3">
                 <h3 className="font-extrabold text-[#1a3c2e] text-base sm:text-lg">
-                  {editingProf ? 'Editar Cadastro de Profissional' : 'Novo Cadastro de Profissional'}
+                  {editingProf ? 'Cadastro do Profissional' : 'Novo Cadastro de Profissional'}
                 </h3>
               </div>
               <div className="flex items-center gap-4">
@@ -1889,92 +1931,106 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                 case 'ocorrencias': return (
                   <div className="space-y-6">
                     {/* Form de Ocorrências */}
-                    <div ref={occurrenceFormRef} className="p-4 border border-slate-100 rounded-xl bg-slate-50/50 space-y-4">
-                      <h4 className="text-xs font-black text-[#1a3c2e] uppercase tracking-wider block border-b pb-1">
-                        {editingOcorrenciaId ? 'Editar Ocorrência' : 'Registrar Nova Ocorrência'}
-                      </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-[#1a3c2e] uppercase block">Data</label>
-                          <input
-                            type="date"
-                            value={ocData}
-                            onChange={(e) => setOcData(e.target.value)}
-                            className="p-2 border border-slate-200 rounded-lg text-sm w-full bg-white focus:ring-1 focus:ring-[#1a3c2e]"
-                            required
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-[#1a3c2e] uppercase block">Paciente</label>
-                          <select
-                            value={ocPacienteId}
-                            onChange={(e) => setOcPacienteId(e.target.value)}
-                            className="p-2 border border-slate-200 rounded-lg text-sm w-full bg-white focus:ring-1 focus:ring-[#1a3c2e]"
-                            required
+                    {exibindoFormOcorrencia ? (
+                      <div ref={occurrenceFormRef} className="p-4 border border-slate-100 rounded-xl bg-slate-50/50 space-y-4 animate-in fade-in duration-200">
+                        <div className="flex justify-between items-center border-b pb-1">
+                          <h4 className="text-xs font-black text-[#1a3c2e] uppercase tracking-wider block">
+                            {editingOcorrenciaId ? 'Editar Ocorrência' : 'Registrar Nova Ocorrência'}
+                          </h4>
+                          <button 
+                            type="button" 
+                            onClick={handleCloseFormOcorrencia} 
+                            className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
+                            title="Fechar Formulário"
                           >
-                            <option value="">Selecione o paciente...</option>
-                            {[...pacientes].sort((a, b) => a.nome.localeCompare(b.nome)).map(p => (
-                              <option key={p.id} value={p.id}>
-                                {p.nome} {p.status ? `(${p.status})` : ''}
-                              </option>
-                            ))}
-                          </select>
+                            <X size={14} />
+                          </button>
                         </div>
-                        <div className="space-y-1 md:col-span-2">
-                          <label className="text-[10px] font-bold text-[#1a3c2e] uppercase block">Descrição do Motivo</label>
-                          <textarea
-                            rows={3}
-                            placeholder="Descreva detalhadamente o motivo da ocorrência..."
-                            value={ocDescricao}
-                            onChange={(e) => setOcDescricao(e.target.value)}
-                            className="p-2 border border-slate-200 rounded-lg text-sm w-full bg-white focus:ring-1 focus:ring-[#1a3c2e]"
-                            required
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-[#1a3c2e] uppercase block">Data</label>
+                            <input
+                              type="date"
+                              value={ocData}
+                              onChange={(e) => setOcData(e.target.value)}
+                              className="p-2 border border-slate-200 rounded-lg text-sm w-full bg-white focus:ring-1 focus:ring-[#1a3c2e]"
+                              required
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-[#1a3c2e] uppercase block">Paciente</label>
+                            <select
+                              value={ocPacienteId}
+                              onChange={(e) => setOcPacienteId(e.target.value)}
+                              className="p-2 border border-slate-200 rounded-lg text-sm w-full bg-white focus:ring-1 focus:ring-[#1a3c2e]"
+                              required
+                            >
+                              <option value="">Selecione o paciente...</option>
+                              {[...pacientes].sort((a, b) => a.nome.localeCompare(b.nome)).map(p => (
+                                <option key={p.id} value={p.id}>
+                                  {p.nome} {p.status ? `(${p.status})` : ''}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="space-y-1 md:col-span-2">
+                            <label className="text-[10px] font-bold text-[#1a3c2e] uppercase block">Descrição do Motivo</label>
+                            <textarea
+                              rows={3}
+                              placeholder="Descreva detalhadamente o motivo da ocorrência..."
+                              value={ocDescricao}
+                              onChange={(e) => setOcDescricao(e.target.value)}
+                              className="p-2 border border-slate-200 rounded-lg text-sm w-full bg-white focus:ring-1 focus:ring-[#1a3c2e]"
+                              required
+                            />
+                          </div>
+                        </div>
+
+                        {/* Checkbox de Bloqueio */}
+                        <div className="flex items-center gap-2 mt-2">
+                          <input
+                            type="checkbox"
+                            id="ocBloquear"
+                            checked={ocBloquear}
+                            onChange={(e) => setOcBloquear(e.target.checked)}
+                            className="w-4 h-4 text-[#1a3c2e] border-slate-300 rounded focus:ring-[#1a3c2e] cursor-pointer"
                           />
+                          <label htmlFor="ocBloquear" className="text-xs font-bold text-slate-700 cursor-pointer select-none">
+                            Bloquear na escala deste paciente
+                          </label>
                         </div>
-                      </div>
 
-                      {/* Checkbox de Bloqueio */}
-                      <div className="flex items-center gap-2 mt-2">
-                        <input
-                          type="checkbox"
-                          id="ocBloquear"
-                          checked={ocBloquear}
-                          onChange={(e) => setOcBloquear(e.target.checked)}
-                          className="w-4 h-4 text-[#1a3c2e] border-slate-300 rounded focus:ring-[#1a3c2e] cursor-pointer"
-                        />
-                        <label htmlFor="ocBloquear" className="text-xs font-bold text-slate-700 cursor-pointer select-none">
-                          Bloquear na escala deste paciente
-                        </label>
-                      </div>
-
-                      {/* Botões do Form de Ocorrência */}
-                      <div className="flex gap-2 justify-end pt-2 border-t border-slate-100">
-                        {editingOcorrenciaId && (
+                        {/* Botões do Form de Ocorrência */}
+                        <div className="flex gap-2 justify-end pt-2 border-t border-slate-100">
                           <button
                             type="button"
-                            onClick={() => {
-                              setOcData(new Date().toISOString().split('T')[0]);
-                              setOcPacienteId('');
-                              setOcDescricao('');
-                              setOcBloquear(false);
-                              setEditingOcorrenciaId(null);
-                            }}
-                            className="px-4 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-700 transition"
+                            onClick={handleCloseFormOcorrencia}
+                            className="px-4 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-700 transition cursor-pointer"
                           >
-                            Cancelar Edição
+                            Cancelar
                           </button>
-                        )}
+                          <button
+                            type="button"
+                            onClick={handleSaveOcorrencia}
+                            disabled={savingOcorrencia}
+                            className="px-4 py-1.5 text-xs font-extrabold text-white bg-red-650 hover:bg-red-700 rounded-lg transition shadow-sm disabled:opacity-50 cursor-pointer"
+                            style={{ backgroundColor: '#1a3c2e', color: '#b8860b' }}
+                          >
+                            {savingOcorrencia ? 'Salvando...' : 'Salvar Ocorrência'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex justify-end">
                         <button
                           type="button"
-                          onClick={handleSaveOcorrencia}
-                          disabled={savingOcorrencia}
-                          className="px-4 py-1.5 text-xs font-extrabold text-white bg-red-650 hover:bg-red-700 rounded-lg transition shadow-sm disabled:opacity-50"
-                          style={{ backgroundColor: '#1a3c2e', color: '#b8860b' }}
+                          onClick={() => setExibindoFormOcorrencia(true)}
+                          className="px-4 py-2 bg-[#1a3c2e] text-[#b8860b] text-xs font-extrabold rounded-lg hover:opacity-90 transition-opacity flex items-center gap-1.5 cursor-pointer border border-[#b8860b]/30 shadow-xs"
                         >
-                          {savingOcorrencia ? 'Salvando...' : 'Salvar Ocorrência'}
+                          <span>+ Registrar Ocorrência</span>
                         </button>
                       </div>
-                    </div>
+                    )}
 
                     {/* Bento Grid Dashboard de Ocorrências Mensais */}
                     <div className="grid grid-cols-2 gap-4 mb-6">
@@ -2197,103 +2253,203 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                   </div>
                 );
                 case 'cracha': return <BadgeGerador profData={formData as any} />;
-                case 'agenda': return (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                      <h4 className="text-xs font-black text-[#1a3c2e] uppercase tracking-wider">
-                        Plantões do Profissional ({agendamentosProf.length})
-                      </h4>
-                      <span className="text-[10px] bg-slate-100 text-slate-505 font-bold px-2 py-0.5 rounded-full text-slate-500">
-                        Escala Geral
-                      </span>
-                    </div>
-
-                    {loadingAgenda ? (
-                      <div className="flex flex-col items-center justify-center py-12 space-y-2">
-                        <span className="animate-spin text-xl text-[#1a3c2e]">⏳</span>
-                        <p className="text-xs text-slate-500 font-semibold animate-pulse">Carregando agenda...</p>
-                      </div>
-                    ) : agendamentosProf.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-10 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
-                        <Calendar className="text-slate-300 mb-2" size={24} />
-                        <p className="text-slate-500 text-xs text-center py-1 font-medium">
-                          Nenhum plantão agendado para este profissional.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {agendamentosProf.map((ag) => {
-                          const patientObj = pacientes.find(p => p.id === ag.idPaciente);
-                          const patientName = patientObj ? patientObj.nome : 'Paciente Desconhecido';
+                case 'agenda': {
+                  if (plantaoSelecionado) {
+                    const patientObj = pacientes.find(p => p.id === plantaoSelecionado.idPaciente);
+                    const patientName = patientObj ? patientObj.nome : 'Paciente Desconhecido';
+                    
+                    const valorBase = Number(plantaoSelecionado.valorPlantao) || 0;
+                    const ajudaCusto = Number(plantaoSelecionado.ajudaCusto || (plantaoSelecionado as any).ajudaDeCusto) || 0;
+                    const valorRepasseTotal = valorBase + ajudaCusto;
+                    
+                    return (
+                      <div className="space-y-4 p-4 border border-[#b8860b]/20 bg-[#fcf8f2] rounded-xl animate-in fade-in duration-200">
+                        <div className="flex justify-between items-center border-b border-[#b8860b]/10 pb-2">
+                          <h4 className="text-xs font-black text-[#1a3c2e] uppercase tracking-wider">
+                            Detalhes do Plantão
+                          </h4>
+                          <button
+                            type="button"
+                            onClick={() => setPlantaoSelecionado(null)}
+                            className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-200/50 transition-colors cursor-pointer flex items-center justify-center"
+                            title="Fechar Detalhes"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                          <div className="space-y-1">
+                            <span className="font-semibold text-slate-500 uppercase tracking-wider block text-[10px]">Paciente</span>
+                            <div className="font-bold text-slate-800 p-2.5 bg-white rounded-lg border border-slate-150">{patientName}</div>
+                          </div>
                           
-                          // Formatar data em bloco "Dia / Mês"
-                          let day = "--";
-                          let month = "---";
-                          if (ag.data) {
-                            const [ano, mesStr, diaStr] = ag.data.split('-');
-                            if (diaStr && mesStr) {
-                              day = diaStr;
-                              const mesesShort = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-                              const mesIndex = parseInt(mesStr, 10) - 1;
-                              if (mesIndex >= 0 && mesIndex < 12) {
-                                month = mesesShort[mesIndex];
+                          <div className="space-y-1">
+                            <span className="font-semibold text-slate-500 uppercase tracking-wider block text-[10px]">Data do Plantão</span>
+                            <div className="font-bold text-slate-800 p-2.5 bg-white rounded-lg border border-slate-150">
+                              {plantaoSelecionado.data ? plantaoSelecionado.data.split('-').reverse().join('/') : '--/--/----'}
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-1">
+                            <span className="font-semibold text-slate-500 uppercase tracking-wider block text-[10px]">Horário</span>
+                            <div className="font-bold text-slate-800 p-2.5 bg-white rounded-lg border border-slate-150">{plantaoSelecionado.horario || 'Não definido'}</div>
+                          </div>
+                          
+                          <div className="space-y-1">
+                            <span className="font-semibold text-slate-500 uppercase tracking-wider block text-[10px]">Status</span>
+                            <div className="font-bold text-slate-800 p-2.5 bg-white rounded-lg border border-slate-150 flex items-center gap-2">
+                              <span className={`w-2 h-2 rounded-full ${
+                                plantaoSelecionado.status === 'Confirmado' ? 'bg-emerald-500' :
+                                plantaoSelecionado.status === 'Concluido' ? 'bg-blue-500' :
+                                plantaoSelecionado.status === 'Cancelado' ? 'bg-rose-500' : 'bg-amber-500'
+                              }`} />
+                              {plantaoSelecionado.status}
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-1">
+                            <span className="font-semibold text-slate-500 uppercase tracking-wider block text-[10px]">Valor do Plantão</span>
+                            <div className="font-bold text-slate-800 p-2.5 bg-white rounded-lg border border-slate-150">
+                              R$ {valorBase.toFixed(2).replace('.', ',')}
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <span className="font-semibold text-slate-500 uppercase tracking-wider block text-[10px]">Ajuda de Custo</span>
+                            <div className="font-bold text-slate-800 p-2.5 bg-white rounded-lg border border-slate-150">
+                              R$ {ajudaCusto.toFixed(2).replace('.', ',')}
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <span className="font-semibold text-slate-500 uppercase tracking-wider block text-[10px]">Valor de Repasse</span>
+                            <div className="font-bold text-[#1a3c2e] p-2.5 bg-white rounded-lg border border-slate-150">
+                              R$ {valorRepasseTotal.toFixed(2).replace('.', ',')}
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <span className="font-semibold text-slate-500 uppercase tracking-wider block text-[10px]">Tipo de Dia</span>
+                            <div className="font-bold text-slate-800 p-2.5 bg-white rounded-lg border border-slate-150">
+                              {plantaoSelecionado.tipoDia || 'Normal'}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end pt-3 border-t border-slate-150/50 mt-4">
+                          <button
+                            type="button"
+                            onClick={() => setPlantaoSelecionado(null)}
+                            className="px-5 py-1.5 bg-[#1a3c2e] text-[#b8860b] hover:opacity-90 font-bold text-xs rounded-lg transition-opacity cursor-pointer"
+                          >
+                            Fechar
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                        <h4 className="text-xs font-black text-[#1a3c2e] uppercase tracking-wider">
+                          Plantões do Profissional ({agendamentosProf.length})
+                        </h4>
+                        <span className="text-[10px] bg-slate-100 text-slate-500 font-bold px-2 py-0.5 rounded-full">
+                          Escala Geral
+                        </span>
+                      </div>
+
+                      {loadingAgenda ? (
+                        <div className="flex flex-col items-center justify-center py-12 space-y-2">
+                          <span className="animate-spin text-xl text-[#1a3c2e]">⏳</span>
+                          <p className="text-xs text-slate-500 font-semibold animate-pulse">Carregando agenda...</p>
+                        </div>
+                      ) : agendamentosProf.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-10 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                          <Calendar className="text-slate-300 mb-2" size={24} />
+                          <p className="text-slate-500 text-xs text-center py-1 font-medium">
+                            Nenhum plantão agendado para este profissional.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {agendamentosProf.map((ag) => {
+                            const patientObj = pacientes.find(p => p.id === ag.idPaciente);
+                            const patientName = patientObj ? patientObj.nome : 'Paciente Desconhecido';
+                            
+                            // Formatar data em bloco "Dia / Mês"
+                            let day = "--";
+                            let month = "---";
+                            if (ag.data) {
+                              const [ano, mesStr, diaStr] = ag.data.split('-');
+                              if (diaStr && mesStr) {
+                                day = diaStr;
+                                const mesesShort = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+                                const mesIndex = parseInt(mesStr, 10) - 1;
+                                if (mesIndex >= 0 && mesIndex < 12) {
+                                  month = mesesShort[mesIndex];
+                                }
                               }
                             }
-                          }
 
-                          // Status Color Styling
-                          let statusBg = "bg-slate-105 text-slate-600 border-slate-200";
-                          if (ag.status === 'Confirmado') {
-                            statusBg = "bg-emerald-50 text-emerald-700 border-emerald-100";
-                          } else if (ag.status === 'Concluido') {
-                            statusBg = "bg-blue-50 text-blue-700 border-blue-100";
-                          } else if (ag.status === 'Cancelado') {
-                            statusBg = "bg-rose-50 text-rose-700 border-rose-100";
-                          } else if (ag.status === 'Aberta') {
-                            statusBg = "bg-amber-50 text-amber-700 border-amber-100";
-                          }
+                            // Status Color Styling
+                            let statusBg = "bg-slate-100 text-slate-600 border-slate-200";
+                            if (ag.status === 'Confirmado') {
+                              statusBg = "bg-emerald-50 text-emerald-700 border-emerald-100";
+                            } else if (ag.status === 'Concluido') {
+                              statusBg = "bg-blue-50 text-blue-700 border-blue-100";
+                            } else if (ag.status === 'Cancelado') {
+                              statusBg = "bg-rose-50 text-rose-700 border-rose-100";
+                            } else if (ag.status === 'Aberta') {
+                              statusBg = "bg-amber-50 text-amber-700 border-amber-100";
+                            }
 
-                          return (
-                            <div 
-                              key={ag.id} 
-                              className="bg-white border border-slate-100 rounded-xl p-3 shadow-xs hover:shadow-md hover:border-slate-300 transition-all flex items-start gap-3 relative overflow-hidden"
-                            >
-                              {/* Calendário Bento Left */}
-                              <div className="flex-shrink-0 w-11 h-11 bg-slate-50 rounded-lg border border-slate-100 flex flex-col items-center justify-center p-1">
-                                <span className="text-xs font-black text-slate-705 leading-none">{day}</span>
-                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-0.5">{month}</span>
-                              </div>
-
-                              {/* Conteúdo Meio */}
-                              <div className="flex-1 min-w-0 space-y-1">
-                                <div className="flex items-center justify-between gap-1">
-                                  <span className="text-[10px] font-mono text-slate-400 flex items-center gap-1">
-                                    <Clock size={11} /> {ag.horario || 'Horário não definido'}
-                                  </span>
-                                  <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded border ${statusBg}`}>
-                                    {ag.status}
-                                  </span>
+                            return (
+                              <div 
+                                key={ag.id} 
+                                onClick={() => setPlantaoSelecionado(ag)}
+                                className="bg-white border border-slate-100 rounded-xl p-3 shadow-xs hover:shadow-md hover:border-slate-300 transition-all flex items-start gap-3 relative overflow-hidden cursor-pointer"
+                                title="Ver Detalhes do Plantão"
+                              >
+                                {/* Calendário Bento Left */}
+                                <div className="flex-shrink-0 w-11 h-11 bg-slate-50 rounded-lg border border-slate-100 flex flex-col items-center justify-center p-1">
+                                  <span className="text-xs font-black text-slate-700 leading-none">{day}</span>
+                                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-0.5">{month}</span>
                                 </div>
 
-                                <h5 className="text-xs font-bold text-slate-800 truncate flex items-center gap-1.5 pt-0.5">
-                                  <User size={12} className="text-slate-400 flex-shrink-0" />
-                                  <span className="truncate">{patientName}</span>
-                                </h5>
+                                {/* Conteúdo Meio */}
+                                <div className="flex-1 min-w-0 space-y-1">
+                                  <div className="flex items-center justify-between gap-1">
+                                    <span className="text-[10px] font-mono text-slate-400 flex items-center gap-1">
+                                      <Clock size={11} /> {ag.horario || 'Horário não definido'}
+                                    </span>
+                                    <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded border ${statusBg}`}>
+                                      {ag.status}
+                                    </span>
+                                  </div>
 
-                                <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-100">
-                                  <span>Repasse: <strong className="font-semibold text-slate-750">R$ {ag.valorRepasse?.toFixed(2) || '0.00'}</strong></span>
-                                  {ag.tipoDia && ag.tipoDia !== 'Normal' && (
-                                    <span className="text-[9px] bg-amber-50 text-amber-800 px-1 py-0.2 rounded font-bold">{ag.tipoDia}</span>
-                                  )}
+                                  <h5 className="text-xs font-bold text-slate-800 truncate flex items-center gap-1.5 pt-0.5">
+                                    <User size={12} className="text-slate-400 flex-shrink-0" />
+                                    <span className="truncate">{patientName}</span>
+                                  </h5>
+
+                                  <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-100">
+                                    <span>Repasse: <strong className="font-semibold text-slate-700">R$ {ag.valorRepasse?.toFixed(2) || '0.00'}</strong></span>
+                                    {ag.tipoDia && ag.tipoDia !== 'Normal' && (
+                                      <span className="text-[9px] bg-amber-50 text-amber-800 px-1 py-0.2 rounded font-bold">{ag.tipoDia}</span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
                 default: return (
                   <div className="space-y-6">
                     {/* Bloco 1: Dados Pessoais */}
@@ -2517,13 +2673,114 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                             </div>
                           </div>
                        )}
-                       <select value={formData.dadosBancarios.banco} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, banco: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]">
+                        <div className="relative flex flex-col gap-1 w-full" id="bank-selector-container">
+                          <div className="relative">
+                            <input
+                              type="text"
+                              placeholder="Pesquise por nome ou número do banco..."
+                              value={isBankDropdownOpen ? bankSearch : (formData.dadosBancarios.banco || '')}
+                              onFocus={() => {
+                                setBankSearch('');
+                                setIsBankDropdownOpen(true);
+                              }}
+                              onBlur={() => {
+                                // Delay to allow selection before closing
+                                setTimeout(() => setIsBankDropdownOpen(false), 200);
+                              }}
+                              onChange={(e) => {
+                                setBankSearch(e.target.value);
+                                setIsBankDropdownOpen(true);
+                              }}
+                              className="w-full p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e] bg-white cursor-pointer font-sans"
+                            />
+                            <div className="absolute right-2 top-2.5 pointer-events-none text-gray-400">
+                              <Search size={14} />
+                            </div>
+                          </div>
+
+                          {isBankDropdownOpen && (
+                            <div className="absolute left-0 right-0 top-full mt-1 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-xl z-50 divide-y divide-slate-100">
+                              <button
+                                type="button"
+                                onMouseDown={() => {
+                                  setFormData({
+                                    ...formData,
+                                    dadosBancarios: {
+                                      ...formData.dadosBancarios,
+                                      banco: ''
+                                    }
+                                  });
+                                  setBankSearch('');
+                                  setIsBankDropdownOpen(false);
+                                }}
+                                className="w-full text-left p-2 hover:bg-slate-50 transition-colors text-xs font-medium text-gray-400 italic"
+                              >
+                                Limpar seleção (Sem banco)
+                              </button>
+                              {(() => {
+                                const query = bankSearch.toLowerCase().trim();
+                                const filtered = bankList.filter(
+                                  b => b.code.toLowerCase().includes(query) || b.name.toLowerCase().includes(query)
+                                );
+
+                                if (filtered.length === 0) {
+                                  return <div className="p-2 text-xs text-gray-400 text-center">Nenhum banco encontrado</div>;
+                                }
+
+                                return filtered.map(b => {
+                                  const valueStr = `[${b.code}] - ${b.name}`;
+                                  const isSelected = formData.dadosBancarios.banco === valueStr;
+                                  return (
+                                    <button
+                                      key={b.code}
+                                      type="button"
+                                      onMouseDown={() => {
+                                        setFormData({
+                                          ...formData,
+                                          dadosBancarios: {
+                                            ...formData.dadosBancarios,
+                                            banco: valueStr
+                                          }
+                                        });
+                                        setBankSearch('');
+                                        setIsBankDropdownOpen(false);
+                                      }}
+                                      className={`w-full text-left p-2 hover:bg-slate-50 transition-colors text-xs font-medium flex items-center justify-between ${
+                                        isSelected ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-700'
+                                      }`}
+                                    >
+                                      <span>[{b.code}] - {b.name}</span>
+                                      {isSelected && <Check size={12} className="text-blue-600" />}
+                                    </button>
+                                  );
+                                });
+                              })()}
+                            </div>
+                          )}
+                        </div>
+                        <select
+                          id="tipo-conta-select"
+                          value={formData.dadosBancarios.tipoConta || ''}
+                          onChange={e => setFormData({
+                            ...formData,
+                            dadosBancarios: {
+                              ...formData.dadosBancarios,
+                              tipoConta: e.target.value
+                            }
+                          })}
+                          className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e] bg-white cursor-pointer font-sans"
+                        >
+                          <option value="">Tipo de Conta...</option>
+                          <option value="Conta-Corrente">Conta-Corrente</option>
+                          <option value="Poupança">Poupança</option>
+                        </select>
+                        {false && <select value={formData.dadosBancarios.banco} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, banco: e.target.value}})} id="banco-select" className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]">
                           <option value="">Selecione um banco...</option>
                           {bankList.map(b => (
                             <option key={b.code} value={`[${b.code}] - ${b.name}`}>[{b.code}] - {b.name}</option>
                           ))}
-                       </select>
-                       <input type="text" placeholder="Agência" value={formData.dadosBancarios.agencia} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, agencia: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]" />
+                        </select>}
+                        <input type="text" placeholder="Agência" value={formData.dadosBancarios.agencia} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, agencia: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]" />
                        <input type="text" placeholder="Conta" value={formData.dadosBancarios.conta} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, conta: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]" />
                        <input type="text" placeholder="PIX" value={formData.dadosBancarios.pix} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, pix: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]" />
                     </CardBase>
@@ -2648,25 +2905,22 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
               }
             })()}
 
-            <div className="flex flex-col sm:flex-row gap-3 justify-between items-center pt-4 border-t border-slate-100 mt-2 print:hidden">
-                <div className="flex gap-2 w-full sm:w-auto">
-                    <button type="button" onClick={handleCloseModal} className="px-5 py-2 hover:bg-gray-100 font-medium text-sm text-slate-600 rounded-lg transition-colors cursor-pointer w-full sm:w-auto">Fechar</button>
-                    {editingProf && userRole === 'Administrador' && activeTab === 'dados' && (
-                        <button
-                            type="button"
-                            onClick={() => setDeleteProfConfirmOpen(true)}
-                            className="px-5 py-2 font-bold text-sm text-red-600 border border-red-600 hover:bg-red-50 rounded-lg transition-all cursor-pointer w-full sm:w-auto"
-                        >
-                            Excluir Profissional
-                        </button>
-                    )}
-                </div>
-                {activeTab === 'dados' && (
-                  <button type="submit" disabled={loading} className="bg-[#1a3c2e] text-[#b8860b] px-4 py-2 rounded-lg font-bold disabled:bg-gray-400">
+            {activeTab === 'dados' && (
+              <div className="flex justify-end items-center gap-3 pt-4 border-t border-slate-100 mt-2 print:hidden">
+                  {editingProf && userRole === 'Administrador' && (
+                      <button
+                          type="button"
+                          onClick={() => setDeleteProfConfirmOpen(true)}
+                          className="px-4 py-2 text-sm font-bold text-red-600 border border-red-600 hover:bg-red-50 rounded-lg transition-all cursor-pointer"
+                      >
+                          Excluir
+                      </button>
+                  )}
+                  <button type="submit" disabled={loading} className="bg-[#1a3c2e] text-[#b8860b] px-4 py-2 rounded-lg font-bold disabled:bg-gray-400 text-sm">
                     {loading ? 'Salvando...' : 'Salvar'}
                   </button>
-                )}
-            </div>
+              </div>
+            )}
           </form>
         </div>
       )}

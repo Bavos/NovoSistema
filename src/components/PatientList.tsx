@@ -312,7 +312,6 @@ export const PatientList: React.FC<PatientListProps> = ({
                           >
                             {p.nome}
                           </button>
-                          <span className="text-sm text-gray-500 mt-0.5 font-mono">CPF: {p.cpf}</span>
                         </div>
                       </td>
 

@@ -79,9 +79,27 @@
         "usuarioExecutou": { "type": "string" }
       },
       "required": ["id", "timestamp", "tipo", "itemsCount", "dadosPacientes", "usuarioExecutou"]
+    },
+    "ConfiguracoesEmpresa": {
+      "title": "Configurações da Empresa",
+      "description": "Única fonte oficial de dados da empresa para todo o sistema (Razão Social, CNPJ, Endereço, Domínios Autorizados e URL da Logo)",
+      "type": "object",
+      "properties": {
+        "razaoSocial": { "type": "string" },
+        "cnpj": { "type": "string" },
+        "endereco": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "dominiosAutorizados": { "type": "array", "items": { "type": "string" } },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["razaoSocial", "cnpj", "endereco"]
     }
   },
   "firestore": {
+    "/configuracoes_empresa/{empresaId}": {
+      "schema": "ConfiguracoesEmpresa",
+      "description": "Coleção central de configurações e dados organizacionais da empresa"
+    },
     "/pacientes/{pacienteId}": {
       "schema": "Paciente",
       "description": "Coleção principal de pacientes"

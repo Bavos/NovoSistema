@@ -16,6 +16,7 @@ export interface DadosBancarios {
   agencia: string;
   conta: string;
   pix: string;
+  tipoConta?: string;
 }
 
 export interface Profissional {

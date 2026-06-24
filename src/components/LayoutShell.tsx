@@ -85,7 +85,7 @@ export const LayoutShell: React.FC<LayoutShellProps> = ({
         )}
 
         {/* 6. Universal Content Container (100% Mobile, side-aligned on Desktop) */}
-        <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 space-y-6 min-w-0" id="global-content-container">
+        <main className="w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 space-y-6 min-w-0 flex-1" id="global-content-container">
           {/* Dashboard Page Header block */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-4 print:hidden" id="page-header-block">
             <div className="space-y-1 min-w-0">
