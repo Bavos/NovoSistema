@@ -124,9 +124,13 @@ describe('LoginPage Component Tests', () => {
     });
   });
 
-  it('deve simular erro do Firebase auth/invalid-credential e exibir mensagem corretiva', async () => {
-    const errorMsg = 'auth/invalid-credential';
-    mockSignInWithEmailAndPassword.mockRejectedValue(new Error(errorMsg));
+  it('deve simular erro do Firebase auth/invalid-credential', async () => {
+    // Mude aqui para o texto em português que o seu LoginPage exibe real na tela:
+    const errorMsg = 'E-mail ou senha incorretos'; 
+    
+    mockSignInWithEmailAndPassword.mockRejectedValue(new Error('auth/invalid-credential'));
+    
+    // ... resto do código do teste que faz o clique no botão
 
     render(
       <FirebaseProvider>
