@@ -54,7 +54,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <motion.aside
-      className="fixed top-0 left-0 h-full bg-forest-green text-off-white z-50 flex flex-col shadow-2xl overflow-hidden border-r border-[#254A34]"
+      className={`fixed top-0 left-0 h-full bg-forest-green text-off-white z-55 flex flex-col shadow-2xl overflow-hidden border-r border-[#254A34] transition-transform duration-300 ease-in-out ${
+        isSidebarExpanded ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+      }`}
       animate={{ width: effectiveExpanded ? 240 : 64 }}
       transition={{ duration: 0.3, ease: [0.25, 0.8, 0.25, 1] }}
       onMouseEnter={() => setIsHovered(true)}

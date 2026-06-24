@@ -1197,7 +1197,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
   // NEW HANDLERS FOR ADVANCED SCHEDULER: Avulso, Concluir, Reabrir, Exclusão
 
-  const handleConfirmAvulso = async () => {
+  const handleSalvarAgendamento = async () => {
     if (!paciente) return false;
     if (datasSelecionadas.length === 0) {
       alert('Selecione ao menos uma data para o agendamento.');
@@ -3351,37 +3351,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           }}
                           className="px-2.5 py-1 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer"
                         >
-                          Hoje
+                          MÊS
                         </button>
 
                         <h2 className="text-sm font-black text-slate-800 tracking-tight font-sans">
                           {['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][calendarMonth]} {calendarYear}
                         </h2>
-                      </div>
-
-                      {/* Segments matching style */}
-                      <div className="flex rounded-md shadow-xs bg-slate-100 p-0.5" role="group">
-                        <button
-                          type="button"
-                          onClick={() => setCalendarView('calendario')}
-                          className={`px-3.5 py-1 text-[11px] font-bold ${calendarView === 'calendario' ? 'text-blue-700 bg-white rounded-md shadow-xs border border-slate-200' : 'text-slate-500 hover:text-slate-800'}`}
-                        >
-                          Mês
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => alert('Modo Semana ainda não disponível.')}
-                          className="px-3.5 py-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
-                        >
-                          Semana
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => alert('Modo Dia ainda não disponível.')}
-                          className="px-3.5 py-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
-                        >
-                          Dia
-                        </button>
                       </div>
                     </div>
 
@@ -3466,9 +3441,17 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                             {ag.horario}
                                             {ag.status === 'Concluido' && ' 🔒'}
                                           </span>
-                                          {(ag.isCuringa || ag.observacao?.includes('CURINGA')) && (
-                                            <span className="px-1 py-[1px] text-[7px] font-black uppercase tracking-wider bg-amber-200 text-amber-900 rounded-sm">Curinga</span>
-                                          )}
+                                          <div className="flex flex-wrap items-center gap-1 justify-end shrink-0">
+                                            {(ag.isCuringa || ag.observacao?.includes('CURINGA')) && (
+                                              <span className="px-1 py-[1px] text-[7px] font-black uppercase tracking-wider bg-amber-200 text-amber-900 rounded-sm">Curinga</span>
+                                            )}
+                                            {(ag.tipoDia === 'Feriado 20%' || ag.tipoDia?.includes('20%') || ag.observacao?.includes('20%')) && (
+                                              <span className="px-1 py-[1px] text-[7px] font-black uppercase tracking-wider bg-blue-200 text-blue-900 rounded-sm">+20%</span>
+                                            )}
+                                            {(ag.tipoDia === 'Feriado 50%' || ag.tipoDia?.includes('50%') || ag.observacao?.includes('50%')) && (
+                                              <span className="px-1 py-[1px] text-[7px] font-black uppercase tracking-wider bg-rose-200 text-rose-900 rounded-sm">+50%</span>
+                                            )}
+                                          </div>
                                         </div>
                                         <span 
                                           className={`truncate block font-medium ${ag.considerarFalta ? 'text-slate-500 line-through decoration-red-500 decoration-2 opacity-80' : 'text-slate-950 opacity-90'}`}
@@ -3942,7 +3925,20 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
                               {/* Prof Name */}
                               <td className="py-3 px-4 font-normal text-gray-900 text-base">
-                                {item.profissional}
+                                <div className="flex flex-col space-y-1">
+                                  <span className="font-semibold">{item.profissional}</span>
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    {(item.observacaoAgendamento?.includes('CURINGA') || item.profissional === 'CURINGA') && (
+                                      <span className="px-1.5 py-0.2 text-[8px] font-black uppercase tracking-wide bg-amber-100 text-amber-805 border border-amber-250 rounded">Curinga</span>
+                                    )}
+                                    {item.feriado === '20%' && (
+                                      <span className="px-1.5 py-0.2 text-[8px] font-black uppercase tracking-wide bg-blue-100 text-blue-805 border border-blue-200 rounded">+20%</span>
+                                    )}
+                                    {item.feriado === '50%' && (
+                                      <span className="px-1.5 py-0.2 text-[8px] font-black uppercase tracking-wide bg-rose-100 text-rose-805 border border-rose-200 rounded">+50%</span>
+                                    )}
+                                  </div>
+                                </div>
                               </td>
 
                               {/* Status indicators */}
@@ -4752,7 +4748,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               <button
                 type="button"
                 onClick={async () => {
-                  const success = await handleConfirmAvulso();
+                  const success = await handleSalvarAgendamento();
                   if (success) {
                     setAvulsoModalOpen(false);
                   }
@@ -4825,6 +4821,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           <span>{selectedShiftForDetails.nomeProfissional}</span>
                           {(selectedShiftForDetails.isCuringa || selectedShiftForDetails.observacao?.includes('CURINGA')) && (
                             <span className="px-1.5 py-0.2 text-[8px] font-black uppercase tracking-wide bg-amber-100 text-amber-800 border border-amber-200 rounded">Curinga</span>
+                          )}
+                          {(selectedShiftForDetails.tipoDia === 'Feriado 20%' || selectedShiftForDetails.tipoDia?.includes('20%') || selectedShiftForDetails.observacao?.includes('20%')) && (
+                            <span className="px-1.5 py-0.2 text-[8px] font-black uppercase tracking-wide bg-blue-100 text-blue-800 border border-blue-200 rounded">+20%</span>
+                          )}
+                          {(selectedShiftForDetails.tipoDia === 'Feriado 50%' || selectedShiftForDetails.tipoDia?.includes('50%') || selectedShiftForDetails.observacao?.includes('50%')) && (
+                            <span className="px-1.5 py-0.2 text-[8px] font-black uppercase tracking-wide bg-rose-100 text-rose-800 border border-rose-200 rounded">+50%</span>
                           )}
                         </p>
                       </div>
@@ -5521,7 +5523,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 <button
                   type="button"
                   onClick={async () => {
-                    const success = await handleConfirmAvulso();
+                    const success = await handleSalvarAgendamento();
                     if (success) {
                       setAvulsoModalOpen(false);
                     }
@@ -6680,7 +6682,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               <input
                 type="text"
                 value={deleteRecordConfirmInput}
-                onChange={(e) => setDeleteRecordConfirmInput(e.target.value)}
+                onChange={(e) => setDeleteRecordConfirmInput(e.target.value.toUpperCase())}
                 placeholder="Digite CONFIRMAR"
                 className="w-full text-xs font-mono font-bold tracking-widest px-3 py-2 border border-slate-200 rounded-lg text-slate-800 bg-slate-50 uppercase focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-red-500"
               />
@@ -6697,7 +6699,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               <button
                 type="button"
                 onClick={async () => {
-                  if (deleteRecordConfirmInput !== 'CONFIRMAR') {
+                  if (deleteRecordConfirmInput.trim().toUpperCase() !== 'CONFIRMAR') {
                     toast.error("Por favor, digite 'CONFIRMAR' para prosseguir.");
                     return;
                   }
@@ -6709,7 +6711,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     setDeleteRecordDialog(null);
                   }
                 }}
-                disabled={deleteRecordConfirmInput !== 'CONFIRMAR'}
+                disabled={deleteRecordConfirmInput.trim().toUpperCase() !== 'CONFIRMAR'}
                 className="flex-1 py-2 text-xs font-black text-white bg-red-600 hover:bg-red-700 rounded-full transition-all text-center cursor-pointer shadow-md disabled:opacity-45 disabled:cursor-not-allowed"
               >
                 {deleteRecordDialog.confirmText || 'Confirmar e Excluir'}

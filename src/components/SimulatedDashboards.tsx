@@ -1296,7 +1296,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
               : 'border-transparent text-slate-500 hover:text-slate-700'
           }`}
         >
-          🗂️ Emissão de Folhas / Relatórios
+          🗂️ Emissão de Folhas
         </button>
         <button
           id="subtab-debitos"
@@ -1328,13 +1328,13 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
           <div className="bg-white p-5 border border-slate-200 rounded-2xl shadow-sm print:hidden">
             <div className="flex flex-col gap-5">
               {/* Top Options */}
-              <div className="flex items-center gap-4 border-b border-slate-100 pb-4">
-                <h3 className="text-sm font-bold text-slate-800">Tipo de Relatório:</h3>
-                <div className="flex bg-slate-100 p-1 rounded-lg">
+              <div className="flex items-center gap-3 border-b border-slate-100 pb-4 w-full min-w-0">
+                <h3 className="text-sm font-bold text-slate-800 shrink-0">Tipo de Relatório:</h3>
+                <div className="flex bg-slate-100 p-1 rounded-xl overflow-x-auto no-scrollbar gap-1 w-full sm:w-auto min-w-0 flex-1">
                   <button
                     id="btn-report-type-fatura"
                     onClick={() => { setFinanceTab('fatura'); setHasGenerated(false); }}
-                    className={`px-4 py-2 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                    className={`px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                       financeTab === 'fatura'
                         ? 'bg-blue-600 text-white shadow-sm'
                         : 'text-slate-500 hover:text-slate-700'
@@ -1345,7 +1345,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                   <button
                     id="btn-report-type-pagamento"
                     onClick={() => { setFinanceTab('pagamento'); setHasGenerated(false); }}
-                    className={`px-4 py-2 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                    className={`px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                       financeTab === 'pagamento'
                         ? 'bg-indigo-600 text-white shadow-sm'
                         : 'text-slate-500 hover:text-slate-700'
@@ -1356,7 +1356,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                   <button
                     id="btn-report-type-mei"
                     onClick={() => { setFinanceTab('mei'); setHasGenerated(false); }}
-                    className={`px-4 py-2 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                    className={`px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                       financeTab === 'mei'
                         ? 'bg-emerald-600 text-white shadow-sm'
                         : 'text-slate-500 hover:text-slate-700'
@@ -1367,7 +1367,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                   <button
                     id="btn-report-type-valor-mei"
                     onClick={() => { setFinanceTab('valor_mei'); setHasGenerated(false); }}
-                    className={`px-4 py-2 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                    className={`px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                       financeTab === 'valor_mei'
                         ? 'bg-amber-600 text-white shadow-sm'
                         : 'text-slate-500 hover:text-slate-700'

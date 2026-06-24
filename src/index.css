@@ -87,6 +87,37 @@ body {
 @layer utilities {
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  
+  /* RESPONSIVE ARCHITECTURAL DESIGN SYSTEM UTILITIES */
+  
+  /* Universal Responsive Container for Internal Content Pages */
+  .system-content-grid {
+    @apply w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 space-y-6 min-w-0;
+  }
+
+  /* Universal Responsive Card component */
+  .responsive-card {
+    @apply w-full bg-white rounded-2xl md:rounded-3xl border border-slate-200/80 shadow-xs p-4 sm:p-6 transition-all hover:shadow-sm;
+  }
+
+  /* Universal Form Input Grid: adapts dynamically to browser width */
+  .responsive-form-grid {
+    @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 w-full;
+  }
+
+  /* Universal Responsive Inputs */
+  .responsive-input {
+    @apply w-full px-3.5 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-forest-green/20 focus:border-forest-green transition-all placeholder:text-slate-400;
+  }
+
+  /* Universal Responsive Tables: prevents page freezing and layout breakages on mobile */
+  .responsive-table-wrapper {
+    @apply w-full overflow-x-auto rounded-xl md:rounded-2xl border border-slate-200/80 bg-white shadow-xs;
+  }
+
+  .responsive-table {
+    @apply w-full min-w-[650px] md:min-w-full divide-y divide-slate-200 text-left text-sm;
+  }
 }
 
 

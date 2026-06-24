@@ -7,8 +7,7 @@ import React, { useState } from 'react';
 import { FirebaseProvider, useFirebase } from './context/FirebaseContext';
 import { LoginPage } from './pages/LoginPage';
 import { FirstAccessPage } from './pages/FirstAccessPage';
-import { Sidebar } from './components/Sidebar';
-import { TopHeader } from './components/TopHeader';
+import { LayoutShell } from './components/LayoutShell';
 import { Pacientes } from './pages/Pacientes';
 import { Profissionais } from './pages/Profissionais';
 import {
@@ -17,10 +16,10 @@ import {
 } from './components/SimulatedDashboards';
 import { Dashboard } from './components/Dashboard';
 import { motion, AnimatePresence } from 'motion/react';
-import { Users, Award, ShieldAlert, Heart, Activity, AlertCircle, X } from 'lucide-react';
+import { ShieldAlert } from 'lucide-react';
 
 const AccessDeniedView: React.FC = () => (
-  <div className="flex flex-col items-center justify-center p-12 bg-white rounded-3xl border border-red-200 shadow-sm max-w-lg mx-auto text-center space-y-4 animate-in fade-in zoom-in-95 duration-200">
+  <div className="flex flex-col items-center justify-center p-12 bg-white rounded-3xl border border-red-200 shadow-sm max-w-lg mx-auto text-center space-y-4 animate-in fade-in zoom-in-95 duration-200" id="access-denied-view">
     <div className="p-4 bg-red-50 text-red-650 rounded-full">
       <ShieldAlert size={48} className="text-red-600 animate-bounce" />
     </div>
@@ -39,7 +38,6 @@ const AccessDeniedView: React.FC = () => (
 function DashboardContent() {
   const [activeSidebarTab, setActiveSidebarTab] = useState<string>('dashboard');
   const [financeiroSubTab, setFinanceiroSubTab] = useState<'folhas' | 'debitos'>('folhas');
-  const [isSidebarExpanded, setIsSidebarExpanded] = useState<boolean>(false);
 
   // Manage Pacientes page inner state routing overrides
   const [isBrowsingForm, setIsBrowsingForm] = useState<boolean>(false);
@@ -48,7 +46,7 @@ function DashboardContent() {
   const [initialSelectedPatient, setInitialSelectedPatient] = useState<any>(null);
   const [initialSelectedProfId, setInitialSelectedProfId] = useState<string>('');
 
-  const { pacientes, loading, userRole, notification, setNotification, user, usuariosSistema } = useFirebase();
+  const { pacientes, loading, userRole, user, usuariosSistema } = useFirebase();
 
   const currentUserProfile = (usuariosSistema || []).find(u => {
     const uEmail = u?.email;
@@ -92,153 +90,98 @@ function DashboardContent() {
   }
 
   return (
-    <div className="min-h-screen bg-off-white text-forest-green font-sans flex">
-      {/* 1. Collapsible/Expandable Sidebar */}
-      <div className="print:hidden">
-        <Sidebar
-          activeTab={activeSidebarTab}
-          setActiveTab={(tab) => {
-            setActiveSidebarTab(tab);
-            setFinanceiroSubTab('folhas');
-            // Auto-reset state overrides
-            setIsBrowsingForm(false);
-            setPacientesTitleOverride('Gestão Integrada de Pacientes');
+    <LayoutShell
+      activeTab={activeSidebarTab}
+      setActiveTab={(tab) => {
+        setActiveSidebarTab(tab);
+        setFinanceiroSubTab('folhas');
+        // Auto-reset state overrides
+        setIsBrowsingForm(false);
+        setPacientesTitleOverride('Gestão Integrada de Pacientes');
 
-            // Clear hash and query parameters when switching tabs to prevent auto-opening
-            try {
-              const url = new URL(window.location.href);
-              url.hash = '';
-              if (url.searchParams.has('profId')) {
-                url.searchParams.delete('profId');
-              }
-              window.history.replaceState({}, '', url.toString().replace(/#$/, ''));
-            } catch (err) {
-              console.warn('Erro ao limpar a URL:', err);
-            }
-          }}
-          isSidebarExpanded={isSidebarExpanded}
-          setIsSidebarExpanded={setIsSidebarExpanded}
-        />
-      </div>
-
-      {/* Main viewport area */}
-      <div
-        className="flex-1 min-h-screen flex flex-col transition-all duration-300"
-        style={{ paddingLeft: isSidebarExpanded ? 240 : 64 }}
-      >
-        {/* 2. Top Header with search/notifs/avatar dropdown */}
-        <div className="print:hidden">
-          <TopHeader
-            isSidebarExpanded={isSidebarExpanded}
-            setIsSidebarExpanded={setIsSidebarExpanded}
-          />
+        // Clear hash and query parameters when switching tabs to prevent auto-opening
+        try {
+          const url = new URL(window.location.href);
+          url.hash = '';
+          if (url.searchParams.has('profId')) {
+            url.searchParams.delete('profId');
+          }
+          window.history.replaceState({}, '', url.toString().replace(/#$/, ''));
+        } catch (err) {
+          console.warn('Erro ao limpar a URL:', err);
+        }
+      }}
+      pageTitle={getPageTitle()}
+      rightHeaderKpi={
+        <div className="hidden sm:flex items-center space-x-3.5 text-xs text-slate-500 select-none bg-white p-2 rounded-xl border border-slate-200 shadow-sm shrink-0">
+          <div className="text-center px-2">
+            <span className="block text-[10px] text-slate-400 font-mono font-bold uppercase">Pacientes Ativos</span>
+            <span className="text-sm font-extrabold text-blue-600">
+              {pacientes.filter((p) => p.status === 'Ativo').length}
+            </span>
+          </div>
+          <div className="w-px h-6 bg-slate-25 bg-slate-200"></div>
+          <div className="text-center px-2">
+            <span className="block text-[10px] text-slate-400 font-mono font-bold uppercase">Escalas Hoje</span>
+            <span className="text-sm font-extrabold text-slate-700">3 Plantões</span>
+          </div>
         </div>
-        
-        {notification && (
-          <div className="fixed top-24 right-6 bg-[#FEF3C7] border-l-4 border-amber-600 text-amber-900 p-4 rounded-xl shadow-xl z-50 animate-in slide-in-from-right-4 max-w-sm flex items-start gap-3 print:hidden border border-amber-200">
-            <AlertCircle className="text-amber-600 shrink-0 mt-0.5" size={18} />
-            <div className="flex-1 space-y-1">
-              <p className="text-[10px] uppercase font-bold tracking-wider text-amber-800">Aviso do Sistema</p>
-              <p className="text-xs font-semibold leading-relaxed">{notification}</p>
-            </div>
-            <button 
-              onClick={() => setNotification(null)}
-              className="text-amber-500 hover:text-amber-700 transition-colors p-0.5 rounded hover:bg-amber-100 cursor-pointer"
-            >
-              <X size={16} />
-            </button>
-          </div>
-        )}
-
-        {/* 3. Area de Conteúdo Main Body */}
-        <main className="flex-1 px-6 py-8 space-y-6 max-w-5xl w-full mx-auto">
-          {/* Dashboard Page Header block */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-4 print:hidden">
-            <div className="space-y-1">
-              <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight flex items-center space-x-2">
-                <span>{getPageTitle()}</span>
-              </h1>
-            </div>
-
-            {/* Quick KPIs badge for upper display context */}
-            <div className="hidden sm:flex items-center space-x-3.5 text-xs text-slate-500 select-none bg-white p-2 rounded-xl border border-slate-200 shadow-sm shrink-0">
-              <div className="text-center px-2">
-                <span className="block text-[10px] text-slate-400 font-mono font-bold uppercase">Pacientes Ativos</span>
-                <span className="text-sm font-extrabold text-blue-600">
-                  {pacientes.filter((p) => p.status === 'Ativo').length}
-                </span>
-              </div>
-              <div className="w-px h-6 bg-slate-25 bg-slate-200"></div>
-              <div className="text-center px-2">
-                <span className="block text-[10px] text-slate-400 font-mono font-bold uppercase">Escalas Hoje</span>
-                <span className="text-sm font-extrabold text-slate-700">3 Plantões</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Main conditional tab navigator inside Area de Conteúdo */}
-          <div className="relative">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeSidebarTab}
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -15 }}
-                transition={{ duration: 0.22 }}
-              >
-                {activeSidebarTab === 'dashboard' ? (
-                  <Dashboard 
-                    setActiveTab={(tab, extra) => {
-                      setActiveSidebarTab(tab);
-                      if (extra?.financeiroSubTab) {
-                        setFinanceiroSubTab(extra.financeiroSubTab);
-                      } else {
-                        setFinanceiroSubTab('folhas');
-                      }
-                    }} 
-                    onSelectPatientRedirect={(pac) => {
-                      setInitialSelectedPatient(pac);
-                      setActiveSidebarTab('pacientes');
-                    }}
-                  />
-                ) : activeSidebarTab === 'pacientes' ? (
-                  <Pacientes
-                    initialSelectedPatient={initialSelectedPatient}
-                    clearInitialSelectedPatient={() => setInitialSelectedPatient(null)}
-                    onViewChange={(isForm, title) => {
-                      setIsBrowsingForm(isForm);
-                      setPacientesTitleOverride(title);
-                    }}
-                  />
-                ) : activeSidebarTab === 'profissionais' ? (
-                  <Profissionais
-                    initialSelectedProfId={initialSelectedProfId}
-                    clearInitialSelectedProfId={() => setInitialSelectedProfId('')}
-                  />
-                ) : activeSidebarTab === 'financeiro' ? (
-                  userRole?.toLowerCase() === 'colaborador' ? (
-                    <AccessDeniedView />
-                  ) : (
-                    <FinanceiroDashboard initialSubTab={financeiroSubTab} />
-                  )
-                ) : activeSidebarTab === 'empresa' ? (
-                  userRole?.toLowerCase() === 'colaborador' ? (
-                    <AccessDeniedView />
-                  ) : (
-                    <EmpresaDashboard />
-                  )
-                ) : null}
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        </main>
-
-        {/* Footer info brand */}
-        <footer className="py-4 border-t border-slate-200 text-center text-xs text-slate-500 select-none font-mono print:hidden">
-          <p>© 2026 CuidarHome S.A. • Todos os direitos reservados • Auditoria Integrada Firestore</p>
-        </footer>
-      </div>
-    </div>
+      }
+    >
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={activeSidebarTab}
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -15 }}
+          transition={{ duration: 0.22 }}
+          className="min-w-0 w-full"
+        >
+          {activeSidebarTab === 'dashboard' ? (
+            <Dashboard 
+              setActiveTab={(tab, extra) => {
+                setActiveSidebarTab(tab);
+                if (extra?.financeiroSubTab) {
+                  setFinanceiroSubTab(extra.financeiroSubTab);
+                } else {
+                  setFinanceiroSubTab('folhas');
+                }
+              }} 
+              onSelectPatientRedirect={(pac) => {
+                setInitialSelectedPatient(pac);
+                setActiveSidebarTab('pacientes');
+              }}
+            />
+          ) : activeSidebarTab === 'pacientes' ? (
+            <Pacientes
+              initialSelectedPatient={initialSelectedPatient}
+              clearInitialSelectedPatient={() => setInitialSelectedPatient(null)}
+              onViewChange={(isForm, title) => {
+                setIsBrowsingForm(isForm);
+                setPacientesTitleOverride(title);
+              }}
+            />
+          ) : activeSidebarTab === 'profissionais' ? (
+            <Profissionais
+              initialSelectedProfId={initialSelectedProfId}
+              clearInitialSelectedProfId={() => setInitialSelectedProfId('')}
+            />
+          ) : activeSidebarTab === 'financeiro' ? (
+            userRole?.toLowerCase() === 'colaborador' ? (
+              <AccessDeniedView />
+            ) : (
+              <FinanceiroDashboard initialSubTab={financeiroSubTab} />
+            )
+          ) : activeSidebarTab === 'empresa' ? (
+            userRole?.toLowerCase() === 'colaborador' ? (
+              <AccessDeniedView />
+            ) : (
+              <EmpresaDashboard />
+            )
+          ) : null}
+        </motion.div>
+      </AnimatePresence>
+    </LayoutShell>
   );
 }
 
