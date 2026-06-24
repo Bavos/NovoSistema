@@ -49,3 +49,4 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # Bloqueia o PR se encontrar tokens, chaves Stripe/AWS hardcoded criadas pela IA
+# trigger pipeline update
