@@ -45,7 +45,8 @@ jobs:
       # Garante que as otimizações do React/Vite/Next não quebram em produção
 
     - name: Verificar Vazamento de Segredos (Gitleaks)
-      uses: gitleaks/gitleaks-action@v2
+- name: Executar Suite de Testes Unitários
+      run: npm test      uses: gitleaks/gitleaks-action@v2
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # Bloqueia o PR se encontrar tokens, chaves Stripe/AWS hardcoded criadas pela IA
