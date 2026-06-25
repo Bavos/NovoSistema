@@ -360,7 +360,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         profissionaisBloqueados: blockedProfs
       };
 
-      await updatePaciente(updatedObj);
+      await updatePaciente(updatedObj, true);
       if (userRole === 'Administrador' && paciente) {
         await addAuditLog(
           'UPDATE',
@@ -425,7 +425,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         profissionaisBloqueados: blockedProfs
       };
 
-      await updatePaciente(updatedObj);
+      await updatePaciente(updatedObj, true);
       if (userRole === 'Administrador' && paciente) {
         await addAuditLog('UPDATE', 'pacientes', paciente.id, `Administrador excluiu ocorrência do paciente ${paciente.nome}`);
       }
@@ -939,7 +939,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         },
       };
 
-      await updatePaciente(updatedObj);
+      await updatePaciente(updatedObj, true);
       if (userRole === 'Administrador') {
         await addAuditLog('UPDATE', 'pacientes', paciente.id, `Administrador atualizou o Plano de Atendimento do paciente ${paciente.nome}`);
       }
@@ -2298,7 +2298,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         </div>
 
         {/* Lado Direito: Barra de Ações */}
-        <div className="flex items-center space-x-2 shadow-xs shrink-0 md:justify-end w-full md:w-auto">
+        <div className="flex flex-wrap items-center gap-2 shrink-0 md:justify-end w-full md:w-auto" id="patient-actions-bar">
           <button
             type="button"
             onClick={onBack}
@@ -3460,10 +3460,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                       title={ag.observacao || 'Inspecionar Plantão'}
                                     >
                                         <div className="flex justify-between items-center w-full gap-1">
-                                          <span className={`font-extrabold shrink-0 ${ag.considerarFalta ? 'text-slate-500 line-through decoration-red-500 decoration-2 opacity-80' : 'text-slate-800'}`}>
-                                            {ag.horario}
-                                            {ag.status === 'Concluido' && ' 🔒'}
-                                          </span>
+                                          {ag.status === 'Concluido' && (
+                                            <span className="font-extrabold shrink-0 text-slate-800">
+                                              🔒
+                                            </span>
+                                          )}
                                           <div className="flex flex-wrap items-center gap-1 justify-end shrink-0">
                                             {(ag.isCuringa || ag.observacao?.includes('CURINGA')) && (
                                               <span className="px-1 py-[1px] text-[7px] font-black uppercase tracking-wider bg-amber-200 text-amber-900 rounded-sm">Curinga</span>

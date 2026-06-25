@@ -15,6 +15,8 @@ interface LayoutShellProps {
   setActiveTab: (tab: string) => void;
   pageTitle: string;
   rightHeaderKpi?: React.ReactNode;
+  onSelectPatientRedirect?: (pac: any) => void;
+  onSelectProfRedirect?: (profId: string) => void;
 }
 
 export const LayoutShell: React.FC<LayoutShellProps> = ({
@@ -23,6 +25,8 @@ export const LayoutShell: React.FC<LayoutShellProps> = ({
   setActiveTab,
   pageTitle,
   rightHeaderKpi,
+  onSelectPatientRedirect,
+  onSelectProfRedirect,
 }) => {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState<boolean>(false);
   const { notification, setNotification } = useFirebase();
@@ -64,6 +68,8 @@ export const LayoutShell: React.FC<LayoutShellProps> = ({
           <TopHeader
             isSidebarExpanded={isSidebarExpanded}
             setIsSidebarExpanded={setIsSidebarExpanded}
+            onSelectPatientRedirect={onSelectPatientRedirect}
+            onSelectProfRedirect={onSelectProfRedirect}
           />
         </div>
 

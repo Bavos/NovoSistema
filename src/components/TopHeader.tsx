@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
-import { Bell, LogOut, Shield, Settings, User, Check } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Bell, LogOut, Shield, Settings, User, Check, Search, X, Users, Briefcase } from 'lucide-react';
 import { useFirebase } from '../context/FirebaseContext';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -12,16 +12,36 @@ import { db } from '../lib/firebase';
 interface TopHeaderProps {
   isSidebarExpanded: boolean;
   setIsSidebarExpanded: (expanded: boolean) => void;
+  onSelectPatientRedirect?: (pac: any) => void;
+  onSelectProfRedirect?: (profId: string) => void;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
   isSidebarExpanded,
   setIsSidebarExpanded,
+  onSelectPatientRedirect,
+  onSelectProfRedirect,
 }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [empresa, setEmpresa] = useState<any>(null);
-  const { user, userRole, usuariosSistema, logout } = useFirebase();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  const { user, userRole, usuariosSistema, logout, pacientes, profissionais } = useFirebase();
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setShowSearchResults(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   useEffect(() => {
     const docRef = doc(db, 'configuracoes_empresa', 'empresa');
@@ -53,10 +73,22 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     setShowDropdown(false);
   };
 
+  const cleanQuery = searchQuery.trim().toLowerCase();
+
+  const matchedPacientes = cleanQuery
+    ? (pacientes || []).filter(p => (p.nome || '').toLowerCase().includes(cleanQuery))
+    : [];
+
+  const matchedProfissionais = cleanQuery
+    ? (profissionais || []).filter(p => (p.nome || '').toLowerCase().includes(cleanQuery))
+    : [];
+
+  const hasAnyResults = matchedPacientes.length > 0 || matchedProfissionais.length > 0;
+
   return (
     <header className="h-16 bg-off-white border-b border-[#254A34]/20 flex items-center justify-between px-6 sticky top-0 z-40" id="top-header">
       {/* Brand & Menu section */}
-      <div className="flex items-center space-x-4 flex-1 max-w-lg">
+      <div className="flex items-center space-x-4 shrink-0">
         <button
           onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
           className="p-2 hover:bg-[#e8e4db] rounded-full text-forest-green transition-colors md:hidden"
@@ -70,13 +102,142 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           <img 
             src={empresa.logoUrl} 
             alt="Logo da Empresa" 
-            className="h-14 w-auto object-contain mix-blend-multiply" 
+            className="h-12 w-auto object-contain mix-blend-multiply hidden sm:block" 
           />
         )}
       </div>
 
+      {/* Global Search Bar */}
+      <div ref={searchContainerRef} className="flex-1 max-w-xs md:max-w-md mx-2 md:mx-6 relative" id="global-search-container">
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search size={15} className="text-forest-green/50" />
+          </div>
+          <input
+            type="text"
+            placeholder="Buscar paciente ou profissional..."
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setShowSearchResults(true);
+            }}
+            onFocus={() => setShowSearchResults(true)}
+            className="w-full pl-8 pr-8 py-1.5 text-[11px] bg-white/70 border border-forest-green/20 rounded-full focus:outline-none focus:ring-1 focus:ring-forest-green focus:border-forest-green focus:bg-white text-forest-green placeholder-forest-green/45 transition-all shadow-xs"
+            id="global-search-input"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => {
+                setSearchQuery('');
+                setShowSearchResults(false);
+              }}
+              className="absolute inset-y-0 right-0 pr-3 flex items-center text-forest-green/40 hover:text-forest-green transition-colors"
+              title="Limpar busca"
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
+
+        {/* Search Results Dropdown */}
+        {showSearchResults && searchQuery.trim() !== '' && (
+          <div className="absolute left-0 mt-1.5 w-full max-h-80 bg-white border border-forest-green/10 rounded-2xl shadow-xl z-50 overflow-y-auto" id="search-results-dropdown">
+            {hasAnyResults ? (
+              <div className="p-2 space-y-3">
+                {/* Pacientes Category */}
+                {matchedPacientes.length > 0 && (
+                  <div>
+                    <div className="px-3 py-1 text-[9px] font-bold uppercase tracking-wider text-forest-green/50 flex items-center gap-1.5">
+                      <Users size={11} className="text-forest-green/40" />
+                      <span>Pacientes ({matchedPacientes.length})</span>
+                    </div>
+                    <div className="mt-1 space-y-0.5">
+                      {matchedPacientes.map((pac) => (
+                        <button
+                          key={pac.id}
+                          onClick={() => {
+                            if (onSelectPatientRedirect) {
+                              onSelectPatientRedirect(pac);
+                            }
+                            setSearchQuery('');
+                            setShowSearchResults(false);
+                          }}
+                          className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-left text-[11px] hover:bg-forest-green/5 transition-colors group cursor-pointer"
+                        >
+                          <div className="min-w-0 flex-1 pr-2">
+                            <p className="font-semibold text-slate-800 group-hover:text-forest-green truncate">
+                              {pac.nome}
+                            </p>
+                            <p className="text-[9px] text-slate-500 truncate">
+                              {pac.endereco?.bairro ? `Bairro: ${pac.endereco.bairro}` : 'Sem endereço'}
+                            </p>
+                          </div>
+                          <span className={`shrink-0 text-[8px] font-bold px-1.5 py-0.5 rounded-full ${
+                            pac.status === 'Ativo' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-slate-100 text-slate-500 border border-slate-200'
+                          }`}>
+                            {pac.status}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Separator if both exist */}
+                {matchedPacientes.length > 0 && matchedProfissionais.length > 0 && (
+                  <div className="border-t border-forest-green/5 my-1"></div>
+                )}
+
+                {/* Profissionais Category */}
+                {matchedProfissionais.length > 0 && (
+                  <div>
+                    <div className="px-3 py-1 text-[9px] font-bold uppercase tracking-wider text-forest-green/50 flex items-center gap-1.5">
+                      <Briefcase size={11} className="text-forest-green/40" />
+                      <span>Profissionais ({matchedProfissionais.length})</span>
+                    </div>
+                    <div className="mt-1 space-y-0.5">
+                      {matchedProfissionais.map((prof) => (
+                        <button
+                          key={prof.id}
+                          onClick={() => {
+                            if (onSelectProfRedirect) {
+                              onSelectProfRedirect(prof.id);
+                            }
+                            setSearchQuery('');
+                            setShowSearchResults(false);
+                          }}
+                          className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-left text-[11px] hover:bg-forest-green/5 transition-colors group cursor-pointer"
+                        >
+                          <div className="min-w-0 flex-1 pr-2">
+                            <p className="font-semibold text-slate-800 group-hover:text-forest-green truncate">
+                              {prof.nome}
+                            </p>
+                            <p className="text-[9px] text-slate-500 truncate">
+                              {prof.conselho ? `${prof.conselho}` : 'Sem conselho'} {prof.cpf ? `• CPF: ${prof.cpf}` : ''}
+                            </p>
+                          </div>
+                          <span className={`shrink-0 text-[8px] font-bold px-1.5 py-0.5 rounded-full ${
+                            prof.status === 'Ativo' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-slate-100 text-slate-500 border border-slate-200'
+                          }`}>
+                            {prof.status || 'Ativo'}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="p-4 text-center text-[11px] text-slate-400 select-none">
+                Nenhum paciente ou profissional para "{searchQuery}"
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Control Actions */}
-      <div className="flex items-center space-x-4">
+      <div className="flex items-center space-x-4 shrink-0">
         {/* Notification Center */}
         <div className="relative">
           <button

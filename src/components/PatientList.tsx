@@ -49,13 +49,15 @@ export const PatientList: React.FC<PatientListProps> = ({
       if (statusA !== statusB) {
         return statusA - statusB;
       }
-      return (a.nome || '').localeCompare(b.nome || '', 'pt-BR');
+      const nameA = (a.nome || '').toLowerCase();
+      const nameB = (b.nome || '').toLowerCase();
+      return nameA.localeCompare(nameB, 'pt-BR');
     });
   }, [pacientes]);
 
   // Combined Search and Filters
   const filteredPacientes = useMemo(() => {
-    return pacientes.filter((p) => {
+    const filtered = pacientes.filter((p) => {
       // Search logic (localSearch or globalSearchQuery)
       const query = (localSearch || globalSearchQuery || '').toLowerCase();
       const matchSearch =
@@ -68,6 +70,18 @@ export const PatientList: React.FC<PatientListProps> = ({
       const matchPaciente = filterPacienteId === 'todos' ? true : p.id === filterPacienteId;
 
       return matchSearch && matchPaciente;
+    });
+
+    // Sort strictly by status first (Ativos on top), then by name (case-insensitive A-Z)
+    return filtered.sort((a, b) => {
+      const statusA = a.status === 'Ativo' ? 0 : 1;
+      const statusB = b.status === 'Ativo' ? 0 : 1;
+      if (statusA !== statusB) {
+        return statusA - statusB;
+      }
+      const nameA = (a.nome || '').toLowerCase();
+      const nameB = (b.nome || '').toLowerCase();
+      return nameA.localeCompare(nameB, 'pt-BR');
     });
   }, [pacientes, localSearch, globalSearchQuery, filterPacienteId]);
 

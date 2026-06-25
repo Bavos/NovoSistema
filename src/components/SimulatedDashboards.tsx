@@ -292,7 +292,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
 
-  const meiProfissionais = activeProfissionais.filter(p => p.temMei && p.cnpj && p.cnpj.trim() !== '');
+  const meiProfissionais = activeProfissionais.filter(p => p.temMei && !p.meiIrregular && p.cnpj && p.cnpj.trim() !== '');
 
   const getReferenciaMesNome = (m: number) => {
     const list = [
@@ -420,6 +420,8 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   const [isInsertingDebit, setIsInsertingDebit] = useState(false);
   const [editingDebitId, setEditingDebitId] = useState<string | null>(null);
   const [newDebitPacienteId, setNewDebitPacienteId] = useState('');
+  const [debitFilterStartDate, setDebitFilterStartDate] = useState('');
+  const [debitFilterEndDate, setDebitFilterEndDate] = useState('');
   const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<{
     isOpen: boolean;
     title: string;
@@ -452,6 +454,23 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       return `${day}/${month}/${year}`;
     } catch (err) {
       return String(val);
+    }
+  };
+
+  const getDebitDateObj = (val: any): Date | null => {
+    if (!val) return null;
+    try {
+      if (typeof val.toDate === 'function') {
+        return val.toDate();
+      } else if (val instanceof Date) {
+        return val;
+      } else if (val.seconds) {
+        return new Date(val.seconds * 1000);
+      } else {
+        return new Date(val);
+      }
+    } catch (err) {
+      return null;
     }
   };
 
@@ -547,7 +566,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
 
       if (financeTab === 'mei') {
         const selectedMEIProfs = activeProfissionais.filter(
-          p => p.temMei && p.cnpj && p.cnpj.trim() !== '' && meiProfissionaisSelecionados.includes(p.id)
+          p => p.temMei && !p.meiIrregular && p.cnpj && p.cnpj.trim() !== '' && meiProfissionaisSelecionados.includes(p.id)
         );
 
         const profsWithPlantoes = selectedMEIProfs.filter(prof => {
@@ -767,7 +786,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
         const textoMotivo = `RETENÇÃO DE GUIA MEI - REF. ${mesFormatado}/${anoFormatado}`;
 
         // Deduct MEI value if temMei
-        if (profissional && profissional.temMei && valorMeiGlobal > 0) {
+        if (profissional && profissional.temMei && !profissional.meiIrregular && valorMeiGlobal > 0) {
             valorLiquido -= valorMeiGlobal;
 
             // Injetar o débito descritivo ("Retenção de Guia MEI")
@@ -921,7 +940,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
           let finalTotalDebitos = totalDebitos;
 
           // Deduct MEI value if temMei
-          if (profissional && profissional.temMei && valorMeiGlobal > 0) {
+          if (profissional && profissional.temMei && !profissional.meiIrregular && valorMeiGlobal > 0) {
             valorLiquido -= valorMeiGlobal;
 
             const autoDebit = {
@@ -1872,7 +1891,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                         
                         const profObj = profissionais.find(p => p.nome === profName);
                         const profId = profObj?.id || `dummy-${profName.toLowerCase().replace(/\s/g, '-')}`;
-                        const temMei = profObj?.temMei === true;
+                        const temMei = profObj?.temMei === true && profObj?.meiIrregular !== true;
                         const cnpj = profObj?.cnpj || '';
                         
                         const debDocsForProf = debitosNoPeriodo.filter(d => 
@@ -1950,7 +1969,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                       const numSelected = selectedProfissionais.length;
                       const numSelectedWithMei = selectedProfissionais.filter(pId => {
                         const profObj = profissionais.find(p => p.id === pId);
-                        return profObj?.temMei === true;
+                        return profObj?.temMei === true && profObj?.meiIrregular !== true;
                       }).length;
 
                       return (
@@ -2273,9 +2292,45 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
 
           {/* Debits Table */}
           <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-            <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
-              <Info size={16} className="text-indigo-600" />
-              <p className="text-xs text-slate-500 font-semibold">Consolidação de Débitos Ativos (Salvos na nuvem em tempo real)</p>
+            <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <Info size={16} className="text-indigo-600" />
+                <p className="text-xs text-slate-500 font-semibold">Consolidação de Débitos Ativos (Salvos na nuvem em tempo real)</p>
+              </div>
+              
+              {/* Filtro por Data */}
+              <div className="flex flex-wrap items-center gap-2 print:hidden">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Filtrar por Data:</span>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="date"
+                    value={debitFilterStartDate}
+                    onChange={(e) => setDebitFilterStartDate(e.target.value)}
+                    className="px-2 py-1 border border-slate-200 rounded-lg text-xs bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#1a3c2e] focus:border-[#1a3c2e]"
+                    placeholder="Início"
+                  />
+                  <span className="text-slate-400 text-[10px] font-bold">até</span>
+                  <input
+                    type="date"
+                    value={debitFilterEndDate}
+                    onChange={(e) => setDebitFilterEndDate(e.target.value)}
+                    className="px-2 py-1 border border-slate-200 rounded-lg text-xs bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#1a3c2e] focus:border-[#1a3c2e]"
+                    placeholder="Fim"
+                  />
+                  {(debitFilterStartDate || debitFilterEndDate) && (
+                    <button
+                      onClick={() => {
+                        setDebitFilterStartDate('');
+                        setDebitFilterEndDate('');
+                      }}
+                      className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                      title="Limpar filtros"
+                    >
+                      Limpar
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
             
             <div className="overflow-x-auto">
@@ -2291,12 +2346,38 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {debitosProfissionais.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="py-12 text-center text-slate-400 italic">Nenhum débito registrado para profissionais cuidador.</td>
-                    </tr>
-                  ) : (
-                    debitosProfissionais.sort((a, b) => {
+                  {(() => {
+                    const filteredDebitos = (debitosProfissionais || []).filter(d => {
+                      const dObj = getDebitDateObj(d.data);
+                      if (!dObj) return true;
+                      
+                      const year = dObj.getFullYear();
+                      const month = String(dObj.getMonth() + 1).padStart(2, '0');
+                      const day = String(dObj.getDate()).padStart(2, '0');
+                      const formattedDateStr = `${year}-${month}-${day}`;
+
+                      if (debitFilterStartDate && formattedDateStr < debitFilterStartDate) {
+                        return false;
+                      }
+                      if (debitFilterEndDate && formattedDateStr > debitFilterEndDate) {
+                        return false;
+                      }
+                      return true;
+                    });
+
+                    if (filteredDebitos.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={6} className="py-12 text-center text-slate-400 italic">
+                            {debitosProfissionais.length === 0 
+                              ? "Nenhum débito registrado para profissionais cuidador." 
+                              : "Nenhum débito encontrado para o período selecionado."}
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    return filteredDebitos.sort((a, b) => {
                       const dateA = a.data?.seconds ? a.data.seconds : new Date(a.data).getTime();
                       const dateB = b.data?.seconds ? b.data.seconds : new Date(b.data).getTime();
                       return dateB - dateA;
@@ -2380,7 +2461,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                         </td>
                       </tr>
                     ))
-                  )}
+                  })()}
                 </tbody>
               </table>
             </div>

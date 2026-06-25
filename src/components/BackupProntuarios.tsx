@@ -50,6 +50,8 @@ export const BackupProntuarios: React.FC = () => {
   const { user, userRole, setNotification } = useFirebase();
   const isAdmin = userRole?.toLowerCase() === 'administrador';
 
+  const hasCheckedAutoBackup = React.useRef(false);
+
   const [backups, setBackups] = useState<BackupRecord[]>([]);
   const [intervalo, setIntervalo] = useState<'diario' | 'semanal' | 'mensal' | 'manual'>('semanal');
   const [loadingBackups, setLoadingBackups] = useState(true);
@@ -256,7 +258,8 @@ export const BackupProntuarios: React.FC = () => {
       setBackups(list);
 
       // 3. Evaluate automatic periodic backup
-      if (loadedInterval !== 'manual') {
+      if (loadedInterval !== 'manual' && !hasCheckedAutoBackup.current) {
+        hasCheckedAutoBackup.current = true;
         const lastBackup = list.find(b => b.tipo === 'Automático' || b.tipo === 'Manual');
         let shouldAutoBackup = false;
 
@@ -365,16 +368,10 @@ export const BackupProntuarios: React.FC = () => {
         setBackups(prev => [newRecord, ...prev]);
       }
 
-      toast.success(`Backup de prontuários em nuvem criado com sucesso! Documento ID: ${docRef.id}`);
-
-      if (!isAutomatic) {
-        alert(`Sucesso! Backup de segurança salvo na nuvem com ${patientsArray.length} prontuários incluídos.`);
-      }
+      toast.success(`Backup de prontuários em nuvem criado com sucesso com ${patientsArray.length} prontuários incluídos!`);
     } catch (err: any) {
       console.error('Erro ao gerar backup de prontuários:', err);
-      if (!isAutomatic) {
-        alert('Erro ao gerar backup: ' + (err.message || String(err)));
-      }
+      toast.error('Erro ao gerar backup: ' + (err.message || String(err)));
     } finally {
       setIsCreatingBackup(false);
     }

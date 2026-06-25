@@ -111,6 +111,14 @@ function DashboardContent() {
           console.warn('Erro ao limpar a URL:', err);
         }
       }}
+      onSelectPatientRedirect={(pac) => {
+        setInitialSelectedPatient(pac);
+        setActiveSidebarTab('pacientes');
+      }}
+      onSelectProfRedirect={(profId) => {
+        setInitialSelectedProfId(profId);
+        setActiveSidebarTab('profissionais');
+      }}
       pageTitle={getPageTitle()}
       rightHeaderKpi={
         <div className="hidden sm:flex items-center space-x-3.5 text-xs text-slate-500 select-none bg-white p-2 rounded-xl border border-slate-200 shadow-sm shrink-0">

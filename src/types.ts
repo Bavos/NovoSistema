@@ -31,6 +31,7 @@ export interface Profissional {
   foto?: string;
   temMei?: boolean;
   cnpj?: string;
+  meiIrregular?: boolean;
   sexo?: 'Masculino' | 'Feminino' | 'Outro';
   dataNascimento?: string;
   idade?: number;

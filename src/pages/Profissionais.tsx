@@ -310,6 +310,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
     foto: '',
     temMei: false,
     cnpj: '',
+    meiIrregular: false,
     sexo: '' as string,
     dataNascimento: '',
     idade: undefined as number | undefined,
@@ -407,6 +408,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
         foto: prof.foto || '',
         temMei: prof.temMei ?? false,
         cnpj: prof.cnpj || '',
+        meiIrregular: prof.meiIrregular ?? false,
         sexo: prof.sexo || 'Masculino',
         dataNascimento: prof.dataNascimento || '',
         idade: prof.idade,
@@ -449,6 +451,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
         foto: '',
         temMei: false,
         cnpj: '',
+        meiIrregular: false,
         sexo: '',
         dataNascimento: '',
         idade: undefined,
@@ -1187,6 +1190,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
           foto: updated.foto || '',
           temMei: updated.temMei ?? false,
           cnpj: updated.cnpj || '',
+          meiIrregular: updated.meiIrregular ?? false,
           sexo: updated.sexo || 'Masculino',
           dataNascimento: updated.dataNascimento || '',
           idade: updated.idade,
@@ -1237,6 +1241,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
           foto: created.foto || '',
           temMei: created.temMei ?? false,
           cnpj: created.cnpj || '',
+          meiIrregular: created.meiIrregular ?? false,
           sexo: created.sexo || 'Masculino',
           dataNascimento: created.dataNascimento || '',
           idade: created.idade,
@@ -1694,7 +1699,16 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
       }
       return prof.id === selectedProfId;
     })
-    .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+    .sort((a, b) => {
+      const statusA = a.status === 'Ativo' ? 0 : 1;
+      const statusB = b.status === 'Ativo' ? 0 : 1;
+      if (statusA !== statusB) {
+        return statusA - statusB;
+      }
+      const nameA = (a.nome || '').toLowerCase();
+      const nameB = (b.nome || '').toLowerCase();
+      return nameA.localeCompare(nameB, 'pt-BR');
+    });
 
   return (
     <div className="space-y-5">
@@ -1707,7 +1721,16 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
             className="w-full px-4 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1a3c2e] outline-none"
           >
             <option value="">Todos os profissionais (Ativos e Inativos)</option>
-            {(profissionais || []).sort((a,b) => (a.nome || '').localeCompare(b.nome || '')).map(prof => (
+            {(profissionais || []).sort((a, b) => {
+              const statusA = a.status === 'Ativo' ? 0 : 1;
+              const statusB = b.status === 'Ativo' ? 0 : 1;
+              if (statusA !== statusB) {
+                return statusA - statusB;
+              }
+              const nameA = (a.nome || '').toLowerCase();
+              const nameB = (b.nome || '').toLowerCase();
+              return nameA.localeCompare(nameB, 'pt-BR');
+            }).map(prof => (
               <option key={prof.id} value={prof.id}>{prof.nome} - {prof.cpf || 'Sem CPF'} {prof.status === 'Inativo' ? '(Inativo)' : ''}</option>
             ))}
           </select>
@@ -2482,20 +2505,22 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                         <input type="text" placeholder="Digite o nome completo" value={formData.nome} onChange={e => setFormData({...formData, nome: e.target.value})} className="p-2 border border-gray-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-[#1a3c2e] focus:border-transparent outline-none bg-white text-gray-800" required />
                       </div>
                       
-                      <div className="space-y-1">
+                      <div className={`space-y-1 ${formData.meiIrregular ? 'opacity-60' : ''}`}>
                         <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">Tem MEI?</label>
                         <div className="flex gap-2">
                           <button
                             type="button"
+                            disabled={formData.meiIrregular}
                             onClick={() => setFormData({...formData, temMei: true})}
-                            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${formData.temMei ? 'bg-[#1a3c2e] text-[#b8860b] shadow-xs' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${formData.temMei ? 'bg-[#1a3c2e] text-[#b8860b] shadow-xs' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'} ${formData.meiIrregular ? 'cursor-not-allowed' : ''}`}
                           >
                             SIM
                           </button>
                           <button
                             type="button"
+                            disabled={formData.meiIrregular}
                             onClick={() => setFormData({...formData, temMei: false, cnpj: ''})}
-                            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${!formData.temMei ? 'bg-red-50 text-red-700 shadow-xs border border-red-100' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${!formData.temMei ? 'bg-red-50 text-red-700 shadow-xs border border-red-100' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'} ${formData.meiIrregular ? 'cursor-not-allowed' : ''}`}
                           >
                             NÃO
                           </button>
@@ -2505,7 +2530,62 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                       {formData.temMei && (
                         <div className="space-y-1 md:col-span-1">
                            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider text-emerald-800">CNPJ</label>
-                           <input type="text" placeholder="00.000.000/0000-00" value={formData.cnpj} onChange={e => setFormData({...formData, cnpj: mascaraCNPJ(e.target.value)})} maxLength={18} className="p-2 border border-emerald-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-emerald-700 bg-emerald-50/50 text-emerald-900" required={formData.temMei} />
+                           <input 
+                             type="text" 
+                             placeholder="00.000.000/0000-00" 
+                             value={formData.cnpj} 
+                             onChange={e => setFormData({...formData, cnpj: mascaraCNPJ(e.target.value)})} 
+                             maxLength={18} 
+                             disabled={formData.meiIrregular}
+                             className={`p-2 border border-emerald-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-emerald-700 bg-emerald-50/50 text-emerald-900 ${formData.meiIrregular ? 'opacity-60 cursor-not-allowed bg-slate-100 border-slate-200 text-slate-500' : ''}`} 
+                             required={formData.temMei} 
+                           />
+                        </div>
+                      )}
+
+                      {/* Status de Regularidade Fiscal MEI (Apenas Administrador pode alterar) */}
+                      {formData.temMei && (
+                        <div className="md:col-span-2 bg-amber-50 border border-amber-200 rounded-xl p-3 md:p-3.5 space-y-2 mt-1" id="mei-status-container">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">📋</span>
+                              <div>
+                                <h4 className="text-xs font-bold text-amber-900">Status na Receita Federal</h4>
+                                <p className="text-[10px] text-amber-700">Controle de regularidade fiscal do profissional MEI.</p>
+                              </div>
+                            </div>
+                            
+                            {userRole === 'Administrador' ? (
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                <input 
+                                  type="checkbox" 
+                                  className="sr-only peer" 
+                                  checked={formData.meiIrregular} 
+                                  onChange={(e) => setFormData({...formData, meiIrregular: e.target.checked})}
+                                />
+                                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
+                                <span className="ml-2 text-xs font-bold text-slate-700">
+                                  {formData.meiIrregular ? 'Irregular (Suspenso)' : 'Regular'}
+                                </span>
+                              </label>
+                            ) : (
+                              <div className="flex items-center gap-1.5">
+                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${formData.meiIrregular ? 'bg-amber-200 text-amber-900' : 'bg-emerald-100 text-emerald-800'}`}>
+                                  {formData.meiIrregular ? 'Irregular (Suspenso)' : 'Regular'}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          {formData.meiIrregular && (
+                            <div className="flex items-start gap-2 bg-amber-100/75 border border-amber-300/50 rounded-lg p-2.5 text-amber-900">
+                              <span className="text-sm">⚠️</span>
+                              <div className="text-[11px] leading-relaxed">
+                                <p className="font-bold">Atenção: CNPJ Temporariamente Inválido/Suspenso.</p>
+                                <p>Os dados do MEI foram preservados, mas este profissional será tratado como <strong className="font-black">Sem MEI</strong> no faturamento e emissão de folhas até a regularização.</p>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                       
