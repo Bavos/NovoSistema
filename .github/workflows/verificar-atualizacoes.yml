@@ -31,16 +31,14 @@ jobs:
         node-version: '20'
         cache: 'npm'
 
-     - name: Instalar Dependências de Forma Estrita
-      run: npm ci
+    - name: Instalar Dependências para Análise
+      run: npm install
+      # Mudamos para 'npm install' para evitar que o desalinhamento do package-lock quebre o fluxo de análise
 
     - name: 1. Verificar Vulnerabilidades Atuais (SCA)
       run: npm audit --audit-level=high
-      # Se houver pacotes com falhas graves, o pipeline avisa imediatamente
 
     - name: 2. Verificar Pacotes Desatualizados
       run: |
         echo "=== Verificando pacotes que possuem atualizações disponíveis ==="
         npm outdated || true
-        # O '|| true' evita que o pipeline quebre apenas porque existem pacotes desatualizados,
-        # permitindo que você veja o relatório completo no log.
