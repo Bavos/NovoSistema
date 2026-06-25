@@ -4,5 +4,13 @@ dist/
 coverage/
 .DS_Store
 *.log
-.env*
+
+# Environment and secrets
+.env
+.env.local
+.env.*
 !.env.example
+
+# Sensitive credentials and config files
+*config.json
+*-adminsdk-*.json

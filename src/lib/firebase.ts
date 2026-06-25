@@ -2,7 +2,26 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
-import firebaseConfig from '../../firebase-applet-config.json';
+import staticConfig from '../../firebase-applet-config.json';
+
+// Resolvendo as configurações do Firebase a partir de variáveis de ambiente com fallback para o arquivo local
+const getEnvVal = (envVal: any, fallbackVal: string): string => {
+  if (envVal === undefined || envVal === null) return fallbackVal;
+  const str = String(envVal).trim();
+  if (str === '' || str === 'undefined' || str === 'null') return fallbackVal;
+  return str;
+};
+
+const firebaseConfig = {
+  apiKey: getEnvVal(import.meta.env.VITE_FIREBASE_API_KEY, staticConfig.apiKey),
+  authDomain: getEnvVal(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN, staticConfig.authDomain),
+  projectId: getEnvVal(import.meta.env.VITE_FIREBASE_PROJECT_ID, staticConfig.projectId),
+  storageBucket: getEnvVal(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET, staticConfig.storageBucket),
+  messagingSenderId: getEnvVal(import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID, staticConfig.messagingSenderId),
+  appId: getEnvVal(import.meta.env.VITE_FIREBASE_APP_ID, staticConfig.appId),
+  measurementId: getEnvVal(import.meta.env.VITE_FIREBASE_MEASUREMENT_ID, staticConfig.measurementId),
+  firestoreDatabaseId: getEnvVal(import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID, staticConfig.firestoreDatabaseId),
+};
 
 const app = initializeApp(firebaseConfig);
 export const db = initializeFirestore(app, {

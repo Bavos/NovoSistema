@@ -91,62 +91,102 @@ export const Dashboard: React.FC<{
 
   const aniversariantes = [...pacBirthdayList, ...profBirthdayList];
 
-  const formatDebitDateDisplay = (val: any): string => {
-    if (!val) return '';
+  const getDebitDateObj = (val: any): Date | null => {
+    if (!val) return null;
     try {
-      let dObj: Date;
       if (typeof val.toDate === 'function') {
-        dObj = val.toDate();
+        return val.toDate();
       } else if (val instanceof Date) {
-        dObj = val;
+        return val;
       } else if (val.seconds) {
-        dObj = new Date(val.seconds * 1000);
+        return new Date(val.seconds * 1000);
       } else {
-        dObj = new Date(val);
+        return new Date(val);
       }
-      return dObj.toLocaleDateString('pt-BR');
+    } catch {
+      return null;
+    }
+  };
+
+  const shouldShowDebit = (debit: any, today: Date): boolean => {
+    const debitDate = getDebitDateObj(debit.data);
+    if (!debitDate) return false;
+
+    // Zerar as horas para comparação segura de datas por fuso horário/calendário
+    const dDate = new Date(debitDate.getFullYear(), debitDate.getMonth(), debitDate.getDate());
+    const tDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    const motivoClean = (debit.motivo || '').toLowerCase().trim();
+
+    if (motivoClean === 'curinga') {
+      const todayDayOfWeek = today.getDay(); // 0 = Domingo, 1 = Segunda, ..., 6 = Sábado
+
+      if (todayDayOfWeek >= 2 && todayDayOfWeek <= 5) {
+        // Terça (2), Quarta (3), Quinta (4), Sexta (5) -> mostra Curingas de ontem (D-1)
+        const yesterday = new Date(tDate);
+        yesterday.setDate(yesterday.getDate() - 1);
+        return dDate.getTime() === yesterday.getTime();
+      } else if (todayDayOfWeek === 1) {
+        // Segunda-feira (1) -> mostra Curingas acumulados de Sexta, Sábado e Domingo
+        const friday = new Date(tDate);
+        friday.setDate(friday.getDate() - 3);
+
+        const saturday = new Date(tDate);
+        saturday.setDate(saturday.getDate() - 2);
+
+        const sunday = new Date(tDate);
+        sunday.setDate(sunday.getDate() - 1);
+
+        const dTime = dDate.getTime();
+        return dTime === friday.getTime() || dTime === saturday.getTime() || dTime === sunday.getTime();
+      }
+      // Fins de semana (Sábado/Domingo): não exibe Curingas (são acumulados na Segunda-feira)
+      return false;
+    } else {
+      // Outros débitos comuns ('mei', 'passagem', 'outros', etc.) -> mostram em D+0 (hoje)
+      return dDate.getTime() === tDate.getTime();
+    }
+  };
+
+  const formatDebitDateDisplay = (val: any): string => {
+    const dObj = getDebitDateObj(val);
+    if (!dObj) return '';
+    try {
+      const weekday = dObj.toLocaleDateString('pt-BR', { weekday: 'long' });
+      const weekdayCap = weekday.charAt(0).toUpperCase() + weekday.slice(1);
+      const dateStr = dObj.toLocaleDateString('pt-BR');
+      return `${weekdayCap}, ${dateStr}`;
     } catch {
       return '';
     }
   };
 
   useEffect(() => {
-    const today = new Date();
-    const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-
-    const q = query(
-      collection(db, 'debitos_profissionais'),
-      where('data', '==', todayMidnight)
-    );
+    const q = query(collection(db, 'debitos_profissionais'));
 
     const unsub = onSnapshot(q, (snapshot) => {
       const list: any[] = [];
+      const today = new Date();
+      
       snapshot.forEach((doc) => {
-        list.push({ id: doc.id, ...doc.data() });
+        const d = { id: doc.id, ...doc.data() };
+        if (shouldShowDebit(d, today)) {
+          list.push(d);
+        }
       });
+      
+      // Ordenar por data decrescente
+      list.sort((a, b) => {
+        const tA = getDebitDateObj(a.data)?.getTime() || 0;
+        const tB = getDebitDateObj(b.data)?.getTime() || 0;
+        return tB - tA;
+      });
+
       setDebitosDoDia(list);
       setLoading(false);
     }, (error) => {
-      console.error("Erro na query de débitos do dia (Firestore query):", error);
-      
-      // Fallback: Query all and filter by current local date string to stay timezone-agnostic and robust
-      const fallbackQuery = query(collection(db, 'debitos_profissionais'));
-      onSnapshot(fallbackQuery, (snapshot) => {
-        const list: any[] = [];
-        const todayStr = today.toLocaleDateString('pt-BR');
-        snapshot.forEach((doc) => {
-          const data = doc.data();
-          const formatted = formatDebitDateDisplay(data.data);
-          if (formatted === todayStr) {
-            list.push({ id: doc.id, ...data });
-          }
-        });
-        setDebitosDoDia(list);
-        setLoading(false);
-      }, (err) => {
-        console.error("Erro no fallback de débitos do dia:", err);
-        setLoading(false);
-      });
+      console.error("Erro na query de débitos do dia:", error);
+      setLoading(false);
     });
 
     return unsub;
