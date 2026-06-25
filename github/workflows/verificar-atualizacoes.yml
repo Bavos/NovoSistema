@@ -1,0 +1,46 @@
+name: Verificação Diária de Atualizações e Segurança
+
+# Gatilhos (Triggers) personalizados
+on:
+  # 1. Gatilho Agendado: Roda automaticamente todos os dias à meia-noite (Horário UTC)
+  schedule:
+    - cron: '0 0 * * *'
+  
+  # 2. Gatilho Manual: Permite que você clique em "Run workflow" direto pelo site do GitHub
+  workflow_dispatch:
+
+  # 3. Gatilho de Código: Dispara se houver mudanças diretas no package.json na branch main
+  push:
+    branches: [ main ]
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+
+jobs:
+  check-updates-and-security:
+    name: Checagem de Segurança e Dependências
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout do Código
+      uses: actions/checkout@v4
+
+    - name: Configurar Ambiente Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Instalar Dependências de Forma Estrita
+      run: npm ci
+
+    - name: 1. Verificar Vulnerabilidades Atuais (SCA)
+      run: npm audit --audit-level=high
+      # Se houver pacotes com falhas graves, o pipeline avisa imediatamente
+
+    - name: 2. Verificar Pacotes Desatualizados
+      run: |
+        echo "=== Verificando pacotes que possuem atualizações disponíveis ==="
+        npm outdated || true
+        # O '|| true' evita que o pipeline quebre apenas porque existem pacotes desatualizados,
+        # permitindo que você veja o relatório completo no log.
