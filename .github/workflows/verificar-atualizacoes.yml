@@ -31,7 +31,7 @@ jobs:
         node-version: '20'
         cache: 'npm'
 
-    - name: Instalar Dependências de Forma Estrita
+     - name: Instalar Dependências de Forma Estrita
       run: npm ci
 
     - name: 1. Verificar Vulnerabilidades Atuais (SCA)
