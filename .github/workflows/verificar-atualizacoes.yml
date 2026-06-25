@@ -1,15 +1,9 @@
 name: Verificação Diária de Atualizações e Segurança
 
-# Gatilhos (Triggers) personalizados
 on:
-  # 1. Gatilho Agendado: Roda automaticamente todos os dias à meia-noite (Horário UTC)
   schedule:
     - cron: '0 0 * * *'
-  
-  # 2. Gatilho Manual: Permite que você clique em "Run workflow" direto pelo site do GitHub
   workflow_dispatch:
-
-  # 3. Gatilho de Código: Dispara se houver mudanças diretas no package.json na branch main
   push:
     branches: [ main ]
     paths:
@@ -33,12 +27,26 @@ jobs:
 
     - name: Instalar Dependências para Análise
       run: npm install
-      # Mudamos para 'npm install' para evitar que o desalinhamento do package-lock quebre o fluxo de análise
 
     - name: 1. Verificar Vulnerabilidades Atuais (SCA)
-      run: npm audit --audit-level=high
+      run: |
+        echo "=== RELATÓRIO DE AUDITORIA DE SEGURANÇA ===" > relatorio-seguranca.txt
+        date >> relatorio-seguranca.txt
+        echo "----------------------------------------" >> relatorio-seguranca.txt
+        npm audit --audit-level=high >> relatorio-seguranca.txt 2>&1 || true
+      # O '>> relatorio-seguranca.txt 2>&1' joga todo o texto e possíveis erros dentro do arquivo txt
 
     - name: 2. Verificar Pacotes Desatualizados
       run: |
-        echo "=== Verificando pacotes que possuem atualizações disponíveis ==="
-        npm outdated || true
+        echo "" >> relatorio-seguranca.txt
+        echo "=== RELATÓRIO DE PACOTES DESATUALIZADOS ===" >> relatorio-seguranca.txt
+        echo "----------------------------------------" >> relatorio-seguranca.txt
+        npm outdated >> relatorio-seguranca.txt 2>&1 || true
+
+    - name: 3. Disponibilizar Relatório para Download (Upload Artifact)
+      uses: actions/upload-artifact@v4
+      with:
+        name: relatorio-dependencias-seguranca
+        path: relatorio-seguranca.txt
+        retention-days: 7
+        # O arquivo fica guardado no GitHub por 7 dias para você baixar quando quiser
