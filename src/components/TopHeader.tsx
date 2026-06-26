@@ -74,13 +74,28 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   };
 
   const cleanQuery = searchQuery.trim().toLowerCase();
+  const cleanDigits = cleanQuery.replace(/\D/g, '');
 
   const matchedPacientes = cleanQuery
-    ? (pacientes || []).filter(p => (p.nome || '').toLowerCase().includes(cleanQuery))
+    ? (pacientes || []).filter(p => {
+        const nomeMatch = (p.nome || '').toLowerCase().includes(cleanQuery);
+        const cpfMatch = p.cpf && (
+          p.cpf.toLowerCase().includes(cleanQuery) || 
+          (cleanDigits !== '' && p.cpf.replace(/\D/g, '').includes(cleanDigits))
+        );
+        return !!(nomeMatch || cpfMatch);
+      })
     : [];
 
   const matchedProfissionais = cleanQuery
-    ? (profissionais || []).filter(p => (p.nome || '').toLowerCase().includes(cleanQuery))
+    ? (profissionais || []).filter(p => {
+        const nomeMatch = (p.nome || '').toLowerCase().includes(cleanQuery);
+        const cpfMatch = p.cpf && (
+          p.cpf.toLowerCase().includes(cleanQuery) || 
+          (cleanDigits !== '' && p.cpf.replace(/\D/g, '').includes(cleanDigits))
+        );
+        return !!(nomeMatch || cpfMatch);
+      })
     : [];
 
   const hasAnyResults = matchedPacientes.length > 0 || matchedProfissionais.length > 0;
@@ -169,7 +184,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                               {pac.nome}
                             </p>
                             <p className="text-[9px] text-slate-500 truncate">
-                              {pac.endereco?.bairro ? `Bairro: ${pac.endereco.bairro}` : 'Sem endereço'}
+                              {pac.endereco?.bairro ? `Bairro: ${pac.endereco.bairro}` : 'Sem endereço'} {pac.cpf ? `• CPF: ${pac.cpf}` : ''}
                             </p>
                           </div>
                           <span className={`shrink-0 text-[8px] font-bold px-1.5 py-0.5 rounded-full ${

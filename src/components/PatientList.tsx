@@ -64,7 +64,8 @@ export const PatientList: React.FC<PatientListProps> = ({
         (p.nome || '').toLowerCase().includes(query) ||
         (p.cpf || '').toLowerCase().includes(query) ||
         (p.bairro || '').toLowerCase().includes(query) ||
-        (p.nomeResponsavel || '').toLowerCase().includes(query);
+        (p.nomeResponsavel || '').toLowerCase().includes(query) ||
+        (p.parentescoResponsavel || '').toLowerCase().includes(query);
 
       // Filter logic
       const matchPaciente = filterPacienteId === 'todos' ? true : p.id === filterPacienteId;

@@ -16,7 +16,7 @@ export interface DadosBancarios {
   agencia: string;
   conta: string;
   pix: string;
-  tipoConta?: string;
+  tipoConta?: 'corrente' | 'poupanca' | 'pagamento' | '';
 }
 
 export interface Profissional {
@@ -154,6 +154,7 @@ export interface Paciente {
   cpf: string;
   nomeResponsavel: string;
   telefoneResponsavel: string;
+  parentescoResponsavel?: string;
   email: string;
   bairro: string;
   status: 'Ativo' | 'Desativado';

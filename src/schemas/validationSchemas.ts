@@ -5,6 +5,7 @@ export const pacienteSchema = z.object({
   cpf: z.string().regex(/^\d{11}$/, "CPF deve conter 11 dígitos numéricos"),
   nomeResponsavel: z.string().min(3, "Nome do responsável é obrigatório"),
   telefoneResponsavel: z.string().optional(),
+  parentescoResponsavel: z.string().optional(),
 });
 
 export const profissionalSchema = z.object({

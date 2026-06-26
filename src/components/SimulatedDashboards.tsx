@@ -685,6 +685,8 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
 
     // CNAB 240 Layout Generation
     try {
+      const DIGITAL_BANKS = ['260', '332', '380', '077', '290'];
+
       const sanitizeCnabString = (str: string | undefined | null): string => {
         if (!str) return '';
         return str
@@ -709,6 +711,52 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
         const cleanVal = sanitizeCnabString(String(value));
         return cleanVal.padEnd(length, ' ').substring(0, length);
       };
+
+      const getFormaIniciacaoPix = (key: string): string => {
+        const clean = key.trim();
+        if (!clean) return '01';
+        const digitsOnly = clean.replace(/\D/g, '');
+        if (digitsOnly.length === 11 || digitsOnly.length === 14) {
+          return '01'; // CPF / CNPJ
+        }
+        if (clean.includes('@')) {
+          return '03'; // E-mail
+        }
+        const phoneDigits = clean.replace(/[^0-9+]/g, '');
+        if ((phoneDigits.length >= 10 && phoneDigits.length <= 14) || clean.startsWith('+')) {
+          return '02'; // Celular
+        }
+        return '04'; // Chave Aleatória (EVP)
+      };
+
+      const getBankCode = (bName: string | undefined): string => {
+        if (!bName) return '077';
+        const clean = bName.toUpperCase();
+        if (clean.includes('INTER')) return '077';
+        if (clean.includes('BRADESCO')) return '237';
+        if (clean.includes('ITAU') || clean.includes('ITAÚ')) return '341';
+        if (clean.includes('SANTANDER')) return '033';
+        if (clean.includes('BRASIL') || clean.includes('BB')) return '001';
+        if (clean.includes('CAIXA')) return '104';
+        if (clean.includes('NUBANK') || clean.includes('NU ')) return '260';
+        const match = bName.replace(/\D/g, '');
+        if (match.length >= 3) return match.substring(0, 3);
+        return '077';
+      };
+
+      const tedFolhas: any[] = [];
+      const pixFolhas: any[] = [];
+
+      validFolhas.forEach((folha) => {
+        const prof = activeProfissionais.find(p => p.id === folha.idProfissional);
+        if (!prof) return;
+        const hasPix = !!(prof.dadosBancarios?.pix && prof.dadosBancarios.pix.trim() !== '');
+        if (hasPix) {
+          pixFolhas.push(folha);
+        } else {
+          tedFolhas.push(folha);
+        }
+      });
 
       const lines: string[] = [];
       const todayDate = new Date();
@@ -757,150 +805,290 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       l1 += ''.padEnd(29, ' '); // Uso exclusivo FEBRABAN/CNAB
       lines.push(l1);
 
-      // --- LINHA 2: HEADER LOTE (TIPO 1) ---
-      let l2 = '';
-      l2 += '077'; // Código do banco
-      l2 += '0001'; // Lote de serviço
-      l2 += '1'; // Tipo de registro
-      l2 += 'C'; // Tipo da operação
-      l2 += '30'; // Tipo do serviço (30 = Pagamento Salários / Serviços)
-      l2 += '03'; // Forma de lançamento (03 = TED)
-      l2 += '046'; // Número da versão do layout do Lote
-      l2 += ' '; // Reservado FEBRABAN
-      l2 += '2'; // Tipo de documento da empresa
-      l2 += compCNPJ; // CPF/CNPJ
-      l2 += ''.padEnd(20, ' '); // Reservado FEBRABAN
-      l2 += compAgencia; // Agência mantenedora
-      l2 += compAgenciaDV; // Dígito verificador agência
-      l2 += compConta; // Conta corrente
-      l2 += compContaDV; // Dígito verificador conta
-      l2 += ' '; // Reservado FEBRABAN
-      l2 += compRazao; // Nome da empresa
-      l2 += ''.padEnd(40, ' '); // Informação genérica opcional
-      l2 += compEndereco; // Endereço da empresa (Logradouro)
-      l2 += compNumero; // Número do local da empresa
-      l2 += ''.padEnd(15, ' '); // Casa, Apto, Sala...
-      l2 += compCidade; // Nome da cidade
-      l2 += compCEP; // CEP
-      l2 += compCEPSuffix; // Complemento do CEP
-      l2 += compUF; // Sigla do estado
-      l2 += ''.padEnd(8, ' '); // Reservado FEBRABAN
-      l2 += ''.padEnd(10, ' '); // Códigos das ocorrências para retorno
-      lines.push(l2);
+      let currentLoteNum = 1;
 
-      // --- DETAILS (SEGMENTO A & B FOR EACH TRANSACTING FOLHA) ---
-      let totalValorLiquidoCentavos = 0;
-      let seqNum = 1;
+      // --- GERATE TED LOTE (LOTE 1) ---
+      if (tedFolhas.length > 0) {
+        const loteStr = formatNum(currentLoteNum, 4);
 
-      validFolhas.forEach((folha) => {
-        const prof = activeProfissionais.find(p => p.id === folha.idProfissional);
-        if (!prof) return;
+        // Header do Lote (Tipo 1)
+        let l2 = '';
+        l2 += '077'; // Código do banco
+        l2 += loteStr; // Lote de serviço
+        l2 += '1'; // Tipo de registro
+        l2 += 'C'; // Tipo da operação
+        l2 += '30'; // Tipo do serviço (30 = Pagamento Salários / Serviços)
+        l2 += '03'; // Forma de lançamento (03 = TED)
+        l2 += '046'; // Número da versão do layout do Lote
+        l2 += ' '; // Reservado FEBRABAN
+        l2 += '2'; // Tipo de documento da empresa
+        l2 += compCNPJ; // CPF/CNPJ
+        l2 += ''.padEnd(20, ' '); // Reservado FEBRABAN
+        l2 += compAgencia; // Agência mantenedora
+        l2 += compAgenciaDV; // Dígito verificador agência
+        l2 += compConta; // Conta corrente
+        l2 += compContaDV; // Dígito verificador conta
+        l2 += ' '; // Reservado FEBRABAN
+        l2 += compRazao; // Nome da empresa
+        l2 += ''.padEnd(40, ' '); // Informação genérica opcional
+        l2 += compEndereco; // Endereço da empresa (Logradouro)
+        l2 += compNumero; // Número do local da empresa
+        l2 += ''.padEnd(15, ' '); // Casa, Apto, Sala...
+        l2 += compCidade; // Nome da cidade
+        l2 += compCEP; // CEP
+        l2 += compCEPSuffix; // Complemento do CEP
+        l2 += compUF; // Sigla do estado
+        l2 += ''.padEnd(8, ' '); // Reservado FEBRABAN
+        l2 += ''.padEnd(10, ' '); // Códigos das ocorrências para retorno
+        lines.push(l2);
 
-        const getBankCode = (bName: string | undefined): string => {
-          if (!bName) return '077';
-          const clean = bName.toUpperCase();
-          if (clean.includes('INTER')) return '077';
-          if (clean.includes('BRADESCO')) return '237';
-          if (clean.includes('ITAU') || clean.includes('ITAÚ')) return '341';
-          if (clean.includes('SANTANDER')) return '033';
-          if (clean.includes('BRASIL') || clean.includes('BB')) return '001';
-          if (clean.includes('CAIXA')) return '104';
-          if (clean.includes('NUBANK') || clean.includes('NU ')) return '260';
-          const match = bName.replace(/\D/g, '');
-          if (match.length >= 3) return match.substring(0, 3);
-          return '077';
-        };
+        let seqNum = 1;
+        let tedValorLiquidoCentavos = 0;
 
-        const profBanco = getBankCode(prof.dadosBancarios?.banco);
-        const profAgencia = formatNum(prof.dadosBancarios?.agencia || '0001', 5);
-        const profAgenciaDV = formatAlpha(prof.dadosBancarios?.agencia?.replace(/[^a-zA-Z0-9]/g, '').slice(-1) || ' ', 1);
-        const profConta = formatNum(prof.dadosBancarios?.conta || '12345', 12);
-        const profContaDV = formatAlpha(prof.dadosBancarios?.conta?.replace(/[^a-zA-Z0-9]/g, '').slice(-1) || ' ', 1);
-        const profNome = formatAlpha(prof.nome, 30);
-        
-        const valueCentavos = Math.round((folha.valorLiquidoReceber || 0) * 100);
-        totalValorLiquidoCentavos += valueCentavos;
+        tedFolhas.forEach((folha) => {
+          const prof = activeProfissionais.find(p => p.id === folha.idProfissional);
+          if (!prof) return;
 
-        // Segmento A
-        let sa = '';
-        sa += '077'; // Banco
-        sa += '0001'; // Lote
-        sa += '3'; // Registro Tipo 3
-        sa += formatNum(seqNum++, 5); // Seq
-        sa += 'A'; // Seg A
-        sa += '0'; // Tipo movimento
-        sa += '00'; // Instrução
-        sa += '000'; // Câmara
-        sa += profBanco; // Banco Favorecido
-        sa += profAgencia; // Agência
-        sa += profAgenciaDV; // DV Agência
-        sa += profConta; // Conta
-        sa += profContaDV; // DV Conta
-        sa += ' '; // Reservado FEBRABAN
-        sa += profNome; // Nome Favorecido
-        sa += formatAlpha(folha.id.substring(0, 20), 20); // Doc nº empresa
-        sa += dataOperacao; // Data pagamento
-        sa += 'BRL'; // Moeda
-        sa += '000000000000000'; // Moeda quantidade
-        sa += formatNum(valueCentavos, 15); // Valor pagamento
-        sa += ''.padEnd(20, ' '); // Doc nº banco
-        sa += '00000000'; // Data efetivação
-        sa += '000000000000000'; // Valor efetivação
-        sa += ''.padEnd(22, ' '); // Reservado FEBRABAN
-        sa += '01'; // Tipo conta (01 = Corrente)
-        sa += ''.padEnd(18, ' '); // Reservado FEBRABAN
-        sa += '00010'; // Finalidade TED
-        sa += ''.padEnd(6, ' '); // Reservado FEBRABAN
-        sa += ''.padEnd(10, ' '); // Ocorrências
-        lines.push(sa);
+          const profBanco = getBankCode(prof.dadosBancarios?.banco);
+          const profAgencia = formatNum(prof.dadosBancarios?.agencia || '0001', 5);
+          const profAgenciaDV = formatAlpha(prof.dadosBancarios?.agencia?.replace(/[^a-zA-Z0-9]/g, '').slice(-1) || ' ', 1);
+          const profConta = formatNum(prof.dadosBancarios?.conta || '12345', 12);
+          const profContaDV = formatAlpha(prof.dadosBancarios?.conta?.replace(/[^a-zA-Z0-9]/g, '').slice(-1) || ' ', 1);
+          const profNome = formatAlpha(prof.nome, 30);
+          
+          const valueCentavos = Math.round((folha.valorLiquidoReceber || 0) * 100);
+          tedValorLiquidoCentavos += valueCentavos;
 
-        // Segmento B
-        const typeDoc = (prof.cnpj && prof.cnpj.trim().length > 0) ? '2' : '1';
-        const profCNPJCPF = formatNum(prof.cnpj || prof.cpf || '', 14);
-        
-        const profRua = formatAlpha(prof.endereco?.rua || 'RUA PRINCIPAL', 35);
-        const profNum = formatNum(prof.endereco?.numero || '0', 5);
-        const profBairro = formatAlpha(prof.endereco?.bairro || 'CENTRO', 15);
-        const profCidade = formatAlpha(prof.endereco?.cidade || 'BELO HORIZONTE', 15);
-        const profCEP = formatNum((prof.endereco?.cep || '30000000').substring(0, 5), 5);
-        const profCEPSuffix = formatNum((prof.endereco?.cep || '30000000').replace(/\D/g, '').substring(5, 8) || '000', 3);
-        const profUF = formatAlpha(prof.endereco?.estado || 'MG', 2);
+          const rawTipo = prof.dadosBancarios?.tipoConta || '';
+          let tipoConta = '01';
+          if (rawTipo) {
+            const normalized = rawTipo.toLowerCase().trim();
+            if (normalized === 'conta corrente' || normalized === 'conta-corrente' || normalized.includes('corrente')) {
+              tipoConta = '01';
+            } else if (normalized === 'conta de pagamento' || normalized === 'conta pagamento' || normalized.includes('pagamento')) {
+              tipoConta = '02';
+            } else if (normalized === 'conta poupança' || normalized === 'conta-poupança' || normalized === 'poupança' || normalized.includes('poupanca') || normalized.includes('poupança')) {
+              tipoConta = '03';
+            }
+          }
 
-        let sb = '';
-        sb += '077'; // Banco
-        sb += '0001'; // Lote
-        sb += '3'; // Registro Tipo 3
-        sb += formatNum(seqNum++, 5); // Seq
-        sb += 'B'; // Seg B
-        sb += '   '; // Reservado FEBRABAN
-        sb += typeDoc; // Tipo doc (1 = CPF, 2 = CNPJ)
-        sb += profCNPJCPF; // Documento
-        sb += profRua; // Logradouro
-        sb += profNum; // Número
-        sb += ''.padEnd(15, ' '); // Complemento
-        sb += profBairro; // Bairro
-        sb += profCidade; // Cidade
-        sb += profCEP; // CEP
-        sb += profCEPSuffix; // CEP Suffix
-        sb += profUF; // Estado
-        sb += ''.padEnd(105, ' '); // Reservado FEBRABAN
-        sb += '00000000'; // ISPB
-        lines.push(sb);
-      });
+          // Segmento A
+          let sa = '';
+          sa += '077'; // Banco
+          sa += loteStr; // Lote
+          sa += '3'; // Registro Tipo 3
+          sa += formatNum(seqNum++, 5); // Seq
+          sa += 'A'; // Seg A
+          sa += '0'; // Tipo movimento
+          sa += '00'; // Instrução
+          sa += '018'; // Câmara centralizadora (sempre "018" para TED)
+          sa += profBanco; // Banco Favorecido
+          sa += profAgencia; // Agência
+          sa += profAgenciaDV; // DV Agência
+          sa += profConta; // Conta
+          sa += profContaDV; // DV Conta
+          sa += ' '; // Reservado FEBRABAN
+          sa += profNome; // Nome Favorecido
+          sa += formatAlpha(folha.id.substring(0, 20), 20); // Doc nº empresa
+          sa += dataOperacao; // Data pagamento
+          sa += 'BRL'; // Moeda
+          sa += '000000000000000'; // Moeda quantidade
+          sa += formatNum(valueCentavos, 15); // Valor pagamento
+          sa += ''.padEnd(20, ' '); // Doc nº banco
+          sa += '00000000'; // Data efetivação
+          sa += '000000000000000'; // Valor efetivação
+          sa += ''.padEnd(22, ' '); // Reservado FEBRABAN
+          sa += tipoConta; // Tipo conta (01 = Corrente, 02 = Pagamento)
+          sa += ''.padEnd(18, ' '); // Reservado FEBRABAN
+          sa += '00010'; // Finalidade TED
+          sa += ''.padEnd(6, ' '); // Reservado FEBRABAN
+          sa += ''.padEnd(10, ' '); // Ocorrências
+          lines.push(sa);
 
-      // --- LINHA 5: TRAILER LOTE (TIPO 5) ---
-      let l5 = '';
-      l5 += '077'; // Banco
-      l5 += '0001'; // Lote
-      l5 += '5'; // Tipo Registro
-      l5 += ''.padEnd(9, ' '); // Reservado FEBRABAN
-      l5 += formatNum(2 + 2 * validFolhas.length, 6); // Qtd registros lote
-      l5 += formatNum(totalValorLiquidoCentavos, 18); // Somatória valores
-      l5 += ''.padEnd(18, '0'); // Qtd moedas
-      l5 += '000000'; // Nº aviso débito
-      l5 += ''.padEnd(165, ' '); // Reservado FEBRABAN
-      l5 += ''.padEnd(10, ' '); // Ocorrências
-      lines.push(l5);
+          // Segmento B
+          const typeDoc = (prof.cnpj && prof.cnpj.trim().length > 0) ? '2' : '1';
+          const profCNPJCPF = formatNum(prof.cnpj || prof.cpf || '', 14);
+          
+          const profRua = formatAlpha(prof.endereco?.rua || 'RUA PRINCIPAL', 35);
+          const profNum = formatNum(prof.endereco?.numero || '0', 5);
+          const profBairro = formatAlpha(prof.endereco?.bairro || 'CENTRO', 15);
+          const profCidade = formatAlpha(prof.endereco?.cidade || 'BELO HORIZONTE', 15);
+          const profCEP = formatNum((prof.endereco?.cep || '30000000').substring(0, 5), 5);
+          const profCEPSuffix = formatNum((prof.endereco?.cep || '30000000').replace(/\D/g, '').substring(5, 8) || '000', 3);
+          const profUF = formatAlpha(prof.endereco?.estado || 'MG', 2);
+
+          let sb = '';
+          sb += '077'; // Banco
+          sb += loteStr; // Lote
+          sb += '3'; // Registro Tipo 3
+          sb += formatNum(seqNum++, 5); // Seq
+          sb += 'B'; // Seg B
+          sb += '   '; // Reservado FEBRABAN
+          sb += typeDoc; // Tipo doc (1 = CPF, 2 = CNPJ)
+          sb += profCNPJCPF; // Documento
+          sb += profRua; // Logradouro
+          sb += profNum; // Número
+          sb += ''.padEnd(15, ' '); // Complemento
+          sb += profBairro; // Bairro
+          sb += profCidade; // Cidade
+          sb += profCEP; // CEP
+          sb += profCEPSuffix; // CEP Suffix
+          sb += profUF; // Estado
+          sb += ''.padEnd(105, ' '); // Reservado FEBRABAN
+          sb += '00000000'; // ISPB
+          lines.push(sb);
+        });
+
+        // Trailer do Lote (Tipo 5)
+        let l5 = '';
+        l5 += '077'; // Banco
+        l5 += loteStr; // Lote
+        l5 += '5'; // Tipo Registro
+        l5 += ''.padEnd(9, ' '); // Reservado FEBRABAN
+        l5 += formatNum(2 + 2 * tedFolhas.length, 6); // Qtd registros lote
+        l5 += formatNum(tedValorLiquidoCentavos, 18); // Somatória valores
+        l5 += ''.padEnd(18, '0'); // Qtd moedas
+        l5 += '000000'; // Nº aviso débito
+        l5 += ''.padEnd(165, ' '); // Reservado FEBRABAN
+        l5 += ''.padEnd(10, ' '); // Ocorrências
+        lines.push(l5);
+
+        currentLoteNum++;
+      }
+
+      // --- GENERATE PIX LOTE (LOTE 2 ou LOTE 1) ---
+      if (pixFolhas.length > 0) {
+        const loteStr = formatNum(currentLoteNum, 4);
+
+        // Header do Lote (Tipo 1) - Forma de Lançamento "45"
+        let l2 = '';
+        l2 += '077'; // Código do banco
+        l2 += loteStr; // Lote de serviço
+        l2 += '1'; // Tipo de registro
+        l2 += 'C'; // Tipo da operação
+        l2 += '30'; // Tipo do serviço (30 = Pagamento Salários / Serviços)
+        l2 += '45'; // Forma de lançamento (45 = Pix)
+        l2 += '046'; // Número da versão do layout do Lote
+        l2 += ' '; // Reservado FEBRABAN
+        l2 += '2'; // Tipo de documento da empresa
+        l2 += compCNPJ; // CPF/CNPJ
+        l2 += ''.padEnd(20, ' '); // Reservado FEBRABAN
+        l2 += compAgencia; // Agência mantenedora
+        l2 += compAgenciaDV; // Dígito verificador agência
+        l2 += compConta; // Conta corrente
+        l2 += compContaDV; // Dígito verificador conta
+        l2 += ' '; // Reservado FEBRABAN
+        l2 += compRazao; // Nome da empresa
+        l2 += ''.padEnd(40, ' '); // Informação genérica opcional
+        l2 += compEndereco; // Endereço da empresa (Logradouro)
+        l2 += compNumero; // Número do local da empresa
+        l2 += ''.padEnd(15, ' '); // Casa, Apto, Sala...
+        l2 += compCidade; // Nome da cidade
+        l2 += compCEP; // CEP
+        l2 += compCEPSuffix; // Complemento do CEP
+        l2 += compUF; // Sigla do estado
+        l2 += ''.padEnd(8, ' '); // Reservado FEBRABAN
+        l2 += ''.padEnd(10, ' '); // Códigos das ocorrências para retorno
+        lines.push(l2);
+
+        let seqNum = 1;
+        let pixValorLiquidoCentavos = 0;
+
+        pixFolhas.forEach((folha) => {
+          const prof = activeProfissionais.find(p => p.id === folha.idProfissional);
+          if (!prof) return;
+
+          const profNome = formatAlpha(prof.nome, 30);
+          const valueCentavos = Math.round((folha.valorLiquidoReceber || 0) * 100);
+          pixValorLiquidoCentavos += valueCentavos;
+
+          // Segmento A (banco/ag/cc zerados, câmara "000")
+          let sa = '';
+          sa += '077'; // Banco
+          sa += loteStr; // Lote
+          sa += '3'; // Registro Tipo 3
+          sa += formatNum(seqNum++, 5); // Seq
+          sa += 'A'; // Seg A
+          sa += '0'; // Tipo movimento
+          sa += '00'; // Instrução
+          sa += '000'; // Câmara centralizadora ("000" para Pix)
+          sa += '000'; // Banco Favorecido (zerado)
+          sa += '00000'; // Agência (zerada)
+          sa += ' '; // DV Agência (vazio)
+          sa += '000000000000'; // Conta (zerada)
+          sa += ' '; // DV Conta (vazio)
+          sa += ' '; // Reservado FEBRABAN
+          sa += profNome; // Nome Favorecido
+          sa += formatAlpha(folha.id.substring(0, 20), 20); // Doc nº empresa
+          sa += dataOperacao; // Data pagamento
+          sa += 'BRL'; // Moeda
+          sa += '000000000000000'; // Moeda quantidade
+          sa += formatNum(valueCentavos, 15); // Valor pagamento
+          sa += ''.padEnd(20, ' '); // Doc nº banco
+          sa += '00000000'; // Data efetivação
+          sa += '000000000000000'; // Valor efetivação
+          sa += ''.padEnd(22, ' '); // Reservado FEBRABAN
+          sa += '01'; // Tipo conta (01 = Corrente)
+          sa += ''.padEnd(18, ' '); // Reservado FEBRABAN
+          sa += ''.padEnd(5, ' '); // Finalidade
+          sa += ''.padEnd(6, ' '); // Reservado FEBRABAN
+          sa += ''.padEnd(10, ' '); // Ocorrências
+          lines.push(sa);
+
+          // Segmento B
+          const typeDoc = (prof.cnpj && prof.cnpj.trim().length > 0) ? '2' : '1';
+          const profCNPJCPF = formatNum(prof.cnpj || prof.cpf || '', 14);
+          
+          const profRua = formatAlpha(prof.endereco?.rua || 'RUA PRINCIPAL', 35);
+          const profNum = formatNum(prof.endereco?.numero || '0', 5);
+          const profBairro = formatAlpha(prof.endereco?.bairro || 'CENTRO', 15);
+          const profCidade = formatAlpha(prof.endereco?.cidade || 'BELO HORIZONTE', 15);
+          const profCEP = formatNum((prof.endereco?.cep || '30000000').substring(0, 5), 5);
+          const profCEPSuffix = formatNum((prof.endereco?.cep || '30000000').replace(/\D/g, '').substring(5, 8) || '000', 3);
+          const profUF = formatAlpha(prof.endereco?.estado || 'MG', 2);
+
+          const formaIniciacao = getFormaIniciacaoPix(prof.dadosBancarios?.pix || '');
+
+          let sb = '';
+          sb += '077'; // Banco
+          sb += loteStr; // Lote
+          sb += '3'; // Registro Tipo 3
+          sb += formatNum(seqNum++, 5); // Seq
+          sb += 'B'; // Seg B
+          sb += formatAlpha(formaIniciacao, 3); // Posições 15-17 com a Forma de Iniciação do Pix
+          sb += typeDoc; // Tipo doc
+          sb += profCNPJCPF; // Documento
+          sb += profRua; // Logradouro
+          sb += profNum; // Número
+          sb += ''.padEnd(15, ' '); // Complemento
+          sb += profBairro; // Bairro
+          sb += profCidade; // Cidade
+          sb += profCEP; // CEP
+          sb += profCEPSuffix; // CEP Suffix
+          sb += profUF; // Estado
+          // Posições 128-227 com a chave Pix (100)
+          sb += formatAlpha(prof.dadosBancarios?.pix || '', 100);
+          sb += ''.padEnd(5, ' '); // Reservado FEBRABAN (5)
+          sb += '00000000'; // ISPB (8)
+          lines.push(sb);
+        });
+
+        // Trailer do Lote (Tipo 5)
+        let l5 = '';
+        l5 += '077'; // Banco
+        l5 += loteStr; // Lote
+        l5 += '5'; // Tipo Registro
+        l5 += ''.padEnd(9, ' '); // Reservado FEBRABAN
+        l5 += formatNum(2 + 2 * pixFolhas.length, 6); // Qtd registros lote
+        l5 += formatNum(pixValorLiquidoCentavos, 18); // Somatória valores
+        l5 += ''.padEnd(18, '0'); // Qtd moedas
+        l5 += '000000'; // Nº aviso débito
+        l5 += ''.padEnd(165, ' '); // Reservado FEBRABAN
+        l5 += ''.padEnd(10, ' '); // Ocorrências
+        lines.push(l5);
+
+        currentLoteNum++;
+      }
 
       // --- LINHA 6: TRAILER ARQUIVO (TIPO 9) ---
       let l6 = '';
@@ -908,24 +1096,54 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       l6 += '9999'; // Lote
       l6 += '9'; // Tipo Registro
       l6 += ''.padEnd(9, ' '); // Reservado FEBRABAN
-      l6 += '000001'; // Qtd lotes
-      l6 += formatNum(4 + 2 * validFolhas.length, 6); // Qtd registros arquivo
+      l6 += formatNum(currentLoteNum - 1, 6); // Qtd lotes gerados dinamicamente
+      l6 += formatNum(lines.length + 1, 6); // Qtd registros arquivo total
       l6 += ''.padEnd(211, ' '); // Reservado FEBRABAN
       lines.push(l6);
 
-      // Build file content with \r\n line endings and guarantee 240 char length per line
-      const fileContent = lines.map(line => line.padEnd(240, ' ').substring(0, 240)).join('\r\n') + '\r\n';
+      // Guard exact 240 size line-by-line verification before concatenation
+      const fileLines: string[] = [];
+      lines.forEach((line, index) => {
+        const formattedLine = line.padEnd(240, ' ').substring(0, 240);
+        if (formattedLine.length !== 240) {
+          throw new Error(`Linha ${index + 1} gerada com tamanho incorreto (${formattedLine.length} caracteres)`);
+        }
+        fileLines.push(formattedLine);
+      });
+
+      const fileContent = fileLines.join('\r\n') + '\r\n';
+
+      // Nomenclatura Dinâmica baseada no mês de referência selecionado no filtro
+      const getDynamicFileName = (): string => {
+        const baseDateStr = dataInicial || dataFinal;
+        if (!baseDateStr) return 'Folha_Remessa.REM';
+
+        const parts = baseDateStr.split('-');
+        if (parts.length !== 3) return 'Folha_Remessa.REM';
+
+        const year = parts[0];
+        const monthIndex = parseInt(parts[1], 10) - 1;
+        const day = parseInt(parts[2], 10);
+
+        const dateObj = new Date(Number(year), monthIndex, day);
+        const monthName = new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(dateObj);
+        const capitalizedMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+
+        return `Folha_${capitalizedMonth}_${year}.REM`;
+      };
+
+      const dynamicFileName = getDynamicFileName();
 
       // Download trigger
       const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = `CI240_001_${formatNum(1, 7)}.REM`;
+      link.download = dynamicFileName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
 
-      toast.success('Arquivo de remessa CNAB 240 (.REM) gerado e baixado com sucesso!');
+      toast.success(`Arquivo de remessa CNAB 240 (${dynamicFileName}) gerado com sucesso!`);
     } catch (err: any) {
       console.error('Erro ao gerar CNAB 240:', err);
       toast.error(`Falha técnica ao gerar remessa: ${err.message || String(err)}`);
@@ -3515,10 +3733,36 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                 return dateStr;
             };
 
+            const parseDate = (dateStr: string): number => {
+                if (!dateStr) return 0;
+                if (dateStr.includes('-')) {
+                    const parts = dateStr.split('-');
+                    if (parts.length === 3) {
+                        return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])).getTime();
+                    }
+                } else if (dateStr.includes('/')) {
+                    const parts = dateStr.split('/');
+                    if (parts.length === 3) {
+                        return new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0])).getTime();
+                    }
+                }
+                return new Date(dateStr).getTime() || 0;
+            };
+
+            const plantoesValidos = (viewDoc.data.plantoesCongelados || [])
+                .filter((p: any) => !p.considerarFalta && p.status !== 'falta' && p.status !== 'Falta')
+                .sort((a: any, b: any) => parseDate(a.data) - parseDate(b.data));
+
+            const totalSomaPlantoes = plantoesValidos.reduce((acc: number, curr: any) => acc + (calculateRowValue(curr, viewDoc.type) || 0), 0);
+
+            const valorTotalCorrigido = viewDoc.type === 'fatura'
+                ? totalSomaPlantoes
+                : (totalSomaPlantoes - (viewDoc.data.valorTotalDebitos || 0));
+
             return (
               <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 print:absolute print:inset-0 print:p-0 print:h-auto print:overflow-visible print:bg-white print:z-[999999]">
                   <div className="bg-white p-6 rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto print:p-0 print:max-h-none print:max-w-none print:w-full print:bg-white print:static print:shadow-none print:rounded-none print:overflow-visible">
-                      <div className="flex justify-between items-center mb-4 print:hidden">
+                       <div className="flex justify-between items-center mb-4 print:hidden">
                         <h3 className="font-black text-lg text-slate-800">Visualização de {viewDoc.type === 'fatura' ? 'Fatura' : 'Folha'}</h3>
                         <div className="flex gap-2">
                             <button 
@@ -3534,8 +3778,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold cursor-pointer hover:bg-emerald-700 transition-colors"
                                  onClick={() => {
                                      import('xlsx').then(XLSX => {
-                                         const plantoes = viewDoc.data.plantoesCongelados || [];
-                                         const rows = plantoes.map((p: any) => {
+                                         const rows = plantoesValidos.map((p: any) => {
                                              const valorLinha = calculateRowValue(p, viewDoc.type);
                                              return {
                                                  'Data Início': formatDateBR(p.data),
@@ -3547,9 +3790,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                          });
 
                                          // Mapeamento e consolidação de rodapés
-                                         const totalGlobal = viewDoc.type === 'fatura' 
-                                             ? (viewDoc.data.valorTotal || 0) 
-                                             : (viewDoc.data.valorLiquidoReceber || 0);
+                                         const totalGlobal = valorTotalCorrigido;
 
                                          if (viewDoc.type === 'folha' && viewDoc.data.valorTotalDebitos > 0) {
                                              rows.push({
@@ -3557,7 +3798,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                                  'Paciente': '',
                                                  'Profissional': '',
                                                  'Serviço': 'SOMA DOS PLANTÕES',
-                                                 'Valor': Number((viewDoc.data.valorTotalPlantoes || 0).toFixed(2))
+                                                 'Valor': Number(totalSomaPlantoes.toFixed(2))
                                              });
                                              rows.push({
                                                  'Data Início': '',
@@ -3620,7 +3861,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                             <div><span className="font-bold">Emissão:</span> {new Date(viewDoc.data.dataEmissao).toLocaleDateString('pt-BR')}</div>
                             <div><span className="font-bold">Status:</span> {viewDoc.data.status}</div>
                             <div><span className="font-bold">{viewDoc.type === 'fatura' ? 'Paciente:' : 'Profissional:'}</span> {viewDoc.type === 'fatura' ? viewDoc.data.nomePaciente : viewDoc.data.nomeProfissional}</div>
-                            <div><span className="font-bold">Valor Total:</span> R$ {viewDoc.type === 'fatura' ? (viewDoc.data.valorTotal || 0).toFixed(2) : (viewDoc.data.valorLiquidoReceber || 0).toFixed(2)}</div>
+                            <div><span className="font-bold">Valor Total:</span> R$ {valorTotalCorrigido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                         </div>
                         {/* Plantões Table */}
                         <table className="w-full text-[10px] border-collapse mb-6">
@@ -3633,7 +3874,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                             </tr>
                           </thead>
                           <tbody>
-                            {viewDoc.data.plantoesCongelados && viewDoc.data.plantoesCongelados.map((p: any, i: number) => {
+                            {plantoesValidos.map((p: any, i: number) => {
                               const valorLinha = calculateRowValue(p, viewDoc.type);
                               return (
                                 <tr key={i} className="border-b border-[#b8860b]/30">
@@ -3655,7 +3896,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                               <>
                                 <tr className="font-bold bg-slate-50 text-slate-600">
                                   <td colSpan={3} className="p-2 text-right uppercase text-[9px]">Soma dos Plantões:</td>
-                                  <td className="p-2 text-right text-slate-700 font-mono">R$ {viewDoc.data.valorTotalPlantoes.toFixed(2)}</td>
+                                  <td className="p-2 text-right text-slate-700 font-mono">R$ {totalSomaPlantoes.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                 </tr>
                                 <tr className="font-bold bg-red-50 text-red-600">
                                   <td colSpan={3} className="p-2 text-right uppercase text-[9px]">Descontos (Débitos):</td>
@@ -3666,10 +3907,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                             <tr className="font-bold bg-emerald-50 text-[#1a3c2e] text-xs">
                               <td colSpan={3} className="p-2 text-right uppercase">TOTAL</td>
                               <td className="p-2 text-right text-[#1a3c2e] font-black font-mono">
-                                R$ {viewDoc.type === 'fatura' 
-                                  ? (viewDoc.data.valorTotal || 0).toFixed(2) 
-                                  : (viewDoc.data.valorLiquidoReceber || 0).toFixed(2)
-                                }
+                                R$ {valorTotalCorrigido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </td>
                             </tr>
                           </tfoot>

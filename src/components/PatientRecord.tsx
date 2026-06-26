@@ -39,7 +39,8 @@ import {
   Crown,
   Info,
   History,
-  Receipt
+  Receipt,
+  Copy
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
@@ -153,6 +154,82 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     addAuditLog
   } = useFirebase();
 
+  const handleCopyToClipboard = async (text: string) => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('Copiado para a área de transferência!');
+    } catch (err) {
+      console.error('Erro ao copiar para a área de transferência', err);
+    }
+  };
+
+  const handleCopyShift = (ag: Agendamento, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    setCopiedShift(ag);
+    setCopiedDayShifts(null);
+    setCopiedSourceDate(ag.data);
+    toast.success(`Plantão de ${ag.nomeProfissional} copiado!`);
+  };
+
+  const handleCopyDay = (dateStr: string, dailyShifts: Agendamento[], e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    if (dailyShifts.length === 0) {
+      toast.error('Nenhum plantão neste dia para copiar.');
+      return;
+    }
+    setCopiedDayShifts(dailyShifts);
+    setCopiedShift(null);
+    setCopiedSourceDate(dateStr);
+    toast.success(`${dailyShifts.length} plantão(ões) do dia ${dateStr.split('-').reverse().join('/')} copiado(s)!`);
+  };
+
+  const handlePasteToDate = async (targetDateStr: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    if (copiedSourceDate === targetDateStr) {
+      toast.error('Não é possível colar no mesmo dia de origem.');
+      return;
+    }
+
+    try {
+      if (copiedShift) {
+        const { id, data, ...rest } = copiedShift;
+        const newAg = {
+          ...rest,
+          data: targetDateStr,
+          status: 'Aberta' as const
+        };
+        await addAgendamento(newAg);
+        toast.success(`Plantão colado com sucesso no dia ${targetDateStr.split('-').reverse().join('/')}!`);
+      } else if (copiedDayShifts && copiedDayShifts.length > 0) {
+        for (const shift of copiedDayShifts) {
+          const { id, data, ...rest } = shift;
+          const newAg = {
+            ...rest,
+            data: targetDateStr,
+            status: 'Aberta' as const
+          };
+          await addAgendamento(newAg);
+        }
+        toast.success(`${copiedDayShifts.length} plantão(ões) colado(s) com sucesso no dia ${targetDateStr.split('-').reverse().join('/')}!`);
+      } else {
+        toast.error('Nenhum plantão copiado.');
+      }
+    } catch (err) {
+      console.error('Erro ao colar plantão:', err);
+      toast.error('Erro ao colar os plantões.');
+    }
+  };
+
   const isBlockedBidirectional = (prof: any) => {
     if (!paciente) return false;
     const patientId = paciente.id;
@@ -247,6 +324,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const [selectedShiftForDetails, setSelectedShiftForDetails] = useState<any>(null);
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+
+  // Clipboard state for copying/pasting shifts
+  const [copiedShift, setCopiedShift] = useState<Agendamento | null>(null);
+  const [copiedDayShifts, setCopiedDayShifts] = useState<Agendamento[] | null>(null);
+  const [copiedSourceDate, setCopiedSourceDate] = useState<string | null>(null);
   const [deleteRecordDialog, setDeleteRecordDialog] = useState<{
     isOpen: boolean;
     title: string;
@@ -449,6 +531,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const [cpf, setCpf] = useState('');
   const [nomeResponsavel, setNomeResponsavel] = useState('');
   const [telefoneResponsavel, setTelefoneResponsavel] = useState('');
+  const [parentescoResponsavel, setParentescoResponsavel] = useState('');
   const [email, setEmail] = useState('');
   const [bairro, setBairro] = useState('');
 
@@ -637,6 +720,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       setCpf(paciente.cpf);
       setNomeResponsavel(paciente.nomeResponsavel);
       setTelefoneResponsavel(paciente.telefoneResponsavel);
+      setParentescoResponsavel(paciente.parentescoResponsavel || '');
       setEmail(paciente.email || '');
       setBairro(paciente.bairro || paciente.endereco.bairro);
 
@@ -780,7 +864,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     }
 
     const cleanCpfVal = (cpf || '').replace(/\D/g, '');
-    const validation = pacienteSchema.safeParse({ nome, cpf: cleanCpfVal, nomeResponsavel, telefoneResponsavel });
+    const validation = pacienteSchema.safeParse({ nome, cpf: cleanCpfVal, nomeResponsavel, telefoneResponsavel, parentescoResponsavel });
 
     if (!validation.success) {
       toast.error(validation.error.issues[0].message);
@@ -848,6 +932,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       cpf,
       nomeResponsavel,
       telefoneResponsavel,
+      parentescoResponsavel,
       email,
       bairro: bairro || 'Copacabana',
       endereco: {
@@ -2613,6 +2698,18 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         placeholder="Ex: (21) 90000-0000"
                       />
                     </div>
+
+                    <div className="space-y-1 col-span-1">
+                      <label className="block text-xs font-semibold text-gray-600">Parentesco (Opcional)</label>
+                      <input
+                        type="text"
+                        disabled={isCurrentlyDeactivated || isColaborador}
+                        value={parentescoResponsavel}
+                        onChange={(e) => setParentescoResponsavel(e.target.value)}
+                        className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#C09A6D] focus:border-[#C09A6D] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
+                        placeholder="Ex: Filho, Cônjuge, Neto"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -2758,6 +2855,20 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               <div className="w-full max-w-xl mx-auto bg-white rounded-2xl shadow-xl border border-gray-200 p-6 md:p-8 mt-6 mb-12 space-y-4 animate-in fade-in-30 slide-in-from-right-3">
                 <h4 className="text-xs font-bold text-slate-700 border-b border-slate-100 pb-2 uppercase tracking-wider italic">ENDEREÇO DE ATENDIMENTO</h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-1">
+                    <label className="block text-xs font-normal text-slate-700">CEP</label>
+                    <input
+                      type="text"
+                      disabled={isCurrentlyDeactivated || isColaborador}
+                      value={cep}
+                      onChange={(e) => setCep(mascaraCEP(e.target.value))}
+                      onBlur={(e) => handleCepBlur(e.target.value)}
+                      maxLength={9}
+                      className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-550 focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed"
+                      placeholder="Ex: 22000-000"
+                    />
+                  </div>
+
                   <div className="md:col-span-2 space-y-1">
                     <label className="block text-xs font-normal text-slate-700">Rua / Logradouro</label>
                     <input
@@ -2779,20 +2890,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       onChange={(e) => setNumero(e.target.value)}
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed"
                       placeholder="Ex: 120"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="block text-xs font-normal text-slate-700">CEP</label>
-                    <input
-                      type="text"
-                      disabled={isCurrentlyDeactivated || isColaborador}
-                      value={cep}
-                      onChange={(e) => setCep(mascaraCEP(e.target.value))}
-                      onBlur={(e) => handleCepBlur(e.target.value)}
-                      maxLength={9}
-                      className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-550 focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed"
-                      placeholder="Ex: 22000-000"
                     />
                   </div>
 
@@ -3431,7 +3528,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           return (
                             <div
                               key={idx}
-                              className={`min-h-[102px] border p-1 rounded-lg flex flex-col transition-all duration-150 ${
+                              className={`min-h-[102px] border p-1 rounded-lg flex flex-col transition-all duration-150 group/cell relative ${
                                 isToday 
                                   ? 'bg-[#fefcf4] border-amber-300 ring-1 ring-amber-100 shadow-xs' 
                                   : cell.isCurrentMonth
@@ -3442,13 +3539,36 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                               }`}
                             >
                               <div className="flex items-center justify-between p-0.5">
-                                <span className={`text-[9px] font-bold select-none px-1.5 py-0.5 rounded-full ${
-                                  isToday
-                                    ? 'bg-amber-600 text-white font-extrabold flex items-center justify-center'
-                                    : cell.isCurrentMonth ? (isSpecialHoliday ? 'text-rose-900 bg-rose-100/70' : 'text-slate-700') : 'text-slate-300'
-                                }`}>
-                                  {cell.dayNumber} {isToday && 'Hoje'}
-                                </span>
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  <span className={`text-[9px] font-bold select-none px-1.5 py-0.5 rounded-full ${
+                                    isToday
+                                      ? 'bg-amber-600 text-white font-extrabold flex items-center justify-center'
+                                      : cell.isCurrentMonth ? (isSpecialHoliday ? 'text-rose-900 bg-rose-100/70' : 'text-slate-700') : 'text-slate-300'
+                                  }`}>
+                                    {cell.dayNumber} {isToday && 'Hoje'}
+                                  </span>
+                                  {dailyAgendamentos.length > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => handleCopyDay(cell.dateStr, dailyAgendamentos, e)}
+                                      className="hidden group-hover/cell:inline-flex items-center text-[8px] bg-slate-100 hover:bg-slate-200 text-slate-650 px-1 py-0.5 rounded border border-slate-250 transition-all font-sans cursor-pointer shrink-0"
+                                      title="Copiar todos os plantões deste dia"
+                                    >
+                                      <Copy size={8} className="mr-0.5" />
+                                      Copiar Dia
+                                    </button>
+                                  )}
+                                  {(copiedShift || (copiedDayShifts && copiedDayShifts.length > 0)) && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => handlePasteToDate(cell.dateStr, e)}
+                                      className="inline-flex items-center text-[8px] bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold px-1 py-0.5 rounded border border-blue-200 transition-all animate-pulse font-sans cursor-pointer shrink-0"
+                                      title={`Colar aqui (${copiedShift ? 'Plantão de ' + copiedShift.nomeProfissional : copiedDayShifts?.length + ' plantões'})`}
+                                    >
+                                      📋 Colar
+                                    </button>
+                                  )}
+                                </div>
                                 {isSpecialHoliday && (
                                   <span className="text-[7.5px] font-bold text-rose-700 bg-rose-100/90 border border-rose-200 px-1 py-0.2 rounded max-w-[65px] truncate select-none" title={cell.holiday}>
                                     🎉 {cell.holiday}
@@ -3473,7 +3593,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                         setIsConfirmingDelete(false);
                                         setDetailsModalOpen(true);
                                       }}
-                                      className={`text-[9.5px] p-1.5 border rounded-lg cursor-pointer flex flex-col text-left w-full transition-all duration-150 relative space-y-0.5 hover:-translate-y-0.5 hover:shadow-xs ${
+                                      className={`text-[9.5px] p-1.5 border rounded-lg cursor-pointer flex flex-col text-left w-full transition-all duration-150 relative space-y-0.5 hover:-translate-y-0.5 hover:shadow-xs group/shift ${
                                         ag.status === 'Cancelado'
                                           ? 'bg-slate-100 border-slate-300 text-slate-500 line-through'
                                           : ag.status === 'Concluido'
@@ -3482,6 +3602,15 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                       }`}
                                       title={ag.observacao || 'Inspecionar Plantão'}
                                     >
+                                        <button
+                                          type="button"
+                                          onClick={(e) => handleCopyShift(ag, e)}
+                                          className="absolute right-1 top-1 hidden group-hover/shift:inline-flex items-center justify-center text-[8px] bg-white hover:bg-blue-50 text-slate-550 hover:text-blue-600 p-0.5 rounded border border-slate-200 transition-all shadow-2xs z-20 cursor-pointer"
+                                          title="Copiar este Plantão"
+                                        >
+                                          <Copy size={9} />
+                                        </button>
+
                                         <div className="flex justify-between items-center w-full gap-1">
                                           {ag.status === 'Concluido' && (
                                             <span className="font-extrabold shrink-0 text-slate-800">
@@ -3501,7 +3630,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                           </div>
                                         </div>
                                         <span 
-                                          className={`truncate block font-medium ${ag.considerarFalta ? 'text-slate-500 line-through decoration-red-500 decoration-2 opacity-80' : 'text-slate-950 opacity-90'}`}
+                                          className={`truncate block font-medium pr-3 ${ag.considerarFalta ? 'text-slate-500 line-through decoration-red-500 decoration-2 opacity-80' : 'text-slate-950 opacity-90'}`}
                                           title={ag.considerarFalta ? `Falta registrada: ${ag.motivoFalta || 'Não Informado'}` : undefined}
                                         >
                                           {ag.nomeProfissional}
@@ -4860,8 +4989,44 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   const viewAjudaValue = selectedShiftForDetails.ajudaCusto || 0;
                   const viewTotalValue = viewRepasseValue + viewTaxaValue + viewAjudaValue;
 
+                  const fullAddress = paciente && paciente.endereco
+                    ? `${paciente.endereco.rua || ''}, ${paciente.endereco.numero || ''} - ${paciente.bairro || paciente.endereco.bairro || ''}, ${paciente.endereco.cidade || ''}`
+                    : paciente?.bairro || '';
+
                   return (
                     <div className="space-y-3">
+                      <div className="space-y-1">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block">Paciente</span>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-sm font-bold text-slate-800">{paciente?.nome || 'Paciente'}</p>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyToClipboard(paciente?.nome || '')}
+                            className="text-gray-400 hover:text-blue-600 transition-colors cursor-pointer"
+                            title="Copiar Nome do Paciente"
+                          >
+                            <Copy size={13} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {fullAddress && (
+                        <div className="space-y-1">
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Endereço de Atendimento</span>
+                          <div className="flex items-start gap-1.5">
+                            <p className="text-xs text-slate-600 leading-normal">{fullAddress}</p>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyToClipboard(fullAddress)}
+                              className="text-gray-400 hover:text-blue-600 transition-colors cursor-pointer mt-0.5 flex-shrink-0"
+                              title="Copiar Endereço"
+                            >
+                              <Copy size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
                       <div className="space-y-1">
                         <span className="text-[10px] uppercase font-bold text-slate-400">Profissional Cuidador</span>
                         <p className="text-sm font-bold text-slate-850 flex items-center gap-1.5">
@@ -4881,11 +5046,31 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       <div className="grid grid-cols-2 gap-3 pb-1 border-b border-slate-100">
                         <div>
                           <span className="text-[10px] uppercase font-bold text-slate-400 block">Data</span>
-                          <span className="text-xs font-semibold text-slate-700">{selectedShiftForDetails.data.split('-').reverse().join('/')}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-semibold text-slate-700">{selectedShiftForDetails.data.split('-').reverse().join('/')}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyToClipboard(selectedShiftForDetails.data.split('-').reverse().join('/'))}
+                              className="text-gray-400 hover:text-blue-600 transition-colors cursor-pointer"
+                              title="Copiar Data"
+                            >
+                              <Copy size={12} />
+                            </button>
+                          </div>
                         </div>
                         <div>
                           <span className="text-[10px] uppercase font-bold text-slate-400 block">Horário</span>
-                          <span className="text-xs font-semibold text-slate-700">{selectedShiftForDetails.horario}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-semibold text-slate-700">{selectedShiftForDetails.horario}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyToClipboard(selectedShiftForDetails.horario)}
+                              className="text-gray-400 hover:text-blue-600 transition-colors cursor-pointer"
+                              title="Copiar Horário"
+                            >
+                              <Copy size={12} />
+                            </button>
+                          </div>
                         </div>
                       </div>
 
@@ -6141,7 +6326,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       Responsável / Família do Paciente:
                     </p>
                     <p className="text-[10px] font-semibold text-slate-650 truncate text-slate-700 leading-none">
-                      {nomeResponsavel || '---'}
+                      {nomeResponsavel || '---'} {parentescoResponsavel ? `(${parentescoResponsavel})` : ''}
                     </p>
                   </div>
                 </div>
@@ -6324,7 +6509,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   <div className="grid grid-cols-2 lg:grid-cols-3 gap-y-3 gap-x-4 text-xs">
                     <div>
                       <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Nome do Representante Responsável:</span>
-                      <p className="font-bold text-slate-800 mt-1">{nomeResponsavel || '---'}</p>
+                      <p className="font-bold text-slate-800 mt-1">{nomeResponsavel || '---'} {parentescoResponsavel ? `(${parentescoResponsavel})` : ''}</p>
                     </div>
                     <div>
                       <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Telefone de Contato do Representante:</span>
@@ -6487,8 +6672,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     <p className="border-t border-slate-400 pt-1.5 font-bold uppercase font-sans text-slate-800">
                       Responsável pelo Paciente / Família
                     </p>
-                    <p className="text-[9px] text-slate-500 leading-none">
-                      {nomeResponsavel || '---'}
+                    <p className="text-[9px] text-slate-500 leading-none font-sans">
+                      {nomeResponsavel || '---'} {parentescoResponsavel ? `(${parentescoResponsavel})` : ''}
                     </p>
                   </div>
                 </div>
@@ -6525,32 +6710,37 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         let concluidos = 0;
         let cancelados = 0;
         let ativos = 0;
+        let faltas = 0;
 
         agMes.forEach(s => {
           if (s.status === 'Cancelado') {
             cancelados++;
           } else {
-            if (s.status === 'Concluido' || s.escalaCongelada) {
-              concluidos++;
+            if (s.considerarFalta) {
+              faltas++;
             } else {
-              ativos++;
-            }
+              if (s.status === 'Concluido' || s.escalaCongelada) {
+                concluidos++;
+              } else {
+                ativos++;
+              }
 
-            let base = Number(s.valorPlantao) || Number(paciente?.planoAtendimento?.valorSugeridoPlantao) || 150;
-            let extra = Number(s.ajudaCusto) || Number(paciente?.planoAtendimento?.ajudaCusto) || 0;
-            let baseTaxa = Number(s.taxaAdm) || Number(paciente?.planoAtendimento?.taxaAdm) || 0;
-            if (s.tipoDia === 'Feriado 20%') {
-              countFeriado20++;
-              sumRep += (base * 1.20) + extra;
-              sumTx += baseTaxa * 1.20;
-            } else if (s.tipoDia === 'Feriado 50%') {
-              countFeriado50++;
-              sumRep += (base * 1.50) + extra;
-              sumTx += baseTaxa * 1.50;
-            } else {
-              countNormal++;
-              sumRep += base + extra;
-              sumTx += baseTaxa;
+              let base = Number(s.valorPlantao) || Number(paciente?.planoAtendimento?.valorSugeridoPlantao) || 150;
+              let extra = Number(s.ajudaCusto) || Number(paciente?.planoAtendimento?.ajudaCusto) || 0;
+              let baseTaxa = Number(s.taxaAdm) || Number(paciente?.planoAtendimento?.taxaAdm) || 0;
+              if (s.tipoDia === 'Feriado 20%') {
+                countFeriado20++;
+                sumRep += (base * 1.20) + extra;
+                sumTx += baseTaxa * 1.20;
+              } else if (s.tipoDia === 'Feriado 50%') {
+                countFeriado50++;
+                sumRep += (base * 1.50) + extra;
+                sumTx += baseTaxa * 1.50;
+              } else {
+                countNormal++;
+                sumRep += base + extra;
+                sumTx += baseTaxa;
+              }
             }
           }
         });

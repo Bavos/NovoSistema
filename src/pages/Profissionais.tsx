@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import html2canvas from 'html2canvas';
 import { useFirebase } from '../context/FirebaseContext';
 import { Profissional, Agendamento, DocumentoAnexo, Ocorrencia } from '../types';
-import { Plus, Edit2, Trash2, X, Check, CalendarDays, Paperclip, AlertCircle, Printer, Download, FileImage, Search, Clock, User, Calendar, Receipt, Phone } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Check, CalendarDays, Paperclip, AlertCircle, Printer, Download, FileImage, Search, Clock, User, Calendar, Receipt, Phone, Copy } from 'lucide-react';
 import { CardBase, DataGrid, DataField, SoftBadge } from '../components/ui/DesignSystem';
 import { db, storage } from '../lib/firebase';
 import { collection, query, where, orderBy, onSnapshot, doc, getDoc, updateDoc, addDoc, deleteDoc, getDocs } from 'firebase/firestore';
@@ -42,6 +42,16 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
     if (found) {
       handleOpenModal(found, 'dados');
       window.location.hash = `/profissionais/${profId}`;
+    }
+  };
+
+  const handleCopyToClipboard = async (text: string) => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('Copiado para a área de transferência!');
+    } catch (err) {
+      console.error('Erro ao copiar para a área de transferência', err);
     }
   };
 
@@ -1170,6 +1180,14 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
       }
     } catch (dbErr) {
       console.error("Erro ao verificar duplicidade de CPF:", dbErr);
+    }
+
+    // Validação de Tipo de Conta obrigatório caso agência e conta estejam preenchidos
+    const hasAgencia = !!(formData.dadosBancarios?.agencia && formData.dadosBancarios.agencia.trim() !== '');
+    const hasConta = !!(formData.dadosBancarios?.conta && formData.dadosBancarios.conta.trim() !== '');
+    if ((hasAgencia || hasConta) && !(formData.dadosBancarios?.tipoConta && formData.dadosBancarios.tipoConta.trim() !== '')) {
+      toast.error('O Tipo de Conta é obrigatório quando Agência e Conta estão preenchidos.');
+      return;
     }
 
     if (isTitularConta === 'Não') {
@@ -2303,6 +2321,9 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                   if (plantaoSelecionado) {
                     const patientObj = pacientes.find(p => p.id === plantaoSelecionado.idPaciente);
                     const patientName = patientObj ? patientObj.nome : 'Paciente Desconhecido';
+                    const patientAddress = patientObj && patientObj.endereco
+                      ? `${patientObj.endereco.rua || ''}, ${patientObj.endereco.numero || ''} - ${patientObj.bairro || patientObj.endereco.bairro || ''}, ${patientObj.endereco.cidade || ''}`
+                      : patientObj?.bairro || '';
                     
                     const valorBase = Number(plantaoSelecionado.valorPlantao) || 0;
                     const ajudaCusto = Number(plantaoSelecionado.ajudaCusto || (plantaoSelecionado as any).ajudaDeCusto) || 0;
@@ -2327,19 +2348,64 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                           <div className="space-y-1">
                             <span className="font-semibold text-slate-500 uppercase tracking-wider block text-[10px]">Paciente</span>
-                            <div className="font-bold text-slate-800 p-2.5 bg-white rounded-lg border border-slate-150">{patientName}</div>
+                            <div className="font-bold text-slate-800 p-2.5 bg-white rounded-lg border border-slate-150 flex items-center justify-between gap-1.5">
+                              <span>{patientName}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyToClipboard(patientName)}
+                                className="text-gray-400 hover:text-blue-600 transition-colors cursor-pointer"
+                                title="Copiar Paciente"
+                              >
+                                <Copy size={13} />
+                              </button>
+                            </div>
                           </div>
+
+                          {patientAddress && (
+                            <div className="space-y-1 sm:col-span-2">
+                              <span className="font-semibold text-slate-500 uppercase tracking-wider block text-[10px]">Endereço de Atendimento</span>
+                              <div className="font-bold text-slate-800 p-2.5 bg-white rounded-lg border border-slate-150 flex items-center justify-between gap-1.5">
+                                <span className="text-xs font-normal text-slate-650">{patientAddress}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyToClipboard(patientAddress)}
+                                  className="text-gray-400 hover:text-blue-600 transition-colors cursor-pointer flex-shrink-0"
+                                  title="Copiar Endereço"
+                                >
+                                  <Copy size={13} />
+                                </button>
+                              </div>
+                            </div>
+                          )}
                           
                           <div className="space-y-1">
                             <span className="font-semibold text-slate-500 uppercase tracking-wider block text-[10px]">Data do Plantão</span>
-                            <div className="font-bold text-slate-800 p-2.5 bg-white rounded-lg border border-slate-150">
-                              {plantaoSelecionado.data ? plantaoSelecionado.data.split('-').reverse().join('/') : '--/--/----'}
+                            <div className="font-bold text-slate-800 p-2.5 bg-white rounded-lg border border-slate-150 flex items-center justify-between gap-1.5">
+                              <span>{plantaoSelecionado.data ? plantaoSelecionado.data.split('-').reverse().join('/') : '--/--/----'}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyToClipboard(plantaoSelecionado.data ? plantaoSelecionado.data.split('-').reverse().join('/') : '')}
+                                className="text-gray-400 hover:text-blue-600 transition-colors cursor-pointer"
+                                title="Copiar Data"
+                              >
+                                <Copy size={13} />
+                              </button>
                             </div>
                           </div>
                           
                           <div className="space-y-1">
                             <span className="font-semibold text-slate-500 uppercase tracking-wider block text-[10px]">Horário</span>
-                            <div className="font-bold text-slate-800 p-2.5 bg-white rounded-lg border border-slate-150">{plantaoSelecionado.horario || 'Não definido'}</div>
+                            <div className="font-bold text-slate-800 p-2.5 bg-white rounded-lg border border-slate-150 flex items-center justify-between gap-1.5">
+                              <span>{plantaoSelecionado.horario || 'Não definido'}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyToClipboard(plantaoSelecionado.horario || '')}
+                                className="text-gray-400 hover:text-blue-600 transition-colors cursor-pointer"
+                                title="Copiar Horário"
+                              >
+                                <Copy size={13} />
+                              </button>
+                            </div>
                           </div>
                           
                           <div className="space-y-1">
@@ -2634,21 +2700,33 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">CPF (Obrigatório)</label>
-                        <input
-                          type="text"
-                          placeholder="000.000.000-00"
-                          value={formData.cpf}
-                          onChange={e => setFormData({...formData, cpf: mascaraCPF(e.target.value)})}
-                          maxLength={14}
-                          className={`p-2 border rounded-lg text-xs w-full focus:outline-none focus:ring-1 transition-all ${
-                            isCpfInvalid
-                              ? 'border-red-500 text-red-950 focus:ring-red-500 focus:border-red-500 bg-red-50/10'
-                              : isCpfValid
-                              ? 'border-emerald-500 text-emerald-950 focus:ring-emerald-500 focus:border-emerald-500 bg-emerald-50/10'
-                              : 'border-gray-200 text-gray-800 focus:ring-[#1a3c2e] focus:border-transparent'
-                          }`}
-                          required
-                        />
+                        <div className="relative">
+                          <input
+                            type="text"
+                            placeholder="000.000.000-00"
+                            value={formData.cpf}
+                            onChange={e => setFormData({...formData, cpf: mascaraCPF(e.target.value)})}
+                            maxLength={14}
+                            className={`p-2 pr-8 border rounded-lg text-xs w-full focus:outline-none focus:ring-1 transition-all ${
+                              isCpfInvalid
+                                ? 'border-red-500 text-red-950 focus:ring-red-500 focus:border-red-500 bg-red-50/10'
+                                : isCpfValid
+                                ? 'border-emerald-500 text-emerald-950 focus:ring-emerald-500 focus:border-emerald-500 bg-emerald-50/10'
+                                : 'border-gray-200 text-gray-800 focus:ring-[#1a3c2e] focus:border-transparent'
+                            }`}
+                            required
+                          />
+                          {formData.cpf && (
+                            <button
+                              type="button"
+                              onClick={() => handleCopyToClipboard(formData.cpf)}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-600 transition-colors cursor-pointer"
+                              title="Copiar CPF"
+                            >
+                              <Copy size={13} />
+                            </button>
+                          )}
+                        </div>
                         {isCpfInvalid && (
                           <p className="text-[10px] text-red-600 font-semibold flex items-center space-x-1 mt-0.5 animate-in fade-in duration-200">
                             <AlertCircle size={12} className="text-red-500 flex-shrink-0" />
@@ -2868,14 +2946,15 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                             ...formData,
                             dadosBancarios: {
                               ...formData.dadosBancarios,
-                              tipoConta: e.target.value
+                              tipoConta: e.target.value as 'corrente' | 'poupanca' | 'pagamento' | ''
                             }
                           })}
                           className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e] bg-white cursor-pointer font-sans"
                         >
                           <option value="">Tipo de Conta...</option>
-                          <option value="Conta-Corrente">Conta-Corrente</option>
-                          <option value="Poupança">Poupança</option>
+                          <option value="corrente">Conta Corrente</option>
+                          <option value="poupanca">Conta Poupança</option>
+                          <option value="pagamento">Conta de Pagamento</option>
                         </select>
                         {false && <select value={formData.dadosBancarios.banco} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, banco: e.target.value}})} id="banco-select" className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]">
                           <option value="">Selecione um banco...</option>
@@ -2885,7 +2964,25 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                         </select>}
                         <input type="text" placeholder="Agência" value={formData.dadosBancarios.agencia} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, agencia: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]" />
                        <input type="text" placeholder="Conta" value={formData.dadosBancarios.conta} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, conta: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]" />
-                       <input type="text" placeholder="PIX" value={formData.dadosBancarios.pix} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, pix: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]" />
+                       <div className="relative">
+                         <input
+                           type="text"
+                           placeholder="PIX"
+                           value={formData.dadosBancarios.pix}
+                           onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, pix: e.target.value}})}
+                           className="p-2 pr-8 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e] w-full"
+                         />
+                         {formData.dadosBancarios.pix && (
+                           <button
+                             type="button"
+                             onClick={() => handleCopyToClipboard(formData.dadosBancarios.pix)}
+                             className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-600 transition-colors cursor-pointer"
+                             title="Copiar PIX"
+                           >
+                             <Copy size={13} />
+                           </button>
+                         )}
+                       </div>
                     </CardBase>
 
                     {/* Bloco 4: Documentos Anexos */}
