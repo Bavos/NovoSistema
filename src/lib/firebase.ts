@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
+import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import staticConfig from '../../firebase-applet-config.json';
 
@@ -20,16 +20,13 @@ const firebaseConfig = {
   messagingSenderId: getEnvVal(import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID, staticConfig.messagingSenderId),
   appId: getEnvVal(import.meta.env.VITE_FIREBASE_APP_ID, staticConfig.appId),
   measurementId: getEnvVal(import.meta.env.VITE_FIREBASE_MEASUREMENT_ID, staticConfig.measurementId),
-  firestoreDatabaseId: getEnvVal(import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID, staticConfig.firestoreDatabaseId),
+  firestoreDatabaseId: getEnvVal(import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID, "ai-studio-ec969b01-95ac-467f-b5b7-48efe433d663"),
 };
 
 const app = initializeApp(firebaseConfig);
-export const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true,
-  localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager()
-  })
-}, firebaseConfig.firestoreDatabaseId); /* CRITICAL: The app will break without this line */
+
+// Apontando explicitamente para o banco nomeado
+export const db = getFirestore(app, "ai-studio-ec969b01-95ac-467f-b5b7-48efe433d663");
 export const auth = getAuth();
 export const storage = getStorage(app);
 

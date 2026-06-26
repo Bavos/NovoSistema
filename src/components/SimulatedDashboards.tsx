@@ -24,7 +24,10 @@ import {
   Search,
   Printer,
   FileDown,
-  ChevronDown
+  ChevronDown,
+  Cpu,
+  ShieldCheck,
+  FileText
 } from 'lucide-react';
 import { INITIAL_PROFESSIONALS } from '../mockData';
 import { useFirebase } from '../context/FirebaseContext';
@@ -272,7 +275,9 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   React.useEffect(() => {
     setSubTab(initialSubTab as any);
   }, [initialSubTab]);
-  const [financeTab, setFinanceTab] = useState<'fatura' | 'pagamento' | 'mei' | 'valor_mei'>('fatura');
+  const [financeTab, setFinanceTab] = useState<'fatura' | 'pagamento' | 'mei' | 'valor_mei' | 'folha_automatizada'>('fatura');
+  const [cnabProfissionaisSelecionados, setCnabProfissionaisSelecionados] = useState<string[]>([]);
+  const [showCnabDropdown, setShowCnabDropdown] = useState(false);
   const [meiProfissionaisSelecionados, setMeiProfissionaisSelecionados] = useState<string[]>([]);
   const [referenciaMes, setReferenciaMes] = useState<number>(() => new Date().getMonth() + 1);
   const [referenciaAno, setReferenciaAno] = useState<number>(() => new Date().getFullYear());
@@ -636,6 +641,294 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       alert('Ocorreu um erro ao buscar os dados.');
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleGerarFolhaAutomatizada = async () => {
+    if (cnabProfissionaisSelecionados.length === 0) {
+      toast.error('Por favor, selecione ao menos um profissional.');
+      return;
+    }
+    if (!dataInicial || !dataFinal) {
+      toast.error('Por favor, informe a Data Inicial e a Data Final.');
+      return;
+    }
+
+    const invalidProfs: string[] = [];
+    const validFolhas: any[] = [];
+
+    for (const pId of cnabProfissionaisSelecionados) {
+      const prof = activeProfissionais.find(p => p.id === pId);
+      if (!prof) continue;
+
+      const matched = folhasPagamento.filter((f: any) => 
+        f.idProfissional === pId && 
+        f.periodoApurado &&
+        f.periodoApurado.inicio >= dataInicial && 
+        f.periodoApurado.fim <= dataFinal
+      );
+
+      if (matched.length === 0) {
+        invalidProfs.push(prof.nome);
+      } else {
+        validFolhas.push(...matched);
+      }
+    }
+
+    if (invalidProfs.length > 0) {
+      toast.error(
+        `Operação negada: Um ou mais profissionais selecionados não possuem folha de pagamento no período informado. (Incompletos: ${invalidProfs.join(', ')})`,
+        { duration: 6000 }
+      );
+      return;
+    }
+
+    // CNAB 240 Layout Generation
+    try {
+      const sanitizeCnabString = (str: string | undefined | null): string => {
+        if (!str) return '';
+        return str
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[Çç]/g, 'C')
+          .replace(/[^A-Za-z0-9\s-]/g, '')
+          .toUpperCase();
+      };
+
+      const sanitizeNumeric = (str: string | undefined | null): string => {
+        if (!str) return '';
+        return str.replace(/\D/g, '');
+      };
+
+      const formatNum = (value: any, length: number): string => {
+        const cleanVal = sanitizeNumeric(String(value));
+        return cleanVal.padStart(length, '0').slice(-length);
+      };
+
+      const formatAlpha = (value: any, length: number): string => {
+        const cleanVal = sanitizeCnabString(String(value));
+        return cleanVal.padEnd(length, ' ').substring(0, length);
+      };
+
+      const lines: string[] = [];
+      const todayDate = new Date();
+      const dataOperacao = todayDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\D/g, ''); // DDMMAAAA
+      const horaOperacao = todayDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).replace(/\D/g, ''); // HHMMSS
+
+      // Company variables from empresa state with safe defaults
+      const compCNPJ = formatNum(empresa?.cnpj || '12345678000199', 14);
+      const compRazao = formatAlpha(empresa?.razaoSocial || 'EMPRESA EXCELENCIA LTDA', 30);
+      const compAgencia = formatNum(empresa?.agencia || '00001', 5);
+      const compAgenciaDV = formatAlpha(empresa?.agenciaDV || '9', 1);
+      const compConta = formatNum(empresa?.conta || '1234567', 12);
+      const compContaDV = formatNum(empresa?.contaDV || '9', 1);
+      const compEndereco = formatAlpha(empresa?.endereco || 'AVENIDA DO CONTORNO', 30);
+      const compNumero = formatNum(empresa?.enderecoNumero || '1000', 5);
+      const compCidade = formatAlpha(empresa?.cidade || 'BELO HORIZONTE', 20);
+      const compCEP = formatNum((empresa?.cep || '30110017').substring(0, 5), 5);
+      const compCEPSuffix = formatAlpha((empresa?.cep || '30110017').replace(/\D/g, '').substring(5, 8) || '000', 3);
+      const compUF = formatAlpha(empresa?.estado || 'MG', 2);
+
+      // --- LINHA 1: HEADER ARQUIVO (TIPO 0) ---
+      let l1 = '';
+      l1 += '077'; // Código do banco na compensação
+      l1 += '0000'; // Lote de serviço
+      l1 += '0'; // Tipo de registro
+      l1 += ''.padEnd(9, ' '); // Reservado FEBRABAN
+      l1 += '2'; // Tipo de documento da empresa (2 = CNPJ)
+      l1 += compCNPJ; // CPF/CNPJ da empresa
+      l1 += ''.padEnd(20, ' '); // Reservado FEBRABAN
+      l1 += compAgencia; // Agência mantenedora da conta
+      l1 += compAgenciaDV; // Dígito verificador da agência
+      l1 += compConta; // Número da conta corrente
+      l1 += compContaDV; // Dígito verificador da conta
+      l1 += ' '; // Reservado FEBRABAN
+      l1 += compRazao; // Nome da empresa
+      l1 += formatAlpha('BANCO INTER', 30); // Nome do banco
+      l1 += ''.padEnd(10, ' '); // Reservado FEBRABAN
+      l1 += '1'; // Código de remessa
+      l1 += dataOperacao; // Data de operação do arquivo
+      l1 += horaOperacao; // Hora de operação do arquivo
+      l1 += '000001'; // Número sequencial do arquivo
+      l1 += '107'; // Número da versão do layout do arquivo
+      l1 += '01600'; // Densidade de gravação do arquivo
+      l1 += ''.padEnd(20, ' '); // Uso reservado do banco
+      l1 += ''.padEnd(20, ' '); // Uso reservado da empresa
+      l1 += ''.padEnd(29, ' '); // Uso exclusivo FEBRABAN/CNAB
+      lines.push(l1);
+
+      // --- LINHA 2: HEADER LOTE (TIPO 1) ---
+      let l2 = '';
+      l2 += '077'; // Código do banco
+      l2 += '0001'; // Lote de serviço
+      l2 += '1'; // Tipo de registro
+      l2 += 'C'; // Tipo da operação
+      l2 += '30'; // Tipo do serviço (30 = Pagamento Salários / Serviços)
+      l2 += '03'; // Forma de lançamento (03 = TED)
+      l2 += '046'; // Número da versão do layout do Lote
+      l2 += ' '; // Reservado FEBRABAN
+      l2 += '2'; // Tipo de documento da empresa
+      l2 += compCNPJ; // CPF/CNPJ
+      l2 += ''.padEnd(20, ' '); // Reservado FEBRABAN
+      l2 += compAgencia; // Agência mantenedora
+      l2 += compAgenciaDV; // Dígito verificador agência
+      l2 += compConta; // Conta corrente
+      l2 += compContaDV; // Dígito verificador conta
+      l2 += ' '; // Reservado FEBRABAN
+      l2 += compRazao; // Nome da empresa
+      l2 += ''.padEnd(40, ' '); // Informação genérica opcional
+      l2 += compEndereco; // Endereço da empresa (Logradouro)
+      l2 += compNumero; // Número do local da empresa
+      l2 += ''.padEnd(15, ' '); // Casa, Apto, Sala...
+      l2 += compCidade; // Nome da cidade
+      l2 += compCEP; // CEP
+      l2 += compCEPSuffix; // Complemento do CEP
+      l2 += compUF; // Sigla do estado
+      l2 += ''.padEnd(8, ' '); // Reservado FEBRABAN
+      l2 += ''.padEnd(10, ' '); // Códigos das ocorrências para retorno
+      lines.push(l2);
+
+      // --- DETAILS (SEGMENTO A & B FOR EACH TRANSACTING FOLHA) ---
+      let totalValorLiquidoCentavos = 0;
+      let seqNum = 1;
+
+      validFolhas.forEach((folha) => {
+        const prof = activeProfissionais.find(p => p.id === folha.idProfissional);
+        if (!prof) return;
+
+        const getBankCode = (bName: string | undefined): string => {
+          if (!bName) return '077';
+          const clean = bName.toUpperCase();
+          if (clean.includes('INTER')) return '077';
+          if (clean.includes('BRADESCO')) return '237';
+          if (clean.includes('ITAU') || clean.includes('ITAÚ')) return '341';
+          if (clean.includes('SANTANDER')) return '033';
+          if (clean.includes('BRASIL') || clean.includes('BB')) return '001';
+          if (clean.includes('CAIXA')) return '104';
+          if (clean.includes('NUBANK') || clean.includes('NU ')) return '260';
+          const match = bName.replace(/\D/g, '');
+          if (match.length >= 3) return match.substring(0, 3);
+          return '077';
+        };
+
+        const profBanco = getBankCode(prof.dadosBancarios?.banco);
+        const profAgencia = formatNum(prof.dadosBancarios?.agencia || '0001', 5);
+        const profAgenciaDV = formatAlpha(prof.dadosBancarios?.agencia?.replace(/[^a-zA-Z0-9]/g, '').slice(-1) || ' ', 1);
+        const profConta = formatNum(prof.dadosBancarios?.conta || '12345', 12);
+        const profContaDV = formatAlpha(prof.dadosBancarios?.conta?.replace(/[^a-zA-Z0-9]/g, '').slice(-1) || ' ', 1);
+        const profNome = formatAlpha(prof.nome, 30);
+        
+        const valueCentavos = Math.round((folha.valorLiquidoReceber || 0) * 100);
+        totalValorLiquidoCentavos += valueCentavos;
+
+        // Segmento A
+        let sa = '';
+        sa += '077'; // Banco
+        sa += '0001'; // Lote
+        sa += '3'; // Registro Tipo 3
+        sa += formatNum(seqNum++, 5); // Seq
+        sa += 'A'; // Seg A
+        sa += '0'; // Tipo movimento
+        sa += '00'; // Instrução
+        sa += '000'; // Câmara
+        sa += profBanco; // Banco Favorecido
+        sa += profAgencia; // Agência
+        sa += profAgenciaDV; // DV Agência
+        sa += profConta; // Conta
+        sa += profContaDV; // DV Conta
+        sa += ' '; // Reservado FEBRABAN
+        sa += profNome; // Nome Favorecido
+        sa += formatAlpha(folha.id.substring(0, 20), 20); // Doc nº empresa
+        sa += dataOperacao; // Data pagamento
+        sa += 'BRL'; // Moeda
+        sa += '000000000000000'; // Moeda quantidade
+        sa += formatNum(valueCentavos, 15); // Valor pagamento
+        sa += ''.padEnd(20, ' '); // Doc nº banco
+        sa += '00000000'; // Data efetivação
+        sa += '000000000000000'; // Valor efetivação
+        sa += ''.padEnd(22, ' '); // Reservado FEBRABAN
+        sa += '01'; // Tipo conta (01 = Corrente)
+        sa += ''.padEnd(18, ' '); // Reservado FEBRABAN
+        sa += '00010'; // Finalidade TED
+        sa += ''.padEnd(6, ' '); // Reservado FEBRABAN
+        sa += ''.padEnd(10, ' '); // Ocorrências
+        lines.push(sa);
+
+        // Segmento B
+        const typeDoc = (prof.cnpj && prof.cnpj.trim().length > 0) ? '2' : '1';
+        const profCNPJCPF = formatNum(prof.cnpj || prof.cpf || '', 14);
+        
+        const profRua = formatAlpha(prof.endereco?.rua || 'RUA PRINCIPAL', 35);
+        const profNum = formatNum(prof.endereco?.numero || '0', 5);
+        const profBairro = formatAlpha(prof.endereco?.bairro || 'CENTRO', 15);
+        const profCidade = formatAlpha(prof.endereco?.cidade || 'BELO HORIZONTE', 15);
+        const profCEP = formatNum((prof.endereco?.cep || '30000000').substring(0, 5), 5);
+        const profCEPSuffix = formatNum((prof.endereco?.cep || '30000000').replace(/\D/g, '').substring(5, 8) || '000', 3);
+        const profUF = formatAlpha(prof.endereco?.estado || 'MG', 2);
+
+        let sb = '';
+        sb += '077'; // Banco
+        sb += '0001'; // Lote
+        sb += '3'; // Registro Tipo 3
+        sb += formatNum(seqNum++, 5); // Seq
+        sb += 'B'; // Seg B
+        sb += '   '; // Reservado FEBRABAN
+        sb += typeDoc; // Tipo doc (1 = CPF, 2 = CNPJ)
+        sb += profCNPJCPF; // Documento
+        sb += profRua; // Logradouro
+        sb += profNum; // Número
+        sb += ''.padEnd(15, ' '); // Complemento
+        sb += profBairro; // Bairro
+        sb += profCidade; // Cidade
+        sb += profCEP; // CEP
+        sb += profCEPSuffix; // CEP Suffix
+        sb += profUF; // Estado
+        sb += ''.padEnd(105, ' '); // Reservado FEBRABAN
+        sb += '00000000'; // ISPB
+        lines.push(sb);
+      });
+
+      // --- LINHA 5: TRAILER LOTE (TIPO 5) ---
+      let l5 = '';
+      l5 += '077'; // Banco
+      l5 += '0001'; // Lote
+      l5 += '5'; // Tipo Registro
+      l5 += ''.padEnd(9, ' '); // Reservado FEBRABAN
+      l5 += formatNum(2 + 2 * validFolhas.length, 6); // Qtd registros lote
+      l5 += formatNum(totalValorLiquidoCentavos, 18); // Somatória valores
+      l5 += ''.padEnd(18, '0'); // Qtd moedas
+      l5 += '000000'; // Nº aviso débito
+      l5 += ''.padEnd(165, ' '); // Reservado FEBRABAN
+      l5 += ''.padEnd(10, ' '); // Ocorrências
+      lines.push(l5);
+
+      // --- LINHA 6: TRAILER ARQUIVO (TIPO 9) ---
+      let l6 = '';
+      l6 += '077'; // Banco
+      l6 += '9999'; // Lote
+      l6 += '9'; // Tipo Registro
+      l6 += ''.padEnd(9, ' '); // Reservado FEBRABAN
+      l6 += '000001'; // Qtd lotes
+      l6 += formatNum(4 + 2 * validFolhas.length, 6); // Qtd registros arquivo
+      l6 += ''.padEnd(211, ' '); // Reservado FEBRABAN
+      lines.push(l6);
+
+      // Build file content with \r\n line endings and guarantee 240 char length per line
+      const fileContent = lines.map(line => line.padEnd(240, ' ').substring(0, 240)).join('\r\n') + '\r\n';
+
+      // Download trigger
+      const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `CI240_001_${formatNum(1, 7)}.REM`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast.success('Arquivo de remessa CNAB 240 (.REM) gerado e baixado com sucesso!');
+    } catch (err: any) {
+      console.error('Erro ao gerar CNAB 240:', err);
+      toast.error(`Falha técnica ao gerar remessa: ${err.message || String(err)}`);
     }
   };
 
@@ -1394,10 +1687,21 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                   >
                     💰 Valor MEI
                   </button>
+                  <button
+                    id="btn-report-type-folha-automatizada"
+                    onClick={() => { setFinanceTab('folha_automatizada'); setHasGenerated(false); }}
+                    className={`px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                      financeTab === 'folha_automatizada'
+                        ? 'bg-purple-600 text-white shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    🤖 Folha Automatizada
+                  </button>
                 </div>
               </div>
 
-              {financeTab !== 'valor_mei' && (
+              {financeTab !== 'valor_mei' && financeTab !== 'folha_automatizada' && (
                 <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                   <div className="flex flex-wrap items-end gap-4">
                     {financeTab === 'fatura' && (
@@ -1582,13 +1886,176 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                   {/* Buttons removed as requested */}
                 </div>
               )}
+
+              {financeTab === 'folha_automatizada' && (
+                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                  <div className="flex flex-wrap items-end gap-4 w-full">
+                    {/* Seletor de Profissionais com Suporte a Seleção Múltipla */}
+                    <div className="relative min-w-[280px]">
+                      <label className="block text-xs font-bold text-slate-500 mb-1">Selecionar Profissional(is)</label>
+                      <button
+                        type="button"
+                        id="select-cnab-profissional-dropdown"
+                        onClick={() => setShowCnabDropdown(!showCnabDropdown)}
+                        className="p-2 border border-slate-200 rounded-lg text-sm bg-white cursor-pointer flex justify-between items-center w-full text-left"
+                      >
+                        <span className="truncate max-w-[220px] block">
+                          {cnabProfissionaisSelecionados.length === 0
+                            ? 'Selecionar um profissional...'
+                            : cnabProfissionaisSelecionados.length === activeProfissionais.length
+                            ? '✨ Todos os Profissionais'
+                            : `${cnabProfissionaisSelecionados.length} profissional(is) selecionado(s)`}
+                        </span>
+                        <ChevronDown className="w-4 h-4 text-slate-400 shrink-0 ml-1" />
+                      </button>
+                      
+                      {showCnabDropdown && (
+                        <div className="absolute z-[999] left-0 top-full mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-xl p-3 min-w-[280px] max-h-[300px] overflow-y-auto">
+                          {/* Opções de Seleção Rápida */}
+                          <div className="flex gap-2 pb-2 border-b border-slate-100 justify-between items-center text-[10px]">
+                            <button
+                              type="button"
+                              onClick={() => setCnabProfissionaisSelecionados(activeProfissionais.map(p => p.id))}
+                              className="text-blue-600 font-bold hover:underline cursor-pointer"
+                            >
+                              Selecionar Todos
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCnabProfissionaisSelecionados([])}
+                              className="text-slate-500 font-bold hover:underline cursor-pointer"
+                            >
+                              Limpar Todos
+                            </button>
+                          </div>
+                          
+                          {/* Lista de Profissionais */}
+                          <div className="space-y-1 pt-1">
+                            {activeProfissionais.map(p => {
+                              const isChecked = cnabProfissionaisSelecionados.includes(p.id);
+                              return (
+                                <label key={p.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-slate-50 cursor-pointer text-xs text-slate-700 select-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => {
+                                      if (isChecked) {
+                                        setCnabProfissionaisSelecionados(cnabProfissionaisSelecionados.filter(id => id !== p.id));
+                                      } else {
+                                        setCnabProfissionaisSelecionados([...cnabProfissionaisSelecionados, p.id]);
+                                      }
+                                    }}
+                                    className="rounded border-slate-300 text-purple-600 focus:ring-purple-500 w-3.5 h-3.5 cursor-pointer"
+                                  />
+                                  <span className="truncate">{p.nome}</span>
+                                  {p.cpf && <span className="text-[9px] text-slate-400 font-mono ml-auto">{p.cpf}</span>}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Seletores de Data */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 mb-1">Data Inicial</label>
+                      <input
+                        type="date"
+                        id="cnab-data-inicial"
+                        value={dataInicial}
+                        onChange={(e) => setDataInicial(e.target.value)}
+                        className="p-2 border border-slate-200 rounded-lg text-sm bg-white"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 mb-1">Data Final</label>
+                      <input
+                        type="date"
+                        id="cnab-data-final"
+                        value={dataFinal}
+                        onChange={(e) => setDataFinal(e.target.value)}
+                        className="p-2 border border-slate-200 rounded-lg text-sm bg-white"
+                        required
+                      />
+                    </div>
+
+                    {/* Botão de Ação Principal */}
+                    <button
+                      type="button"
+                      id="btn-cnab-gerar-folha"
+                      onClick={handleGerarFolhaAutomatizada}
+                      className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-bold transition-all disabled:opacity-50 flex items-center gap-2 h-[38px] cursor-pointer"
+                    >
+                      🤖 Gerar Folha
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
           {/* Main spreadsheet display container */}
           <div className="bg-white p-6 border border-slate-200 rounded-2xl shadow-sm space-y-6 print:border-none print:shadow-none print:p-0">
             
-            {financeTab === 'valor_mei' ? (
+            {financeTab === 'folha_automatizada' ? (
+              <div className="max-w-4xl mx-auto py-8 space-y-6 font-sans">
+                <div className="text-center space-y-3">
+                  <div className="w-16 h-16 bg-purple-50 rounded-2xl flex items-center justify-center mx-auto text-purple-600 shadow-sm border border-purple-100">
+                    <Cpu size={32} />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-slate-800 text-lg">Geração de Folha Automatizada (CNAB 240)</h3>
+                    <p className="text-slate-500 text-sm max-w-lg mx-auto">
+                      Gere arquivos de remessa de pagamentos posicional no padrão CNAB 240 (Banco Inter) para processamento em lote.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-4">
+                    <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                      <ShieldCheck className="text-purple-600 w-4 h-4" /> Diretrizes de Segurança
+                    </h4>
+                    <ul className="text-xs text-slate-600 space-y-2 list-disc pl-4 leading-relaxed">
+                      <li>
+                        <strong>Sanitização Ativa:</strong> Todos os campos (Razão Social, Nome, CPF) são expurgados de acentos e caracteres especiais para evitar desalinhamento posicional.
+                      </li>
+                      <li>
+                        <strong>Validação de Movimentação:</strong> Bloqueia a exportação se qualquer profissional selecionado não possuir folha fechada no período informado.
+                      </li>
+                      <li>
+                        <strong>Segurança de Dados:</strong> Previne vazamentos de requisições nulas e dados ausentes no cabeçalho ou trailer.
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-4">
+                    <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                      <FileText className="text-purple-600 w-4 h-4" /> Estrutura do Arquivo .REM
+                    </h4>
+                    <ul className="text-xs text-slate-600 space-y-2 list-decimal pl-4 leading-relaxed">
+                      <li>Header do Arquivo (Tipo 0) - Dados identificadores da empresa matriz.</li>
+                      <li>Header do Lote (Tipo 1) - Serviço 30 / Lançamento 03 (TED).</li>
+                      <li>Segmento A (Detalhe) - Informações financeiras e dados bancários de cada favorecido.</li>
+                      <li>Segmento B (Detalhe) - Identificação civil (CPF) e endereço do favorecido.</li>
+                      <li>Trailer do Lote (Tipo 5) - Somatório de transações e controle financeiro.</li>
+                      <li>Trailer do Arquivo (Tipo 9) - Contador consolidado de registros do documento.</li>
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Status Section */}
+                <div className="bg-purple-50/50 p-4 rounded-xl border border-purple-100/60 flex items-start gap-3">
+                  <span className="text-purple-600 shrink-0 text-lg">💡</span>
+                  <p className="text-xs text-purple-800 leading-relaxed">
+                    Certifique-se de que os dados bancários e cadastrais (CPF, endereço completo com CEP e número) dos cuidadores/profissionais estejam atualizados em seus respectivos cadastros. Os dados da sua empresa são lidos em tempo real a partir das configurações cadastrais da Matriz.
+                  </p>
+                </div>
+              </div>
+            ) : financeTab === 'valor_mei' ? (
               <div className="max-w-md mx-auto py-10 space-y-6 font-sans">
                 <div className="text-center space-y-2">
                   <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto text-amber-600 shadow-sm border border-amber-100">

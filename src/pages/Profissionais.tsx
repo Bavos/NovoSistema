@@ -1149,6 +1149,29 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
       return;
     }
 
+    // Trava de Duplicidade Cruzada de CPF (Anti-Duplicação)
+    const formattedCpfVal = mascaraCPF(cleanCpfVal);
+    const cpfOptions = [cleanCpfVal, formattedCpfVal].filter(Boolean);
+
+    try {
+      const profQuery = query(collection(db, 'profissionais'), where('cpf', 'in', cpfOptions));
+      const profSnap = await getDocs(profQuery);
+      const duplicateProf = profSnap.docs.find(doc => !editingProf || doc.id !== editingProf?.id);
+      if (duplicateProf) {
+        toast.error('Falha no cadastro: Este CPF já se encontra registrado em nosso sistema.');
+        return;
+      }
+
+      const pacQuery = query(collection(db, 'pacientes'), where('cpf', 'in', cpfOptions));
+      const pacSnap = await getDocs(pacQuery);
+      if (!pacSnap.empty) {
+        toast.error('Falha no cadastro: Este CPF já se encontra registrado em nosso sistema.');
+        return;
+      }
+    } catch (dbErr) {
+      console.error("Erro ao verificar duplicidade de CPF:", dbErr);
+    }
+
     if (isTitularConta === 'Não') {
       const cleanCpfTitularVal = (formData.cpfTitularConta || '').replace(/\D/g, '');
       if (cleanCpfTitularVal && !validarCPF(cleanCpfTitularVal)) {

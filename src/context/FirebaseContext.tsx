@@ -266,7 +266,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         await getDocFromServer(doc(db, 'test', 'connection'));
       } catch (connErr) {
         if (connErr instanceof Error && connErr.message.toLowerCase().includes('offline')) {
-          console.error("Please check your Firebase configuration.");
+          console.warn("Please check your Firebase configuration.");
         } else {
           console.log("Firestore initialized. Live mirroring active. Database is connecting dynamically.");
         }
@@ -477,6 +477,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         desativadoEm: null,
         desativadoMotivo: null,
       });
+      await addAuditLog('UPDATE', 'pacientes', id, `Paciente reativado`);
       setNotification(`Paciente reativado com sucesso.`);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `pacientes/${id}`);
@@ -551,6 +552,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         batch.delete(doc(db, 'plantoes', id));
       }
       await batch.commit();
+      for (const id of ids) {
+        await addAuditLog('DELETE', 'plantoes', id, `Plantão excluído em lote`);
+      }
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `plantoes/batch`);
       throw err;
@@ -701,6 +705,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         desativadoMotivo: 'Exclusão lógica do registro (Inativo de acordo com diretrizes de segurança)',
       });
       console.log("Exclusão lógica realizada com sucesso para:", id);
+      await addAuditLog('DELETE', 'pacientes', id, `Paciente inativado via exclusão lógica`);
       setNotification('Paciente desativado logicamente com sucesso.');
     } catch (err) {
       console.error("Erro na exclusão lógica:", err);

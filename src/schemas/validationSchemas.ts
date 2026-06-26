@@ -11,6 +11,6 @@ export const profissionalSchema = z.object({
   nome: z.string().min(3, "Nome é obrigatório"),
   cpf: z.string().regex(/^\d{11}$/, "CPF deve conter 11 dígitos numéricos"),
   profissao: z.string().min(3, "Profissão é obrigatória"),
-  telefone: z.string().min(10, "Telefone é obrigatório"),
+  telefone: z.string().optional(),
   meiIrregular: z.boolean().optional(),
 });

@@ -792,6 +792,29 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       return;
     }
 
+    // Trava de Duplicidade Cruzada de CPF (Anti-Duplicação)
+    const formattedCpfVal = mascaraCPF(cleanCpfVal);
+    const cpfOptions = [cleanCpfVal, formattedCpfVal].filter(Boolean);
+
+    try {
+      const pacQuery = query(collection(db, 'pacientes'), where('cpf', 'in', cpfOptions));
+      const pacSnap = await getDocs(pacQuery);
+      const duplicatePac = pacSnap.docs.find(doc => isNew || doc.id !== paciente?.id);
+      if (duplicatePac) {
+        toast.error('Falha no cadastro: Este CPF já se encontra registrado em nosso sistema.');
+        return;
+      }
+
+      const profQuery = query(collection(db, 'profissionais'), where('cpf', 'in', cpfOptions));
+      const profSnap = await getDocs(profQuery);
+      if (!profSnap.empty) {
+        toast.error('Falha no cadastro: Este CPF já se encontra registrado em nosso sistema.');
+        return;
+      }
+    } catch (dbErr) {
+      console.error("Erro ao verificar duplicidade de CPF:", dbErr);
+    }
+
     // Validation for Billing Details
     if (responsavelPagamento === 'Outro Responsável') {
       if (!nomePagador.trim() || !cpfPagador.trim()) {

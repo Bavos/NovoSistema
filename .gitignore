@@ -13,4 +13,5 @@ coverage/
 
 # Sensitive credentials and config files
 *config.json
+!firebase-applet-config.json
 *-adminsdk-*.json
