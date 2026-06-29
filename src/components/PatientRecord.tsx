@@ -314,7 +314,48 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   }, [editShiftDate]);
 
   // Multi-date selection state for Novo Agendamento
-  const [selectedDates, setSelectedDates] = useState<string[]>([]);
+  const [selectedDates, setSelectedDates] = useState<{ date: string; cycle: number }[]>([]);
+
+  const handleDateClick = (formattedDate: string) => {
+    // Escuta do Tipo de Turno selecionado no formulário
+    const selectedOpt = avulsoPlantaoOptionId === 'principal'
+      ? { tipoEscala: tipoEscala || 'Diurno 12h' }
+      : tiposPlantao.find(tp => tp.id === avulsoPlantaoOptionId);
+    const is48h = selectedOpt?.tipoEscala?.includes('48h');
+
+    if (is48h) {
+      // Calcular o dia seguinte de forma segura usando JS nativo
+      const d1 = new Date(formattedDate + 'T12:00:00');
+      const d2 = new Date(d1);
+      d2.setDate(d1.getDate() + 1);
+      const formattedDate2 = `${d2.getFullYear()}-${String(d2.getMonth() + 1).padStart(2, '0')}-${String(d2.getDate()).padStart(2, '0')}`;
+
+      const isD1Selected = selectedDates.some(d => d.date === formattedDate);
+
+      if (isD1Selected) {
+        // Se já está selecionado, remove o par completo
+        setSelectedDates(prev => prev.filter(d => d.date !== formattedDate && d.date !== formattedDate2));
+      } else {
+        // Se não está selecionado, adiciona ambas as datas (Dia 1 e Dia 2)
+        setSelectedDates(prev => {
+          const filtered = prev.filter(d => d.date !== formattedDate && d.date !== formattedDate2);
+          return [
+            ...filtered,
+            { date: formattedDate, cycle: 1 },
+            { date: formattedDate2, cycle: 2 }
+          ];
+        });
+      }
+    } else {
+      // Turno normal (24h ou outro padrão): toggle padrão com cycle: 1
+      const isSelected = selectedDates.some(d => d.date === formattedDate);
+      if (isSelected) {
+        setSelectedDates(prev => prev.filter(d => d.date !== formattedDate));
+      } else {
+        setSelectedDates(prev => [...prev, { date: formattedDate, cycle: 1 }]);
+      }
+    }
+  };
   const [tempDate, setTempDate] = useState("");
   const [agnCalendarYear, setAgnCalendarYear] = useState(new Date().getFullYear());
   const [agnCalendarMonth, setAgnCalendarMonth] = useState(new Date().getMonth());
@@ -588,6 +629,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     setValorSugeridoPlantao,
     ajudaCusto,
     setAjudaCusto,
+    valorTransporte,
+    setValorTransporte,
+    valorAlimentacao,
+    setValorAlimentacao,
     taxaAdm,
     setTaxaAdm,
     tiposPlantao,
@@ -702,6 +747,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const [newSubHoraInicio, setNewSubHoraInicio] = useState<string>('07:00');
   const [newSubValorPlantao, setNewSubValorPlantao] = useState<number | ''>(150);
   const [newSubAjudaCusto, setNewSubAjudaCusto] = useState<number | ''>(0);
+  const [newSubValorTransporte, setNewSubValorTransporte] = useState<number | ''>(0);
+  const [newSubValorAlimentacao, setNewSubValorAlimentacao] = useState<number | ''>(0);
   const [newSubTaxaAdm, setNewSubTaxaAdm] = useState<number | ''>(0);
   const [editingSubId, setEditingSubId] = useState<string | null>(null);
 
@@ -750,6 +797,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       setHoraInicioPadrao(paciente.planoAtendimento?.horaInicioPadrao || '07:00');
       setValorSugeridoPlantao(paciente.planoAtendimento?.valorSugeridoPlantao || 150);
       setAjudaCusto(paciente.planoAtendimento?.ajudaCusto || 0);
+      setValorTransporte(paciente.planoAtendimento?.valorTransporte ?? paciente.planoAtendimento?.ajudaCusto ?? 0);
+      setValorAlimentacao(paciente.planoAtendimento?.valorAlimentacao ?? 0);
       setTaxaAdm(paciente.planoAtendimento?.taxaAdm || 0);
       setTiposPlantao(paciente.planoAtendimento?.tiposPlantao || []);
       
@@ -796,6 +845,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       setHoraInicioPadrao('07:00');
       setValorSugeridoPlantao(150);
       setAjudaCusto(0);
+      setValorTransporte(0);
+      setValorAlimentacao(0);
       setTaxaAdm(0);
       setTiposPlantao([]);
 
@@ -814,6 +865,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         setHoraInicioPadrao(found.planoAtendimento.horaInicioPadrao || '07:00');
         setValorSugeridoPlantao(found.planoAtendimento.valorSugeridoPlantao ?? 150);
         setAjudaCusto(found.planoAtendimento.ajudaCusto ?? 0);
+        setValorTransporte(found.planoAtendimento.valorTransporte ?? found.planoAtendimento.ajudaCusto ?? 0);
+        setValorAlimentacao(found.planoAtendimento.valorAlimentacao ?? 0);
         setTaxaAdm(found.planoAtendimento.taxaAdm ?? 0);
         setTiposPlantao(found.planoAtendimento.tiposPlantao || []);
       }
@@ -1024,8 +1077,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       return;
     }
 
-    if (valorSugeridoPlantao === '' || ajudaCusto === '' || taxaAdm === '') {
-      alert('Erro de Validação: Ajuste os valores do Plano de Atendimento. Os campos "Valor do Plantão", "Ajuda de Custo" e "Taxa Adm" não podem ficar vazios / em branco.');
+    if (valorSugeridoPlantao === '' || valorTransporte === '' || valorAlimentacao === '' || taxaAdm === '') {
+      alert('Erro de Validação: Ajuste os valores do Plano de Atendimento. Os campos "Valor do Plantão", "Transporte", "Alimentação" e "Taxa Adm" não podem ficar vazios / em branco.');
       return;
     }
 
@@ -1041,7 +1094,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
           tipoEscala,
           horaInicioPadrao,
           valorSugeridoPlantao: Number(valorSugeridoPlantao),
-          ajudaCusto: Number(ajudaCusto),
+          ajudaCusto: Number(valorTransporte || 0) + Number(valorAlimentacao || 0),
+          valorTransporte: Number(valorTransporte),
+          valorAlimentacao: Number(valorAlimentacao),
           taxaAdm: Number(taxaAdm),
           tiposPlantao,
         },
@@ -1330,6 +1385,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
           horaInicio: horaInicioPadrao || '07:00',
           valorPlantao: Number(valorSugeridoPlantao || 0),
           ajudaCusto: Number(ajudaCusto || 0),
+          valorTransporte: Number(valorTransporte || 0),
+          valorAlimentacao: Number(valorAlimentacao || 0),
           taxaAdm: Number(taxaAdm || 0),
         },
         ...tiposPlantao.map((tp) => ({
@@ -1338,6 +1395,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
           horaInicio: tp.horaInicio,
           valorPlantao: Number(tp.valorPlantao || 0),
           ajudaCusto: Number(tp.ajudaCusto || 0),
+          valorTransporte: Number(tp.valorTransporte ?? tp.ajudaCusto ?? 0),
+          valorAlimentacao: Number(tp.valorAlimentacao ?? 0),
           taxaAdm: Number(tp.taxaAdm || 0),
         })),
       ];
@@ -1345,7 +1404,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       const chosenOpt = shiftsList.find((s) => s.id === avulsoPlantaoOptionId) || shiftsList[0];
 
       const baseRepasseValue = chosenOpt.valorPlantao;
-      const baseAjudaValue = chosenOpt.ajudaCusto;
+      const baseTransporte = chosenOpt.valorTransporte || 0;
+      const baseAlimentacao = chosenOpt.valorAlimentacao || 0;
       const baseTaxaValue = chosenOpt.taxaAdm;
       const chosenHoraInicio = chosenOpt.horaInicio;
       const chosenTipoEscalaStr = chosenOpt.tipoEscala;
@@ -1369,13 +1429,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         isFeriado = '50%';
       }
 
-      const { plantaoFinal, taxaAdmFinal, ajudaCusto: finalAjuda } = calculateShiftValues(
-        baseRepasseValue,
-        baseTaxaValue,
-        baseAjudaValue,
-        isFeriado
-      );
-
       // Helper to calculate endTime
       const getTerminoTime = (startTime: string, duration: number): string => {
         try {
@@ -1390,7 +1443,37 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       const pickedProf = profissionais.find(p => p.nome === avulsoProf);
       
       // Criar agendamento individual para cada data selecionada
-      for (const curData of selectedDates) {
+      let activeParentId = '';
+      for (const curItem of selectedDates) {
+        const curData = curItem.date;
+        const curCycle = curItem.cycle || 1;
+
+        const is48h = chosenTipoEscalaStr.toLowerCase().includes('48h');
+        if (is48h) {
+          if (curCycle === 1) {
+            activeParentId = `pai-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+          }
+        } else {
+          activeParentId = '';
+        }
+
+        // Apply our dynamic business logic for 48h and Normal shifts
+        let dayTransporte = baseTransporte;
+        let dayAlimentacao = baseAlimentacao;
+
+        if (is48h && curCycle === 2) {
+          dayTransporte = 0; // O valor de transporte é rigorosamente ignorado/zerado no Dia 2
+        }
+
+        const dayAjudaCusto = dayTransporte + dayAlimentacao;
+
+        const { plantaoFinal, taxaAdmFinal, ajudaCusto: finalAjuda } = calculateShiftValues(
+          baseRepasseValue,
+          baseTaxaValue,
+          dayAjudaCusto,
+          isFeriado
+        );
+
         // Check for conflicts
         const conflict = agendamentos.find(p => p.data === curData && p.nomeProfissional === avulsoProf && p.status === 'Confirmado');
         if (conflict) {
@@ -1408,11 +1491,15 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
           valorPlantao: plantaoFinal,
           valorRepasse: plantaoFinal,
           ajudaCusto: finalAjuda,
+          valorTransporte: dayTransporte,
+          valorAlimentacao: dayAlimentacao,
           taxaAdm: taxaAdmFinal,
           status: 'Confirmado',
           observacao: avulsoObs || (avulsoCuringa ? 'CURINGA' : ''),
           tipoDia: avulsoTipoDia as 'Normal' | 'Feriado 20%' | 'Feriado 50%',
-          isCuringa: avulsoCuringa
+          isCuringa: avulsoCuringa,
+          ciclo: curCycle,
+          idAgendamentoPai: activeParentId || undefined
         });
       }
 
@@ -3078,14 +3165,34 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   </div>
 
                   <div className="space-y-1">
-                    <label className="block text-xs font-normal text-slate-700">Aj. de Custo (R$)</label>
+                    <label className="block text-xs font-normal text-slate-700">Valor Transporte (R$)</label>
                     <input
                       type="number"
                       disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
-                      value={ajudaCusto}
-                      onChange={(e) => setAjudaCusto(e.target.value === '' ? '' : Number(e.target.value))}
+                      value={valorTransporte}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? '' : Number(e.target.value);
+                        setValorTransporte(val);
+                        setAjudaCusto(Number(val || 0) + Number(valorAlimentacao || 0));
+                      }}
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed text-slate-600"
-                      placeholder="Ajuda de custo"
+                      placeholder="Valor transporte"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-xs font-normal text-slate-700">Valor Alimentação (R$)</label>
+                    <input
+                      type="number"
+                      disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
+                      value={valorAlimentacao}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? '' : Number(e.target.value);
+                        setValorAlimentacao(val);
+                        setAjudaCusto(Number(valorTransporte || 0) + Number(val || 0));
+                      }}
+                      className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed text-slate-600"
+                      placeholder="Valor alimentação (0 se a casa fornece)"
                     />
                   </div>
 
@@ -3154,12 +3261,31 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       </div>
 
                       <div className="space-y-1">
-                        <label className="block text-[10px] font-normal text-slate-600">Aj. de Custo (R$)</label>
+                        <label className="block text-[10px] font-normal text-slate-600">Transporte (R$)</label>
                         <input
                           type="number"
                           disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
-                          value={newSubAjudaCusto}
-                          onChange={(e) => setNewSubAjudaCusto(e.target.value === '' ? '' : Number(e.target.value))}
+                          value={newSubValorTransporte}
+                          onChange={(e) => {
+                            const val = e.target.value === '' ? '' : Number(e.target.value);
+                            setNewSubValorTransporte(val);
+                            setNewSubAjudaCusto(Number(val || 0) + Number(newSubValorAlimentacao || 0));
+                          }}
+                          className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-white font-normal"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="block text-[10px] font-normal text-slate-600">Alimentação (R$)</label>
+                        <input
+                          type="number"
+                          disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
+                          value={newSubValorAlimentacao}
+                          onChange={(e) => {
+                            const val = e.target.value === '' ? '' : Number(e.target.value);
+                            setNewSubValorAlimentacao(val);
+                            setNewSubAjudaCusto(Number(newSubValorTransporte || 0) + Number(val || 0));
+                          }}
                           className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-white font-normal"
                         />
                       </div>
@@ -3187,6 +3313,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                             setNewSubHoraInicio('07:00');
                             setNewSubValorPlantao(150);
                             setNewSubAjudaCusto(0);
+                            setNewSubValorTransporte(0);
+                            setNewSubValorAlimentacao(0);
                             setNewSubTaxaAdm(0);
                           }}
                           className="mr-2 px-3 py-1.5 text-xs font-semibold text-slate-750 bg-slate-100 hover:bg-slate-200 rounded-lg shadow-xs transition-colors cursor-pointer disabled:opacity-50"
@@ -3209,6 +3337,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                               horaInicio: newSubHoraInicio,
                               valorPlantao: Number(newSubValorPlantao || 0),
                               ajudaCusto: Number(newSubAjudaCusto || 0),
+                              valorTransporte: Number(newSubValorTransporte || 0),
+                              valorAlimentacao: Number(newSubValorAlimentacao || 0),
                               taxaAdm: Number(newSubTaxaAdm || 0)
                             } : t));
                             setEditingSubId(null);
@@ -3219,6 +3349,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                               horaInicio: newSubHoraInicio,
                               valorPlantao: Number(newSubValorPlantao || 0),
                               ajudaCusto: Number(newSubAjudaCusto || 0),
+                              valorTransporte: Number(newSubValorTransporte || 0),
+                              valorAlimentacao: Number(newSubValorAlimentacao || 0),
                               taxaAdm: Number(newSubTaxaAdm || 0),
                             };
                             setTiposPlantao([...tiposPlantao, newType]);
@@ -3226,6 +3358,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           // Reset inputs to default values
                           setNewSubValorPlantao(150);
                           setNewSubAjudaCusto(0);
+                          setNewSubValorTransporte(0);
+                          setNewSubValorAlimentacao(0);
                           setNewSubTaxaAdm(0);
                         }}
                         className="flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed rounded-lg shadow-xs transition-colors cursor-pointer"
@@ -3291,6 +3425,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                         setNewSubHoraInicio(tp.horaInicio);
                                         setNewSubValorPlantao(tp.valorPlantao);
                                         setNewSubAjudaCusto(tp.ajudaCusto);
+                                        setNewSubValorTransporte(tp.valorTransporte ?? tp.ajudaCusto ?? 0);
+                                        setNewSubValorAlimentacao(tp.valorAlimentacao ?? 0);
                                         setNewSubTaxaAdm(tp.taxaAdm);
                                       }}
                                       className="py-1 px-2.5 border border-blue-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-all font-semibold inline-flex items-center space-x-1 cursor-pointer text-xs"
@@ -3371,7 +3507,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       onClick={() => {
                         const today = new Date();
                         const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-                        setSelectedDates([todayStr]);
+                        setSelectedDates([{ date: todayStr, cycle: 1 }]);
                         setAvulsoProf('');
                         setAvulsoPlantaoOptionId('principal');
                         setAvulsoTipoDia('Normal');
@@ -4736,7 +4872,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     ))}
                     {Array.from({ length: new Date(agnCalendarYear, agnCalendarMonth + 1, 0).getDate() }, (_, i) => i + 1).map((dayNum) => {
                       const formattedDate = `${agnCalendarYear}-${String(agnCalendarMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
-                      const isSelected = selectedDates.includes(formattedDate);
+                      const isSelected = selectedDates.some(d => d.date === formattedDate);
                       const isToday = new Date().toDateString() === new Date(agnCalendarYear, agnCalendarMonth, dayNum).toDateString();
                       const isHoliday = feriados.some(f => f.date === formattedDate);
                       
@@ -4744,13 +4880,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         <button
                           key={`${agnCalendarMonth}-${agnCalendarYear}-${dayNum}`}
                           type="button"
-                          onClick={() => {
-                            if (isSelected) {
-                              setSelectedDates(selectedDates.filter(d => d !== formattedDate));
-                            } else {
-                              setSelectedDates([...selectedDates, formattedDate]);
-                            }
-                          }}
+                          onClick={() => handleDateClick(formattedDate)}
                           className={`h-8 w-8 text-xs font-semibold flex items-center justify-center transition-all cursor-pointer select-none mx-auto rounded-full
                             ${isSelected 
                               ? 'bg-green-700 text-white font-bold hover:bg-green-800 shadow-sm transform scale-105' 

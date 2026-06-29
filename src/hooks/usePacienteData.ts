@@ -8,6 +8,8 @@ export function usePacienteData(pacienteId: string | null | undefined) {
   const [horaInicioPadrao, setHoraInicioPadrao] = useState('07:00');
   const [valorSugeridoPlantao, setValorSugeridoPlantao] = useState<number | ''>(150);
   const [ajudaCusto, setAjudaCusto] = useState<number | ''>(0);
+  const [valorTransporte, setValorTransporte] = useState<number | ''>(0);
+  const [valorAlimentacao, setValorAlimentacao] = useState<number | ''>(0);
   const [taxaAdm, setTaxaAdm] = useState<number | ''>(0);
   const [tiposPlantao, setTiposPlantao] = useState<EscalacaoPlano[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -24,6 +26,8 @@ export function usePacienteData(pacienteId: string | null | undefined) {
           setHoraInicioPadrao(found.planoAtendimento.horaInicioPadrao || '07:00');
           setValorSugeridoPlantao(found.planoAtendimento.valorSugeridoPlantao ?? 150);
           setAjudaCusto(found.planoAtendimento.ajudaCusto ?? 0);
+          setValorTransporte(found.planoAtendimento.valorTransporte ?? found.planoAtendimento.ajudaCusto ?? 0);
+          setValorAlimentacao(found.planoAtendimento.valorAlimentacao ?? 0);
           setTaxaAdm(found.planoAtendimento.taxaAdm ?? 0);
           setTiposPlantao(found.planoAtendimento.tiposPlantao || []);
         }
@@ -70,8 +74,8 @@ export function usePacienteData(pacienteId: string | null | undefined) {
       return;
     }
 
-    if (valorSugeridoPlantao === '' || ajudaCusto === '' || taxaAdm === '') {
-      alert('Erro de Validação: Os campos "Valor do Plantão", "Ajuda de Custo" e "Taxa Adm" não podem ficar vazios/em branco.');
+    if (valorSugeridoPlantao === '' || valorTransporte === '' || valorAlimentacao === '' || taxaAdm === '') {
+      alert('Erro de Validação: Os campos "Valor do Plantão", "Transporte", "Alimentação" e "Taxa Adm" não podem ficar vazios/em branco.');
       return;
     }
 
@@ -81,7 +85,9 @@ export function usePacienteData(pacienteId: string | null | undefined) {
           tipoEscala,
           horaInicioPadrao,
           valorSugeridoPlantao: Number(valorSugeridoPlantao),
-          ajudaCusto: Number(ajudaCusto),
+          ajudaCusto: Number(valorTransporte || 0) + Number(valorAlimentacao || 0),
+          valorTransporte: Number(valorTransporte),
+          valorAlimentacao: Number(valorAlimentacao),
           taxaAdm: Number(taxaAdm),
           tiposPlantao,
         }
@@ -103,6 +109,10 @@ export function usePacienteData(pacienteId: string | null | undefined) {
     setValorSugeridoPlantao,
     ajudaCusto,
     setAjudaCusto,
+    valorTransporte,
+    setValorTransporte,
+    valorAlimentacao,
+    setValorAlimentacao,
     taxaAdm,
     setTaxaAdm,
     tiposPlantao,

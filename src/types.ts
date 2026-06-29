@@ -115,6 +115,8 @@ export interface EscalacaoPlano {
   valorPlantao: number | "";
   ajudaCusto: number | "";
   taxaAdm: number | "";
+  valorTransporte?: number | "";
+  valorAlimentacao?: number | "";
 }
 
 export interface PlanoAtendimento {
@@ -123,6 +125,8 @@ export interface PlanoAtendimento {
   valorSugeridoPlantao: number | "";
   ajudaCusto?: number | "";
   taxaAdm?: number | "";
+  valorTransporte?: number | "";
+  valorAlimentacao?: number | "";
   tiposPlantao?: EscalacaoPlano[];
   convenio?: string;
   matricula?: string;
@@ -214,6 +218,10 @@ export interface Agendamento {
   considerarFalta?: boolean;
   motivoFalta?: string;
   atendimentoRealizado?: string;
+  ciclo?: number;
+  idAgendamentoPai?: string;
+  valorTransporte?: number;
+  valorAlimentacao?: number;
 }
 
 export type CancelingReason =
