@@ -314,7 +314,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   }, [editShiftDate]);
 
   // Multi-date selection state for Novo Agendamento
-  const [datasSelecionadas, setDatasSelecionadas] = useState<string[]>([]);
+  const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [tempDate, setTempDate] = useState("");
   const [agnCalendarYear, setAgnCalendarYear] = useState(new Date().getFullYear());
   const [agnCalendarMonth, setAgnCalendarMonth] = useState(new Date().getMonth());
@@ -1307,7 +1307,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
   const handleSalvarAgendamento = async () => {
     if (!paciente) return false;
-    if (datasSelecionadas.length === 0) {
+    if (selectedDates.length === 0) {
       alert('Selecione ao menos uma data para o agendamento.');
       return false;
     }
@@ -1390,7 +1390,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       const pickedProf = profissionais.find(p => p.nome === avulsoProf);
       
       // Criar agendamento individual para cada data selecionada
-      for (const curData of datasSelecionadas) {
+      for (const curData of selectedDates) {
         // Check for conflicts
         const conflict = agendamentos.find(p => p.data === curData && p.nomeProfissional === avulsoProf && p.status === 'Confirmado');
         if (conflict) {
@@ -1416,13 +1416,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         });
       }
 
-      const totalQuantity = datasSelecionadas.length;
+      const totalQuantity = selectedDates.length;
       setAvulsoProf('');
       setAvulsoPlantaoOptionId('principal');
       setAvulsoTipoDia('Normal');
       setAvulsoObs('');
       setAvulsoCuringa(false);
-      setDatasSelecionadas([]);
+      setSelectedDates([]);
       setAvulsoModalOpen(false);
       alert(totalQuantity > 1 ? `${totalQuantity} plantões agendados em lote com sucesso!` : 'Novo agendamento criado com sucesso!');
       return true;
@@ -3371,7 +3371,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       onClick={() => {
                         const today = new Date();
                         const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-                        setDatasSelecionadas([todayStr]);
+                        setSelectedDates([todayStr]);
                         setAvulsoProf('');
                         setAvulsoPlantaoOptionId('principal');
                         setAvulsoTipoDia('Normal');
@@ -4736,7 +4736,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     ))}
                     {Array.from({ length: new Date(agnCalendarYear, agnCalendarMonth + 1, 0).getDate() }, (_, i) => i + 1).map((dayNum) => {
                       const formattedDate = `${agnCalendarYear}-${String(agnCalendarMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
-                      const isSelected = datasSelecionadas.includes(formattedDate);
+                      const isSelected = selectedDates.includes(formattedDate);
                       const isToday = new Date().toDateString() === new Date(agnCalendarYear, agnCalendarMonth, dayNum).toDateString();
                       const isHoliday = feriados.some(f => f.date === formattedDate);
                       
@@ -4746,19 +4746,19 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           type="button"
                           onClick={() => {
                             if (isSelected) {
-                              setDatasSelecionadas(datasSelecionadas.filter(d => d !== formattedDate));
+                              setSelectedDates(selectedDates.filter(d => d !== formattedDate));
                             } else {
-                              setDatasSelecionadas([...datasSelecionadas, formattedDate]);
+                              setSelectedDates([...selectedDates, formattedDate]);
                             }
                           }}
                           className={`h-8 w-8 text-xs font-semibold flex items-center justify-center transition-all cursor-pointer select-none mx-auto rounded-full
                             ${isSelected 
-                              ? 'bg-[#1a3c2e] text-white font-bold hover:bg-[#1a3c2e]/90 shadow-sm transform scale-105' 
+                              ? 'bg-green-700 text-white font-bold hover:bg-green-800 shadow-sm transform scale-105' 
                               : isHoliday
                                 ? 'bg-rose-100 text-rose-900 border border-rose-200 hover:bg-rose-200'
                                 : isToday
                                   ? 'bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100/50'
-                                  : 'text-gray-700 hover:bg-gray-150/50 hover:text-gray-900'
+                                  : 'bg-white hover:bg-gray-100 text-gray-700'
                             }`}
                         >
                           {dayNum}
@@ -4766,53 +4766,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       );
                     })}
                   </div>
-                </div>
-
-                {/* Tags / Chips das Datas Selecionadas */}
-                <div className="space-y-1.5 mt-2">
-                  <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500">
-                    <span>Dias selecionados ({datasSelecionadas.length}):</span>
-                    {datasSelecionadas.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setDatasSelecionadas([])}
-                        className="text-red-600 hover:underline font-bold text-xs"
-                      >
-                        Limpar todos ×
-                      </button>
-                    )}
-                  </div>
-                  {datasSelecionadas.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5 p-2.5 bg-gray-50 border border-gray-150 rounded-lg max-h-32 overflow-y-auto">
-                      {datasSelecionadas
-                        .slice()
-                        .sort()
-                        .map((dt) => {
-                          const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-                          const dObj = new Date(dt + 'T12:00:00');
-                          const dW = days[dObj.getDay()] || 'Sex';
-                          return (
-                            <div
-                              key={dt}
-                              className="inline-flex items-center space-x-1.5 px-2 py-0.5 bg-blue-50 border border-blue-100 rounded text-[11px] text-blue-800 font-medium"
-                            >
-                              <span>{dW}</span>
-                              <span className="text-blue-300 font-light text-[9px]">•</span>
-                              <span>{dt.split('-').reverse().join('/')}</span>
-                              <button
-                                type="button"
-                                onClick={() => setDatasSelecionadas(datasSelecionadas.filter((x) => x !== dt))}
-                                className="text-red-500 hover:text-red-700 font-bold text-xs ml-1 focus:outline-none cursor-pointer"
-                              >
-                                ×
-                              </button>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  ) : (
-                    <p className="text-[10px] text-slate-400 italic">Selecione as datas diretamente no calendário acima.</p>
-                  )}
                 </div>
               </div>
 
@@ -4887,13 +4840,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       <span>R$ {(computedRepasse + computedAjuda).toFixed(2)}</span>
                     </div>
                   )}
-                  {datasSelecionadas.length > 1 && (
+                  {selectedDates.length > 1 && (
                     <div className="col-span-2 border-t border-dashed border-indigo-100 pt-2 flex justify-between font-extrabold text-[#1a3c2e]">
-                      <span>Total do Lote ({datasSelecionadas.length}x):</span>
+                      <span>Total do Lote ({selectedDates.length}x):</span>
                       <span>
                         R$ {userRole?.toLowerCase() === 'administrador'
-                          ? ((computedRepasse + computedTaxa + computedAjuda) * datasSelecionadas.length).toFixed(2)
-                          : ((computedRepasse + computedAjuda) * datasSelecionadas.length).toFixed(2)
+                          ? ((computedRepasse + computedTaxa + computedAjuda) * selectedDates.length).toFixed(2)
+                          : ((computedRepasse + computedAjuda) * selectedDates.length).toFixed(2)
                         }
                       </span>
                     </div>
