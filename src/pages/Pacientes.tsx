@@ -24,7 +24,14 @@ export const Pacientes: React.FC<PacientesProps> = ({
 }) => {
   const [selectedPaciente, setSelectedPaciente] = useState<any>(null);
   const [isNewPatient, setIsNewPatient] = useState<boolean>(false);
-  const { pacientes, deletePaciente, deactivatePaciente } = useFirebase();
+  const [isLoading, setIsLoading] = useState(true);
+  const { pacientes, deletePaciente, deactivatePaciente, loading } = useFirebase();
+
+  useEffect(() => {
+    if (!loading) {
+      setIsLoading(false);
+    }
+  }, [loading]);
 
   useEffect(() => {
     if (initialSelectedPatient) {
@@ -87,6 +94,7 @@ export const Pacientes: React.FC<PacientesProps> = ({
       onDeletePatient={(id) => deletePaciente(id)}
       onDeactivatePatient={(id, motivo) => deactivatePaciente(id, motivo)}
       globalSearchQuery={globalSearchQuery || ''}
+      isLoading={isLoading}
     />
   );
 };

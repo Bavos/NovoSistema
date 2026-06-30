@@ -12,6 +12,7 @@ import { mascaraCPF, mascaraCNPJ, mascaraTelefone, mascaraCEP, validarCPF } from
 import { fetchCep, fetchBanks } from '../lib/brasilApi';
 import { toast } from 'react-hot-toast';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { CardSkeleton } from '../components/ui/CardSkeleton';
 
 interface ProfissionaisProps {
   initialSelectedProfId?: string;
@@ -22,7 +23,15 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
   initialSelectedProfId,
   clearInitialSelectedProfId
 }) => {
-  const { profissionais, pacientes, addProfissional, updateProfissional, deleteProfissional, uploadLogo, uploadProfissionalFoto, uploadPdf, userRole } = useFirebase();
+  const { profissionais, pacientes, addProfissional, updateProfissional, deleteProfissional, uploadLogo, uploadProfissionalFoto, uploadPdf, userRole, loading: firebaseLoading } = useFirebase();
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!firebaseLoading) {
+      setIsLoading(false);
+    }
+  }, [firebaseLoading]);
+
   const [selectedProfId, setSelectedProfId] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -1836,69 +1845,11 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
 
       {/* Unified Cards list for all screen sizes */}
       <div className="space-y-3 print:hidden" id="professionals-cards-container">
-        {filteredAndSortedProfissionais.map((prof, index) => {
-          const cleanPhone = (prof.telefone || '').trim();
-
-          return (
-            <div
-              key={`prof-card-${prof.id || index}`}
-              className="bg-white p-4 rounded-xl shadow-xs border border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:shadow-sm hover:border-gray-200 transition-all animate-in fade-in-50"
-            >
-              {/* Left Section: Info */}
-              <div className="min-w-0 flex-1 space-y-2">
-                {/* Name & Status Badge */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleNavigateToProfile(prof.id)}
-                    className="font-bold text-slate-800 text-base hover:text-emerald-600 transition-colors cursor-pointer text-left focus:outline-none"
-                  >
-                    {prof.nome}
-                  </button>
-                  <SoftBadge variant={prof.status === 'Ativo' ? 'green' : 'red'}>
-                    {prof.status || 'Inativo'}
-                  </SoftBadge>
-                </div>
-
-                {/* Subinfo Row: Phone and Specialty horizontally aligned */}
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500 font-medium">
-                  {prof.especialidade ? (
-                    <span className="flex items-center gap-1 bg-indigo-50 text-indigo-700 border border-indigo-150 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider">
-                      {prof.especialidade}
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1 bg-slate-50 text-slate-500 border border-slate-200 px-2 py-0.5 rounded-md text-[10px] font-semibold italic">
-                      Geral
-                    </span>
-                  )}
-                  {cleanPhone && (
-                    <span className="flex items-center gap-1 bg-slate-50 text-slate-600 px-2 py-0.5 rounded border border-slate-200">
-                      <strong>Telefone:</strong> {cleanPhone}
-                    </span>
-                  )}
-                  {prof.cpf && (
-                    <span className="text-slate-500 font-mono">
-                      <strong>CPF:</strong> {prof.cpf}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Right Section: Ghost Circular button with Pencil/Edit icon */}
-              <div className="flex items-center justify-end flex-shrink-0">
-                <button
-                  type="button"
-                  onClick={() => handleOpenModal(prof, 'dados')}
-                  className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-full transition-all cursor-pointer border border-transparent hover:border-emerald-100 flex items-center justify-center"
-                  title="Editar Profissional"
-                >
-                  <Edit2 size={16} />
-                </button>
-              </div>
-            </div>
-          );
-        })}
-        {filteredAndSortedProfissionais.length === 0 && (
+        {isLoading ? (
+          Array.from({ length: 5 }).map((_, i) => (
+            <CardSkeleton key={`prof-skeleton-${i}`} />
+          ))
+        ) : filteredAndSortedProfissionais.length === 0 ? (
           <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400 shadow-sm">
             <div className="flex flex-col items-center justify-center space-y-2">
               <AlertCircle size={28} className="text-slate-300 animate-bounce" />
@@ -1906,6 +1857,69 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
               <p className="text-xs text-slate-400">Tente buscar por outro termo ou desmarque os filtros.</p>
             </div>
           </div>
+        ) : (
+          filteredAndSortedProfissionais.map((prof, index) => {
+            const cleanPhone = (prof.telefone || '').trim();
+
+            return (
+              <div
+                key={`prof-card-${prof.id || index}`}
+                className="bg-white p-4 rounded-xl shadow-xs border border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:shadow-sm hover:border-gray-200 transition-all animate-in fade-in-50"
+              >
+                {/* Left Section: Info */}
+                <div className="min-w-0 flex-1 space-y-2">
+                  {/* Name & Status Badge */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleNavigateToProfile(prof.id)}
+                      className="font-bold text-slate-800 text-base hover:text-emerald-600 transition-colors cursor-pointer text-left focus:outline-none"
+                    >
+                      {prof.nome}
+                    </button>
+                    <SoftBadge variant={prof.status === 'Ativo' ? 'green' : 'red'}>
+                      {prof.status || 'Inativo'}
+                    </SoftBadge>
+                  </div>
+
+                  {/* Subinfo Row: Phone and Specialty horizontally aligned */}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500 font-medium">
+                    {prof.especialidade ? (
+                      <span className="flex items-center gap-1 bg-indigo-50 text-indigo-700 border border-indigo-150 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider">
+                        {prof.especialidade}
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 bg-slate-50 text-slate-500 border border-slate-200 px-2 py-0.5 rounded-md text-[10px] font-semibold italic">
+                        Geral
+                      </span>
+                    )}
+                    {cleanPhone && (
+                      <span className="flex items-center gap-1 bg-slate-50 text-slate-600 px-2 py-0.5 rounded border border-slate-200">
+                        <strong>Telefone:</strong> {cleanPhone}
+                      </span>
+                    )}
+                    {prof.cpf && (
+                      <span className="text-slate-500 font-mono">
+                        <strong>CPF:</strong> {prof.cpf}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Section: Ghost Circular button with Pencil/Edit icon */}
+                <div className="flex items-center justify-end flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenModal(prof, 'dados')}
+                    className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-full transition-all cursor-pointer border border-transparent hover:border-emerald-100 flex items-center justify-center"
+                    title="Editar Profissional"
+                  >
+                    <Edit2 size={16} />
+                  </button>
+                </div>
+              </div>
+            );
+          })
         )}
       </div>
 

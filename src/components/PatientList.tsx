@@ -9,6 +9,7 @@ import { Edit, Trash, Plus, Filter, Check, EyeOff, ShieldCheck, AlertCircle, Sea
 import { toast } from 'react-hot-toast';
 import { useFirebase } from '../context/FirebaseContext';
 import { ConfirmModal } from './ConfirmModal';
+import { CardSkeleton } from './ui/CardSkeleton';
 
 interface PatientListProps {
   pacientes: Paciente[];
@@ -17,6 +18,7 @@ interface PatientListProps {
   onDeletePatient: (id: string) => void;
   onDeactivatePatient: (id: string, motivo: string) => void;
   globalSearchQuery: string;
+  isLoading?: boolean;
 }
 
 export const PatientList: React.FC<PatientListProps> = ({
@@ -26,6 +28,7 @@ export const PatientList: React.FC<PatientListProps> = ({
   onDeletePatient,
   onDeactivatePatient,
   globalSearchQuery,
+  isLoading,
 }) => {
   const { userRole } = useFirebase();
   const isColaborador = userRole?.toLowerCase() === 'colaborador';
@@ -283,7 +286,11 @@ export const PatientList: React.FC<PatientListProps> = ({
 
       {/* Cards List Container */}
       <div className="space-y-3" id="patients-cards-container">
-        {filteredPacientes.length === 0 ? (
+        {isLoading ? (
+          Array.from({ length: 5 }).map((_, i) => (
+            <CardSkeleton key={`patient-skeleton-${i}`} />
+          ))
+        ) : filteredPacientes.length === 0 ? (
           <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400">
             <div className="flex flex-col items-center justify-center space-y-2">
               <AlertCircle size={28} className="text-slate-300 animate-bounce" />
