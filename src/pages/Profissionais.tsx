@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import html2canvas from 'html2canvas';
 import { useFirebase } from '../context/FirebaseContext';
 import { Profissional, Agendamento, DocumentoAnexo, Ocorrencia } from '../types';
-import { Plus, Edit2, Trash2, X, Check, CalendarDays, Paperclip, AlertCircle, Printer, Download, FileImage, Search, Clock, User, Calendar, Receipt, Phone, Copy } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Check, CalendarDays, Paperclip, AlertCircle, Printer, Download, FileImage, Search, Clock, User, Calendar, Receipt, Copy, Save } from 'lucide-react';
 import { CardBase, DataGrid, DataField, SoftBadge } from '../components/ui/DesignSystem';
 import { db, storage } from '../lib/firebase';
 import { collection, query, where, orderBy, onSnapshot, doc, getDoc, updateDoc, addDoc, deleteDoc, getDocs } from 'firebase/firestore';
@@ -24,6 +24,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
 }) => {
   const { profissionais, pacientes, addProfissional, updateProfissional, deleteProfissional, uploadLogo, uploadProfissionalFoto, uploadPdf, userRole } = useFirebase();
   const [selectedProfId, setSelectedProfId] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -804,11 +805,11 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
       // Adjust column styles
       worksheet.columns.forEach(column => {
         let maxLen = 12;
-        column.eachCell({ includeEmpty: true }, cell => {
+        column?.eachCell?.({ includeEmpty: true }, cell => {
           const valStr = cell.value ? String(cell.value) : '';
           if (valStr.length > maxLen) maxLen = valStr.length;
         });
-        column.width = Math.min(maxLen + 4, 60); // limit max width so it fits
+        if (column) column.width = Math.min(maxLen + 4, 60); // limit max width so it fits
       });
 
       const buffer = await workbook.xlsx.writeBuffer();
@@ -1733,172 +1734,177 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
     );
   };
 
-  const filteredAndSortedProfissionais = (profissionais || [])
-    .filter(prof => {
-      if (!selectedProfId) {
-        return true;
-      }
-      return prof.id === selectedProfId;
-    })
-    .sort((a, b) => {
-      const statusA = a.status === 'Ativo' ? 0 : 1;
-      const statusB = b.status === 'Ativo' ? 0 : 1;
-      if (statusA !== statusB) {
-        return statusA - statusB;
-      }
-      const nameA = (a.nome || '').toLowerCase();
-      const nameB = (b.nome || '').toLowerCase();
-      return nameA.localeCompare(nameB, 'pt-BR');
-    });
+  const filteredAndSortedProfissionais = useMemo(() => {
+    const query = searchTerm.toLowerCase().trim();
+    const cleanQuery = query.replace(/\D/g, '');
+
+    return (profissionais || [])
+      .filter(prof => {
+        // filter by selected dropdown
+        if (selectedProfId && prof.id !== selectedProfId) {
+          return false;
+        }
+
+        const cleanCpf = (prof.cpf || '').replace(/\D/g, '');
+        const cleanPhone = (prof.telefone || '').replace(/\D/g, '');
+
+        const matchSearch = !query ||
+          (prof.nome || '').toLowerCase().includes(query) ||
+          (prof.cpf || '').toLowerCase().includes(query) ||
+          (prof.telefone || '').toLowerCase().includes(query) ||
+          (prof.especialidade || '').toLowerCase().includes(query) ||
+          (cleanQuery && cleanCpf.includes(cleanQuery)) ||
+          (cleanQuery && cleanPhone.includes(cleanQuery));
+
+        return matchSearch;
+      })
+      .sort((a, b) => {
+        const statusA = a.status === 'Ativo' ? 0 : 1;
+        const statusB = b.status === 'Ativo' ? 0 : 1;
+        if (statusA !== statusB) {
+          return statusA - statusB;
+        }
+        const nameA = (a.nome || '').toLowerCase();
+        const nameB = (b.nome || '').toLowerCase();
+        return nameA.localeCompare(nameB, 'pt-BR');
+      });
+  }, [profissionais, selectedProfId, searchTerm]);
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col sm:flex-row items-center justify-between bg-white p-4 rounded-xl border border-slate-200 print:hidden gap-4">
-        {/* Lado Esquerdo: Dropdown de seleção */}
-        <div className="relative w-full max-w-md">
-          <select
-            value={selectedProfId}
-            onChange={e => setSelectedProfId(e.target.value)}
-            className="w-full px-4 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1a3c2e] outline-none"
-          >
-            <option value="">Todos os profissionais (Ativos e Inativos)</option>
-            {(profissionais || []).sort((a, b) => {
-              const statusA = a.status === 'Ativo' ? 0 : 1;
-              const statusB = b.status === 'Ativo' ? 0 : 1;
-              if (statusA !== statusB) {
-                return statusA - statusB;
-              }
-              const nameA = (a.nome || '').toLowerCase();
-              const nameB = (b.nome || '').toLowerCase();
-              return nameA.localeCompare(nameB, 'pt-BR');
-            }).map(prof => (
-              <option key={prof.id} value={prof.id}>{prof.nome} - {prof.cpf || 'Sem CPF'} {prof.status === 'Inativo' ? '(Inativo)' : ''}</option>
-            ))}
-          </select>
+      {/* Search and filter block */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm print:hidden">
+        <div className="flex flex-wrap items-center gap-3 flex-1 w-full">
+          {/* Universal Search Field */}
+          <div className="relative max-w-xs w-full">
+            <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
+            <input
+              type="text"
+              placeholder="Buscar por nome, CPF ou telefone..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-700 bg-slate-50 focus:outline-none focus:border-emerald-500 focus:bg-white transition-all shadow-inner"
+            />
+          </div>
+
+          {/* Status/Professional Selector dropdown */}
+          <div className="relative max-w-xs w-full">
+            <select
+              value={selectedProfId}
+              onChange={e => setSelectedProfId(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-700 font-medium focus:outline-none focus:border-emerald-500 focus:bg-white transition-all shadow-inner cursor-pointer"
+            >
+              <option value="">Todos os profissionais (Ativos e Inativos)</option>
+              {(profissionais || []).sort((a, b) => {
+                const statusA = a.status === 'Ativo' ? 0 : 1;
+                const statusB = b.status === 'Ativo' ? 0 : 1;
+                if (statusA !== statusB) {
+                  return statusA - statusB;
+                }
+                const nameA = (a.nome || '').toLowerCase();
+                const nameB = (b.nome || '').toLowerCase();
+                return nameA.localeCompare(nameB, 'pt-BR');
+              }).map(prof => (
+                <option key={prof.id} value={prof.id}>
+                  {prof.nome} - {prof.cpf || 'Sem CPF'} {prof.status === 'Inativo' ? '(Inativo)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {(selectedProfId || searchTerm) && (
+            <button
+              onClick={() => {
+                setSearchTerm('');
+                setSelectedProfId('');
+              }}
+              className="text-xs text-slate-400 hover:text-emerald-600 underline font-semibold cursor-pointer"
+            >
+              Resetar Filtros
+            </button>
+          )}
         </div>
 
-        {/* Lado Direito: Botão para incluir */}
+        {/* Primary action */}
         <button
           onClick={() => handleOpenModal()}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 flex items-center gap-2 cursor-pointer shadow-sm w-full sm:w-auto justify-center"
+          className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-md text-xs font-semibold flex items-center gap-2 cursor-pointer shadow-sm w-full sm:w-auto justify-center transition-colors"
         >
           <Plus size={14} /> Novo Profissional
         </button>
       </div>
 
-      <div className="bg-white border border-gray-100 rounded-xl overflow-hidden shadow-sm print:hidden hidden md:block">
-        <table className="w-full text-sm hidden md:table">
-          <thead className="bg-[#fbfaf8] border-b border-gray-100 text-gray-400 text-xs uppercase tracking-wider font-semibold">
-            <tr>
-              <th className="py-3.5 px-4 text-left font-semibold text-gray-500 text-xs">Nome</th>
-              <th className="py-3.5 px-4 text-left font-semibold text-gray-500 text-xs">Especialidade</th>
-              <th className="py-3.5 px-4 text-left font-semibold text-gray-500 text-xs">Telefone</th>
-              <th className="py-3.5 px-4 text-center font-semibold text-gray-500 text-xs">Status</th>
-              <th className="py-3.5 px-4 text-center font-semibold text-gray-500 text-xs">Ações</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50 text-gray-700 text-sm">
-            {filteredAndSortedProfissionais.map((prof, index) => (
-              <tr 
-                key={`prof.id.tr.${prof.id || index}-${index}`} 
-                className={`transition-colors duration-150 hover:bg-gray-50/80 ${prof.status !== 'Ativo' ? 'bg-rose-50/30 text-slate-700' : index % 2 === 0 ? 'bg-white' : 'bg-[#faf9f6]/40'}`}
-              >
-                <td className="py-3.5 px-4 text-left">
+      {/* Unified Cards list for all screen sizes */}
+      <div className="space-y-3 print:hidden" id="professionals-cards-container">
+        {filteredAndSortedProfissionais.map((prof, index) => {
+          const cleanPhone = (prof.telefone || '').trim();
+
+          return (
+            <div
+              key={`prof-card-${prof.id || index}`}
+              className="bg-white p-4 rounded-xl shadow-xs border border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:shadow-sm hover:border-gray-200 transition-all animate-in fade-in-50"
+            >
+              {/* Left Section: Info */}
+              <div className="min-w-0 flex-1 space-y-2">
+                {/* Name & Status Badge */}
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={() => handleNavigateToProfile(prof.id)}
-                    className="font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer text-left transition-colors focus:outline-none text-sm"
+                    className="font-bold text-slate-800 text-base hover:text-emerald-600 transition-colors cursor-pointer text-left focus:outline-none"
                   >
                     {prof.nome}
                   </button>
-                </td>
-                <td className="py-3.5 px-4 text-left text-xs font-normal">
-                  {prof.especialidade ? (
-                    <SoftBadge variant="indigo">{prof.especialidade}</SoftBadge>
-                  ) : (
-                    <span className="text-gray-300 italic">Geral</span>
-                  )}
-                </td>
-                <td className="py-3.5 px-4 text-slate-500 text-left text-xs font-normal font-mono">{prof.telefone}</td>
-                <td className="py-3.5 px-4 text-center">
-                    <SoftBadge variant={prof.status === 'Ativo' ? 'green' : 'red'}>
-                        {prof.status || 'Inativo'}
-                    </SoftBadge>
-                </td>
-                 <td className="py-3.5 px-4">
-                  <div className="flex gap-2 justify-center items-center">
-                    <button 
-                      onClick={() => handleOpenModal(prof, 'dados')} 
-                      className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50/50 transition-all p-1.5 rounded-lg border border-transparent hover:border-indigo-100 cursor-pointer" 
-                      title="Editar"
-                    >
-                      <Edit2 size={13} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {filteredAndSortedProfissionais.length === 0 && (
-              <tr>
-                <td colSpan={5} className="py-8 px-4 text-center text-slate-400 text-sm font-normal">
-                  Nenhum profissional encontrado.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                  <SoftBadge variant={prof.status === 'Ativo' ? 'green' : 'red'}>
+                    {prof.status || 'Inativo'}
+                  </SoftBadge>
+                </div>
 
-      {/* Visualização em Cards para Celular */}
-      <div className="block md:hidden print:hidden space-y-3 px-4">
-        {filteredAndSortedProfissionais.map((prof, index) => (
-          <div 
-            key={`prof.id.card.${prof.id || index}-${index}`}
-            onClick={() => handleNavigateToProfile(prof.id)}
-            className={`relative bg-white rounded-xl border border-gray-100 p-4 shadow-sm transition-colors cursor-pointer hover:bg-gray-50/80 active:bg-gray-100 ${prof.status !== 'Ativo' ? 'bg-rose-50/30 text-slate-700' : ''}`}
-          >
-            {/* Bloco de Informações - Distribuição vertical com gap-2 */}
-            <div className="flex flex-col gap-2">
-              {/* Nome e Badge de Status Alinhados Lado a Lado */}
-              <div className="flex items-center flex-wrap gap-2 pr-10">
-                <h4 className="text-base font-semibold text-gray-900 leading-tight break-words">{prof.nome}</h4>
-                <SoftBadge variant={prof.status === 'Ativo' ? 'green' : 'red'}>
-                  {prof.status || 'Inativo'}
-                </SoftBadge>
+                {/* Subinfo Row: Phone and Specialty horizontally aligned */}
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500 font-medium">
+                  {prof.especialidade ? (
+                    <span className="flex items-center gap-1 bg-indigo-50 text-indigo-700 border border-indigo-150 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider">
+                      {prof.especialidade}
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 bg-slate-50 text-slate-500 border border-slate-200 px-2 py-0.5 rounded-md text-[10px] font-semibold italic">
+                      Geral
+                    </span>
+                  )}
+                  {cleanPhone && (
+                    <span className="flex items-center gap-1 bg-slate-50 text-slate-600 px-2 py-0.5 rounded border border-slate-200">
+                      <strong>Telefone:</strong> {cleanPhone}
+                    </span>
+                  )}
+                  {prof.cpf && (
+                    <span className="text-slate-500 font-mono">
+                      <strong>CPF:</strong> {prof.cpf}
+                    </span>
+                  )}
+                </div>
               </div>
-              
-              {/* Especialidade e Telefone com Ícone Discreto */}
-              <div className="flex flex-wrap items-center gap-2">
-                {prof.especialidade ? (
-                  <SoftBadge variant="indigo">{prof.especialidade}</SoftBadge>
-                ) : (
-                  <span className="text-gray-300 italic text-xs">Geral</span>
-                )}
-                {prof.telefone && (
-                  <div className="text-xs text-slate-500 font-normal font-mono flex items-center gap-1">
-                    <Phone size={12} className="text-slate-400 flex-shrink-0" />
-                    <span>{prof.telefone}</span>
-                  </div>
-                )}
+
+              {/* Right Section: Ghost Circular button with Pencil/Edit icon */}
+              <div className="flex items-center justify-end flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleOpenModal(prof, 'dados')}
+                  className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-full transition-all cursor-pointer border border-transparent hover:border-emerald-100 flex items-center justify-center"
+                  title="Editar Profissional"
+                >
+                  <Edit2 size={16} />
+                </button>
               </div>
             </div>
-
-            {/* Botão de Editar no Topo Direito (absolute) */}
-            <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                handleOpenModal(prof, 'dados');
-              }} 
-              className="absolute top-4 right-4 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 active:bg-indigo-100/80 p-2 rounded-lg border border-indigo-100 bg-indigo-50/20 transition-all cursor-pointer flex items-center justify-center shadow-xs" 
-              title="Editar"
-            >
-              <Edit2 size={14} />
-            </button>
-          </div>
-        ))}
+          );
+        })}
         {filteredAndSortedProfissionais.length === 0 && (
-          <div className="bg-white rounded-xl border border-gray-100 p-8 text-center text-slate-400 text-sm font-normal shadow-sm">
-            Nenhum profissional encontrado.
+          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400 shadow-sm">
+            <div className="flex flex-col items-center justify-center space-y-2">
+              <AlertCircle size={28} className="text-slate-300 animate-bounce" />
+              <p className="font-medium text-slate-500">Nenhum profissional localizado</p>
+              <p className="text-xs text-slate-400">Tente buscar por outro termo ou desmarque os filtros.</p>
+            </div>
           </div>
         )}
       </div>
@@ -1939,14 +1945,14 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
               </div>
             </div>
             
-            <nav className="flex overflow-x-auto whitespace-nowrap gap-2 pb-2 w-full no-scrollbar md:overflow-x-visible md:flex-wrap">
+            <nav className="border-b border-gray-200 flex overflow-x-auto whitespace-nowrap gap-6 pb-0 w-full no-scrollbar md:flex-wrap">
               <button
                 type="button"
                 onClick={() => setActiveTab('dados')}
-                className={`shrink-0 flex items-center space-x-1.5 px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                className={`shrink-0 flex items-center space-x-1.5 pb-2.5 px-1 text-xs font-semibold whitespace-nowrap transition-all border-b-2 ${
                   activeTab === 'dados'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-gray-600 hover:bg-gray-100'
+                    ? 'border-emerald-500 text-emerald-600 font-bold bg-transparent'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 bg-transparent'
                 }`}
               >
                 Dados Pessoais
@@ -1956,35 +1962,35 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                   <button
                     type="button"
                     onClick={() => setActiveTab('agenda')}
-                    className={`shrink-0 flex items-center space-x-1.5 px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                    className={`shrink-0 flex items-center space-x-1.5 pb-2.5 px-1 text-xs font-semibold whitespace-nowrap transition-all border-b-2 ${
                       activeTab === 'agenda'
-                        ? 'bg-blue-600 text-white shadow-sm'
-                        : 'text-gray-600 hover:bg-gray-100'
+                        ? 'border-emerald-500 text-emerald-600 font-bold bg-transparent'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 bg-transparent'
                     }`}
                   >
-                    <CalendarDays size={13} /> Agenda
+                    <CalendarDays size={13} /> <span>Agenda</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setActiveTab('cracha')}
-                    className={`shrink-0 flex items-center space-x-1.5 px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                    className={`shrink-0 flex items-center space-x-1.5 pb-2.5 px-1 text-xs font-semibold whitespace-nowrap transition-all border-b-2 ${
                       activeTab === 'cracha'
-                        ? 'bg-blue-600 text-white shadow-sm'
-                        : 'text-gray-600 hover:bg-gray-100'
+                        ? 'border-emerald-500 text-emerald-600 font-bold bg-transparent'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 bg-transparent'
                     }`}
                   >
-                    Crachá
+                    <span>Crachá</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setActiveTab('ocorrencias')}
-                    className={`shrink-0 flex items-center space-x-1.5 px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                    className={`shrink-0 flex items-center space-x-1.5 pb-2.5 px-1 text-xs font-semibold whitespace-nowrap transition-all border-b-2 ${
                       activeTab === 'ocorrencias'
-                        ? 'bg-blue-600 text-white shadow-sm'
-                        : 'text-gray-600 hover:bg-gray-100'
+                        ? 'border-emerald-500 text-emerald-600 font-bold bg-transparent'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 bg-transparent'
                     }`}
                   >
-                    Ocorrências
+                    <span>Ocorrências</span>
                   </button>
                 </>
               )}
@@ -3111,12 +3117,18 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                       <button
                           type="button"
                           onClick={() => setDeleteProfConfirmOpen(true)}
-                          className="px-4 py-2 text-sm font-bold text-red-600 border border-red-600 hover:bg-red-50 rounded-lg transition-all cursor-pointer"
+                          className="bg-rose-500 hover:bg-rose-600 text-white px-4 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
                       >
+                          <Trash2 size={13} />
                           Excluir
                       </button>
                   )}
-                  <button type="submit" disabled={loading} className="bg-[#1a3c2e] text-[#b8860b] px-4 py-2 rounded-lg font-bold disabled:bg-gray-400 text-sm">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-md text-xs font-semibold disabled:bg-gray-450 transition-all flex items-center gap-1.5 shadow-xs"
+                  >
+                    <Save size={13} />
                     {loading ? 'Salvando...' : 'Salvar'}
                   </button>
               </div>

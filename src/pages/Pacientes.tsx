@@ -86,7 +86,7 @@ export const Pacientes: React.FC<PacientesProps> = ({
       onNewPatient={handleNewPatientClick}
       onDeletePatient={(id) => deletePaciente(id)}
       onDeactivatePatient={(id, motivo) => deactivatePaciente(id, motivo)}
-      globalSearchQuery={globalSearchQuery}
+      globalSearchQuery={globalSearchQuery || ''}
     />
   );
 };

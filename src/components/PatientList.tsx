@@ -57,15 +57,22 @@ export const PatientList: React.FC<PatientListProps> = ({
 
   // Combined Search and Filters
   const filteredPacientes = useMemo(() => {
+    const query = (localSearch || globalSearchQuery || '').toLowerCase().trim();
+    const cleanQuery = query.replace(/\D/g, '');
+
     const filtered = pacientes.filter((p) => {
       // Search logic (localSearch or globalSearchQuery)
-      const query = (localSearch || globalSearchQuery || '').toLowerCase();
-      const matchSearch =
+      const cleanCpf = (p.cpf || '').replace(/\D/g, '');
+      const cleanPhone = (p.telefoneResponsavel || '').replace(/\D/g, '');
+
+      const matchSearch = !query ||
         (p.nome || '').toLowerCase().includes(query) ||
         (p.cpf || '').toLowerCase().includes(query) ||
         (p.bairro || '').toLowerCase().includes(query) ||
         (p.nomeResponsavel || '').toLowerCase().includes(query) ||
-        (p.parentescoResponsavel || '').toLowerCase().includes(query);
+        (p.parentescoResponsavel || '').toLowerCase().includes(query) ||
+        (cleanQuery && cleanCpf.includes(cleanQuery)) ||
+        (cleanQuery && cleanPhone.includes(cleanQuery));
 
       // Filter logic
       const matchPaciente = filterPacienteId === 'todos' ? true : p.id === filterPacienteId;
@@ -181,7 +188,7 @@ export const PatientList: React.FC<PatientListProps> = ({
             <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
             <input
               type="text"
-              placeholder="Buscar nesta lista..."
+              placeholder="Buscar por nome, CPF ou telefone..."
               value={localSearch}
               onChange={(e) => setLocalSearch(e.target.value)}
               className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-700 bg-slate-50 focus:outline-none focus:border-blue-500 focus:bg-white transition-all shadow-inner"
@@ -228,7 +235,7 @@ export const PatientList: React.FC<PatientListProps> = ({
                   setDeactivateConfirmText('');
                   setBulkDeactivateOpen(true);
                 }}
-                className="flex items-center space-x-1 px-2.5 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-colors cursor-pointer"
+                className="flex items-center space-x-1 px-3 py-1.5 text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 rounded-md transition-colors cursor-pointer shadow-xs"
                 title="Desativar selecionados"
               >
                 <EyeOff size={13} />
@@ -239,7 +246,7 @@ export const PatientList: React.FC<PatientListProps> = ({
                   setDeleteConfirmText('');
                   setBulkDeleteOpen(true);
                 }}
-                className="flex items-center space-x-1 px-2.5 py-1.5 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors cursor-pointer"
+                className="flex items-center space-x-1 px-3 py-1.5 text-xs font-semibold text-white bg-rose-500 hover:bg-rose-600 rounded-md transition-colors cursor-pointer shadow-xs"
                 title="Excluir selecionados"
               >
                 <Trash size={13} />
@@ -250,7 +257,7 @@ export const PatientList: React.FC<PatientListProps> = ({
 
           <button
             onClick={onNewPatient}
-            className="flex items-center space-x-1.5 px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-all shadow-lg shadow-blue-200 cursor-pointer"
+            className="flex items-center space-x-1.5 px-5 py-2 text-xs font-semibold text-white bg-emerald-500 hover:bg-emerald-600 rounded-md transition-all shadow-sm cursor-pointer"
             id="btn-novo-paciente"
           >
             <Plus size={16} />
@@ -259,124 +266,120 @@ export const PatientList: React.FC<PatientListProps> = ({
         </div>
       </div>
 
-      {/* Table Container */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden" id="patients-table-container">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-sm font-semibold text-gray-800 tracking-wider">
-                <th className="py-4 px-4 w-12 text-center">
-                  <input
-                    type="checkbox"
-                    checked={isAllSelected}
-                    onChange={handleSelectAll}
-                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                  />
-                </th>
-                <th className="py-4 px-4 text-left font-semibold text-gray-800">Nome Completo</th>
-                <th className="p-4 text-left font-semibold text-gray-800">Bairro</th>
-                <th className="p-4 text-left font-semibold text-gray-800">Grau Dependência</th>
-                <th className="p-4 text-center font-semibold text-gray-800">Plano de Escala</th>
-                <th className="p-4 text-center font-semibold text-gray-800">Status</th>
-              </tr>
-            </thead>
-            <tbody className="text-gray-900 text-base divide-y divide-slate-100">
-              {filteredPacientes.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400">
-                    <div className="flex flex-col items-center justify-center space-y-2">
-                      <AlertCircle size={28} className="text-slate-300" />
-                      <p className="font-medium text-slate-500">Nenhum paciente localizado</p>
-                      <p className="text-xs text-slate-400">Tente ajustar suas palavras-chave ou regras de filtros no painel.</p>
+      {/* Selection Control Bar */}
+      {filteredPacientes.length > 0 && (
+        <div className="flex items-center justify-between px-4 py-2 bg-slate-100/60 rounded-xl border border-slate-200/60 text-xs text-slate-600 mb-3">
+          <label className="flex items-center space-x-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={isAllSelected}
+              onChange={handleSelectAll}
+              className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5"
+            />
+            <span className="font-semibold text-slate-700">Selecionar Todos os {filteredPacientes.length} Pacientes</span>
+          </label>
+        </div>
+      )}
+
+      {/* Cards List Container */}
+      <div className="space-y-3" id="patients-cards-container">
+        {filteredPacientes.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400">
+            <div className="flex flex-col items-center justify-center space-y-2">
+              <AlertCircle size={28} className="text-slate-300 animate-bounce" />
+              <p className="font-medium text-slate-500">Nenhum paciente localizado</p>
+              <p className="text-xs text-slate-400">Tente ajustar suas palavras-chave ou regras de filtros no painel.</p>
+            </div>
+          </div>
+        ) : (
+          filteredPacientes.map((p, index) => {
+            const isSelected = selectedIds.includes(p.id);
+            const cleanPhone = (p.telefoneResponsavel || '').trim();
+
+            return (
+              <div
+                key={`pac-card-${p.id || index}`}
+                className={`bg-white p-4 rounded-xl shadow-xs border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:shadow-sm hover:border-gray-200 ${
+                  isSelected ? 'border-emerald-500 ring-1 ring-emerald-500/20 bg-emerald-50/5' : 'border-gray-100'
+                }`}
+              >
+                {/* Left Section: Checkbox & Info */}
+                <div className="flex items-start space-x-3.5 flex-1 min-w-0">
+                  <div className="pt-0.5 flex-shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={(e) => handleSelectOne(p.id, e.target.checked)}
+                      className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4 cursor-pointer"
+                    />
+                  </div>
+
+                  <div className="min-w-0 flex-1 space-y-2">
+                    {/* Header Info: Name & Status Badge */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={() => onSelectPatient(p)}
+                        className="font-bold text-slate-800 text-base hover:text-emerald-600 transition-colors cursor-pointer text-left focus:outline-none"
+                      >
+                        {p.nome}
+                      </button>
+                      {getStatusBadge(p.status)}
                     </div>
-                  </td>
-                </tr>
-              ) : (
-                filteredPacientes.map((p, index) => {
-                  const isSelected = selectedIds.includes(p.id);
-                  const letters = p.nome
-                    .split(' ')
-                    .map((n) => n[0])
-                    .slice(0, 2)
-                    .join('')
-                    .toUpperCase();
 
-                  return (
-                    <tr
-                      key={`pac-${p.id || index}-${index}`}
-                      className={`hover:bg-slate-50/70 transition-colors group ${
-                        isSelected ? 'bg-blue-50/40 hover:bg-blue-50/60' : index % 2 === 0 ? 'bg-white' : 'bg-slate-50/20'
-                      }`}
-                    >
-                      {/* Checkbox wrapper */}
-                      <td className="py-4 px-4 text-center">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={(e) => handleSelectOne(p.id, e.target.checked)}
-                          className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                        />
-                      </td>
-
-                      {/* Full Name */}
-                      <td className="py-4 px-4">
-                        <div className="flex flex-col">
-                          <button
-                            onClick={() => onSelectPatient(p)}
-                            className="font-normal text-gray-900 hover:text-blue-600 text-left transition-colors cursor-pointer text-base"
-                          >
-                            {p.nome}
-                          </button>
-                        </div>
-                      </td>
-
-                      {/* Bairro */}
-                      <td className="py-4 px-4">
-                        <div className="flex flex-col space-y-1.5">
-                          <span className="font-normal text-gray-900 text-base">{p.bairro}</span>
-                          <div className="flex flex-wrap gap-1.5 items-center">
-                            <span className="text-xs font-normal text-indigo-700 bg-indigo-50 border border-indigo-150 px-2 py-0.5 rounded shadow-sm">
-                              {p.planoAtendimento?.tipoEscala || 'Diurno 12h'} • {p.planoAtendimento?.horaInicioPadrao || '07:00'}
-                            </span>
-                            {p.planoAtendimento?.tiposPlantao && p.planoAtendimento.tiposPlantao.map((sub) => (
-                              <span key={sub.id} className="text-xs font-normal text-gray-600 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded" title={`Valor: R$ ${sub.valorPlantao}`}>
-                                {sub.tipoEscala} • {sub.horaInicio}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Grau Dependencia */}
-                      <td className="py-4 px-4">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold border ${getDependenceBadge(
-                            p.informacoesMedicas?.grauDependencia
-                          )}`}
-                        >
+                    {/* Meta Info Row: Phone, Dependence, Bairro */}
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500 font-medium">
+                      {cleanPhone && (
+                        <span className="flex items-center gap-1 bg-slate-50 text-slate-600 px-2 py-0.5 rounded border border-slate-200">
+                          <strong>Telefone:</strong> {cleanPhone}
+                        </span>
+                      )}
+                      <span className="flex items-center gap-1">
+                        <strong>Grau de Dependência:</strong> 
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border uppercase tracking-wider ${getDependenceBadge(p.informacoesMedicas?.grauDependencia)}`}>
                           {p.informacoesMedicas?.grauDependencia || 'Não informado'}
                         </span>
-                      </td>
-
-                      {/* Plano de Escala */}
-                      <td className="py-4 px-4 text-center">
-                        <span className="inline-flex items-center px-2.5 py-1 rounded bg-slate-100 text-slate-700 font-mono text-sm font-normal border border-slate-200">
-                          {p.planoAtendimento?.tipoEscala || 'Diurno 12h'}
+                      </span>
+                      {p.bairro && (
+                        <span className="text-slate-500 bg-slate-50 border border-slate-150 px-2 py-0.5 rounded">
+                          <strong>Bairro:</strong> {p.bairro}
                         </span>
-                      </td>
+                      )}
+                    </div>
 
-                      {/* Status badge */}
-                      <td className="py-4 px-4">{getStatusBadge(p.status)}</td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                    {/* Escala Row */}
+                    <div className="flex flex-wrap gap-1.5 items-center">
+                      <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-150 px-2 py-0.5 rounded shadow-xs">
+                        {p.planoAtendimento?.tipoEscala || 'Diurno 12h'} • {p.planoAtendimento?.horaInicioPadrao || '07:00'}
+                      </span>
+                      {p.planoAtendimento?.tiposPlantao && p.planoAtendimento.tiposPlantao.map((sub) => (
+                        <span key={sub.id} className="text-[10px] font-medium text-slate-600 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded" title={`Valor: R$ ${sub.valorPlantao}`}>
+                          {sub.tipoEscala} • {sub.horaInicio}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
 
+                {/* Right Section: Pencil Action Button */}
+                <div className="flex items-center justify-end flex-shrink-0">
+                  <button
+                    onClick={() => onSelectPatient(p)}
+                    className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-full transition-all cursor-pointer border border-transparent hover:border-emerald-100"
+                    title="Editar/Ver Prontuário"
+                  >
+                    <Edit size={16} />
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Dynamic Footer stats container wrapper */}
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
         {/* Dynamic Footer stats */}
-        <div className="bg-slate-50/75 py-3 px-6 border-t border-slate-200 text-xs text-slate-500 flex justify-between items-center">
+        <div className="bg-slate-50/75 py-3 px-6 text-xs text-slate-500 flex justify-between items-center">
           <p>
             Exibindo <span className="font-semibold text-slate-700">{filteredPacientes.length}</span> de <span className="font-semibold text-slate-700">{pacientes.length}</span> pacientes cadastrados.
           </p>

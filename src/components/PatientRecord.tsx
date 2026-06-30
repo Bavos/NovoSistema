@@ -40,7 +40,9 @@ import {
   Info,
   History,
   Receipt,
-  Copy
+  Copy,
+  MessageSquare,
+  Phone
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
@@ -173,6 +175,44 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     setCopiedDayShifts(null);
     setCopiedSourceDate(ag.data);
     toast.success(`Plantão de ${ag.nomeProfissional} copiado!`);
+  };
+
+  const handlePasteClipboardToDate = async (targetDateStr: string) => {
+    if (!clipboardAgendamento) {
+      toast.error('Nenhum agendamento copiado para colar.');
+      return;
+    }
+
+    try {
+      const { id, data, ...rest } = clipboardAgendamento;
+
+      // Check for conflicts: is the professional already assigned on this day for this patient?
+      const conflict = agendamentos.find(
+        (p) =>
+          p.data === targetDateStr &&
+          p.idProfissional === clipboardAgendamento.idProfissional &&
+          p.status === 'Confirmado'
+      );
+
+      if (conflict) {
+        toast.error(
+          `Conflito: ${clipboardAgendamento.nomeProfissional} já tem plantão confirmado em ${targetDateStr.split('-').reverse().join('/')}`
+        );
+        return;
+      }
+
+      const newAg = {
+        ...rest,
+        data: targetDateStr,
+        status: clipboardAgendamento.status || ('Aberta' as const),
+      };
+
+      await addAgendamento(newAg);
+      toast.success('Agendamento colado com sucesso');
+    } catch (error) {
+      console.error('Erro ao colar agendamento:', error);
+      toast.error('Erro ao colar agendamento');
+    }
   };
 
   const handleCopyDay = (dateStr: string, dailyShifts: Agendamento[], e?: React.MouseEvent) => {
@@ -370,6 +410,27 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const [copiedShift, setCopiedShift] = useState<Agendamento | null>(null);
   const [copiedDayShifts, setCopiedDayShifts] = useState<Agendamento[] | null>(null);
   const [copiedSourceDate, setCopiedSourceDate] = useState<string | null>(null);
+  const [clipboardAgendamento, setClipboardAgendamento] = useState<Agendamento | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    type: 'day' | 'shift';
+    targetDate?: string;
+    targetShift?: Agendamento;
+  } | null>(null);
+
+  // Context Menu Global Click listener for closing on outside click
+  useEffect(() => {
+    const handleGlobalClick = () => {
+      if (contextMenu) {
+        setContextMenu(null);
+      }
+    };
+    window.addEventListener('click', handleGlobalClick);
+    return () => {
+      window.removeEventListener('click', handleGlobalClick);
+    };
+  }, [contextMenu]);
   const [deleteRecordDialog, setDeleteRecordDialog] = useState<{
     isOpen: boolean;
     title: string;
@@ -1901,11 +1962,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       // Auto column widths
       worksheet.columns.forEach(column => {
         let maxLen = 12;
-        column.eachCell({ includeEmpty: true }, cell => {
+        column?.eachCell?.({ includeEmpty: true }, cell => {
           const valStr = cell.value ? String(cell.value) : '';
           if (valStr.length > maxLen) maxLen = valStr.length;
         });
-        column.width = maxLen + 4;
+        if (column) column.width = maxLen + 4;
       });
 
       const buffer = await workbook.xlsx.writeBuffer();
@@ -2497,20 +2558,20 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
           <button
             type="button"
             onClick={onBack}
-            className="bg-transparent hover:bg-slate-100 text-slate-700 h-9 px-3.5 rounded-lg text-xs font-semibold transition-colors flex items-center space-x-1.5 cursor-pointer"
+            className="bg-blue-500 hover:bg-blue-600 text-white h-9 px-4 rounded-md text-xs font-semibold shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer"
             id="btn-voltar-topo-global"
           >
-            <ArrowLeft size={15} />
+            <ArrowLeft size={14} />
             <span>Voltar</span>
           </button>
           {!isNew && (
             <button
               type="button"
               onClick={() => setImprimirProntuarioModalOpen(true)}
-              className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 h-9 px-3.5 rounded-lg text-xs font-semibold transition-colors flex items-center space-x-1.5 cursor-pointer"
+              className="bg-blue-500 hover:bg-blue-600 text-white h-9 px-4 rounded-md text-xs font-semibold shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer"
               id="btn-imprimir-prontuario-global"
             >
-              <Printer size={15} />
+              <Printer size={14} />
               <span>Exportar Prontuário</span>
             </button>
           )}
@@ -2523,10 +2584,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     setDeactivateConfirmInput('');
                     setAlertDeactivateOpen(true);
                   }}
-                  className="bg-transparent text-red-650 hover:bg-red-50 hover:text-red-700 h-9 px-3.5 rounded-lg text-xs font-semibold transition-colors flex items-center space-x-1.5 cursor-pointer"
+                  className="bg-rose-500 hover:bg-rose-600 text-white h-9 px-4 rounded-md text-xs font-semibold shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer"
                   id="btn-desativar-paciente"
                 >
-                  <Lock size={15} />
+                  <Lock size={14} />
                   <span>Desativar Paciente</span>
                 </button>
               )}
@@ -2534,10 +2595,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 <button
                   type="button"
                   onClick={handleSave}
-                  className="bg-forest-green hover:bg-hover-green text-white h-9 px-4.5 rounded-lg text-xs font-semibold shadow-md transition-colors flex items-center space-x-1.5 cursor-pointer"
+                  className="bg-emerald-500 hover:bg-emerald-600 text-white h-9 px-4.5 rounded-md text-xs font-semibold shadow-sm transition-all flex items-center space-x-1.5 cursor-pointer"
                   id="btn-salvar-alteracoes"
                 >
-                  <Save size={15} />
+                  <Save size={14} />
                   <span>Salvar Alterações</span>
                 </button>
               )}
@@ -2547,10 +2608,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               <button
                 type="button"
                 onClick={handleReactivate}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white h-9 px-4.5 rounded-lg text-xs font-bold shadow-md transition-colors flex items-center space-x-1.5"
+                className="bg-emerald-500 hover:bg-emerald-600 text-white h-9 px-4.5 rounded-md text-xs font-bold shadow-sm transition-all flex items-center space-x-1.5"
                 id="btn-reativar-paciente"
               >
-                <Unlock size={15} className="animate-bounce" />
+                <Unlock size={14} className="animate-bounce" />
                 <span>Reativar Paciente</span>
               </button>
             )
@@ -2563,35 +2624,38 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         {/* Right side form view containing horizontals sub tabs */}
         <div className="space-y-4">
           {/* sub-tabs header block */}
-          <nav className="flex overflow-x-auto whitespace-nowrap gap-1.5 pb-2 w-full no-scrollbar md:flex-nowrap md:overflow-x-auto">
+          <nav className="border-b border-gray-200 flex overflow-x-auto whitespace-nowrap gap-6 pb-0 w-full no-scrollbar md:flex-nowrap md:overflow-x-auto">
             <button
+              type="button"
               onClick={() => setActiveTab('geral')}
-              className={`shrink-0 flex items-center space-x-1.5 px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-xs md:text-sm font-medium transition-colors ${
+              className={`shrink-0 flex items-center space-x-1.5 pb-2.5 px-1 text-xs md:text-sm font-semibold transition-all border-b-2 ${
                 activeTab === 'geral'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-600 hover:bg-gray-100'
+                  ? 'border-emerald-500 text-emerald-600 font-bold bg-transparent'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 bg-transparent'
               }`}
             >
               <User size={15} />
               <span>Geral & Contato</span>
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab('endereco')}
-              className={`shrink-0 flex items-center space-x-1.5 px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-xs md:text-sm font-medium transition-colors ${
+              className={`shrink-0 flex items-center space-x-1.5 pb-2.5 px-1 text-xs md:text-sm font-semibold transition-all border-b-2 ${
                 activeTab === 'endereco'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-600 hover:bg-gray-100'
+                  ? 'border-emerald-500 text-emerald-600 font-bold bg-transparent'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 bg-transparent'
               }`}
             >
               <MapPin size={15} />
               <span>Endereço</span>
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab('medico')}
-              className={`shrink-0 flex items-center space-x-1.5 px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-xs md:text-sm font-medium transition-colors ${
+              className={`shrink-0 flex items-center space-x-1.5 pb-2.5 px-1 text-xs md:text-sm font-semibold transition-all border-b-2 ${
                 activeTab === 'medico'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-600 hover:bg-gray-100'
+                  ? 'border-emerald-500 text-emerald-600 font-bold bg-transparent'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 bg-transparent'
               }`}
             >
               <Stethoscope size={15} />
@@ -2599,11 +2663,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             </button>
             {!isColaborador && (
               <button
+                type="button"
                 onClick={() => setActiveTab('plano')}
-                className={`shrink-0 flex items-center space-x-1.5 px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-xs md:text-sm font-medium transition-colors ${
+                className={`shrink-0 flex items-center space-x-1.5 pb-2.5 px-1 text-xs md:text-sm font-semibold transition-all border-b-2 ${
                   activeTab === 'plano'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-gray-600 hover:bg-gray-100'
+                    ? 'border-emerald-500 text-emerald-600 font-bold bg-transparent'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 bg-transparent'
                 }`}
               >
                 <Clock size={15} />
@@ -2613,10 +2678,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             <button
               type="button"
               onClick={() => setActiveTab('agendamento')}
-              className={`shrink-0 flex items-center space-x-1.5 px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-xs md:text-sm font-medium transition-colors ${
+              className={`shrink-0 flex items-center space-x-1.5 pb-2.5 px-1 text-xs md:text-sm font-semibold transition-all border-b-2 ${
                 activeTab === 'agendamento'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-600 hover:bg-gray-100'
+                  ? 'border-emerald-500 text-emerald-600 font-bold bg-transparent'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 bg-transparent'
               }`}
             >
               <CalendarDays size={15} />
@@ -2625,10 +2690,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             <button
               type="button"
               onClick={() => setActiveTab('ocorrencias')}
-              className={`shrink-0 flex items-center space-x-1.5 px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-xs md:text-sm font-medium transition-colors ${
+              className={`shrink-0 flex items-center space-x-1.5 pb-2.5 px-1 text-xs md:text-sm font-semibold transition-all border-b-2 ${
                 activeTab === 'ocorrencias'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-600 hover:bg-gray-100'
+                  ? 'border-emerald-500 text-emerald-600 font-bold bg-transparent'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 bg-transparent'
               }`}
               id="tab-btn-ocorrencias"
             >
@@ -2638,10 +2703,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             <button
               type="button"
               onClick={() => setActiveTab('auditoria')}
-              className={`shrink-0 flex items-center space-x-1.5 px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-xs md:text-sm font-medium transition-colors ${
+              className={`shrink-0 flex items-center space-x-1.5 pb-2.5 px-1 text-xs md:text-sm font-semibold transition-all border-b-2 ${
                 activeTab === 'auditoria'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-600 hover:bg-gray-100'
+                  ? 'border-emerald-500 text-emerald-600 font-bold bg-transparent'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 bg-transparent'
               }`}
               id="tab-btn-auditoria"
             >
@@ -3664,6 +3729,15 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           return (
                             <div
                               key={idx}
+                              onContextMenu={(e) => {
+                                e.preventDefault();
+                                setContextMenu({
+                                  x: e.clientX,
+                                  y: e.clientY,
+                                  type: 'day',
+                                  targetDate: cell.dateStr
+                                });
+                              }}
                               className={`min-h-[102px] border p-1 rounded-lg flex flex-col transition-all duration-150 group/cell relative ${
                                 isToday 
                                   ? 'bg-[#fefcf4] border-amber-300 ring-1 ring-amber-100 shadow-xs' 
@@ -3736,6 +3810,16 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                             ? 'bg-indigo-55 bg-indigo-100 border-indigo-200 text-indigo-900 font-bold'
                                             : 'bg-emerald-55 bg-emerald-50 border-emerald-250 text-emerald-900 font-extrabold hover:bg-emerald-100 hover:border-emerald-300'
                                       }`}
+                                      onContextMenu={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setContextMenu({
+                                          x: e.clientX,
+                                          y: e.clientY,
+                                          type: 'shift',
+                                          targetShift: ag
+                                        });
+                                      }}
                                       title={ag.observacao || 'Inspecionar Plantão'}
                                     >
                                         <button
@@ -3789,6 +3873,70 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         <span className="flex items-center"><span className="w-2 h-2 bg-red-405 bg-red-400 rounded-full mr-1"></span> Cancelado 🔴</span>
                       </div>
                     </div>
+
+                    {/* Custom Right-Click Context Menu */}
+                    {contextMenu && (
+                      <>
+                        {/* Backdrop overlay to close menu on click */}
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setContextMenu(null)}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            setContextMenu(null);
+                          }}
+                        />
+                        <div
+                          className="fixed bg-white border border-slate-200 rounded-xl shadow-xl py-1.5 z-50 min-w-[200px] text-slate-700 animate-in fade-in zoom-in-95 duration-100"
+                          style={{
+                            top: contextMenu.y,
+                            left: contextMenu.x,
+                          }}
+                        >
+                          {contextMenu.type === 'shift' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setClipboardAgendamento(contextMenu.targetShift || null);
+                                toast.success('Agendamento copiado');
+                                setContextMenu(null);
+                              }}
+                              className="w-full px-3.5 py-2 text-left text-xs font-semibold hover:bg-slate-50 flex items-center space-x-2 text-slate-700 cursor-pointer"
+                            >
+                              <Copy size={13.5} className="text-slate-400" />
+                              <span>Copiar Agendamento</span>
+                            </button>
+                          )}
+
+                          {contextMenu.type === 'day' && (
+                            <>
+                              <div className="px-3.5 py-1.5 border-b border-slate-100 text-[9px] font-black text-slate-400 uppercase tracking-wider select-none font-sans">
+                                Opções de Agendamento
+                              </div>
+                              {clipboardAgendamento ? (
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    if (contextMenu.targetDate) {
+                                      await handlePasteClipboardToDate(contextMenu.targetDate);
+                                    }
+                                    setContextMenu(null);
+                                  }}
+                                  className="w-full px-3.5 py-2 text-left text-xs font-bold hover:bg-emerald-50 hover:text-emerald-700 flex items-center space-x-2 text-emerald-600 cursor-pointer font-sans"
+                                >
+                                  <Check size={13.5} className="text-emerald-500" />
+                                  <span>Colar Agendamento</span>
+                                </button>
+                              ) : (
+                                <div className="px-3.5 py-2 text-left text-xs text-slate-400 italic select-none font-sans">
+                                  Nenhum agendamento copiado
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
  
