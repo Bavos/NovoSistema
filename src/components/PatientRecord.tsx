@@ -3631,7 +3631,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     <button
                       type="button"
                       onClick={handleBaixarFaturaExcel}
-                      className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-all shadow-xs cursor-pointer font-sans"
+                      className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg transition-all shadow-xs cursor-pointer font-sans border border-yellow-400/20"
                     >
                       <Receipt size={13.5} />
                       <span>Excel (.xlsx)</span>
@@ -4913,7 +4913,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       {/* 1. MODELO / MODAL: NOVO AGENDAMENTO */}
       {avulsoModalOpen && (
         <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in-30 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full flex flex-col p-6 space-y-4 font-sans">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-2xl w-full flex flex-col p-6 space-y-4 font-sans">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                 <Calendar size={15} className="text-sky-600" />
@@ -4970,7 +4970,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               <div className="space-y-2.5">
                 <label className="block text-xs font-bold text-slate-700">Data do(s) Plantão(ões) (Múltiplas Escolhas)</label>
                 
-                <div className="bg-[#fcfbf9] border border-gray-150 rounded-xl p-3 shadow-sm font-sans max-w-sm mx-auto">
+                <div className="bg-[#fcfbf9] border border-gray-200 rounded-xl p-3 shadow-sm font-sans w-full">
                   {/* Calendar Header with Navigation */}
                   <div className="flex items-center justify-between mb-3">
                     <button
@@ -5009,14 +5009,14 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   {/* Day Names Grid */}
                   <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-gray-400 mb-1.5">
                     {["D", "S", "T", "Q", "Q", "S", "S"].map((d, index) => (
-                      <div key={`cal-header-${index}`} className="py-0.5">{d}</div>
+                      <div key={`cal-header-${index}`} className="py-1">{d}</div>
                     ))}
                   </div>
 
                   {/* Days Grid */}
-                  <div className="grid grid-cols-7 gap-1">
+                  <div className="grid grid-cols-7 w-full gap-0 border border-gray-200 rounded-lg overflow-hidden">
                     {Array.from({ length: new Date(agnCalendarYear, agnCalendarMonth, 1).getDay() }).map((_, i) => (
-                      <div key={`empty-${agnCalendarMonth}-${agnCalendarYear}-${i}`} className="h-8 w-8" />
+                      <div key={`empty-${agnCalendarMonth}-${agnCalendarYear}-${i}`} className="border border-gray-200 min-h-[80px] w-full bg-gray-50/50" />
                     ))}
                     {Array.from({ length: new Date(agnCalendarYear, agnCalendarMonth + 1, 0).getDate() }, (_, i) => i + 1).map((dayNum) => {
                       const formattedDate = `${agnCalendarYear}-${String(agnCalendarMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
@@ -5024,22 +5024,23 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       const isToday = new Date().toDateString() === new Date(agnCalendarYear, agnCalendarMonth, dayNum).toDateString();
                       const isHoliday = feriados.some(f => f.date === formattedDate);
                       
+                      const baseClass = "border border-gray-200 min-h-[80px] w-full flex flex-col justify-start items-center p-1 transition-all cursor-pointer select-none";
+                      const stateClass = isSelected 
+                        ? 'bg-green-700 text-white font-extrabold hover:bg-green-800 shadow-xs' 
+                        : isHoliday
+                          ? 'bg-rose-100 text-rose-950 hover:bg-rose-200'
+                          : isToday
+                            ? 'bg-amber-100 text-amber-950 hover:bg-amber-200 border-2 border-amber-400'
+                            : 'bg-white hover:bg-gray-100 text-gray-700';
+
                       return (
                         <button
                           key={`${agnCalendarMonth}-${agnCalendarYear}-${dayNum}`}
                           type="button"
                           onClick={() => handleDateClick(formattedDate)}
-                          className={`h-8 w-8 text-xs font-semibold flex items-center justify-center transition-all cursor-pointer select-none mx-auto rounded-full
-                            ${isSelected 
-                              ? 'bg-green-700 text-white font-bold hover:bg-green-800 shadow-sm transform scale-105' 
-                              : isHoliday
-                                ? 'bg-rose-100 text-rose-900 border border-rose-200 hover:bg-rose-200'
-                                : isToday
-                                  ? 'bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100/50'
-                                  : 'bg-white hover:bg-gray-100 text-gray-700'
-                            }`}
+                          className={`${baseClass} ${stateClass}`}
                         >
-                          {dayNum}
+                          <span className="text-xs font-extrabold self-start pl-1 pt-0.5">{dayNum}</span>
                         </button>
                       );
                     })}

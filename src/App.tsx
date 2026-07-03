@@ -41,7 +41,7 @@ function DashboardContent() {
 
   // Manage Pacientes page inner state routing overrides
   const [isBrowsingForm, setIsBrowsingForm] = useState<boolean>(false);
-  const [pacientesTitleOverride, setPacientesTitleOverride] = useState<string>('Gestão Integrada de Pacientes');
+  const [pacientesTitleOverride, setPacientesTitleOverride] = useState<string>('Gestão Pacientes');
   const [showFirstAccess, setShowFirstAccess] = useState(false);
   const [initialSelectedPatient, setInitialSelectedPatient] = useState<any>(null);
   const [initialSelectedProfId, setInitialSelectedProfId] = useState<string>('');
@@ -97,7 +97,7 @@ function DashboardContent() {
         setFinanceiroSubTab('folhas');
         // Auto-reset state overrides
         setIsBrowsingForm(false);
-        setPacientesTitleOverride('Gestão Integrada de Pacientes');
+        setPacientesTitleOverride('Gestão Pacientes');
 
         // Clear hash and query parameters when switching tabs to prevent auto-opening
         try {

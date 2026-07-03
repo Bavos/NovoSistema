@@ -69,7 +69,7 @@ export const Pacientes: React.FC<PacientesProps> = ({
       } else if (isNewPatient) {
         onViewChange(true, 'Novo Paciente');
       } else {
-        onViewChange(false, 'Gestão Integrada de Pacientes');
+        onViewChange(false, 'Gestão Pacientes');
       }
     }
   }, [selectedPaciente, isNewPatient, onViewChange, selectedPaciente?.nome]);

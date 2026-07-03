@@ -1783,7 +1783,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
     <div className="space-y-5">
       {/* Search and filter block */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm print:hidden">
-        <div className="flex flex-wrap items-center gap-3 flex-1 w-full">
+        <div className="flex flex-wrap items-center gap-3 flex-1">
           {/* Universal Search Field */}
           <div className="relative max-w-xs w-full">
             <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
@@ -1834,13 +1834,16 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
           )}
         </div>
 
-        {/* Primary action */}
-        <button
-          onClick={() => handleOpenModal()}
-          className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-md text-xs font-semibold flex items-center gap-2 cursor-pointer shadow-sm w-full sm:w-auto justify-center transition-colors"
-        >
-          <Plus size={14} /> Novo Profissional
-        </button>
+        {/* Right side primary action */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => handleOpenModal()}
+            className="flex items-center space-x-1.5 px-5 py-2 text-xs font-semibold text-white bg-emerald-500 hover:bg-emerald-600 rounded-md transition-all shadow-sm cursor-pointer"
+          >
+            <Plus size={14} />
+            <span>Novo Profissional</span>
+          </button>
+        </div>
       </div>
 
       {/* Unified Cards list for all screen sizes */}
