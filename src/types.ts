@@ -34,7 +34,7 @@ export interface Profissional {
   meiIrregular?: boolean;
   sexo?: 'Masculino' | 'Feminino' | 'Outro';
   dataNascimento?: string;
-  idade?: number;
+  idade?: number | string;
   profissao?: 'Cuidadora(o)' | 'Téc. Enfermagem' | 'Enfermeira(o)' | 'Fisioterapeuta' | 'Médica(o)';
   rg?: string;
   cpf?: string;
@@ -160,6 +160,8 @@ export interface Paciente {
   telefoneResponsavel: string;
   parentescoResponsavel?: string;
   email: string;
+  altura?: string;
+  peso?: string;
   bairro: string;
   status: 'Ativo' | 'Desativado';
   desativadoEm?: string | null;

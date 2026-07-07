@@ -42,7 +42,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
 
   if (!isOpen) return null;
 
-  const isMatched = inputText.trim() === expectedWord;
+  const isMatched = inputText.trim().toUpperCase() === expectedWord.toUpperCase();
 
   const handleConfirmClick = async () => {
     if (!isMatched || loading) return;

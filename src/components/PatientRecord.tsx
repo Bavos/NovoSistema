@@ -635,6 +635,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const [telefoneResponsavel, setTelefoneResponsavel] = useState('');
   const [parentescoResponsavel, setParentescoResponsavel] = useState('');
   const [email, setEmail] = useState('');
+  const [altura, setAltura] = useState('');
+  const [peso, setPeso] = useState('');
   const [bairro, setBairro] = useState('');
 
   // Dados de Faturamento e Pagamento
@@ -830,6 +832,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       setTelefoneResponsavel(paciente.telefoneResponsavel);
       setParentescoResponsavel(paciente.parentescoResponsavel || '');
       setEmail(paciente.email || '');
+      setAltura(paciente.altura || '');
+      setPeso(paciente.peso || '');
       setBairro(paciente.bairro || paciente.endereco.bairro);
 
       // Dados de Faturamento e Pagamento
@@ -879,6 +883,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       setNomeResponsavel('');
       setTelefoneResponsavel('');
       setEmail('');
+      setAltura('');
+      setPeso('');
       setBairro('');
 
       // Clean Dados de Faturamento e Pagamento
@@ -1048,6 +1054,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       telefoneResponsavel,
       parentescoResponsavel,
       email,
+      altura,
+      peso,
       bairro: bairro || 'Copacabana',
       endereco: {
         rua,
@@ -1422,19 +1430,37 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   // NEW HANDLERS FOR ADVANCED SCHEDULER: Avulso, Concluir, Reabrir, Exclusão
 
   const handleSalvarAgendamento = async () => {
-    if (!paciente) return false;
-    if (selectedDates.length === 0) {
-      alert('Selecione ao menos uma data para o agendamento.');
+    // 1. Validação de Payload (Console.log)
+    console.log("Validando Payload do Novo Agendamento:", {
+      profissional: avulsoProf,
+      selectedDates,
+      turno: avulsoPlantaoOptionId,
+      pacienteId: paciente?.id
+    });
+
+    if (!paciente) {
+      toast.error('Erro: Paciente não identificado.');
       return false;
     }
+
     if (!avulsoProf || avulsoProf.trim() === '') {
-      toast.error('Por favor, selecione um profissional para o agendamento.');
+      toast.error('Por favor, preencha o campo obrigatório: Profissional.');
+      return false;
+    }
+
+    if (!selectedDates || selectedDates.length === 0) {
+      toast.error('Por favor, preencha o campo obrigatório: Datas no calendário.');
+      return false;
+    }
+
+    if (!avulsoPlantaoOptionId || avulsoPlantaoOptionId.trim() === '') {
+      toast.error('Por favor, preencha o campo obrigatório: Horário / Turno.');
       return false;
     }
 
     const pickedProf = profissionais.find(p => p.nome === avulsoProf);
     if (pickedProf && isBlockedBidirectional(pickedProf)) {
-      alert('Atenção: Este profissional possui uma restrição de atendimento (bloqueio) para este paciente devido a uma ocorrência passada.');
+      toast.error('Atenção: Este profissional possui uma restrição de atendimento (bloqueio) para este paciente devido a uma ocorrência passada.');
       return false;
     }
 
@@ -1570,12 +1596,22 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       setAvulsoTipoDia('Normal');
       setAvulsoObs('');
       setAvulsoCuringa(false);
+      
+      // 3. Atualização de Estado (UX) - limpar selectedDates e fechar modal
       setSelectedDates([]);
       setAvulsoModalOpen(false);
-      alert(totalQuantity > 1 ? `${totalQuantity} plantões agendados em lote com sucesso!` : 'Novo agendamento criado com sucesso!');
+
+      // Real-time Firebase listener handles calendar update automatically, but we also log it for clarity.
+      console.log("Sucesso: Real-time listener do Firebase atualiza os dados do calendário automaticamente.");
+
+      // 2. Feedback Visual (Toasts) - Sucesso
+      toast.success(totalQuantity > 1 ? `${totalQuantity} plantões agendados em lote com sucesso!` : 'Agendamento salvo com sucesso!');
       return true;
-    } catch (err) {
-      alert('Erro ao criar novo agendamento.');
+    } catch (err: any) {
+      // 2. Feedback Visual (Toasts) - Erro
+      const errorMessage = err?.message || String(err);
+      console.error('Erro ao salvar agendamento:', err);
+      toast.error(`Erro ao salvar: ${errorMessage}`);
       return false;
     }
   };
@@ -2802,15 +2838,27 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       />
                     </div>
 
-                    <div className="space-y-1 col-span-1 md:col-span-3">
-                      <label className="block text-sm font-medium text-gray-750">E-mail de Contato (Opcional)</label>
+                    <div className="space-y-1 col-span-1 md:col-span-1">
+                      <label className="block text-sm font-medium text-gray-750">Altura</label>
                       <input
-                        type="email"
+                        type="text"
                         disabled={isCurrentlyDeactivated || isColaborador}
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        value={altura}
+                        onChange={(e) => setAltura(e.target.value)}
                         className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
-                        placeholder="email@exemplo.com"
+                        placeholder="Ex: 1,70 m"
+                      />
+                    </div>
+
+                    <div className="space-y-1 col-span-1 md:col-span-1">
+                      <label className="block text-sm font-medium text-gray-750">Peso</label>
+                      <input
+                        type="text"
+                        disabled={isCurrentlyDeactivated || isColaborador}
+                        value={peso}
+                        onChange={(e) => setPeso(e.target.value)}
+                        className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
+                        placeholder="Ex: 70 kg"
                       />
                     </div>
                   </div>
@@ -5155,7 +5203,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               </button>
               <button
                 type="button"
-                onClick={async () => {
+                onClick={async (e) => {
+                  e.preventDefault();
                   const success = await handleSalvarAgendamento();
                   if (success) {
                     setAvulsoModalOpen(false);
@@ -6725,8 +6774,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       </p>
                     </div>
                     <div>
-                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">E-mail de Contato:</span>
-                      <p className="font-medium text-slate-750 mt-1 truncate">{email || '---'}</p>
+                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Altura:</span>
+                      <p className="font-medium text-slate-750 mt-1 truncate">{altura || paciente?.altura || '---'}</p>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Peso:</span>
+                      <p className="font-medium text-slate-750 mt-1 truncate">{peso || paciente?.peso || '---'}</p>
                     </div>
                     <div>
                       <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Logística de Chegada ao Domicílio:</span>

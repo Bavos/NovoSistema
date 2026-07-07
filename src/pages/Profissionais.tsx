@@ -333,7 +333,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
     meiIrregular: false,
     sexo: '' as string,
     dataNascimento: '',
-    idade: undefined as number | undefined,
+    idade: undefined as number | string | undefined,
     profissao: '' as string,
     rg: '',
     cpf: '',
@@ -368,21 +368,71 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
     grauParentescoTitular: '',
   });
 
+  // Convert YYYY-MM-DD from Firebase DB to DD/MM/AAAA for state/input
+  const formatDbDateToInput = (dateStr: string | undefined): string => {
+    if (!dateStr) return '';
+    const regexYmd = /^\d{4}-\d{2}-\d{2}$/;
+    if (regexYmd.test(dateStr)) {
+      const [y, m, d] = dateStr.split('-');
+      return `${d}/${m}/${y}`;
+    }
+    return dateStr;
+  };
+
+  // Calculate age based on DD/MM/AAAA formatted date string
+  const calculateAge = (dateString: string): string => {
+    if (!dateString || dateString.length !== 10) return '';
+    
+    const parts = dateString.split('/');
+    if (parts.length !== 3) return '';
+    
+    const day = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10);
+    const year = parseInt(parts[2], 10);
+    
+    if (isNaN(day) || isNaN(month) || isNaN(year)) return '';
+    if (month < 1 || month > 12) return '';
+    if (day < 1 || day > 31) return '';
+    if (year < 1900 || year > new Date().getFullYear()) return '';
+    
+    const birthDate = new Date(year, month - 1, day);
+    if (
+      isNaN(birthDate.getTime()) ||
+      birthDate.getFullYear() !== year ||
+      birthDate.getMonth() !== month - 1 ||
+      birthDate.getDate() !== day
+    ) {
+      return '';
+    }
+    
+    const today = new Date();
+    let calculatedAge = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      calculatedAge--;
+    }
+    
+    if (calculatedAge >= 0) {
+      return `${calculatedAge} anos`;
+    }
+    return '';
+  };
+
+  // Mask function for birthday input (DD/MM/AAAA)
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let val = e.target.value.replace(/\D/g, '');
+    val = val.replace(/(\d{2})(\d)/, '$1/$2');
+    val = val.replace(/(\d{2})(\d)/, '$1/$2');
+    setFormData(prev => ({ ...prev, dataNascimento: val }));
+  };
+
   // Calculate age based on dataNascimento
   useEffect(() => {
-    if (formData.dataNascimento) {
-      const today = new Date();
-      const birthDate = new Date(formData.dataNascimento);
-      if (!isNaN(birthDate.getTime())) {
-        let calculatedAge = today.getFullYear() - birthDate.getFullYear();
-        const m = today.getMonth() - birthDate.getMonth();
-        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-          calculatedAge--;
-        }
-        if (calculatedAge >= 0) {
-          setFormData(prev => ({ ...prev, idade: calculatedAge }));
-        }
-      }
+    if (formData.dataNascimento && formData.dataNascimento.length === 10) {
+      const computedAge = calculateAge(formData.dataNascimento);
+      setFormData(prev => ({ ...prev, idade: computedAge || '' }));
+    } else {
+      setFormData(prev => ({ ...prev, idade: '' }));
     }
   }, [formData.dataNascimento]);
 
@@ -430,7 +480,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
         cnpj: prof.cnpj || '',
         meiIrregular: prof.meiIrregular ?? false,
         sexo: prof.sexo || 'Masculino',
-        dataNascimento: prof.dataNascimento || '',
+        dataNascimento: formatDbDateToInput(prof.dataNascimento || ''),
         idade: prof.idade,
         profissao: prof.profissao || 'Cuidadora(o)',
         rg: prof.rg || '',
@@ -1169,6 +1219,18 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
       return;
     }
 
+    // 1 - Antes de salvar um novo profissional o sistema deve verificar se o c.p.f já consta como cadastrado.
+    if (!editingProf) {
+      const cpfJaCadastrado = profissionais.some(p => {
+        const pCpf = (p.cpf || '').replace(/\D/g, '');
+        return pCpf === cleanCpfVal;
+      });
+      if (cpfJaCadastrado) {
+        toast.error('Aviso: Este CPF já consta como cadastrado para outro profissional.');
+        return;
+      }
+    }
+
     // Trava de Duplicidade Cruzada de CPF (Anti-Duplicação)
     const formattedCpfVal = mascaraCPF(cleanCpfVal);
     const cpfOptions = [cleanCpfVal, formattedCpfVal].filter(Boolean);
@@ -1243,7 +1305,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
           cnpj: updated.cnpj || '',
           meiIrregular: updated.meiIrregular ?? false,
           sexo: updated.sexo || 'Masculino',
-          dataNascimento: updated.dataNascimento || '',
+          dataNascimento: formatDbDateToInput(updated.dataNascimento || ''),
           idade: updated.idade,
           profissao: updated.profissao || 'Cuidadora(o)',
           rg: updated.rg || '',
@@ -1294,7 +1356,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
           cnpj: created.cnpj || '',
           meiIrregular: created.meiIrregular ?? false,
           sexo: created.sexo || 'Masculino',
-          dataNascimento: created.dataNascimento || '',
+          dataNascimento: formatDbDateToInput(created.dataNascimento || ''),
           idade: created.idade,
           profissao: created.profissao || 'Cuidadora(o)',
           rg: created.rg || '',
@@ -2711,11 +2773,18 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Data de Nascimento</label>
-                        <input type="date" value={formData.dataNascimento} onChange={e => setFormData({...formData, dataNascimento: e.target.value})} className="p-2 border border-gray-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-[#1a3c2e] focus:border-transparent outline-none bg-white text-gray-800" />
+                        <input 
+                          type="text" 
+                          maxLength={10} 
+                          placeholder="DD/MM/AAAA" 
+                          value={formData.dataNascimento} 
+                          onChange={handleDateChange} 
+                          className="p-2 border border-gray-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-[#1a3c2e] focus:border-transparent outline-none bg-white text-gray-800" 
+                        />
                       </div>
                       <div className="space-y-1">
                          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Idade</label>
-                         <input type="text" value={formData.idade || ''} disabled className="p-2 border border-gray-100 rounded-lg text-xs w-full bg-gray-50 text-gray-400" />
+                         <input type="text" value={formData.idade || ''} disabled className="p-2 border border-gray-100 rounded-lg text-xs w-full bg-gray-50 text-gray-400 font-medium" />
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">RG</label>

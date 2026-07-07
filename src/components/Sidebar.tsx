@@ -94,9 +94,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
           const IconComponent = item.icon;
 
           return (
-            <button
+            <a
               key={item.id}
-              onClick={() => setActiveTab(item.id)}
+              href={`?tab=${item.id}`}
+              onClick={(e) => {
+                // If it was clicked with modifier keys or middle button, let the browser handle it natively
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) {
+                  return;
+                }
+                e.preventDefault();
+                setActiveTab(item.id);
+              }}
               className={`w-full flex items-center p-3 rounded-lg transition-all duration-200 group text-left relative ${
                 isActive
                   ? 'bg-hover-green text-mustard-gold font-medium'
@@ -133,7 +141,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   {item.label}
                 </div>
               )}
-            </button>
+            </a>
           );
         })}
       </nav>

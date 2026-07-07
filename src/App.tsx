@@ -36,7 +36,18 @@ const AccessDeniedView: React.FC = () => (
 );
 
 function DashboardContent() {
-  const [activeSidebarTab, setActiveSidebarTab] = useState<string>('dashboard');
+  const [activeSidebarTab, setActiveSidebarTab] = useState<string>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam && ['dashboard', 'pacientes', 'profissionais', 'financeiro', 'empresa'].includes(tabParam)) {
+        return tabParam;
+      }
+    } catch (e) {
+      console.warn(e);
+    }
+    return 'dashboard';
+  });
   const [financeiroSubTab, setFinanceiroSubTab] = useState<'folhas' | 'debitos'>('folhas');
 
   // Manage Pacientes page inner state routing overrides
@@ -55,6 +66,25 @@ function DashboardContent() {
   });
   const rawName = currentUserProfile?.nome || user?.displayName || user?.email?.split('@')[0] || 'Renato B. Z.';
   const displayName = rawName.replace(/\s?\((Admin|Colaborador)\)/g, '');
+
+  // Handle browser back/forward buttons (popstate event)
+  React.useEffect(() => {
+    const handlePopState = () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const tabParam = params.get('tab');
+        if (tabParam && ['dashboard', 'pacientes', 'profissionais', 'financeiro', 'empresa'].includes(tabParam)) {
+          setActiveSidebarTab(tabParam);
+        } else {
+          setActiveSidebarTab('dashboard');
+        }
+      } catch (e) {
+        console.warn(e);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Redirect away from Empresa and Financeiro if role is Colaborador
   React.useEffect(() => {
@@ -99,25 +129,40 @@ function DashboardContent() {
         setIsBrowsingForm(false);
         setPacientesTitleOverride('Gestão Pacientes');
 
-        // Clear hash and query parameters when switching tabs to prevent auto-opening
+        // Update tab search parameters when switching tabs
         try {
           const url = new URL(window.location.href);
           url.hash = '';
           if (url.searchParams.has('profId')) {
             url.searchParams.delete('profId');
           }
-          window.history.replaceState({}, '', url.toString().replace(/#$/, ''));
+          url.searchParams.set('tab', tab);
+          window.history.pushState({}, '', url.toString());
         } catch (err) {
-          console.warn('Erro ao limpar a URL:', err);
+          console.warn('Erro ao atualizar a URL:', err);
         }
       }}
       onSelectPatientRedirect={(pac) => {
         setInitialSelectedPatient(pac);
         setActiveSidebarTab('pacientes');
+        try {
+          const url = new URL(window.location.href);
+          url.searchParams.set('tab', 'pacientes');
+          window.history.pushState({}, '', url.toString());
+        } catch (err) {
+          console.warn(err);
+        }
       }}
       onSelectProfRedirect={(profId) => {
         setInitialSelectedProfId(profId);
         setActiveSidebarTab('profissionais');
+        try {
+          const url = new URL(window.location.href);
+          url.searchParams.set('tab', 'profissionais');
+          window.history.pushState({}, '', url.toString());
+        } catch (err) {
+          console.warn(err);
+        }
       }}
       pageTitle={getPageTitle()}
       rightHeaderKpi={
@@ -154,10 +199,24 @@ function DashboardContent() {
                 } else {
                   setFinanceiroSubTab('folhas');
                 }
+                try {
+                  const url = new URL(window.location.href);
+                  url.searchParams.set('tab', tab);
+                  window.history.pushState({}, '', url.toString());
+                } catch (err) {
+                  console.warn(err);
+                }
               }} 
               onSelectPatientRedirect={(pac) => {
                 setInitialSelectedPatient(pac);
                 setActiveSidebarTab('pacientes');
+                try {
+                  const url = new URL(window.location.href);
+                  url.searchParams.set('tab', 'pacientes');
+                  window.history.pushState({}, '', url.toString());
+                } catch (err) {
+                  console.warn(err);
+                }
               }}
             />
           ) : activeSidebarTab === 'pacientes' ? (

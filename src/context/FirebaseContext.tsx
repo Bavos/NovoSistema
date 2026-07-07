@@ -563,7 +563,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const addAgendamento = async (newAg: Omit<Agendamento, 'id'>) => {
     try {
-      const fullAgToSave = { ...newAg, status: 'Aberta' as const };
+      const fullAgToSave = { ...newAg, status: 'Aberta' as const } as any;
+      // Removendo campos 'undefined' antes de enviar ao Firestore para evitar erros de tipo incompatível
+      Object.keys(fullAgToSave).forEach(key => {
+        if (fullAgToSave[key] === undefined) {
+          delete fullAgToSave[key];
+        }
+      });
       const docRef = await addDoc(collection(db, 'agendamentos'), fullAgToSave);
       const fullAgendamento: Agendamento = { ...fullAgToSave, id: docRef.id };
       await addAuditLog('CREATE', 'agendamentos', docRef.id, `Agendamento criado: ${fullAgendamento.data}`);
@@ -577,7 +583,14 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const updateAgendamento = async (ag: Agendamento) => {
     try {
-      await setDoc(doc(db, 'agendamentos', ag.id), ag);
+      const agToSave = { ...ag } as any;
+      // Removendo campos 'undefined' antes de enviar ao Firestore para evitar erros de tipo incompatível
+      Object.keys(agToSave).forEach(key => {
+        if (agToSave[key] === undefined) {
+          delete agToSave[key];
+        }
+      });
+      await setDoc(doc(db, 'agendamentos', ag.id), agToSave);
       await addAuditLog('UPDATE', 'agendamentos', ag.id, `Agendamento atualizado: ${ag.id}`);
       setNotification('Agendamento atualizado.');
     } catch (err) {
