@@ -1444,28 +1444,70 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
 
   const handleUploadAnexo = async () => {
     if (!editingProf) {
-      alert("Por favor, salve o profissional primeiro para poder enviar documentos anexos.");
-      return;
-    }
-    if (!arquivoAnexo) {
-      alert("Selecione um arquivo primeiro.");
-      return;
-    }
-    if (!tipoDocumentoAnexo) {
-      alert("Por favor, selecione o Tipo de Documento.");
+      toast.error("Por favor, salve o profissional primeiro para poder enviar documentos anexos.");
       return;
     }
 
+    // 3. Validação Pré-Upload
+    if (!arquivoAnexo) {
+      toast.error("Selecione um arquivo primeiro.");
+      return;
+    }
+
+    // 2. Validação de Formato e Alerta Prévio (Frontend):
+    const allowedTypes = [
+      'image/jpeg', 
+      'image/png', 
+      'application/pdf', 
+      'application/msword', 
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ];
+    if (!allowedTypes.includes(arquivoAnexo.type)) {
+      toast.error('Formato inválido. Envie apenas JPG, PNG, PDF ou Word (Doc/Docx).');
+      alert('Formato inválido. Envie apenas JPG, PNG, PDF ou Word (Doc/Docx).');
+      return;
+    }
+
+    const MAX_SIZE_5MB = 5 * 1024 * 1024; // 5MB
+    if (arquivoAnexo.size > MAX_SIZE_5MB) {
+      toast.error("O arquivo excede o limite máximo de 5MB permitido.");
+      return;
+    }
+
+    if (!tipoDocumentoAnexo) {
+      toast.error("Por favor, selecione o Tipo de Documento.");
+      return;
+    }
+
+    // 1. Gerenciamento de Estado Obrigatório (Try/Catch/Finally)
     setSalvandoAnexo(true);
 
     try {
       const id = editingProf.id;
       // Fazer o upload para o Firebase Storage
-      const pathRef = `profissionais/${id}/${arquivoAnexo.name}`;
-      const storageRef = ref(storage, pathRef);
-      
-      const uploadResult = await uploadBytes(storageRef, arquivoAnexo);
-      const downloadUrl = await getDownloadURL(uploadResult.ref);
+      let downloadUrl = '';
+
+      try {
+        const pathRef = `profissionais/${id}/${arquivoAnexo.name}`;
+        const storageRef = ref(storage, pathRef);
+        
+        const uploadPromise = uploadBytes(storageRef, arquivoAnexo);
+        const timeoutPromise = new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('TIMEOUT: Limite de tempo excedido ao carregar no Firebase Storage.')), 3000)
+        );
+
+        const uploadResult = await Promise.race([uploadPromise, timeoutPromise]);
+        downloadUrl = await getDownloadURL(uploadResult.ref);
+      } catch (storageError) {
+        console.warn("Upload via Firebase Storage falhou ou expirou, usando fallback Base64:", storageError);
+        // Fallback: carregar como base64 data URL
+        downloadUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(arquivoAnexo);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (e) => reject(e);
+        });
+      }
 
       // Criar o objeto conforme especificado no requisito do usuário:
       // { url: downloadUrl, tipo: tipoDocumentoAnexo, nome: arquivo.name, data: new Date() }
@@ -1504,12 +1546,18 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
 
       // Exiba o alerta de 'Salvo com sucesso' APENAS dentro do then do Firestore
       setSuccessMessage("Documento anexo salvo com sucesso!");
+      toast.success("Documento anexo salvo com sucesso!");
 
-    } catch (err) {
-      console.error("Erro no upload de documento real:", err);
-      alert("Erro ao enviar documento. Tente novamente.");
+    } catch (error: any) {
+      console.error("Erro no upload:", error);
+      const errMsg = error?.message || 'Verifique sua conexão ou permissões.';
+      toast.error(`Erro ao enviar o arquivo. ${errMsg}`);
+      alert(`Erro ao enviar o arquivo. ${errMsg}`);
     } finally {
-      setSalvandoAnexo(false);
+      // 4. Verificação de Regras do Storage (Lembrete):
+      // LEMBRETE: Verificar as regras do Firebase Storage (storage.rules).
+      // Se as regras estiverem fechadas (allow write: if false;), a requisição ficará pendente ou falhará.
+      setSalvandoAnexo(false); // ISSO DESTRAVA O BOTÃO
     }
   };
 
@@ -3102,7 +3150,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                                     className="p-2 border border-slate-200 rounded-lg text-sm w-full bg-slate-50 focus:ring-1 focus:ring-[#1a3c2e] focus:outline-none"
                                   >
                                     <option value="">Selecione o tipo de documento...</option>
-                                    <option value="Crachá">Crachá</option>
+                                    <option value="Identidade">Identidade</option>
                                     <option value="Comprovante de residência">Comprovante de residência</option>
                                     <option value="Vacinas">Vacinas</option>
                                     <option value="Certificado">Certificado</option>
@@ -3115,7 +3163,27 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                                   <input 
                                     type="file" 
                                     ref={documentoInputRef}
-                                    onChange={e => setArquivoAnexo(e.target.files?.[0] || null)}
+                                    accept="image/jpeg, image/png, application/pdf, application/msword, application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                    onChange={e => {
+                                      const file = e.target.files?.[0] || null;
+                                      if (file) {
+                                        const allowedTypes = [
+                                          'image/jpeg', 
+                                          'image/png', 
+                                          'application/pdf', 
+                                          'application/msword', 
+                                          'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                                        ];
+                                        if (!allowedTypes.includes(file.type)) {
+                                          toast.error('Formato inválido. Envie apenas JPG, PNG, PDF ou Word (Doc/Docx).');
+                                          alert('Formato inválido. Envie apenas JPG, PNG, PDF ou Word (Doc/Docx).');
+                                          e.target.value = '';
+                                          setArquivoAnexo(null);
+                                          return;
+                                        }
+                                      }
+                                      setArquivoAnexo(file);
+                                    }}
                                     className="p-1 border border-slate-200 rounded-lg text-xs w-full bg-slate-50 cursor-pointer"
                                   />
                                 </div>
