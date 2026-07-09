@@ -45,6 +45,7 @@ import {
   Phone
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { GlossyButton } from './GlossyButton';
 
 // Helper to compute calendar positions matching the layout provided
 const getDaysInMonthGrid = (monthIndex: number, year: number, customHolidays?: Record<string, string>) => {
@@ -2591,65 +2592,65 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
         {/* Lado Direito: Barra de Ações */}
         <div className="flex flex-wrap items-center gap-2 shrink-0 md:justify-end w-full md:w-auto" id="patient-actions-bar">
-          <button
+          <GlossyButton
             type="button"
             onClick={onBack}
-            className="bg-blue-500 hover:bg-blue-600 text-white h-9 px-4 rounded-md text-xs font-semibold shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer"
+            variant="gray"
             id="btn-voltar-topo-global"
           >
             <ArrowLeft size={14} />
             <span>Voltar</span>
-          </button>
+          </GlossyButton>
           {!isNew && (
-            <button
+            <GlossyButton
               type="button"
               onClick={() => setImprimirProntuarioModalOpen(true)}
-              className="bg-blue-500 hover:bg-blue-600 text-white h-9 px-4 rounded-md text-xs font-semibold shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer"
+              variant="blue"
               id="btn-imprimir-prontuario-global"
             >
               <Printer size={14} />
               <span>Exportar Prontuário</span>
-            </button>
+            </GlossyButton>
           )}
           {!isCurrentlyDeactivated ? (
             <>
               {!isNew && userRole === 'Administrador' && (
-                <button
+                <GlossyButton
                   type="button"
                   onClick={() => {
                     setDeactivateConfirmInput('');
                     setAlertDeactivateOpen(true);
                   }}
-                  className="bg-rose-500 hover:bg-rose-600 text-white h-9 px-4 rounded-md text-xs font-semibold shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer"
+                  variant="red"
                   id="btn-desativar-paciente"
                 >
                   <Lock size={14} />
                   <span>Desativar Paciente</span>
-                </button>
+                </GlossyButton>
               )}
               {userRole === 'Administrador' && (
-                <button
+                <GlossyButton
                   type="button"
                   onClick={handleSave}
-                  className="bg-emerald-500 hover:bg-emerald-600 text-white h-9 px-4.5 rounded-md text-xs font-semibold shadow-sm transition-all flex items-center space-x-1.5 cursor-pointer"
+                  variant="green"
                   id="btn-salvar-alteracoes"
                 >
                   <Save size={14} />
                   <span>Salvar Alterações</span>
-                </button>
+                </GlossyButton>
               )}
             </>
           ) : (
             userRole === 'Administrador' && (
-              <button
+              <GlossyButton
                 type="button"
                 onClick={handleReactivate}
-                className="bg-emerald-500 hover:bg-emerald-600 text-white h-9 px-4.5 rounded-md text-xs font-bold shadow-sm transition-all flex items-center space-x-1.5"
+                variant="yellow"
                 id="btn-reativar-paciente"
               >
                 <Unlock size={14} className="animate-bounce" />
                 <span>Reativar Paciente</span>
-              </button>
+              </GlossyButton>
             )
           )}
         </div>
@@ -4792,24 +4793,24 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
-              <button
+              <GlossyButton
                 type="button"
                 onClick={() => {
                   setCancelShiftModalOpen(false);
                   setSelectedShiftForCancel(null);
                 }}
-                className="px-3.5 py-2 text-xs text-slate-500 hover:bg-slate-100 rounded-lg font-medium"
+                variant="gray"
               >
                 Voltar
-              </button>
-              <button
+              </GlossyButton>
+              <GlossyButton
                 type="button"
                 onClick={handleConfirmCancelShift}
-                className="px-4 py-2 text-xs text-white bg-red-600 hover:bg-red-700 rounded-lg font-bold shadow-md shadow-red-500/10"
+                variant="red"
                 id="btn-confirm-cancel-shift"
               >
                 Salvar Cancelamento
-              </button>
+              </GlossyButton>
             </div>
           </div>
         </div>
@@ -4896,23 +4897,23 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
-              <button
+              <GlossyButton
                 type="button"
                 onClick={() => {
                   setEditShiftModalOpen(false);
                   setEditingShiftId(null);
                 }}
-                className="px-3.5 py-1.5 text-xs text-slate-500 hover:bg-slate-100 rounded-lg"
+                variant="gray"
               >
                 Cancelar
-              </button>
-              <button
+              </GlossyButton>
+              <GlossyButton
                 type="button"
                 onClick={handleSaveEditShift}
-                className="px-4 py-1.5 text-xs text-white bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold"
+                variant="green"
               >
                 Salvar Mudança
-              </button>
+              </GlossyButton>
             </div>
           </div>
         </div>
@@ -5667,14 +5668,15 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   </div>
 
                   <div className="flex gap-2 pt-3 border-t border-slate-100">
-                    <button
+                    <GlossyButton
                       type="button"
                       onClick={() => setIsEditingDetails(false)}
-                      className="flex-1 py-1.5 text-xs font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all"
+                      variant="gray"
+                      className="flex-1"
                     >
                       Voltar
-                    </button>
-                    <button
+                    </GlossyButton>
+                    <GlossyButton
                       type="button"
                       onClick={async () => {
                         if (!detailsProfName || detailsProfName.trim() === '') {
@@ -5787,10 +5789,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           alert('Erro ao atualizar plantão.');
                         }
                       }}
-                      className="flex-1 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-all"
+                      variant="green"
+                      className="flex-1"
                     >
                       Salvar Mudanças
-                    </button>
+                    </GlossyButton>
                   </div>
                 </div>
               )}
@@ -6026,14 +6029,14 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-150 mt-4">
-                <button
+                <GlossyButton
                   type="button"
                   onClick={() => setAvulsoModalOpen(false)}
-                  className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                  variant="gray"
                 >
                   Voltar
-                </button>
-                <button
+                </GlossyButton>
+                <GlossyButton
                   type="button"
                   onClick={async () => {
                     const success = await handleSalvarAgendamento();
@@ -6041,10 +6044,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       setAvulsoModalOpen(false);
                     }
                   }}
-                  className="px-4.5 py-2 text-xs font-extrabold bg-sky-600 hover:bg-sky-700 text-white rounded-lg transition-color shadow-sm cursor-pointer"
+                  variant="blue"
                 >
                   Salvar Avulso(s)
-                </button>
+                </GlossyButton>
               </div>
             </div>
           </div>

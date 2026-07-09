@@ -10,6 +10,7 @@ import { toast } from 'react-hot-toast';
 import { useFirebase } from '../context/FirebaseContext';
 import { ConfirmModal } from './ConfirmModal';
 import { CardSkeleton } from './ui/CardSkeleton';
+import { GlossyButton } from './GlossyButton';
 
 interface PatientListProps {
   pacientes: Paciente[];
@@ -233,39 +234,41 @@ export const PatientList: React.FC<PatientListProps> = ({
               <span className="text-xs text-slate-500 mr-2 font-medium">
                 {selectedIds.length} selecionado(s):
               </span>
-              <button
+              <GlossyButton
                 onClick={() => {
                   setDeactivateConfirmText('');
                   setBulkDeactivateOpen(true);
                 }}
-                className="flex items-center space-x-1 px-3 py-1.5 text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 rounded-md transition-colors cursor-pointer shadow-xs"
+                variant="red"
+                className="py-1.5 px-3 min-w-[100px] text-xs gap-1"
                 title="Desativar selecionados"
               >
                 <EyeOff size={13} />
                 <span>Desativar</span>
-              </button>
-              <button
+              </GlossyButton>
+              <GlossyButton
                 onClick={() => {
                   setDeleteConfirmText('');
                   setBulkDeleteOpen(true);
                 }}
-                className="flex items-center space-x-1 px-3 py-1.5 text-xs font-semibold text-white bg-rose-500 hover:bg-rose-600 rounded-md transition-colors cursor-pointer shadow-xs"
+                variant="red"
+                className="py-1.5 px-3 min-w-[100px] text-xs gap-1"
                 title="Excluir selecionados"
               >
                 <Trash size={13} />
                 <span>Excluir</span>
-              </button>
+              </GlossyButton>
             </div>
           )}
 
-          <button
+          <GlossyButton
             onClick={onNewPatient}
-            className="flex items-center space-x-1.5 px-5 py-2 text-xs font-semibold text-white bg-emerald-500 hover:bg-emerald-600 rounded-md transition-all shadow-sm cursor-pointer"
+            variant="green"
             id="btn-novo-paciente"
           >
             <Plus size={16} />
             <span>Novo Paciente</span>
-          </button>
+          </GlossyButton>
         </div>
       </div>
 

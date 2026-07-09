@@ -120,4 +120,103 @@ body {
   }
 }
 
+.btn-paciente-gradient {
+  --clr-font-main: hsla(0, 0%, 20%, 1);
+  --btn-bg-1: hsla(194, 100%, 69%, 1);
+  --btn-bg-2: hsla(217, 100%, 56%, 1);
+  --btn-bg-color: hsla(360, 100%, 100%, 1);
+  --radii: 0.5em;
+  cursor: pointer;
+  padding: 0.9em 1.4em;
+  min-width: 120px;
+  min-height: 44px;
+  font-size: 1rem;
+  font-weight: 500;
+  transition: 0.8s;
+  background-size: 280% auto;
+  background-image: linear-gradient(325deg, var(--btn-bg-2) 0%, var(--btn-bg-1) 55%, var(--btn-bg-2) 90%);
+  border: none;
+  border-radius: var(--radii);
+  color: var(--btn-bg-color);
+  box-shadow:
+    0px 0px 20px rgba(71, 184, 255, 0.5),
+    0px 5px 5px -1px rgba(58, 125, 233, 0.25),
+    inset 4px 4px 8px rgba(175, 230, 255, 0.5),
+    inset -4px -4px 8px rgba(19, 95, 216, 0.35);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-paciente-gradient:hover {
+  background-position: right top;
+}
+
+.btn-paciente-gradient:is(:focus, :focus-visible, :active) {
+  outline: none;
+  box-shadow:
+    0 0 0 3px var(--btn-bg-color),
+    0 0 0 6px var(--btn-bg-2);
+}
+
+/* Estrutura Base do Botão 3D */
+.btn-glossy {
+  --radii: 0.5em;
+  --btn-bg-color: #ffffff;
+  cursor: pointer;
+  padding: 0.7em 1.2em;
+  min-width: 140px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  transition: 0.8s;
+  background-size: 280% auto;
+  background-image: linear-gradient(325deg, var(--btn-bg-2) 0%, var(--btn-bg-1) 55%, var(--btn-bg-2) 90%);
+  border: none;
+  border-radius: var(--radii);
+  color: var(--btn-bg-color);
+  box-shadow:
+    0px 0px 20px var(--shadow-1),
+    0px 5px 5px -1px var(--shadow-2),
+    inset 4px 4px 8px var(--shadow-3),
+    inset -4px -4px 8px var(--shadow-4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem; /* Espaço para o ícone */
+}
+
+.btn-glossy:hover { background-position: right top; }
+.btn-glossy:is(:focus, :focus-visible, :active) {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--btn-bg-color), 0 0 0 6px var(--btn-bg-2);
+}
+
+/* Paleta Harmônica de Cores */
+.btn-blue { /* Exportar */
+  --btn-bg-1: #47b8ff; --btn-bg-2: #135fd8;
+  --shadow-1: rgba(71, 184, 255, 0.4); --shadow-2: rgba(58, 125, 233, 0.25);
+  --shadow-3: rgba(175, 230, 255, 0.5); --shadow-4: rgba(19, 95, 216, 0.35);
+}
+.btn-green { /* Salvar */
+  --btn-bg-1: #34d399; --btn-bg-2: #059669;
+  --shadow-1: rgba(52, 211, 153, 0.4); --shadow-2: rgba(5, 150, 105, 0.25);
+  --shadow-3: rgba(167, 243, 208, 0.5); --shadow-4: rgba(4, 120, 87, 0.35);
+}
+.btn-red { /* Desativar */
+  --btn-bg-1: #fb7185; --btn-bg-2: #e11d48;
+  --shadow-1: rgba(251, 113, 133, 0.4); --shadow-2: rgba(225, 29, 72, 0.25);
+  --shadow-3: rgba(254, 205, 211, 0.5); --shadow-4: rgba(190, 18, 60, 0.35);
+}
+.btn-gray { /* Voltar */
+  --btn-bg-1: #94a3b8; --btn-bg-2: #475569;
+  --shadow-1: rgba(148, 163, 184, 0.4); --shadow-2: rgba(71, 85, 105, 0.25);
+  --shadow-3: rgba(226, 232, 240, 0.5); --shadow-4: rgba(51, 65, 85, 0.35);
+}
+.btn-yellow {
+  --btn-bg-1: #fbbf24; --btn-bg-2: #d97706;
+  --shadow-1: rgba(251, 191, 36, 0.4); --shadow-2: rgba(217, 119, 6, 0.25);
+  --shadow-3: rgba(253, 230, 138, 0.5); --shadow-4: rgba(180, 83, 9, 0.35);
+}
+
+
 

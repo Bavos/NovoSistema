@@ -13,6 +13,7 @@ import { fetchCep, fetchBanks } from '../lib/brasilApi';
 import { toast } from 'react-hot-toast';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { CardSkeleton } from '../components/ui/CardSkeleton';
+import { GlossyButton } from '../components/GlossyButton';
 
 interface ProfissionaisProps {
   initialSelectedProfId?: string;
@@ -1822,21 +1823,15 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                <table className="w-full text-left border-collapse">
                  <tbody>
                    <tr className="border-b border-slate-300">
-                     <td className="py-2">
+                     <td className="py-3">
                         <div className="italic text-slate-500 text-xs">Nome</div>
                         <div className="text-sm font-semibold text-slate-800">{profData.nome}</div>
                      </td>
                    </tr>
                    <tr className="border-b border-slate-300">
-                     <td className="py-2">
+                     <td className="py-3">
                         <div className="italic text-slate-500 text-xs">CPF</div>
                         <div className="text-sm font-semibold text-slate-800">{profData.cpf}</div>
-                     </td>
-                   </tr>
-                   <tr className="border-b border-slate-300">
-                     <td className="py-2">
-                        <div className="italic text-slate-500 text-xs">RG</div>
-                        <div className="text-sm font-semibold text-slate-800">{profData.rg}</div>
                      </td>
                    </tr>
                  </tbody>
@@ -1946,13 +1941,13 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
 
         {/* Right side primary action */}
         <div className="flex items-center gap-2">
-          <button
+          <GlossyButton
             onClick={() => handleOpenModal()}
-            className="flex items-center space-x-1.5 px-5 py-2 text-xs font-semibold text-white bg-emerald-500 hover:bg-emerald-600 rounded-md transition-all shadow-sm cursor-pointer"
+            variant="green"
           >
             <Plus size={14} />
             <span>Novo Profissional</span>
-          </button>
+          </GlossyButton>
         </div>
       </div>
 
@@ -2199,33 +2194,32 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
 
                         {/* Botões do Form de Ocorrência */}
                         <div className="flex gap-2 justify-end pt-2 border-t border-slate-100">
-                          <button
+                          <GlossyButton
                             type="button"
                             onClick={handleCloseFormOcorrencia}
-                            className="px-4 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-700 transition cursor-pointer"
+                            variant="gray"
                           >
                             Cancelar
-                          </button>
-                          <button
+                          </GlossyButton>
+                          <GlossyButton
                             type="button"
                             onClick={handleSaveOcorrencia}
                             disabled={savingOcorrencia}
-                            className="px-4 py-1.5 text-xs font-extrabold text-white bg-red-650 hover:bg-red-700 rounded-lg transition shadow-sm disabled:opacity-50 cursor-pointer"
-                            style={{ backgroundColor: '#1a3c2e', color: '#b8860b' }}
+                            variant="green"
                           >
                             {savingOcorrencia ? 'Salvando...' : 'Salvar Ocorrência'}
-                          </button>
+                          </GlossyButton>
                         </div>
                       </div>
                     ) : (
                       <div className="flex justify-end">
-                        <button
+                        <GlossyButton
                           type="button"
                           onClick={() => setExibindoFormOcorrencia(true)}
-                          className="px-4 py-2 bg-[#1a3c2e] text-[#b8860b] text-xs font-extrabold rounded-lg hover:opacity-90 transition-opacity flex items-center gap-1.5 cursor-pointer border border-[#b8860b]/30 shadow-xs"
+                          variant="blue"
                         >
                           <span>+ Registrar Ocorrência</span>
-                        </button>
+                        </GlossyButton>
                       </div>
                     )}
 
@@ -2835,10 +2829,6 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                          <input type="text" value={formData.idade || ''} disabled className="p-2 border border-gray-100 rounded-lg text-xs w-full bg-gray-50 text-gray-400 font-medium" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">RG</label>
-                        <input type="text" placeholder="Digite o RG" value={formData.rg} onChange={e => setFormData({...formData, rg: e.target.value})} className="p-2 border border-gray-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-[#1a3c2e] focus:border-transparent outline-none bg-white text-gray-800" />
-                      </div>
-                      <div className="space-y-1">
                         <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">CPF (Obrigatório)</label>
                         <div className="relative">
                           <input
@@ -3189,15 +3179,16 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                                 </div>
 
                                 <div className="md:col-span-3">
-                                  <button
+                                  <GlossyButton
                                     type="button"
                                     onClick={handleUploadAnexo}
                                     disabled={salvandoAnexo}
-                                    className="w-full bg-[#1a3c2e] text-[#b8860b] hover:bg-[#132c22] disabled:bg-slate-300 disabled:text-slate-500 rounded-lg font-bold py-2 px-3 text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                                    variant="green"
+                                    className="w-full"
                                   >
                                     {salvandoAnexo ? (
                                       <>
-                                        <span className="w-3 h-3 border-2 border-[#b8860b] border-t-transparent rounded-full animate-spin"></span>
+                                        <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
                                         <span>Carregando...</span>
                                       </>
                                     ) : (
@@ -3206,7 +3197,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                                         <span>Salvar Anexo</span>
                                       </>
                                     )}
-                                  </button>
+                                  </GlossyButton>
                                 </div>
                               </div>
                             </div>
@@ -3268,23 +3259,23 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
             {activeTab === 'dados' && (
               <div className="flex justify-end items-center gap-3 pt-4 border-t border-slate-100 mt-2 print:hidden">
                   {editingProf && userRole === 'Administrador' && (
-                      <button
+                      <GlossyButton
                           type="button"
                           onClick={() => setDeleteProfConfirmOpen(true)}
-                          className="bg-rose-500 hover:bg-rose-600 text-white px-4 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
+                          variant="red"
                       >
                           <Trash2 size={13} />
                           Excluir
-                      </button>
+                      </GlossyButton>
                   )}
-                  <button
+                  <GlossyButton
                     type="submit"
                     disabled={loading}
-                    className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-md text-xs font-semibold disabled:bg-gray-450 transition-all flex items-center gap-1.5 shadow-xs"
+                    variant="green"
                   >
                     <Save size={13} />
                     {loading ? 'Salvando...' : 'Salvar'}
-                  </button>
+                  </GlossyButton>
               </div>
             )}
           </form>

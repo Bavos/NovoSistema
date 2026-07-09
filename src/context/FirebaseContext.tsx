@@ -24,11 +24,16 @@ import {
   serverTimestamp,
   query,
   where,
-  orderBy
+  orderBy,
+  limit,
+  startAfter
 } from 'firebase/firestore';
 
 interface FirebaseContextType {
   pacientes: Paciente[];
+  loadingPacientes: boolean;
+  hasMore: boolean;
+  loadMorePacientes: () => Promise<void>;
   plantoes: Plantao[];
   agendamentos: Agendamento[];
   loading: boolean;
@@ -92,6 +97,67 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [logsAuditoria, setLogsAuditoria] = useState<AuditLog[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Pagination states for patients
+  const [loadingPacientes, setLoadingPacientes] = useState(false);
+  const [lastVisible, setLastVisible] = useState<any>(null);
+  const [hasMore, setHasMore] = useState(true);
+
+  const fetchFirstPagePacientes = async () => {
+    setLoadingPacientes(true);
+    try {
+      const q = query(collection(db, 'pacientes'), orderBy('nome'), limit(20));
+      const snap = await getDocs(q);
+      const list: Paciente[] = [];
+      snap.forEach((d) => list.push(d.data() as Paciente));
+      setPacientes(list);
+      
+      if (!snap.empty) {
+        const lastDoc = snap.docs[snap.docs.length - 1];
+        setLastVisible(lastDoc);
+        setHasMore(snap.docs.length === 20);
+      } else {
+        setLastVisible(null);
+        setHasMore(false);
+      }
+    } catch (error) {
+      console.error("Erro ao carregar primeira página de pacientes:", error);
+      handleFirestoreError(error, OperationType.GET, 'pacientes');
+    } finally {
+      setLoadingPacientes(false);
+      setLoading(false);
+    }
+  };
+
+  const loadMorePacientes = async () => {
+    if (!hasMore || loadingPacientes || !lastVisible) return;
+    setLoadingPacientes(true);
+    try {
+      const q = query(
+        collection(db, 'pacientes'),
+        orderBy('nome'),
+        startAfter(lastVisible),
+        limit(20)
+      );
+      const snap = await getDocs(q);
+      const list: Paciente[] = [];
+      snap.forEach((d) => list.push(d.data() as Paciente));
+      
+      if (list.length > 0) {
+        setPacientes((prev) => [...prev, ...list]);
+        const lastDoc = snap.docs[snap.docs.length - 1];
+        setLastVisible(lastDoc);
+        setHasMore(snap.docs.length === 20);
+      } else {
+        setHasMore(false);
+      }
+    } catch (error) {
+      console.error("Erro ao carregar mais pacientes:", error);
+      handleFirestoreError(error, OperationType.GET, 'pacientes');
+    } finally {
+      setLoadingPacientes(false);
+    }
+  };
 
   // Authentication State Observer
   useEffect(() => {
@@ -250,7 +316,6 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Perform Background Authentication and Real-time Live Firestore Mirroring
   useEffect(() => {
-    let unsubscribePacientes: (() => void) | null = null;
     let unsubscribePlantoes: (() => void) | null = null;
     let unsubscribeAgendamentos: (() => void) | null = null;
     let unsubscribeProfissionais: (() => void) | null = null;
@@ -293,13 +358,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
       */
 
-      // 3. Real-time Subscription to collections
-      unsubscribePacientes = onSnapshot(collection(db, 'pacientes'), (snap) => {
-        const list: Paciente[] = [];
-        snap.forEach((d) => list.push(d.data() as Paciente));
-        setPacientes(list);
-        setLoading(false);
-      }, (error) => handleFirestoreError(error, OperationType.GET, 'pacientes'));
+      // 3. Load paginated patients first page
+      fetchFirstPagePacientes();
 
       unsubscribePlantoes = onSnapshot(collection(db, 'plantoes'), (snap) => {
         const list: Plantao[] = [];
@@ -353,7 +413,6 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     initFirebaseSync();
 
     return () => {
-      if (unsubscribePacientes) unsubscribePacientes();
       if (unsubscribePlantoes) unsubscribePlantoes();
       if (unsubscribeAgendamentos) unsubscribeAgendamentos();
       if (unsubscribeProfissionais) unsubscribeProfissionais();
@@ -1003,6 +1062,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     <FirebaseContext.Provider
       value={{
         pacientes,
+        loadingPacientes,
+        hasMore,
+        loadMorePacientes,
         plantoes,
         agendamentos,
         loading,

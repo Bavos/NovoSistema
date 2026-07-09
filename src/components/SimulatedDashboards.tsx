@@ -36,6 +36,7 @@ import { db } from '../lib/firebase';
 import { collection, query, where, getDocs, doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { mascaraCNPJ } from '../lib/masks';
 import { toast } from 'react-hot-toast';
+import { GlossyButton } from './GlossyButton';
 
 /* ----------------------------------------------------
  * Tab 2: Profissionais Co-curators
@@ -2177,24 +2178,24 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                       <span className="text-xs font-bold text-slate-700">Relatório Consolidado Gerado com Sucesso</span>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <button
+                      <GlossyButton
                         onClick={handlePrint}
-                        className="px-3.5 py-2 bg-slate-500 hover:bg-slate-600 active:scale-[0.99] text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                        variant="gray"
                       >
                         <Printer className="w-4 h-4" /> Imprimir Relatório
-                      </button>
-                      <button
+                      </GlossyButton>
+                      <GlossyButton
                         onClick={exportExcel}
-                        className="px-3.5 py-2 bg-[#f8fafc] hover:bg-slate-100 hover:scale-[1.01] text-slate-700 rounded-xl text-xs font-bold tracking-tight border border-slate-200 shadow-sm flex items-center gap-1.5 cursor-pointer"
+                        variant="yellow"
                       >
-                        <FileDown className="w-4 h-4 text-emerald-600" /> Exportar Planilha Excel
-                      </button>
-                      <button
+                        <FileDown className="w-4 h-4" /> Exportar Planilha Excel
+                      </GlossyButton>
+                      <GlossyButton
                         onClick={exportWord}
-                        className="px-3.5 py-2 bg-[#f8fafc] hover:bg-slate-100 hover:scale-[1.01] text-slate-700 rounded-xl text-xs font-bold tracking-tight border border-slate-200 shadow-sm flex items-center gap-1.5 cursor-pointer"
+                        variant="blue"
                       >
-                        <Briefcase className="w-4 h-4 text-blue-600" /> Exportar Word
-                      </button>
+                        <Briefcase className="w-4 h-4" /> Exportar Word
+                      </GlossyButton>
                     </div>
                   </div>
                 )}
@@ -2229,18 +2230,18 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <button
+                        <GlossyButton
                           onClick={exportExcel}
-                          className="px-3 py-2 bg-[#f8fafc] hover:bg-slate-100 hover:scale-[1.01] text-slate-700 rounded-xl text-xs font-bold tracking-tight border border-slate-200 shadow-sm flex items-center gap-1.5 cursor-pointer transition-all"
+                          variant="yellow"
                         >
-                          <FileDown className="w-4 h-4 text-emerald-600" /> Exportar Planilha Excel
-                        </button>
-                        <button
+                          <FileDown className="w-4 h-4" /> Exportar Planilha Excel
+                        </GlossyButton>
+                        <GlossyButton
                           onClick={handlePrint}
-                          className="px-3.5 py-2 bg-slate-500 hover:bg-slate-600 active:scale-[0.99] text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                          variant="gray"
                         >
                           <Printer className="w-4 h-4" /> Imprimir Relatório
-                        </button>
+                        </GlossyButton>
                       </div>
                     </div>
 
@@ -3573,17 +3574,15 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                        <div className="flex justify-between items-center mb-4 print:hidden">
                         <h3 className="font-black text-lg text-slate-800">Visualização de {viewDoc.type === 'fatura' ? 'Fatura' : 'Folha'}</h3>
                         <div className="flex gap-2">
-                            <button 
-                                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold cursor-pointer hover:bg-blue-700 transition-colors"
+                            <GlossyButton 
+                                variant="blue"
                                 onClick={async () => {
                                     await handleDownloadWordFromCanvas(viewDoc.data, viewDoc.type);
                                 }}
                                 disabled={loadingExport}
                             >
-                                {loadingExport ? "Gerando..." : "Exportar Imagem (JPEG)"}
-                            </button>
-                            <button 
-                                 className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold cursor-pointer hover:bg-emerald-700 transition-colors"
+                                {loadingExport ? "Gerando..." : "Exportar Imagem (JPEG)"}</GlossyButton>
+                            <GlossyButton variant="yellow"
                                  onClick={() => {
                                      import('xlsx').then(XLSX => {
                                          const rows = plantoesValidos.map((p: any) => {
@@ -3642,8 +3641,8 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                          XLSX.writeFile(wb, `${viewDoc.type}_${viewDoc.data.id.substring(0, 8)}.xlsx`);
                                      });
                                  }}
-                            >Exportar XLSX</button>
-                            <button onClick={() => setViewDoc(null)} className="px-4 py-2 bg-slate-200 rounded-lg text-xs font-bold hover:bg-slate-300 transition-colors">Fechar</button>
+                            >Exportar XLSX</GlossyButton>
+                            <GlossyButton onClick={() => setViewDoc(null)} variant="gray">Fechar</GlossyButton>
                         </div>
                       </div>
                       <div id="print-area" ref={faturaRef} className="w-[210mm] p-[10mm] bg-[#fcf8f2] text-black border border-slate-300 mx-auto print:w-full print:p-0 print:border-none print:shadow-none print:m-0">
