@@ -11,6 +11,7 @@ import { useFirebase } from '../context/FirebaseContext';
 import { ConfirmModal } from './ConfirmModal';
 import { CardSkeleton } from './ui/CardSkeleton';
 import { GlossyButton } from './GlossyButton';
+import { normalizeText } from '../lib/masks';
 
 interface PatientListProps {
   pacientes: Paciente[];
@@ -61,7 +62,7 @@ export const PatientList: React.FC<PatientListProps> = ({
 
   // Combined Search and Filters
   const filteredPacientes = useMemo(() => {
-    const query = (localSearch || globalSearchQuery || '').toLowerCase().trim();
+    const query = normalizeText(localSearch || globalSearchQuery).trim();
     const cleanQuery = query.replace(/\D/g, '');
 
     const filtered = pacientes.filter((p) => {
@@ -70,11 +71,11 @@ export const PatientList: React.FC<PatientListProps> = ({
       const cleanPhone = (p.telefoneResponsavel || '').replace(/\D/g, '');
 
       const matchSearch = !query ||
-        (p.nome || '').toLowerCase().includes(query) ||
-        (p.cpf || '').toLowerCase().includes(query) ||
-        (p.bairro || '').toLowerCase().includes(query) ||
-        (p.nomeResponsavel || '').toLowerCase().includes(query) ||
-        (p.parentescoResponsavel || '').toLowerCase().includes(query) ||
+        normalizeText(p.nome).includes(query) ||
+        normalizeText(p.cpf).includes(query) ||
+        normalizeText(p.bairro).includes(query) ||
+        normalizeText(p.nomeResponsavel).includes(query) ||
+        normalizeText(p.parentescoResponsavel).includes(query) ||
         (cleanQuery && cleanCpf.includes(cleanQuery)) ||
         (cleanQuery && cleanPhone.includes(cleanQuery));
 

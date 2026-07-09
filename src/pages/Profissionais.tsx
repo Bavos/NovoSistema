@@ -8,7 +8,7 @@ import { db, storage } from '../lib/firebase';
 import { collection, query, where, orderBy, onSnapshot, doc, getDoc, updateDoc, addDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { profissionalSchema } from '../schemas/validationSchemas';
-import { mascaraCPF, mascaraCNPJ, mascaraTelefone, mascaraCEP, validarCPF } from '../lib/masks';
+import { mascaraCPF, mascaraCNPJ, mascaraTelefone, mascaraCEP, validarCPF, maskBankAccount, normalizeText } from '../lib/masks';
 import { fetchCep, fetchBanks } from '../lib/brasilApi';
 import { toast } from 'react-hot-toast';
 import { ConfirmModal } from '../components/ConfirmModal';
@@ -1849,7 +1849,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
   };
 
   const filteredAndSortedProfissionais = useMemo(() => {
-    const query = searchTerm.toLowerCase().trim();
+    const query = normalizeText(searchTerm).trim();
     const cleanQuery = query.replace(/\D/g, '');
 
     return (profissionais || [])
@@ -1863,10 +1863,10 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
         const cleanPhone = (prof.telefone || '').replace(/\D/g, '');
 
         const matchSearch = !query ||
-          (prof.nome || '').toLowerCase().includes(query) ||
-          (prof.cpf || '').toLowerCase().includes(query) ||
-          (prof.telefone || '').toLowerCase().includes(query) ||
-          (prof.especialidade || '').toLowerCase().includes(query) ||
+          normalizeText(prof.nome).includes(query) ||
+          normalizeText(prof.cpf).includes(query) ||
+          normalizeText(prof.telefone).includes(query) ||
+          normalizeText(prof.especialidade).includes(query) ||
           (cleanQuery && cleanCpf.includes(cleanQuery)) ||
           (cleanQuery && cleanPhone.includes(cleanQuery));
 
@@ -3093,7 +3093,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                           ))}
                         </select>}
                         <input type="text" placeholder="Agência" value={formData.dadosBancarios.agencia} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, agencia: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]" />
-                       <input type="text" placeholder="Conta" value={formData.dadosBancarios.conta} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, conta: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]" />
+                        <input type="text" placeholder="Conta" value={formData.dadosBancarios.conta} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, conta: maskBankAccount(e.target.value)}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]" />
                        <div className="relative">
                          <input
                            type="text"

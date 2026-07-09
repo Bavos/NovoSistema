@@ -92,3 +92,34 @@ export const mascaraMesAno = (value: string): string => {
   return `${limited.slice(0, 2)}/${limited.slice(2)}`;
 };
 
+/**
+ * Aplica máscara de Conta Bancária: Converte "123456" em "12345-6" ou "123x" em "123-X"
+ */
+export const maskBankAccount = (value: string): string => {
+  // Remove any character that is not a digit or X/x
+  const clean = value.replace(/[^0-9Xx]/g, '');
+  
+  // X/x is only allowed at the very end. Let's filter out any X/x that are not at the end.
+  const digits = clean.replace(/[Xx]/g, '');
+  const hasXAtEnd = /[Xx]$/.test(clean);
+  
+  const finalValue = digits + (hasXAtEnd ? clean.charAt(clean.length - 1).toUpperCase() : '');
+  
+  if (finalValue.length <= 1) {
+    return finalValue;
+  }
+  
+  const mainPart = finalValue.slice(0, -1);
+  const dv = finalValue.slice(-1);
+  return `${mainPart}-${dv}`;
+};
+
+/**
+ * Remove acentos, caracteres especiais de acentuação e converte para minúsculas.
+ */
+export const normalizeText = (text: string | null | undefined): string => {
+  return text ? text.toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "") : "";
+};
+
+
+
