@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
 import { Paciente, EscalacaoPlano } from '../types';
 
-export function usePacienteData(pacienteId: string | null | undefined) {
+export function usePacienteData(pacienteId: string | null | undefined, initialPaciente?: Paciente | null) {
   const { pacientes, updatePaciente } = useFirebase();
   const [tipoEscala, setTipoEscala] = useState<string>('Diurno 12h');
   const [horaInicioPadrao, setHoraInicioPadrao] = useState('07:00');
@@ -20,7 +20,7 @@ export function usePacienteData(pacienteId: string | null | undefined) {
       setLoading(true);
       // Simulate network look-up delay from Firestore
       const timer = setTimeout(() => {
-        const found = pacientes.find(p => p.id === pacienteId);
+        const found = pacientes.find(p => p.id === pacienteId) || initialPaciente;
         if (found && found.planoAtendimento) {
           setTipoEscala(found.planoAtendimento.tipoEscala || 'Diurno 12h');
           setHoraInicioPadrao(found.planoAtendimento.horaInicioPadrao || '07:00');
@@ -35,7 +35,7 @@ export function usePacienteData(pacienteId: string | null | undefined) {
       }, 100);
       return () => clearTimeout(timer);
     }
-  }, [pacienteId, pacientes]);
+  }, [pacienteId, pacientes, initialPaciente]);
 
   // Simulate firestore "updateDoc" function
   const updateDoc = async (id: string, updatedFields: Partial<Paciente>) => {
@@ -43,7 +43,7 @@ export function usePacienteData(pacienteId: string | null | undefined) {
     return new Promise<void>((resolve, reject) => {
       setTimeout(async () => {
         try {
-          const current = pacientes.find(p => p.id === id);
+          const current = pacientes.find(p => p.id === id) || initialPaciente;
           if (!current) {
             throw new Error('Paciente não encontrado no Firestore.');
           }

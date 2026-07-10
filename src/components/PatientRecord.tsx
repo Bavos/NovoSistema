@@ -10,6 +10,7 @@ import { fetchCep, fetchBanks, getHolidays } from '../lib/brasilApi';
 import { Paciente, Plantao, CancelingReason, EscalacaoPlano, Agendamento } from '../types';
 import { useFirebase } from '../context/FirebaseContext';
 import { usePacienteData } from '../hooks/usePacienteData';
+import { ModalInserirDebito, DadosAtalhoCuringa } from './ModalInserirDebito';
 import { CardBase, DataGrid, DataField, SoftBadge } from './ui/DesignSystem';
 import { pacienteSchema } from '../schemas/validationSchemas';
 import { mascaraCPF, mascaraTelefone, mascaraCEP, mascaraMesAno, validarCPF } from '../lib/masks';
@@ -407,6 +408,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
+  // Curinga shortcut modal state
+  const [isCuringaShortcutModalOpen, setIsCuringaShortcutModalOpen] = useState(false);
+  const [curingaShortcutData, setCuringaShortcutData] = useState<DadosAtalhoCuringa | null>(null);
+
   // Clipboard state for copying/pasting shifts
   const [copiedShift, setCopiedShift] = useState<Agendamento | null>(null);
   const [copiedDayShifts, setCopiedDayShifts] = useState<Agendamento[] | null>(null);
@@ -471,7 +476,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       alert('Salve o paciente antes de cadastrar uma ocorrência.');
       return;
     }
-    const targetPatient = pacientes.find(p => p.id === paciente.id);
+    const targetPatient = pacientes.find(p => p.id === paciente.id) || paciente;
     if (!targetPatient) {
       alert('Paciente correspondente não foi encontrado.');
       return;
@@ -546,6 +551,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       };
 
       await updatePaciente(updatedObj, true);
+      if (onSelectPatient) {
+        onSelectPatient(updatedObj);
+      }
       if (userRole === 'Administrador' && paciente) {
         await addAuditLog(
           'UPDATE',
@@ -583,7 +591,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
   const handleDeleteOcorrencia = async (ocId: string) => {
     if (!paciente) return;
-    const targetPatient = pacientes.find(p => p.id === paciente.id);
+    const targetPatient = pacientes.find(p => p.id === paciente.id) || paciente;
     if (!targetPatient) return;
 
     if (!window.confirm('Tem certeza de que deseja excluir esta ocorrência?')) {
@@ -611,6 +619,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       };
 
       await updatePaciente(updatedObj, true);
+      if (onSelectPatient) {
+        onSelectPatient(updatedObj);
+      }
       if (userRole === 'Administrador' && paciente) {
         await addAuditLog('UPDATE', 'pacientes', paciente.id, `Administrador excluiu ocorrência do paciente ${paciente.nome}`);
       }
@@ -644,9 +655,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const [responsavelPagamento, setResponsavelPagamento] = useState<'O próprio Paciente' | 'Outro Responsável'>('O próprio Paciente');
   const [nomePagador, setNomePagador] = useState('');
   const [cpfPagador, setCpfPagador] = useState('');
-  const [opcaoEnvio, setOpcaoEnvio] = useState<'WhatsApp' | 'E-mail' | 'Ambos'>('WhatsApp');
+  const [opcaoEnvio, setOpcaoEnvio] = useState<'WhatsApp' | 'E-mail' | 'Ambos' | 'Somente fatura'>('WhatsApp');
   const [whatsappFaturamento, setWhatsappFaturamento] = useState('');
-  const [emailFaturamento, setEmailFaturamento] = useState('');
   const [dataReajuste, setDataReajuste] = useState('');
 
   // Endereço block
@@ -702,7 +712,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     tiposPlantao,
     setTiposPlantao,
     savePlanoAtendimento,
-  } = usePacienteData(paciente?.id);
+  } = usePacienteData(paciente?.id, paciente);
 
   // New States for attached Calendar Layout & Buttons
   const [calendarMonth, setCalendarMonth] = useState<number>(new Date().getMonth());
@@ -815,6 +825,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const [newSubValorAlimentacao, setNewSubValorAlimentacao] = useState<number | ''>(0);
   const [newSubTaxaAdm, setNewSubTaxaAdm] = useState<number | ''>(0);
   const [editingSubId, setEditingSubId] = useState<string | null>(null);
+  const [showExtraForm, setShowExtraForm] = useState<boolean>(false);
 
   // Status simulation
   const [isNew, setIsNew] = useState(true);
@@ -843,7 +854,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       setCpfPagador(paciente.dadosPagamento?.cpfPagador || '');
       setOpcaoEnvio(paciente.dadosPagamento?.opcaoEnvio || 'WhatsApp');
       setWhatsappFaturamento(paciente.dadosPagamento?.whatsappFaturamento || '');
-      setEmailFaturamento(paciente.dadosPagamento?.emailFaturamento || '');
       setDataReajuste(paciente.dadosPagamento?.dataReajuste || '');
 
       setRua(paciente.endereco.rua);
@@ -894,7 +904,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       setCpfPagador('');
       setOpcaoEnvio('WhatsApp');
       setWhatsappFaturamento('');
-      setEmailFaturamento('');
 
       setRua('');
       setNumero('');
@@ -927,7 +936,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   // Carregamento Inicial (useEffect) do Firestore na montagem da sub-aba 'Plano de Atendimento'
   useEffect(() => {
     if (activeTab === 'plano' && paciente) {
-      const found = pacientes.find(p => p.id === paciente.id);
+      const found = pacientes.find(p => p.id === paciente.id) || paciente;
       if (found && found.planoAtendimento) {
         setTipoEscala(found.planoAtendimento.tipoEscala || 'Diurno 12h');
         setHoraInicioPadrao(found.planoAtendimento.horaInicioPadrao || '07:00');
@@ -1041,8 +1050,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     }
 
     if (opcaoEnvio === 'E-mail' || opcaoEnvio === 'Ambos') {
-      if (!emailFaturamento.trim()) {
-        toast.error('Por favor, preencha o E-mail para Faturamento.');
+      if (!email.trim()) {
+        toast.error('Por favor, preencha o E-mail para Envio.');
         return;
       }
     }
@@ -1075,11 +1084,14 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         observacoesClinicas,
       },
       planoAtendimento: {
+        ...(paciente?.planoAtendimento || {}),
         tipoEscala,
         horaInicioPadrao,
-        valorSugeridoPlantao,
-        ajudaCusto,
-        taxaAdm,
+        valorSugeridoPlantao: valorSugeridoPlantao === '' ? '' : Number(valorSugeridoPlantao),
+        ajudaCusto: ajudaCusto === '' ? '' : Number(ajudaCusto),
+        valorTransporte: valorTransporte === '' ? '' : Number(valorTransporte),
+        valorAlimentacao: valorAlimentacao === '' ? '' : Number(valorAlimentacao),
+        taxaAdm: taxaAdm === '' ? '' : Number(taxaAdm),
         tiposPlantao,
       },
       dadosPagamento: {
@@ -1088,7 +1100,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         cpfPagador: responsavelPagamento === 'Outro Responsável' ? cpfPagador : '',
         opcaoEnvio,
         whatsappFaturamento: (opcaoEnvio === 'WhatsApp' || opcaoEnvio === 'Ambos') ? whatsappFaturamento : '',
-        emailFaturamento: (opcaoEnvio === 'E-mail' || opcaoEnvio === 'Ambos') ? emailFaturamento : '',
+        emailFaturamento: (opcaoEnvio === 'E-mail' || opcaoEnvio === 'Ambos') ? email : '',
         dataReajuste,
       },
     };
@@ -1153,7 +1165,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     }
 
     try {
-      const current = pacientes.find(p => p.id === paciente.id);
+      const current = pacientes.find(p => p.id === paciente.id) || paciente;
       if (!current) {
         throw new Error('Paciente não encontrado no Firestore.');
       }
@@ -1173,6 +1185,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       };
 
       await updatePaciente(updatedObj, true);
+      if (onSelectPatient) {
+        onSelectPatient(updatedObj);
+      }
       if (userRole === 'Administrador') {
         await addAuditLog('UPDATE', 'pacientes', paciente.id, `Administrador atualizou o Plano de Atendimento do paciente ${paciente.nome}`);
       }
@@ -1227,7 +1242,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       cancelText: 'Cancelar',
       onConfirm: async () => {
         try {
-          const current = pacientes.find(p => p.id === paciente.id);
+          const current = pacientes.find(p => p.id === paciente.id) || paciente;
           if (!current) {
             throw new Error('Paciente não encontrado no Firestore.');
           }
@@ -1264,12 +1279,16 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             };
           }
 
-          // 4. Persistencia no Firebase (Firestore) com updateDoc
-          const docRef = doc(db, 'pacientes', paciente.id);
+          // 4. Persistencia no Firebase (Firestore) com updatePaciente
+          const updatedObj = {
+            ...current,
+            planoAtendimento: updatedPlano,
+          };
           try {
-            await updateDoc(docRef, {
-              planoAtendimento: updatedPlano
-            });
+            await updatePaciente(updatedObj, true);
+            if (onSelectPatient) {
+              onSelectPatient(updatedObj);
+            }
           } catch (firestoreErr) {
             handleFirestoreError(firestoreErr, OperationType.UPDATE, `pacientes/${paciente.id}`);
           }
@@ -2934,7 +2953,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     </div>
 
                     <div className="space-y-1 col-span-1">
-                      <label className="block text-xs font-medium text-gray-750">Canal de Envio da Fatura/Boleto *</label>
+                      <label className="block text-xs font-medium text-gray-750">Envio da Fatura/Boleto *</label>
                       <select
                         disabled={isCurrentlyDeactivated || isColaborador}
                         value={opcaoEnvio}
@@ -2944,6 +2963,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         <option value="WhatsApp">WhatsApp</option>
                         <option value="E-mail">E-mail</option>
                         <option value="Ambos">Ambos</option>
+                        <option value="Somente fatura">Somente fatura</option>
                       </select>
                     </div>
 
@@ -3022,15 +3042,15 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
                     {(opcaoEnvio === 'E-mail' || opcaoEnvio === 'Ambos') && (
                       <div className="space-y-1 col-span-1 md:col-span-2">
-                        <label className="block text-xs font-medium text-gray-750">E-mail para Faturamento *</label>
+                        <label className="block text-xs font-medium text-gray-750">E-mail para Envio *</label>
                         <input
                           type="email"
                           required
                           disabled={isCurrentlyDeactivated || isColaborador}
-                          value={emailFaturamento}
-                          onChange={(e) => setEmailFaturamento(e.target.value)}
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
                           className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#C09A6D] focus:border-[#C09A6D] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
-                          placeholder="faturamento@exemplo.com"
+                          placeholder="destinatario@exemplo.com"
                         />
                       </div>
                     )}
@@ -3334,154 +3354,170 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     <p className="text-[11px] text-slate-500 mb-3">
                       Caso o paciente use formatos de escalas complementares (ex: Plantão de 24 horas no fim de semana, ou Diurno 9h diferenciado), cadastre-os abaixo:
                     </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 items-end">
-                      <div className="space-y-1">
-                        <label className="block text-[10px] font-normal text-slate-600">Tipo da Escala</label>
-                        <select
-                          disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
-                          value={newSubTipoEscala}
-                          onChange={(e) => setNewSubTipoEscala(e.target.value)}
-                          className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-white font-normal"
-                        >
-                          <option value="Diurno 9h">Diurno 9h</option>
-                          <option value="Noturno 9h">Noturno 9h</option>
-                          <option value="Diurno 12h">Diurno 12h</option>
-                          <option value="Noturno 12h">Noturno 12h</option>
-                          <option value="Plantão 24h">Plantão 24h</option>
-                          <option value="Plantão 48h">Plantão 48h</option>
-                        </select>
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="block text-[10px] font-normal text-slate-600">Horário de Início</label>
-                        <input
-                          type="time"
-                          disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
-                          value={newSubHoraInicio}
-                          onChange={(e) => setNewSubHoraInicio(e.target.value)}
-                          className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-white font-normal"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="block text-[10px] font-normal text-slate-600">Valor Plantão (R$)</label>
-                        <input
-                          type="number"
-                          disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
-                          value={newSubValorPlantao}
-                          onChange={(e) => setNewSubValorPlantao(e.target.value === '' ? '' : Number(e.target.value))}
-                          className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-white font-normal"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="block text-[10px] font-normal text-slate-600">Transporte (R$)</label>
-                        <input
-                          type="number"
-                          disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
-                          value={newSubValorTransporte}
-                          onChange={(e) => {
-                            const val = e.target.value === '' ? '' : Number(e.target.value);
-                            setNewSubValorTransporte(val);
-                            setNewSubAjudaCusto(Number(val || 0) + Number(newSubValorAlimentacao || 0));
-                          }}
-                          className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-white font-normal"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="block text-[10px] font-normal text-slate-600">Alimentação (R$)</label>
-                        <input
-                          type="number"
-                          disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
-                          value={newSubValorAlimentacao}
-                          onChange={(e) => {
-                            const val = e.target.value === '' ? '' : Number(e.target.value);
-                            setNewSubValorAlimentacao(val);
-                            setNewSubAjudaCusto(Number(newSubValorTransporte || 0) + Number(val || 0));
-                          }}
-                          className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-white font-normal"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="block text-[10px] font-normal text-slate-600">Tx Adm (R$)</label>
-                        <input
-                          type="number"
-                          disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
-                          value={newSubTaxaAdm}
-                          onChange={(e) => setNewSubTaxaAdm(e.target.value === '' ? '' : Number(e.target.value))}
-                          className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-white font-normal"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-3 flex justify-end items-center">
-                      {editingSubId && (
+                    {!showExtraForm ? (
+                      <div className="flex justify-start">
                         <button
                           type="button"
-                          disabled={userRole?.toLowerCase() === 'colaborador'}
-                          onClick={() => {
-                            setEditingSubId(null);
-                            setNewSubTipoEscala('Diurno 12h');
-                            setNewSubHoraInicio('07:00');
-                            setNewSubValorPlantao(150);
-                            setNewSubAjudaCusto(0);
-                            setNewSubValorTransporte(0);
-                            setNewSubValorAlimentacao(0);
-                            setNewSubTaxaAdm(0);
-                          }}
-                          className="mr-2 px-3 py-1.5 text-xs font-semibold text-slate-750 bg-slate-100 hover:bg-slate-200 rounded-lg shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                          disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
+                          onClick={() => setShowExtraForm(true)}
+                          className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold text-blue-600 border border-blue-200 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-xs transition-all cursor-pointer"
                         >
-                          Cancelar Edição
+                          <Plus size={14} />
+                          <span>+ Incluir Plantão Adicional</span>
                         </button>
-                      )}
-                      <button
-                        type="button"
-                        disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
-                        onClick={() => {
-                          if (userRole?.toLowerCase() === 'colaborador') {
-                            alert('Acesso Negado: Usuários com perfil Colaborador não possuem permissão para realizar alterações no Plano de Atendimento.');
-                            return;
-                          }
-                          if (editingSubId) {
-                            setTiposPlantao(tiposPlantao.map(t => t.id === editingSubId ? {
-                              ...t,
-                              tipoEscala: newSubTipoEscala,
-                              horaInicio: newSubHoraInicio,
-                              valorPlantao: Number(newSubValorPlantao || 0),
-                              ajudaCusto: Number(newSubAjudaCusto || 0),
-                              valorTransporte: Number(newSubValorTransporte || 0),
-                              valorAlimentacao: Number(newSubValorAlimentacao || 0),
-                              taxaAdm: Number(newSubTaxaAdm || 0)
-                            } : t));
-                            setEditingSubId(null);
-                          } else {
-                            const newType: EscalacaoPlano = {
-                              id: `tp-${Date.now()}`,
-                              tipoEscala: newSubTipoEscala,
-                              horaInicio: newSubHoraInicio,
-                              valorPlantao: Number(newSubValorPlantao || 0),
-                              ajudaCusto: Number(newSubAjudaCusto || 0),
-                              valorTransporte: Number(newSubValorTransporte || 0),
-                              valorAlimentacao: Number(newSubValorAlimentacao || 0),
-                              taxaAdm: Number(newSubTaxaAdm || 0),
-                            };
-                            setTiposPlantao([...tiposPlantao, newType]);
-                          }
-                          // Reset inputs to default values
-                          setNewSubValorPlantao(150);
-                          setNewSubAjudaCusto(0);
-                          setNewSubValorTransporte(0);
-                          setNewSubValorAlimentacao(0);
-                          setNewSubTaxaAdm(0);
-                        }}
-                        className="flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed rounded-lg shadow-xs transition-colors cursor-pointer"
-                      >
-                        <Plus size={14} />
-                        <span>{editingSubId ? 'Salvar Edição' : 'Adicionar Modo de Plantão'}</span>
-                      </button>
-                    </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 items-end">
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-normal text-slate-600">Tipo da Escala</label>
+                            <select
+                              disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
+                              value={newSubTipoEscala}
+                              onChange={(e) => setNewSubTipoEscala(e.target.value)}
+                              className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-white font-normal"
+                            >
+                              <option value="Diurno 9h">Diurno 9h</option>
+                              <option value="Noturno 9h">Noturno 9h</option>
+                              <option value="Diurno 12h">Diurno 12h</option>
+                              <option value="Noturno 12h">Noturno 12h</option>
+                              <option value="Plantão 24h">Plantão 24h</option>
+                              <option value="Plantão 48h">Plantão 48h</option>
+                            </select>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-normal text-slate-600">Horário de Início</label>
+                            <input
+                              type="time"
+                              disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
+                              value={newSubHoraInicio}
+                              onChange={(e) => setNewSubHoraInicio(e.target.value)}
+                              className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-white font-normal"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-normal text-slate-600">Valor Plantão (R$)</label>
+                            <input
+                              type="number"
+                              disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
+                              value={newSubValorPlantao}
+                              onChange={(e) => setNewSubValorPlantao(e.target.value === '' ? '' : Number(e.target.value))}
+                              className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-white font-normal"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-normal text-slate-600">Transporte (R$)</label>
+                            <input
+                              type="number"
+                              disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
+                              value={newSubValorTransporte}
+                              onChange={(e) => {
+                                const val = e.target.value === '' ? '' : Number(e.target.value);
+                                setNewSubValorTransporte(val);
+                                setNewSubAjudaCusto(Number(val || 0) + Number(newSubValorAlimentacao || 0));
+                              }}
+                              className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-white font-normal"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-normal text-slate-600">Alimentação (R$)</label>
+                            <input
+                              type="number"
+                              disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
+                              value={newSubValorAlimentacao}
+                              onChange={(e) => {
+                                const val = e.target.value === '' ? '' : Number(e.target.value);
+                                setNewSubValorAlimentacao(val);
+                                setNewSubAjudaCusto(Number(newSubValorTransporte || 0) + Number(val || 0));
+                              }}
+                              className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-white font-normal"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-normal text-slate-600">Tx Adm (R$)</label>
+                            <input
+                              type="number"
+                              disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
+                              value={newSubTaxaAdm}
+                              onChange={(e) => setNewSubTaxaAdm(e.target.value === '' ? '' : Number(e.target.value))}
+                              className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-white font-normal"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="mt-3 flex justify-end items-center">
+                          <button
+                            type="button"
+                            disabled={userRole?.toLowerCase() === 'colaborador'}
+                            onClick={() => {
+                              setEditingSubId(null);
+                              setNewSubTipoEscala('Diurno 12h');
+                              setNewSubHoraInicio('07:00');
+                              setNewSubValorPlantao(150);
+                              setNewSubAjudaCusto(0);
+                              setNewSubValorTransporte(0);
+                              setNewSubValorAlimentacao(0);
+                              setNewSubTaxaAdm(0);
+                              setShowExtraForm(false);
+                            }}
+                            className="mr-2 px-3 py-1.5 text-xs font-semibold text-slate-750 bg-slate-100 hover:bg-slate-200 rounded-lg shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
+                            onClick={() => {
+                              if (userRole?.toLowerCase() === 'colaborador') {
+                                alert('Acesso Negado: Usuários com perfil Colaborador não possuem permissão para realizar alterações no Plano de Atendimento.');
+                                return;
+                              }
+                              if (editingSubId) {
+                                setTiposPlantao(tiposPlantao.map(t => t.id === editingSubId ? {
+                                  ...t,
+                                  tipoEscala: newSubTipoEscala,
+                                  horaInicio: newSubHoraInicio,
+                                  valorPlantao: Number(newSubValorPlantao || 0),
+                                  ajudaCusto: Number(newSubAjudaCusto || 0),
+                                  valorTransporte: Number(newSubValorTransporte || 0),
+                                  valorAlimentacao: Number(newSubValorAlimentacao || 0),
+                                  taxaAdm: Number(newSubTaxaAdm || 0)
+                                } : t));
+                                setEditingSubId(null);
+                              } else {
+                                const newType: EscalacaoPlano = {
+                                  id: `tp-${Date.now()}`,
+                                  tipoEscala: newSubTipoEscala,
+                                  horaInicio: newSubHoraInicio,
+                                  valorPlantao: Number(newSubValorPlantao || 0),
+                                  ajudaCusto: Number(newSubAjudaCusto || 0),
+                                  valorTransporte: Number(newSubValorTransporte || 0),
+                                  valorAlimentacao: Number(newSubValorAlimentacao || 0),
+                                  taxaAdm: Number(newSubTaxaAdm || 0),
+                                };
+                                setTiposPlantao([...tiposPlantao, newType]);
+                              }
+                              // Reset inputs to default values
+                              setNewSubValorPlantao(150);
+                              setNewSubAjudaCusto(0);
+                              setNewSubValorTransporte(0);
+                              setNewSubValorAlimentacao(0);
+                              setNewSubTaxaAdm(0);
+                              setShowExtraForm(false);
+                            }}
+                            className="flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed rounded-lg shadow-xs transition-colors cursor-pointer"
+                          >
+                            <Plus size={14} />
+                            <span>{editingSubId ? 'Salvar Edição' : 'Adicionar Modo de Plantão'}</span>
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   {/* Table of configured shifts, containing complete list (Principal + Additionals) */}
@@ -3542,6 +3578,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                         setNewSubValorTransporte(tp.valorTransporte ?? tp.ajudaCusto ?? 0);
                                         setNewSubValorAlimentacao(tp.valorAlimentacao ?? 0);
                                         setNewSubTaxaAdm(tp.taxaAdm);
+                                        setShowExtraForm(true);
                                       }}
                                       className="py-1 px-2.5 border border-blue-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-all font-semibold inline-flex items-center space-x-1 cursor-pointer text-xs"
                                       title="Editar formato"
@@ -3619,9 +3656,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       type="button"
                       disabled={isCurrentlyDeactivated}
                       onClick={() => {
-                        const today = new Date();
-                        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-                        setSelectedDates([{ date: todayStr, cycle: 1 }]);
+                        setSelectedDates([]);
                         setAvulsoProf('');
                         setAvulsoPlantaoOptionId('principal');
                         setAvulsoTipoDia('Normal');
@@ -3787,12 +3822,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                   targetDate: cell.dateStr
                                 });
                               }}
-                              className={`min-h-[102px] border p-1 rounded-lg flex flex-col transition-all duration-150 group/cell relative ${
+                              className={`min-h-[130px] border-2 p-1 rounded-lg flex flex-col transition-all duration-150 group/cell relative ${
                                 isToday 
                                   ? 'bg-[#fefcf4] border-amber-300 ring-1 ring-amber-100 shadow-xs' 
                                   : cell.isCurrentMonth
-                                    ? 'bg-white border-slate-200/60'
-                                    : 'bg-slate-50/40 opacity-40 border-slate-200/30'
+                                    ? 'bg-white border-slate-400'
+                                    : 'bg-slate-50/40 opacity-40 border-slate-300'
                               } ${
                                 isSpecialHoliday && !isToday ? 'bg-rose-50/70 border-rose-200 ring-1 ring-rose-100 shadow-xs' : ''
                               }`}
@@ -4628,10 +4663,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 {/* Histórico list */}
                 <div className="pt-6 border-t border-slate-100 font-sans">
                   <h4 className="text-xs font-bold text-slate-700 mb-3 uppercase tracking-wider italic">
-                    Histórico de Ocorrências ({(pacientes.find(p => p.id === paciente?.id)?.ocorrencias || []).length})
+                    Histórico de Ocorrências ({((pacientes.find(p => p.id === paciente?.id) || paciente)?.ocorrencias || []).length})
                   </h4>
                   
-                  {((pacientes.find(p => p.id === paciente?.id)?.ocorrencias || []).length === 0) ? (
+                  {(((pacientes.find(p => p.id === paciente?.id) || paciente)?.ocorrencias || []).length === 0) ? (
                     <div className="p-6 text-center text-xs text-slate-400 italic border border-dashed border-slate-200 rounded-xl">
                       Nenhuma ocorrência registrada para este paciente.
                     </div>
@@ -4648,7 +4683,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 text-gray-900 text-sm md:text-base">
-                          {(pacientes.find(p => p.id === paciente?.id)?.ocorrencias || []).map((oc, index) => (
+                          {((pacientes.find(p => p.id === paciente?.id) || paciente)?.ocorrencias || []).map((oc, index) => (
                             <tr key={`oc-${oc.id || index}-${index}`} className={`transition-colors hover:bg-slate-50 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
                               <td className="py-3 px-4 whitespace-nowrap font-normal text-slate-500">
                                 {oc.data ? oc.data.split('-').reverse().join('/') : '-'}
@@ -5445,6 +5480,26 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         </div>
                       ) : (
                         <div className="flex gap-2 pt-3 border-t border-slate-100 font-sans">
+                          {(selectedShiftForDetails.isCuringa || selectedShiftForDetails.observacao?.toLowerCase().includes('curinga')) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCuringaShortcutData({
+                                  profissionalId: selectedShiftForDetails.idProfissional || '',
+                                  profissional: selectedShiftForDetails.nomeProfissional || '',
+                                  pacienteId: selectedShiftForDetails.idPaciente || '',
+                                  paciente: paciente?.nome || '',
+                                  data: selectedShiftForDetails.data || '',
+                                  motivo: 'Curinga'
+                                });
+                                setIsCuringaShortcutModalOpen(true);
+                                setDetailsModalOpen(false);
+                              }}
+                              className="flex-1 py-2 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg border border-emerald-200 transition-all text-center flex items-center justify-center gap-1 cursor-pointer"
+                            >
+                              <span>💰 Pagar</span>
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => {
@@ -6827,10 +6882,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">WhatsApp p/ Faturamento:</span>
                       <p className="font-mono text-slate-750 mt-1">{whatsappFaturamento || '---'}</p>
                     </div>
-                    <div>
-                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">E-mail p/ Faturamento:</span>
-                      <p className="font-medium text-slate-750 mt-1 truncate">{emailFaturamento || '---'}</p>
-                    </div>
+                    {(opcaoEnvio === 'E-mail' || opcaoEnvio === 'Ambos') && (
+                      <div>
+                        <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">E-mail para Envio:</span>
+                        <p className="font-medium text-slate-750 mt-1 truncate">{email || '---'}</p>
+                      </div>
+                    )}
                     <div>
                       <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Data do Reajuste:</span>
                       <p className="font-medium text-slate-750 mt-1">{dataReajuste || '---'}</p>
@@ -7239,6 +7296,17 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             </div>
           </div>
         </div>
+      )}
+
+      {isCuringaShortcutModalOpen && (
+        <ModalInserirDebito
+          isOpen={isCuringaShortcutModalOpen}
+          onClose={() => {
+            setIsCuringaShortcutModalOpen(false);
+            setCuringaShortcutData(null);
+          }}
+          dadosAtalhoCuringa={curingaShortcutData}
+        />
       )}
     </div>
   );

@@ -37,6 +37,7 @@ import { collection, query, where, getDocs, doc, getDoc, setDoc, deleteDoc } fro
 import { mascaraCNPJ } from '../lib/masks';
 import { toast } from 'react-hot-toast';
 import { GlossyButton } from './GlossyButton';
+import { ModalInserirDebito } from './ModalInserirDebito';
 
 /* ----------------------------------------------------
  * Tab 2: Profissionais Co-curators
@@ -2966,125 +2967,14 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       )}
 
       {/* Insert Debit Modal */}
-      {showDebitModal && (
-        <div className="fixed inset-0 bg-slate-900/60 z-[100] backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-md rounded-2xl border border-slate-200 shadow-2xl p-6 relative animate-in zoom-in-95 duration-200">
-            <button
-              onClick={() => {
-                setEditingDebitId(null);
-                setShowDebitModal(false);
-              }}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer p-1 rounded-lg hover:bg-slate-100"
-            >
-              <X size={18} />
-            </button>
-
-            <div className="mb-4">
-              <h2 className="text-base font-black text-slate-900">
-                {editingDebitId ? 'Editar Débito de Profissional' : 'Inserir Débito de Profissional'}
-              </h2>
-              <p className="text-xs text-slate-400 mt-1">
-                {editingDebitId ? 'Atualize as informações do lançamento de débito do perfil do cuidador.' : 'Lançamento de desconto pontual para abatimento automático na folha apurada.'}
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Profissional *</label>
-                <select
-                  value={newDebitProfId}
-                  onChange={(e) => setNewDebitProfId(e.target.value)}
-                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm bg-white"
-                  required
-                >
-                  <option value="">Selecione o profissional...</option>
-                  {activeProfissionais.map(p => (
-                    <option key={p.id} value={p.id}>{p.nome}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Paciente (Opcional)</label>
-                <select
-                  value={newDebitPacienteId}
-                  onChange={(e) => setNewDebitPacienteId(e.target.value)}
-                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm bg-white"
-                >
-                  <option value="">Nenhum paciente selecionado</option>
-                  {activePacientes.map(p => (
-                    <option key={p.id} value={p.id}>{p.nome}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Data do Débito *</label>
-                <input
-                  type="date"
-                  value={newDebitDate}
-                  onChange={(e) => setNewDebitDate(e.target.value)}
-                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm bg-white"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Valor do Débito *</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2.5 text-sm text-slate-400 font-bold font-mono">R$</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    placeholder="0.00"
-                    value={newDebitValor}
-                    onChange={(e) => setNewDebitValor(e.target.value)}
-                    className="w-full pl-9 pr-3 p-2.5 border border-slate-200 rounded-lg text-sm bg-white font-mono font-bold text-slate-800"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Motivo do Débito *</label>
-                <select
-                  value={newDebitMotivo}
-                  onChange={(e) => setNewDebitMotivo(e.target.value as any)}
-                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm bg-white"
-                  required
-                >
-                  <option value="Curinga">Curinga</option>
-                  <option value="Passagem">Passagem</option>
-                  <option value="MEI">MEI</option>
-                  <option value="Outros">Outros</option>
-                </select>
-              </div>
-
-              <div className="flex gap-3 pt-3 border-t border-slate-100 justify-end transition-all">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingDebitId(null);
-                    setShowDebitModal(false);
-                  }}
-                  className="px-4 py-2 border border-slate-200 text-slate-500 rounded-lg text-xs font-bold hover:bg-slate-50 cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleAddDebit}
-                  disabled={isInsertingDebit}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold disabled:opacity-50 cursor-pointer"
-                >
-                  {isInsertingDebit ? 'Gravando...' : (editingDebitId ? 'Salvar Alterações' : 'Confirmar Lançamento')}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ModalInserirDebito
+        isOpen={showDebitModal}
+        onClose={() => {
+          setEditingDebitId(null);
+          setShowDebitModal(false);
+        }}
+        editingDebitId={editingDebitId}
+      />
 
       {deleteConfirmDialog && deleteConfirmDialog.isOpen && (
         <div className="fixed inset-0 bg-slate-900/60 z-[110] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">

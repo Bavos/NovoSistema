@@ -488,6 +488,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     try {
       console.log(`[Firebase] setDoc, paciente id: ${id}`);
       await setDoc(doc(db, 'pacientes', id), fullPaciente);
+      setPacientes((prev) => [fullPaciente, ...prev]);
       await addAuditLog('CREATE', 'pacientes', id, `Paciente criado: ${fullPaciente.nome}`);
       if (!skipNotification) {
         setNotification(`Paciente '${fullPaciente.nome}' criado com sucesso.`);
@@ -503,6 +504,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const updatePaciente = async (updatedPac: Paciente, skipNotification?: boolean) => {
     try {
       await setDoc(doc(db, 'pacientes', updatedPac.id), updatedPac);
+      setPacientes((prev) =>
+        prev.map((p) => (p.id === updatedPac.id ? updatedPac : p))
+      );
       await addAuditLog('UPDATE', 'pacientes', updatedPac.id, `Paciente atualizado: ${updatedPac.nome}`);
       if (!skipNotification) {
         setNotification(`Paciente '${updatedPac.nome}' atualizado com sucesso.`);
@@ -521,6 +525,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         desativadoEm: todayStr,
         desativadoMotivo: motivo,
       });
+      setPacientes((prev) =>
+        prev.map((p) =>
+          p.id === id
+            ? { ...p, status: 'Desativado', desativadoEm: todayStr, desativadoMotivo: motivo }
+            : p
+        )
+      );
       await addAuditLog('UPDATE', 'pacientes', id, `Paciente desativado: ${motivo}`);
       setNotification(`Paciente desativado com sucesso.`);
     } catch (err) {
@@ -536,6 +547,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         desativadoEm: null,
         desativadoMotivo: null,
       });
+      setPacientes((prev) =>
+        prev.map((p) =>
+          p.id === id
+            ? { ...p, status: 'Ativo', desativadoEm: null, desativadoMotivo: null }
+            : p
+        )
+      );
       await addAuditLog('UPDATE', 'pacientes', id, `Paciente reativado`);
       setNotification(`Paciente reativado com sucesso.`);
     } catch (err) {
@@ -776,6 +794,18 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         desativadoEm: todayStr,
         desativadoMotivo: 'Exclusão lógica do registro (Inativo de acordo com diretrizes de segurança)',
       });
+      setPacientes((prev) =>
+        prev.map((p) =>
+          p.id === id
+            ? {
+                ...p,
+                status: 'Desativado',
+                desativadoEm: todayStr,
+                desativadoMotivo: 'Exclusão lógica do registro (Inativo de acordo com diretrizes de segurança)',
+              }
+            : p
+        )
+      );
       console.log("Exclusão lógica realizada com sucesso para:", id);
       await addAuditLog('DELETE', 'pacientes', id, `Paciente inativado via exclusão lógica`);
       setNotification('Paciente desativado logicamente com sucesso.');

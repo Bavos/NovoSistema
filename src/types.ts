@@ -136,7 +136,7 @@ export interface DadosPagamento {
   responsavelPagamento: 'O próprio Paciente' | 'Outro Responsável';
   nomePagador?: string;
   cpfPagador?: string;
-  opcaoEnvio: 'WhatsApp' | 'E-mail' | 'Ambos';
+  opcaoEnvio: 'WhatsApp' | 'E-mail' | 'Ambos' | 'Somente fatura';
   whatsappFaturamento?: string;
   emailFaturamento?: string;
   dataReajuste?: string;
