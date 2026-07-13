@@ -48,6 +48,12 @@ import {
 import { toast } from 'react-hot-toast';
 import { GlossyButton } from './GlossyButton';
 
+
+// Helper to remove accents and lower case for better searching
+const removerAcentos = (str: string): string => {
+  return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+};
+
 // Helper to compute calendar positions matching the layout provided
 const getDaysInMonthGrid = (monthIndex: number, year: number, customHolidays?: Record<string, string>) => {
   const labelHolidays: Record<string, string> = {
@@ -5067,7 +5073,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   <div className="absolute left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl z-55 divide-y divide-slate-100">
                     {profissionais
                       .filter(p =>
-                        (p.nome || '').toLowerCase().includes((avulsoProf || '').toLowerCase()) &&
+                        removerAcentos(p.nome || '').includes(removerAcentos(avulsoProf || '')) &&
                         p.status === 'Ativo' &&
                         !isBlockedBidirectional(p)
                       )
@@ -6003,7 +6009,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     {showAvulsoProfDropdown && (
                       <div className="absolute left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl z-25 divide-y divide-slate-100 font-sans">
                         {profissionais.filter(p =>
-                          (p.nome || '').toLowerCase().includes((avulsoProf || '').toLowerCase()) &&
+                          removerAcentos(p.nome || '').includes(removerAcentos(avulsoProf || '')) &&
                           p.status === 'Ativo' &&
                           !isBlockedBidirectional(p)
                         ).map((prof) => (
