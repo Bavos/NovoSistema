@@ -778,6 +778,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   
   // Modals
   const [avulsoModalOpen, setAvulsoModalOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [concluirModalOpen, setConcluirModalOpen] = useState(false);
   const [reabrirModalOpen, setReabrirModalOpen] = useState(false);
   const [excluirModalOpen, setExcluirModalOpen] = useState(false);
@@ -1456,41 +1457,42 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   // NEW HANDLERS FOR ADVANCED SCHEDULER: Avulso, Concluir, Reabrir, Exclusão
 
   const handleSalvarAgendamento = async () => {
-    // 1. Validação de Payload (Console.log)
-    console.log("Validando Payload do Novo Agendamento:", {
-      profissional: avulsoProf,
-      selectedDates,
-      turno: avulsoPlantaoOptionId,
-      pacienteId: paciente?.id
-    });
-
-    if (!paciente) {
-      toast.error('Erro: Paciente não identificado.');
-      return false;
-    }
-
-    if (!avulsoProf || avulsoProf.trim() === '') {
-      toast.error('Por favor, preencha o campo obrigatório: Profissional.');
-      return false;
-    }
-
-    if (!selectedDates || selectedDates.length === 0) {
-      toast.error('Por favor, preencha o campo obrigatório: Datas no calendário.');
-      return false;
-    }
-
-    if (!avulsoPlantaoOptionId || avulsoPlantaoOptionId.trim() === '') {
-      toast.error('Por favor, preencha o campo obrigatório: Horário / Turno.');
-      return false;
-    }
-
-    const pickedProf = profissionais.find(p => p.nome === avulsoProf);
-    if (pickedProf && isBlockedBidirectional(pickedProf)) {
-      toast.error('Atenção: Este profissional possui uma restrição de atendimento (bloqueio) para este paciente devido a uma ocorrência passada.');
-      return false;
-    }
-
+    setIsSaving(true);
     try {
+      // 1. Validação de Payload (Console.log)
+      console.log("Validando Payload do Novo Agendamento:", {
+        profissional: avulsoProf,
+        selectedDates,
+        turno: avulsoPlantaoOptionId,
+        pacienteId: paciente?.id
+      });
+
+      if (!paciente) {
+        toast.error('Erro: Paciente não identificado.');
+        return false;
+      }
+
+      if (!avulsoProf || avulsoProf.trim() === '') {
+        toast.error('Por favor, preencha o campo obrigatório: Profissional.');
+        return false;
+      }
+
+      if (!selectedDates || selectedDates.length === 0) {
+        toast.error('Por favor, preencha o campo obrigatório: Datas no calendário.');
+        return false;
+      }
+
+      if (!avulsoPlantaoOptionId || avulsoPlantaoOptionId.trim() === '') {
+        toast.error('Por favor, preencha o campo obrigatório: Horário / Turno.');
+        return false;
+      }
+
+      const pickedProf = profissionais.find(p => p.nome === avulsoProf);
+      if (pickedProf && isBlockedBidirectional(pickedProf)) {
+        toast.error('Atenção: Este profissional possui uma restrição de atendimento (bloqueio) para este paciente devido a uma ocorrência passada.');
+        return false;
+      }
+
       const shiftsList = [
         {
           id: 'principal',
@@ -1553,8 +1555,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         }
       };
 
-      const pickedProf = profissionais.find(p => p.nome === avulsoProf);
-      
       // Criar agendamento individual para cada data selecionada
       let activeParentId = '';
       for (const curItem of selectedDates) {
@@ -1639,6 +1639,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       console.error('Erro ao salvar agendamento:', err);
       toast.error(`Erro ao salvar: ${errorMessage}`);
       return false;
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -5283,6 +5285,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               </button>
               <button
                 type="button"
+                disabled={isSaving}
                 onClick={async (e) => {
                   e.preventDefault();
                   const success = await handleSalvarAgendamento();
@@ -5290,9 +5293,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     setAvulsoModalOpen(false);
                   }
                 }}
-                className="px-4.5 py-2 text-xs font-extrabold bg-sky-600 hover:bg-sky-700 text-white rounded-lg transition-all shadow-sm cursor-pointer"
+                className={`px-4.5 py-2 text-xs font-extrabold bg-sky-600 hover:bg-sky-700 text-white rounded-lg transition-all shadow-sm cursor-pointer ${isSaving ? 'opacity-55 cursor-not-allowed bg-sky-500' : ''}`}
               >
-                Confirmar e Agendar
+                {isSaving ? 'Agendando...' : 'Confirmar e Agendar'}
               </button>
             </div>
           </div>
