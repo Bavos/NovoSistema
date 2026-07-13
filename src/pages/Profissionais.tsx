@@ -589,10 +589,6 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
 
   const handleSaveOcorrencia = async () => {
     if (!editingProf) return;
-    if (!ocPacienteId) {
-      alert('Por favor, selecione o paciente.');
-      return;
-    }
     if (!ocDescricao.trim()) {
       alert('Por favor, detalhe a ocorrência.');
       return;
@@ -600,13 +596,13 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
 
     setSavingOcorrencia(true);
     try {
-      const chosenPaciente = pacientes.find(p => p.id === ocPacienteId);
+      const chosenPaciente = ocPacienteId ? pacientes.find(p => p.id === ocPacienteId) : null;
       const payload: any = {
         data: ocData,
-        pacienteId: ocPacienteId,
-        pacienteNome: chosenPaciente ? chosenPaciente.nome : 'Paciente Desconhecido',
+        pacienteId: ocPacienteId || '',
+        pacienteNome: chosenPaciente ? chosenPaciente.nome : 'Administrativa / Geral',
         descricao: ocDescricao.trim(),
-        bloquearEscala: ocBloquear,
+        bloquearEscala: ocPacienteId ? ocBloquear : false,
         createdAt: new Date().toISOString(),
         tipo: 'manual'
       };
@@ -2155,9 +2151,8 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                               value={ocPacienteId}
                               onChange={(e) => setOcPacienteId(e.target.value)}
                               className="p-2 border border-slate-200 rounded-lg text-sm w-full bg-white focus:ring-1 focus:ring-[#1a3c2e]"
-                              required
                             >
-                              <option value="">Selecione o paciente...</option>
+                              <option value="">Nenhum (Ocorrência Administrativa / Geral)</option>
                               {[...pacientes].sort((a, b) => a.nome.localeCompare(b.nome)).map(p => (
                                 <option key={p.id} value={p.id}>
                                   {p.nome} {p.status ? `(${p.status})` : ''}
@@ -2179,18 +2174,20 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                         </div>
 
                         {/* Checkbox de Bloqueio */}
-                        <div className="flex items-center gap-2 mt-2">
-                          <input
-                            type="checkbox"
-                            id="ocBloquear"
-                            checked={ocBloquear}
-                            onChange={(e) => setOcBloquear(e.target.checked)}
-                            className="w-4 h-4 text-[#1a3c2e] border-slate-300 rounded focus:ring-[#1a3c2e] cursor-pointer"
-                          />
-                          <label htmlFor="ocBloquear" className="text-xs font-bold text-slate-700 cursor-pointer select-none">
-                            Bloquear na escala deste paciente
-                          </label>
-                        </div>
+                        {ocPacienteId && (
+                          <div className="flex items-center gap-2 mt-2">
+                            <input
+                              type="checkbox"
+                              id="ocBloquear"
+                              checked={ocBloquear}
+                              onChange={(e) => setOcBloquear(e.target.checked)}
+                              className="w-4 h-4 text-[#1a3c2e] border-slate-300 rounded focus:ring-[#1a3c2e] cursor-pointer"
+                            />
+                            <label htmlFor="ocBloquear" className="text-xs font-bold text-slate-700 cursor-pointer select-none">
+                              Bloquear na escala deste paciente
+                            </label>
+                          </div>
+                        )}
 
                         {/* Botões do Form de Ocorrência */}
                         <div className="flex gap-2 justify-end pt-2 border-t border-slate-100">

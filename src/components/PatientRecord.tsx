@@ -492,17 +492,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       alert('Selecione uma data para a ocorrência.');
       return;
     }
-    if (!ocProfId) {
-      alert('Selecione o profissional envolvido.');
-      return;
-    }
     if (!ocDescricao.trim()) {
       alert('Informe a descrição do motivo da ocorrência.');
       return;
     }
 
-    const matchedProf = profissionais.find(p => p.id === ocProfId);
-    const profName = matchedProf ? matchedProf.nome : 'Desconhecido';
+    const matchedProf = ocProfId ? profissionais.find(p => p.id === ocProfId) : null;
+    const profName = matchedProf ? matchedProf.nome : 'Administrativa / Geral';
 
     setSavingOcorrencia(true);
     try {
@@ -516,10 +512,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             return {
               ...oc,
               data: ocData,
-              profissionalId: ocProfId,
+              profissionalId: ocProfId || '',
               profissionalNome: profName,
               descricao: ocDescricao,
-              bloquearProfissional: ocBloquear
+              bloquearProfissional: ocProfId ? ocBloquear : false
             };
           }
           return oc;
@@ -529,24 +525,26 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         const newOc = {
           id: 'oc-' + Date.now().toString(),
           data: ocData,
-          profissionalId: ocProfId,
+          profissionalId: ocProfId || '',
           profissionalNome: profName,
           descricao: ocDescricao,
-          bloquearProfissional: ocBloquear
+          bloquearProfissional: ocProfId ? ocBloquear : false
         };
         updatedOcs = [...currentOcs, newOc];
       }
 
       // Handle block array (profissionaisBloqueados)
       let blockedProfs = [...(targetPatient.profissionaisBloqueados || [])];
-      if (ocBloquear) {
-        if (!blockedProfs.includes(ocProfId)) {
-          blockedProfs.push(ocProfId);
-        }
-      } else {
-        const otherBlocksCount = updatedOcs.filter(oc => oc.profissionalId === ocProfId && oc.bloquearProfissional).length;
-        if (otherBlocksCount === 0) {
-          blockedProfs = blockedProfs.filter(id => id !== ocProfId);
+      if (ocProfId) {
+        if (ocBloquear) {
+          if (!blockedProfs.includes(ocProfId)) {
+            blockedProfs.push(ocProfId);
+          }
+        } else {
+          const otherBlocksCount = updatedOcs.filter(oc => oc.profissionalId === ocProfId && oc.bloquearProfissional).length;
+          if (otherBlocksCount === 0) {
+            blockedProfs = blockedProfs.filter(id => id !== ocProfId);
+          }
         }
       }
 
@@ -4633,14 +4631,14 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     </div>
 
                     <div className="space-y-1">
-                      <label className="block text-xs font-normal text-slate-700">Profissional Envolvido *</label>
+                      <label className="block text-xs font-normal text-slate-700">Profissional Envolvido</label>
                       <select
                         disabled={isColaborador}
                         value={ocProfId}
                         onChange={(e) => setOcProfId(e.target.value)}
                         className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed font-sans"
                       >
-                        <option value="">Selecione um profissional</option>
+                        <option value="">Nenhum (Ocorrência Administrativa / Geral)</option>
                         {profissionais.map(p => (
                           <option key={p.id} value={p.id}>
                             {p.nome} ({p.especialidade || p.profissao || 'Profissional'})
@@ -4661,19 +4659,21 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       />
                     </div>
 
-                    <div className="md:col-span-2 flex items-center space-x-2 py-1">
-                      <input
-                        type="checkbox"
-                        id="check-bloquear-prof"
-                        disabled={isColaborador}
-                        checked={ocBloquear}
-                        onChange={(e) => setOcBloquear(e.target.checked)}
-                        className="h-4 w-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                      />
-                      <label htmlFor="check-bloquear-prof" className="text-xs font-semibold text-rose-700 cursor-pointer select-none disabled:opacity-50">
-                        Bloquear este profissional para este paciente
-                      </label>
-                    </div>
+                    {ocProfId && (
+                      <div className="md:col-span-2 flex items-center space-x-2 py-1">
+                        <input
+                          type="checkbox"
+                          id="check-bloquear-prof"
+                          disabled={isColaborador}
+                          checked={ocBloquear}
+                          onChange={(e) => setOcBloquear(e.target.checked)}
+                          className="h-4 w-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        />
+                        <label htmlFor="check-bloquear-prof" className="text-xs font-semibold text-rose-700 cursor-pointer select-none disabled:opacity-50">
+                          Bloquear este profissional para este paciente
+                        </label>
+                      </div>
+                    )}
                   </div>
 
                   {!isColaborador && (
