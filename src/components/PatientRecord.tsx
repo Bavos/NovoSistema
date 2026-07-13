@@ -853,7 +853,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       setNomePagador(paciente.dadosPagamento?.nomePagador || '');
       setCpfPagador(paciente.dadosPagamento?.cpfPagador || '');
       setOpcaoEnvio(paciente.dadosPagamento?.opcaoEnvio || 'WhatsApp');
-      setWhatsappFaturamento(paciente.dadosPagamento?.whatsappFaturamento || '');
+      setWhatsappFaturamento(mascaraTelefone(paciente.dadosPagamento?.whatsappFaturamento || ''));
       setDataReajuste(paciente.dadosPagamento?.dataReajuste || '');
 
       setRua(paciente.endereco.rua);
@@ -2492,6 +2492,35 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     }))
   ];
 
+  const getShiftNameForAgendamento = (ag: Agendamento) => {
+    let multiplier = 1.0;
+    if (ag.tipoDia === 'Feriado 20%') {
+      multiplier = 1.2;
+    } else if (ag.tipoDia === 'Feriado 50%') {
+      multiplier = 1.5;
+    }
+    const baseValue = (ag.valorPlantao || 0) / multiplier;
+    const startHour = ag.horario?.split('-')[0] || '';
+
+    // Tenta encontrar correspondência exata no horário de início e valor base
+    let match = availableShifts.find(opt => 
+      opt.horaInicio === startHour && 
+      Math.abs(opt.valorPlantao - baseValue) < 0.5
+    );
+
+    // Se não encontrar, tenta por horário de início apenas
+    if (!match) {
+      match = availableShifts.find(opt => opt.horaInicio === startHour);
+    }
+
+    // Se ainda não encontrar, tenta por valor base apenas
+    if (!match) {
+      match = availableShifts.find(opt => Math.abs(opt.valorPlantao - baseValue) < 0.5);
+    }
+
+    return match ? match.tipoEscala : (tipoEscala || 'Diurno 12h');
+  };
+
   const selectedAvulsoOpt = availableShifts.find(s => s.id === avulsoPlantaoOptionId) || availableShifts[0];
 
   const baseRepasseValue = selectedAvulsoOpt?.valorPlantao || 0;
@@ -3033,7 +3062,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           required
                           disabled={isCurrentlyDeactivated || isColaborador}
                           value={whatsappFaturamento}
-                          onChange={(e) => setWhatsappFaturamento(e.target.value)}
+                          onChange={(e) => setWhatsappFaturamento(mascaraTelefone(e.target.value))}
                           className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#C09A6D] focus:border-[#C09A6D] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
                           placeholder="Ex: (21) 90000-0000"
                         />
@@ -3638,7 +3667,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             )}
 
             {activeTab === 'agendamento' && (
-              <div className="w-full max-w-5xl mx-auto bg-white rounded-2xl shadow-xl border border-gray-200 p-6 md:p-8 mt-6 mb-12 space-y-4 animate-in fade-in-30 slide-in-from-right-3">
+              <div className="w-full max-w-6xl mx-auto bg-white rounded-2xl shadow-xl border border-gray-200 p-6 md:p-8 mt-6 mb-12 space-y-4 animate-in fade-in-30 slide-in-from-right-3">
                 {/* Operations Header Buttons Deck - RH Cuidado Domiciliar */}
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-xs space-y-2.5">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block font-sans">🛠️ Controles de Escala Operacional</span>
@@ -3938,6 +3967,15 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                           title={ag.considerarFalta ? `Falta registrada: ${ag.motivoFalta || 'Não Informado'}` : undefined}
                                         >
                                           {ag.nomeProfissional}
+                                        </span>
+                                        <span className={`text-[8.5px] font-bold block truncate mt-0.5 ${
+                                          ag.status === 'Cancelado'
+                                            ? 'text-slate-400'
+                                            : ag.status === 'Concluido'
+                                              ? 'text-indigo-750/90'
+                                              : 'text-emerald-700/90'
+                                        }`}>
+                                          {getShiftNameForAgendamento(ag)}
                                         </span>
                                     </div>
                                   );
