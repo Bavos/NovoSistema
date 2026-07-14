@@ -1780,7 +1780,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                       id="btn-finance-gerar-relatorio"
                       onClick={handleGerarRelatorios}
                       disabled={isGenerating}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold transition-all disabled:opacity-50 flex items-center gap-2 h-[38px] cursor-pointer"
+                      className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 text-white font-medium rounded-lg shadow-lg shadow-blue-500/40 hover:bg-blue-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isGenerating ? (
                         <>⏳ Aguarde...</>
@@ -2313,7 +2313,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                                 <button
                                   onClick={() => handleSalvarFaturaDefinitiva(pacId, agends)}
                                   disabled={isSaving}
-                                  className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
+                                  className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 text-white font-medium rounded-lg shadow-lg shadow-blue-500/40 hover:bg-blue-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                   {isSaving ? 'Salvando...' : '💾 Salvar Fatura Definitiva'}
                                 </button>
@@ -2717,7 +2717,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                                       type="button"
                                       onClick={() => setShowBatchModal(false)}
                                       disabled={isBatchProcessing}
-                                      className="flex-1 py-2.5 px-4 border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
                                     >
                                       Cancelar
                                     </button>
@@ -2725,7 +2725,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                                       type="button"
                                       onClick={processBatchPayroll}
                                       disabled={isBatchProcessing}
-                                      className="flex-1 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-md shadow-emerald-100 hover:shadow-none transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-emerald-500 text-white font-medium rounded-lg shadow-lg shadow-emerald-500/40 hover:bg-emerald-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                       {isBatchProcessing ? (
                                         <>
@@ -2765,7 +2765,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
             <div className="flex flex-wrap gap-2 self-start print:hidden">
               <button
                 onClick={handlePrint}
-                className="px-4 py-2 bg-slate-500 hover:bg-slate-600 text-white rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
               >
                 <Printer size={15} /> Imprimir Relatório
               </button>
@@ -2778,7 +2778,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                   setNewDebitPacienteId('');
                   setShowDebitModal(true);
                 }}
-                className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer flex items-center justify-center gap-1.5"
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-red-500 text-white font-medium rounded-lg shadow-lg shadow-red-500/40 hover:bg-red-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Plus size={15} /> Lançar Débito
               </button>
@@ -3621,12 +3621,12 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                 <div className="bg-white p-6 rounded-2xl max-w-sm w-full">
                     <p className="text-sm font-bold text-slate-800">⚠️ Tem certeza que deseja excluir esta Fatura/Folha do histórico? Esta ação não pode ser desfeita.</p>
                     <div className="flex justify-end gap-3 mt-4">
-                        <button onClick={() => setDeleteConfirm(null)} className="px-4 py-2 bg-slate-200 rounded-lg text-xs font-bold">Não</button>
+                        <button onClick={() => setDeleteConfirm(null)} className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50">Não</button>
                         <button onClick={async () => {
                             if(deleteConfirm.type === 'fatura') await deleteFaturaPaciente(deleteConfirm.id);
                             else await deleteFolhaPagamento(deleteConfirm.id);
                             setDeleteConfirm(null);
-                        }} className="px-4 py-2 bg-red-600 text-white rounded-lg text-xs font-bold">Sim, Excluir</button>
+                        }} className="flex items-center justify-center gap-2 px-4 py-2 bg-red-500 text-white font-medium rounded-lg shadow-lg shadow-red-500/40 hover:bg-red-600 transition-all active:scale-95 disabled:opacity-50">Sim, Excluir</button>
                     </div>
                 </div>
             </div>
@@ -4067,7 +4067,7 @@ export const EmpresaDashboard: React.FC = () => {
                           console.log("Edit button clicked!");
                           startEditing();
                         }}
-                        className="px-4 py-2 text-xs uppercase font-bold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer bg-white border border-slate-200 rounded-md shadow-sm"
+                        className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
                       >
                         Editar
                       </button>
@@ -4085,14 +4085,14 @@ export const EmpresaDashboard: React.FC = () => {
               <div className="flex items-center gap-2 pt-2 justify-end">
                 <button 
                   onClick={() => setIsEditingMatriz(false)}
-                  className="px-3 py-1.5 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-full text-[11px] font-semibold transition-colors cursor-pointer bg-white"
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
                   disabled={isUploading}
                 >
                   Cancelar
                 </button>
                 <button 
                   onClick={handleSaveMatriz}
-                  className="px-3 py-1.5 bg-[#1a3626] hover:bg-[#254a34] text-white rounded-full text-[11px] font-semibold shadow-sm transition-colors cursor-pointer"
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-500 text-white font-medium rounded-lg shadow-lg shadow-emerald-500/40 hover:bg-emerald-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={isUploading}
                 >
                   {isUploading ? "Salvando..." : "Salvar"}
@@ -4133,7 +4133,7 @@ export const EmpresaDashboard: React.FC = () => {
             <button
               onClick={handleHardReset}
               disabled={isResettingDatabase}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer disabled:bg-red-300 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 self-start sm:self-center"
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-red-500 text-white font-medium rounded-lg shadow-lg shadow-red-500/40 hover:bg-red-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isResettingDatabase ? (
                 <>
@@ -4182,7 +4182,7 @@ export const EmpresaDashboard: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowResetModal(false)}
-                className="px-3.5 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-full text-[11px] font-semibold transition-colors cursor-pointer bg-white"
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
               >
                 Cancelar
               </button>
@@ -4190,7 +4190,7 @@ export const EmpresaDashboard: React.FC = () => {
                 type="button"
                 onClick={executeHardReset}
                 disabled={resetConfirmText.trim().toUpperCase() !== 'ZERAR'}
-                className="px-3.5 py-2 bg-red-600 hover:bg-red-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-full text-[11px] font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-red-500 text-white font-medium rounded-lg shadow-lg shadow-red-500/40 hover:bg-red-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Trash2 size={13} />
                 <span>Confirmar Hard Reset</span>

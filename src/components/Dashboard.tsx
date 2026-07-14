@@ -299,7 +299,7 @@ export const Dashboard: React.FC<{
             <Gift size={24} />
           </div>
           <div>
-            <h4 className="text-sm font-serif font-bold text-forest-green" id="title-aniversariantes">Aniversariantes do Dia</h4>
+            <h4 className="text-sm font-bold text-forest-green" id="title-aniversariantes">Aniversariantes do Dia</h4>
             <p className="text-xs text-forest-green/70">Parabenize hoje os nossos assistidos e colaboradores!</p>
           </div>
         </div>
@@ -337,7 +337,7 @@ export const Dashboard: React.FC<{
               <Receipt size={24} />
             </div>
             <div>
-              <h3 className="text-lg font-serif font-bold text-forest-green" id="title-debitos-dia">Débitos do Dia</h3>
+              <h3 className="text-lg font-bold text-forest-green" id="title-debitos-dia">Débitos do Dia</h3>
               <p className="text-xs text-forest-green/70">Monitoramento e validação operacional dos débitos programados para hoje</p>
             </div>
           </div>
@@ -400,7 +400,7 @@ export const Dashboard: React.FC<{
                   <Calendar size={24} />
                 </div>
                 <div>
-                  <h3 className="text-lg font-serif font-bold text-forest-green" id="title-avisos-reajuste">Avisos de Reajuste</h3>
+                  <h3 className="text-lg font-bold text-forest-green" id="title-avisos-reajuste">Avisos de Reajuste</h3>
                   <p className="text-xs text-forest-green/70">Reajustes contratuais programados para os próximos 45 dias</p>
                 </div>
               </div>
@@ -428,7 +428,7 @@ export const Dashboard: React.FC<{
           )}
 
           <div className="bg-white p-6 rounded-2xl border border-forest-green/10 shadow-sm flex flex-col h-full">
-            <h3 className="text-md font-serif font-bold text-forest-green mb-5 border-b border-forest-green/5 pb-4" id="title-quick-actions">Ações Rápidas</h3>
+            <h3 className="text-md font-bold text-forest-green mb-5 border-b border-forest-green/5 pb-4" id="title-quick-actions">Ações Rápidas</h3>
             <div className="grid grid-cols-1 gap-4 flex-1">
               {quickActions.map(action => (
                 <button

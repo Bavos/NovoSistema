@@ -594,7 +594,7 @@ export const BackupProntuarios: React.FC = () => {
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className="flex items-center gap-2 px-5 py-3 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 hover:text-slate-900 font-bold rounded-xl text-xs transition-all duration-200 shadow-sm cursor-pointer hover:border-slate-350 active:scale-[0.98]"
+          className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
         >
           <Database size={14} className="text-[#1A3626]" />
           <span>Informações sobre Backup</span>
@@ -623,7 +623,7 @@ export const BackupProntuarios: React.FC = () => {
           <button
             type="button"
             onClick={() => setIsOpen(false)}
-            className="text-[10px] font-bold text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2.5 py-1.5 rounded-lg border border-slate-200 transition-colors uppercase cursor-pointer"
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
           >
             Recolher
           </button>
@@ -669,7 +669,7 @@ export const BackupProntuarios: React.FC = () => {
           <button
             onClick={() => triggerBackup(false)}
             disabled={isCreatingBackup}
-            className="mt-3 w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs shadow-sm transition-all flex items-center justify-center gap-1.5 hover:scale-[1.01] cursor-pointer"
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 text-white font-medium rounded-lg shadow-lg shadow-blue-500/40 hover:bg-blue-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed w-full mt-3"
           >
             {isCreatingBackup ? (
               <>
@@ -741,16 +741,16 @@ export const BackupProntuarios: React.FC = () => {
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); handleRestoreFromCloud(bk); }}
-                      className="min-h-[38px] p-2 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-colors border border-blue-200/50"
+                      className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-500 text-white font-medium rounded-lg shadow-lg shadow-blue-500/40 hover:bg-blue-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-[11px] min-h-[38px]"
                       title="Restaurar este Backup no banco de dados ativo"
                     >
-                      <RotateCcw size={13} className="text-blue-600" />
+                      <RotateCcw size={13} />
                       <span>Restaurar este Backup</span>
                     </button>
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); handleExportJSON(bk); }}
-                      className="min-h-[38px] p-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
+                      className="flex items-center justify-center gap-2 px-3 py-1.5 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50 text-[11px] min-h-[38px]"
                       title="Exportar dados para arquivo JSON"
                     >
                       <Download size={13} />
@@ -759,7 +759,7 @@ export const BackupProntuarios: React.FC = () => {
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); handleExportCSV(bk); }}
-                      className="min-h-[38px] p-2 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
+                      className="flex items-center justify-center gap-2 px-3 py-1.5 bg-emerald-500 text-white font-medium rounded-lg shadow-lg shadow-emerald-500/40 hover:bg-emerald-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-[11px] min-h-[38px]"
                       title="Exportar tabela de prontuários para CSV"
                     >
                       <Download size={13} />
@@ -775,7 +775,7 @@ export const BackupProntuarios: React.FC = () => {
                             await handleDeleteBackup(bk.id);
                             setConfirmingDeleteId(null);
                           }}
-                          className="min-h-[38px] min-w-[42px] px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-black cursor-pointer transition-all shadow-xs"
+                          className="flex items-center justify-center gap-1 px-2.5 py-1 bg-red-500 text-white font-bold rounded-lg shadow-lg shadow-red-500/30 hover:bg-red-600 transition-all active:scale-95 disabled:opacity-50 text-xs min-h-[38px]"
                         >
                           Sim
                         </button>
@@ -785,7 +785,7 @@ export const BackupProntuarios: React.FC = () => {
                             e.stopPropagation();
                             setConfirmingDeleteId(null);
                           }}
-                          className="min-h-[38px] min-w-[42px] px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-bold cursor-pointer transition-all"
+                          className="flex items-center justify-center gap-1 px-2.5 py-1 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50 text-xs min-h-[38px]"
                         >
                           Não
                         </button>
@@ -797,7 +797,7 @@ export const BackupProntuarios: React.FC = () => {
                           e.stopPropagation();
                           setConfirmingDeleteId(bk.id);
                         }}
-                        className="min-h-[38px] min-w-[38px] p-2 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-800 rounded-lg cursor-pointer transition-colors flex items-center justify-center border border-red-100/30"
+                        className="flex items-center justify-center min-h-[38px] min-w-[38px] p-2 bg-red-500 text-white font-medium rounded-lg shadow-lg shadow-red-500/40 hover:bg-red-600 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
                         title="Excluir do histórico"
                       >
                         <Trash2 size={15} />
@@ -813,7 +813,7 @@ export const BackupProntuarios: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowFullHistoryModal(true)}
-                  className="px-4 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-xl text-slate-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50 text-xs"
                 >
                   <Clock size={13} className="text-slate-500" />
                   <span>Ver Histórico Completo ({backups.length})</span>
@@ -841,7 +841,7 @@ export const BackupProntuarios: React.FC = () => {
               </div>
               <button 
                 onClick={() => setShowFullHistoryModal(false)}
-                className="p-1 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                className="flex items-center justify-center gap-2 px-3 py-1.5 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50 text-xs"
               >
                 &times;
               </button>
@@ -875,16 +875,16 @@ export const BackupProntuarios: React.FC = () => {
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); handleRestoreFromCloud(bk); }}
-                        className="p-1.5 px-2.5 min-h-[36px] bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg font-bold text-[10px] flex items-center gap-1 cursor-pointer transition-colors border border-blue-200/50"
+                        className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-500 text-white font-medium rounded-lg shadow-lg shadow-blue-500/40 hover:bg-blue-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-[11px] min-h-[38px]"
                         title="Restaurar este Backup no banco de dados ativo"
                       >
-                        <RotateCcw size={11} className="text-blue-600" />
+                        <RotateCcw size={11} />
                         <span>Restaurar</span>
                       </button>
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); handleExportJSON(bk); }}
-                        className="p-1.5 px-2.5 min-h-[36px] bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-[10px] flex items-center gap-1 cursor-pointer transition-colors"
+                        className="flex items-center justify-center gap-2 px-3 py-1.5 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50 text-[11px] min-h-[38px]"
                         title="Exportar dados para arquivo JSON"
                       >
                         <Download size={11} />
@@ -893,7 +893,7 @@ export const BackupProntuarios: React.FC = () => {
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); handleExportCSV(bk); }}
-                        className="p-1.5 px-2.5 min-h-[36px] bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg font-bold text-[10px] flex items-center gap-1 cursor-pointer transition-colors"
+                        className="flex items-center justify-center gap-2 px-3 py-1.5 bg-emerald-500 text-white font-medium rounded-lg shadow-lg shadow-emerald-500/40 hover:bg-emerald-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-[11px] min-h-[38px]"
                         title="Exportar tabela de prontuários para CSV"
                       >
                         <Download size={11} />
@@ -903,13 +903,13 @@ export const BackupProntuarios: React.FC = () => {
                         <div className="flex items-center gap-1.5 transition-all animate-in fade-in zoom-in-95 bg-red-50 p-1 rounded-lg border border-red-100">
                           <span className="text-[9px] text-red-600 font-bold uppercase select-none px-1">Excluir?</span>
                           <button
-                            type="button"
+                            type="button; e.stopPropagation();"
                             onClick={async (e) => {
                               e.stopPropagation();
                               await handleDeleteBackup(bk.id);
                               setConfirmingDeleteId(null);
                             }}
-                            className="min-h-[36px] min-w-[38px] px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-black cursor-pointer transition-all shadow-xs"
+                            className="flex items-center justify-center gap-1 px-2.5 py-1 bg-red-500 text-white font-bold rounded-lg shadow-lg shadow-red-500/30 hover:bg-red-600 transition-all active:scale-95 disabled:opacity-50 text-xs min-h-[38px]"
                           >
                             Sim
                           </button>
@@ -919,7 +919,7 @@ export const BackupProntuarios: React.FC = () => {
                               e.stopPropagation();
                               setConfirmingDeleteId(null);
                             }}
-                            className="min-h-[36px] min-w-[38px] px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-bold cursor-pointer transition-all"
+                            className="flex items-center justify-center gap-1 px-2.5 py-1 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50 text-xs min-h-[38px]"
                           >
                             Não
                           </button>
@@ -931,7 +931,7 @@ export const BackupProntuarios: React.FC = () => {
                             e.stopPropagation();
                             setConfirmingDeleteId(bk.id);
                           }}
-                          className="min-h-[36px] min-w-[36px] p-2 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-800 rounded-lg cursor-pointer transition-colors flex items-center justify-center border border-red-100/30"
+                          className="flex items-center justify-center min-h-[36px] min-w-[36px] p-2 bg-red-500 text-white font-medium rounded-lg shadow-lg shadow-red-500/40 hover:bg-red-600 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
                           title="Excluir do histórico"
                         >
                           <Trash2 size={13} />
@@ -949,7 +949,7 @@ export const BackupProntuarios: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowFullHistoryModal(false)}
-                className="px-4 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-lg text-xs transition-all cursor-pointer shadow-xs"
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50 text-xs"
               >
                 Voltar ao Painel
               </button>

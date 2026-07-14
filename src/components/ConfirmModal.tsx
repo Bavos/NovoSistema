@@ -60,12 +60,12 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   const severityColors = {
     danger: {
       accent: 'border-red-200 bg-red-50 text-red-700',
-      button: 'bg-red-600 hover:bg-red-700 hover:shadow-red-200/50 text-white focus:ring-red-500',
+      button: 'bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/40 text-white',
       glow: 'shadow-red-50',
     },
     warning: {
       accent: 'border-amber-200 bg-amber-50 text-amber-700',
-      button: 'bg-amber-600 hover:bg-amber-700 hover:shadow-amber-200/50 text-white focus:ring-amber-500',
+      button: 'bg-amber-500 hover:bg-amber-600 shadow-lg shadow-amber-500/40 text-white',
       glow: 'shadow-amber-50',
     },
   };
@@ -135,14 +135,14 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
             <button
               onClick={onClose}
               disabled={loading}
-              className="flex-1 py-2 px-4 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-all cursor-pointer disabled:opacity-50"
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
             >
               {cancelText}
             </button>
             <button
               onClick={handleConfirmClick}
               disabled={!isMatched || loading}
-              className={`flex-1 py-2 px-4 text-xs font-bold rounded-xl transition-all shadow-md flex items-center justify-center space-x-1.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none ${colors.button}`}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 font-medium rounded-lg transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${colors.button}`}
             >
               <span>{loading ? 'Processando...' : confirmText}</span>
             </button>

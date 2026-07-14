@@ -100,7 +100,7 @@ export const GestaoAcessos: React.FC = () => {
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className="flex items-center gap-2 px-5 py-3 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 hover:text-slate-900 font-bold rounded-xl text-xs transition-all duration-200 shadow-sm cursor-pointer hover:border-slate-350 active:scale-[0.98]"
+          className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
         >
           <Key size={14} className="text-[#1A3626]" />
           <span>Informações sobre Acessos</span>
@@ -125,7 +125,7 @@ export const GestaoAcessos: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowForm(true)}
-                className="flex items-center gap-1.5 px-4 py-2.5 bg-[#1A3626] text-white hover:bg-[#254A34] transition-all duration-200 rounded-xl text-xs font-semibold shadow-md cursor-pointer active:scale-[0.98]"
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-500 text-white font-medium rounded-lg shadow-lg shadow-emerald-500/40 hover:bg-emerald-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Plus size={15} /> + Adicionar Acesso
               </button>
@@ -133,7 +133,7 @@ export const GestaoAcessos: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="text-[10px] font-bold text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-3 py-2.5 rounded-xl border border-slate-200 transition-colors uppercase cursor-pointer"
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
             >
               Recolher
             </button>
@@ -156,7 +156,7 @@ export const GestaoAcessos: React.FC = () => {
               <button 
                 type="button"
                 onClick={cancelEdit}
-                className="text-[10px] font-bold text-slate-500 hover:text-slate-800 bg-white hover:bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 transition-colors uppercase cursor-pointer"
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
               >
                 Cancelar
               </button>
@@ -205,7 +205,7 @@ export const GestaoAcessos: React.FC = () => {
               <button
                 type="submit"
                 id="gestao-submit-user-btn"
-                className="px-6 h-11 bg-[#1A3626] text-white hover:bg-[#254A34] active:scale-[0.98] rounded-xl text-xs font-semibold shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-500 text-white font-medium rounded-lg shadow-lg shadow-emerald-500/40 hover:bg-emerald-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Plus size={15} /> {editingId ? 'Salvar Alterações' : 'Salvar Acesso'}
               </button>
@@ -256,7 +256,7 @@ export const GestaoAcessos: React.FC = () => {
                                 setSendingResetId(null);
                               }
                             }}
-                            className="px-2 py-0.5 bg-[#1A3626] hover:bg-[#254A34] text-white rounded text-[9px] font-bold uppercase cursor-pointer"
+                            className="flex items-center justify-center gap-1 px-2 py-0.5 bg-emerald-500 text-white font-bold rounded text-[9px] shadow shadow-emerald-500/30 hover:bg-emerald-600 transition-all active:scale-95 disabled:opacity-50"
                           >
                             Sim
                           </button>
@@ -266,7 +266,7 @@ export const GestaoAcessos: React.FC = () => {
                               e.stopPropagation();
                               setConfirmingResetId(null);
                             }}
-                            className="px-2 py-0.5 bg-slate-200 hover:bg-slate-350 text-slate-700 rounded text-[9px] font-bold uppercase cursor-pointer border border-slate-200"
+                            className="flex items-center justify-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-700 font-bold rounded text-[9px] hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
                           >
                             Não
                           </button>
@@ -276,7 +276,7 @@ export const GestaoAcessos: React.FC = () => {
                           type="button"
                           disabled={sendingResetId !== null}
                           onClick={() => setConfirmingResetId(user.id)}
-                          className="inline-flex items-center justify-center px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 hover:text-[#1a3c2e] hover:bg-slate-50 border border-slate-200 hover:border-slate-350 rounded-md transition-all duration-150 cursor-pointer select-none whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="inline-flex items-center justify-center px-2 py-1 text-[9px] font-bold uppercase tracking-wider bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-all duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                           id={`reset-${user.id}`}
                         >
                           🔑 Enviar Redefinição de Senha
@@ -300,13 +300,13 @@ export const GestaoAcessos: React.FC = () => {
                             await deleteUser(user.id);
                             setConfirmingDeleteId(null);
                           }}
-                          className="px-2 py-0.5 bg-red-600 text-white rounded text-[10px] font-bold uppercase cursor-pointer hover:bg-red-700 transition-colors"
+                          className="flex items-center justify-center gap-1 px-2 py-0.5 bg-red-500 text-white font-bold rounded text-[10px] shadow shadow-red-500/30 hover:bg-red-600 transition-all active:scale-95 disabled:opacity-50"
                         >
                           Sim
                         </button>
                         <button
                           onClick={() => setConfirmingDeleteId(null)}
-                          className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-bold uppercase cursor-pointer hover:bg-slate-200 transition-colors border border-slate-200"
+                          className="flex items-center justify-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-700 font-bold rounded text-[10px] hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
                         >
                           Não
                         </button>

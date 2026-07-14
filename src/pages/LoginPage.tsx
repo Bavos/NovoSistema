@@ -39,7 +39,7 @@ export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ o
                 <div className="flex justify-center mb-6">
                     <img src={logo} alt="Logo" className="h-20 w-auto" />
                 </div>
-                <h1 className="text-2xl font-serif font-bold text-slate-800 mb-6 text-center">Login</h1>
+                <h1 className="text-2xl font-bold text-slate-800 mb-6 text-center">Login</h1>
                 {error && (
                     <div className="bg-red-50 text-red-600 p-3 rounded-xl text-xs mb-4 border border-red-100 text-center font-medium" id="login-error-message">
                         {error}

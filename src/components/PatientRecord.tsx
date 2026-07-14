@@ -4688,7 +4688,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                             setOcDescricao('');
                             setOcBloquear(false);
                           }}
-                          className="px-4 py-2 hover:bg-slate-100 font-medium text-xs text-slate-600 rounded-lg transition-colors cursor-pointer"
+                          className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
                         >
                           Cancelar Edição
                         </button>
@@ -4697,7 +4697,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         type="button"
                         disabled={savingOcorrencia}
                         onClick={handleSaveOcorrencia}
-                        className="bg-blue-600 text-white px-5 py-2 rounded-lg text-xs font-semibold shadow-md shadow-blue-200 hover:bg-blue-700 transition-colors flex items-center space-x-1.5 cursor-pointer disabled:bg-blue-400 font-sans"
+                        className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 text-white font-medium rounded-lg shadow-lg shadow-blue-500/40 hover:bg-blue-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Save size={14} />
                         <span>{savingOcorrencia ? 'Salvando...' : 'Salvar Ocorrência'}</span>
@@ -5279,7 +5279,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               <button
                 type="button"
                 onClick={() => setAvulsoModalOpen(false)}
-                className="px-4 py-2 text-xs font-bold text-slate-550 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer"
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
               >
                 Voltar
               </button>
@@ -5293,7 +5293,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     setAvulsoModalOpen(false);
                   }
                 }}
-                className={`px-4.5 py-2 text-xs font-extrabold bg-sky-600 hover:bg-sky-700 text-white rounded-lg transition-all shadow-sm cursor-pointer ${isSaving ? 'opacity-55 cursor-not-allowed bg-sky-500' : ''}`}
+                className={`flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 text-white font-medium rounded-lg shadow-lg shadow-blue-500/40 hover:bg-blue-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${isSaving ? 'opacity-55 cursor-not-allowed' : ''}`}
               >
                 {isSaving ? 'Agendando...' : 'Confirmar e Agendar'}
               </button>
@@ -7290,7 +7290,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               <span className="text-xl">⚠️</span>
             </div>
             <div className="space-y-2">
-              <h3 className="text-lg font-bold text-[#1A3626] font-serif tracking-tight">
+              <h3 className="text-lg font-bold text-[#1A3626] tracking-tight">
                 {deleteRecordDialog.title}
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">

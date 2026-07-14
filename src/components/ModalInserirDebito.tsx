@@ -276,7 +276,7 @@ export const ModalInserirDebito: React.FC<ModalInserirDebitoProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-slate-200 text-slate-500 rounded-lg text-xs font-bold hover:bg-slate-50 cursor-pointer"
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
             >
               Cancelar
             </button>
@@ -284,7 +284,7 @@ export const ModalInserirDebito: React.FC<ModalInserirDebitoProps> = ({
               type="button"
               onClick={handleAddDebit}
               disabled={isInsertingDebit}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold disabled:opacity-50 cursor-pointer"
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-500 text-white font-medium rounded-lg shadow-lg shadow-emerald-500/40 hover:bg-emerald-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isInsertingDebit ? 'Gravando...' : (editingDebitId ? 'Salvar Alterações' : 'Confirmar Lançamento')}
             </button>

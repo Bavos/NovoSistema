@@ -33,7 +33,7 @@ export const FirstAccessPage: React.FC<FirstAccessPageProps> = ({ onBackToLogin 
             <div className="flex justify-center mb-6">
                 <img src={logo} alt="Logo" className="h-20 w-auto" />
             </div>
-            <h1 className="text-2xl font-serif font-bold text-slate-800 mb-6 text-center">Ativar Conta</h1>
+            <h1 className="text-2xl font-bold text-slate-800 mb-6 text-center">Ativar Conta</h1>
             <form onSubmit={handleActivate} className="space-y-4">
                 <input 
                     type="email" 
