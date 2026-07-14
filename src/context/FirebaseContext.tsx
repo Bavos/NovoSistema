@@ -9,6 +9,7 @@ import { INITIAL_PACIENTES, INITIAL_PLANTOES } from '../mockData';
 import { db, auth, storage, OperationType, handleFirestoreError } from '../lib/firebase';
 import { signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, sendEmailVerification, User } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { toast } from 'react-hot-toast';
 import {
   collection,
   doc,
@@ -678,6 +679,11 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const deleteAgendamento = async (id: string) => {
     try {
+      const existing = agendamentos.find(a => a.id === id);
+      if (existing && (existing.escalaCongelada || existing.status === 'Concluido')) {
+        toast.error('Escala fechada. Não é possível excluir esse plantão.');
+        return;
+      }
       await deleteDoc(doc(db, 'agendamentos', id));
       await addAuditLog('DELETE', 'agendamentos', id, `Agendamento excluído`);
       setNotification('Agendamento excluído.');

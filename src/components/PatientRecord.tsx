@@ -2408,10 +2408,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       return;
     }
 
-    const frozenCount = matches.filter((s) => s.status === 'Concluido').length;
+    const closedCount = matches.filter((s) => s.escalaCongelada || s.status === 'Concluido').length;
 
-    if (frozenCount > 0) {
-      alert('Não é possível realizar a exclusão pois existem plantões CONCLUÍDOS no período selecionado. Por favor, reabra a escala para realizar alterações ou ajuste o período de exclusão.');
+    if (closedCount > 0) {
+      toast.error('Escala fechada. Não é possível excluir esse plantão.');
       return;
     }
 
@@ -5510,13 +5510,18 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                             <button
                               type="button"
                               onClick={async () => {
+                                if (selectedShiftForDetails.escalaCongelada || selectedShiftForDetails.status === 'Concluido') {
+                                  toast.error("Escala fechada. Não é possível excluir esse plantão.");
+                                  setIsConfirmingDelete(false);
+                                  return;
+                                }
                                 try {
                                   await deleteAgendamento(selectedShiftForDetails.id);
                                   setDetailsModalOpen(false);
                                   setSelectedShiftForDetails(null);
                                   setIsConfirmingDelete(false);
-                                } catch (err) {
-                                  alert("Erro ao excluir o plantão.");
+                                } catch (err: any) {
+                                  alert(err.message || "Erro ao excluir o plantão.");
                                 }
                               }}
                               className="flex-1 py-1.5 text-xs font-extrabold bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-all text-center shadow-sm cursor-pointer"
@@ -5572,6 +5577,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           <button
                             type="button"
                             onClick={() => {
+                              if (selectedShiftForDetails.escalaCongelada || selectedShiftForDetails.status === 'Concluido') {
+                                toast.error("Escala fechada. Não é possível excluir esse plantão.");
+                                return;
+                              }
                               setIsConfirmingDelete(true);
                             }}
                             className="flex-1 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-all text-center flex items-center justify-center gap-1 cursor-pointer"

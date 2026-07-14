@@ -310,8 +310,8 @@ export const PatientList: React.FC<PatientListProps> = ({
             return (
               <div
                 key={`pac-card-${p.id || index}`}
-                className={`bg-white p-4 rounded-xl shadow-xs border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:shadow-sm hover:border-gray-200 ${
-                  isSelected ? 'border-emerald-500 ring-1 ring-emerald-500/20 bg-emerald-50/5' : 'border-gray-100'
+                className={`bg-white p-4 rounded-xl shadow-sm border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:shadow-sm hover:border-gray-200 ${
+                  isSelected ? 'border-emerald-500 ring-1 ring-emerald-500/20 bg-emerald-50/5' : 'border-gray-300'
                 }`}
               >
                 {/* Left Section: Checkbox & Info */}

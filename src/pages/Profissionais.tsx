@@ -1968,7 +1968,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
             return (
               <div
                 key={`prof-card-${prof.id || index}`}
-                className="bg-white p-4 rounded-xl shadow-xs border border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:shadow-sm hover:border-gray-200 transition-all animate-in fade-in-50"
+                className="bg-white p-4 rounded-xl shadow-sm border border-gray-300 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:shadow-sm hover:border-gray-200 transition-all animate-in fade-in-50"
               >
                 {/* Left Section: Info */}
                 <div className="min-w-0 flex-1 space-y-2">

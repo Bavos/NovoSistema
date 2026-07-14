@@ -55,7 +55,7 @@ export const ProfissionaisDashboard: React.FC = () => {
         </div>
         <button
           onClick={() => alert('Simulação de cadastro de novo profissional')}
-          className="px-4 py-2 bg-[#0F172A] text-white hover:bg-slate-800 rounded-md text-xs font-semibold shadow-md transition-colors cursor-pointer"
+          className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-500 text-white font-medium rounded-lg shadow-lg shadow-emerald-500/40 hover:bg-emerald-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           + Credenciar Profissional
         </button>
@@ -845,7 +845,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       // 1. Validação de Escala Fechada (Pré-requisito)
       const closed = await isEscalaFechada(pacId, 'paciente', dataInicial, dataFinal);
       if (!closed) {
-        alert('Ação negada: A escala do período selecionado ainda não foi fechada pela coordenação.');
+        toast.error('Ação negada: A escala do período selecionado ainda não foi fechada pela coordenação.');
         setIsSaving(false);
         return;
       }
@@ -917,9 +917,26 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
         // 1. Validação de Escala Fechada (Pré-requisito)
         const closed = await isEscalaFechada(pId, 'profissional', dataInicial, dataFinal);
         if (!closed) {
-          alert('Ação negada: A escala do período selecionado ainda não foi fechada pela coordenação.');
+          toast.error('Ação negada: A escala do período selecionado ainda não foi fechada pela coordenação.');
           setIsSaving(false);
           return;
+        }
+
+        // 1.1. Validação de Escala do Paciente Fechada (Pré-requisito)
+        const uniquePatientIds = Array.from(new Set(
+          agends
+            .filter(ag => ag.status !== 'Cancelado')
+            .map(ag => ag.idPaciente)
+            .filter(Boolean)
+        ));
+
+        for (const patientId of uniquePatientIds) {
+          const patientClosed = await isEscalaFechada(patientId, 'paciente', dataInicial, dataFinal);
+          if (!patientClosed) {
+            toast.error('Ação negada: A escala do período selecionado ainda não foi fechada pela coordenação.');
+            setIsSaving(false);
+            return;
+          }
         }
 
         // 2. Trava Anti-Duplicidade no Histórico
@@ -1042,9 +1059,10 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
           });
         }
         alert(`Folha para ${profName} fechada com sucesso!`);
-      } catch (err) {
-        console.error(err);
-        alert('Erro ao fechar folha.');
+        console.log(`[handleFecharFolhaProfissional] Folha de pagamento criada com sucesso no Firestore (ID: ${savedFolha.id}) para o profissional ${profName}.`);
+      } catch (err: any) {
+        console.error(`[handleFecharFolhaProfissional] Falha crítica ao salvar folha para o profissional ${profName} na coleção 'folhas_pagamento':`, err);
+        alert(`Erro ao fechar folha de pagamento para ${profName}: ${err.message || err}`);
       } finally {
         setIsSaving(false);
       }
@@ -1052,6 +1070,10 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
 
   const processBatchPayroll = async () => {
     setIsBatchProcessing(true);
+    let successCount = 0;
+    let skipCount = 0;
+    const skippedProfs: string[] = [];
+
     try {
       const parts = dataInicial.split('-');
       const month = parts[1] ? parseInt(parts[1], 10) : referenciaMes;
@@ -1070,6 +1092,8 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
 
       // Pre-checks for ALL selected professionals beforehand (Scale Fechada and Anti-duplex)
       const targetMonthYear = getMonthYearString(dataInicial);
+      const readyProfIdList: string[] = [];
+
       for (const pId of selectedProfissionais) {
         const pObj = profissionais.find(p => p.id === pId);
         const name = pObj?.nome || '';
@@ -1077,9 +1101,27 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
         // Scale Closed Check
         const closed = await isEscalaFechada(pId, 'profissional', dataInicial, dataFinal);
         if (!closed) {
-          alert(`Ação negada: A escala do período selecionado ainda não foi fechada pela coordenação para o profissional ${name}.`);
+          toast.error(`Ação negada: A escala do período selecionado ainda não foi fechada pela coordenação para o profissional ${name}.`);
           setIsBatchProcessing(false);
           return;
+        }
+
+        // Patient Scale Closed Check
+        const profAgends = agendamentosGerados.filter(ag => ag.nomeProfissional === name || ag.idProfissional === pId);
+        const uniquePatientIds = Array.from(new Set(
+          profAgends
+            .filter(ag => ag.status !== 'Cancelado')
+            .map(ag => ag.idPaciente)
+            .filter(Boolean)
+        ));
+
+        for (const patientId of uniquePatientIds) {
+          const patientClosed = await isEscalaFechada(patientId, 'paciente', dataInicial, dataFinal);
+          if (!patientClosed) {
+            toast.error('Ação negada: A escala do período selecionado ainda não foi fechada pela coordenação.');
+            setIsBatchProcessing(false);
+            return;
+          }
         }
 
         // Anti-duplicity Check
@@ -1103,104 +1145,124 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
           setIsBatchProcessing(false);
           return;
         }
+
+        readyProfIdList.push(pId);
       }
 
       await Promise.all(
-        selectedProfissionais.map(async (pId) => {
+        readyProfIdList.map(async (pId) => {
           const profissional = profissionais.find(p => p.id === pId);
           if (!profissional) return;
 
           const profName = profissional.nome;
-          const agends = agendamentosGerados.filter(ag => ag.nomeProfissional === profName);
+          try {
+            const agends = agendamentosGerados.filter(ag => ag.nomeProfissional === profName);
 
-          let somaRepasses = 0;
-          let somaAjudas = 0;
-          agends.forEach(ag => {
-            const vals = getAgendamentoCalculatedValues(ag);
-            somaRepasses += vals.valorRepasseFinal;
-            somaAjudas += vals.ajudaCusto;
-          });
+            let somaRepasses = 0;
+            let somaAjudas = 0;
+            agends.forEach(ag => {
+              const vals = getAgendamentoCalculatedValues(ag);
+              somaRepasses += vals.valorRepasseFinal;
+              somaAjudas += vals.ajudaCusto;
+            });
 
-          // Current debits in the period
-          const debDocsForProf = debitosNoPeriodo.filter(d => 
-            (d.idProfissional === pId || 
-            d.nomeProfissional.toLowerCase() === profName.toLowerCase()) &&
-            (d.status === 'pendente' || d.status === undefined)
-          );
-          let totalDebitos = debDocsForProf.reduce((sum, d) => sum + d.valor, 0);
+            // Current debits in the period
+            const debDocsForProf = debitosNoPeriodo.filter(d => 
+              (d.idProfissional === pId || 
+              d.nomeProfissional.toLowerCase() === profName.toLowerCase()) &&
+              (d.status === 'pendente' || d.status === undefined)
+            );
+            let totalDebitos = debDocsForProf.reduce((sum, d) => sum + d.valor, 0);
 
-          let totalPlantoes = somaRepasses;
-          let totalAjudaCusto = somaAjudas;
+            let totalPlantoes = somaRepasses;
+            let totalAjudaCusto = somaAjudas;
 
-          let valorLiquido = totalPlantoes + totalAjudaCusto - totalDebitos;
+            let valorLiquido = totalPlantoes + totalAjudaCusto - totalDebitos;
 
-          const valorMeiGlobal = parseFloat(String(valorMei || 0));
+            const valorMeiGlobal = parseFloat(String(valorMei || 0));
 
-          const listDebs = [...debDocsForProf];
-          let finalTotalDebitos = totalDebitos;
+            const listDebs = [...debDocsForProf];
+            let finalTotalDebitos = totalDebitos;
 
-          // Deduct MEI value if temMei
-          if (profissional && profissional.temMei && !profissional.meiIrregular && valorMeiGlobal > 0) {
-            valorLiquido -= valorMeiGlobal;
+            // Deduct MEI value if temMei
+            if (profissional && profissional.temMei && !profissional.meiIrregular && valorMeiGlobal > 0) {
+              valorLiquido -= valorMeiGlobal;
 
-            const autoDebit = {
+              const autoDebit = {
+                idProfissional: pId,
+                nomeProfissional: profName,
+                data: new Date(),
+                valor: valorMeiGlobal,
+                motivo: textoMotivo,
+                status: 'descontado' as const
+              };
+              const savedDebit = await addDebitoProfissional(autoDebit);
+              listDebs.push(savedDebit);
+              finalTotalDebitos += valorMeiGlobal;
+            }
+
+            // Bloqueio de Emissão Zerada - Handle gracefully per professional to prevent breaking the whole batch
+            if (valorLiquido <= 0) {
+              console.warn(`[processBatchPayroll] Pulando profissional ${profName} porque o valor líquido é zerado ou negativo: R$ ${valorLiquido}`);
+              skipCount++;
+              skippedProfs.push(profName);
+              return;
+            }
+
+            const savedFolha = await addFolhaPagamento({
               idProfissional: pId,
               nomeProfissional: profName,
-              data: new Date(),
-              valor: valorMeiGlobal,
-              motivo: textoMotivo,
-              status: 'descontado' as const
-            };
-            const savedDebit = await addDebitoProfissional(autoDebit);
-            listDebs.push(savedDebit);
-            finalTotalDebitos += valorMeiGlobal;
-          }
-
-          // Bloqueio de Emissão Zerada
-          if (valorLiquido <= 0) {
-            throw new Error(`Não é possível gerar uma folha com valor zerado ou negativo para ${profName}.`);
-          }
-
-          const savedFolha = await addFolhaPagamento({
-            idProfissional: pId,
-            nomeProfissional: profName,
-            dataEmissao: new Date().toISOString(),
-            periodoApurado: { inicio: dataInicial, fim: dataFinal },
-            valorTotalPlantoes: totalPlantoes + totalAjudaCusto,
-            valorTotalDebitos: finalTotalDebitos,
-            valorLiquidoReceber: valorLiquido,
-            status: 'Fechada',
-            historicoDebitos: listDebs,
-            plantoesCongelados: agends
-          });
-
-          // 3. Liquidação (Baixa) Automática de débitos pendentes que entraram no cálculo
-          for (const deb of debDocsForProf) {
-            await updateDebitoProfissional({
-              ...deb,
-              status: 'descontado',
-              folhaIdVinculada: savedFolha.id
+              dataEmissao: new Date().toISOString(),
+              periodoApurado: { inicio: dataInicial, fim: dataFinal },
+              valorTotalPlantoes: totalPlantoes + totalAjudaCusto,
+              valorTotalDebitos: finalTotalDebitos,
+              valorLiquidoReceber: valorLiquido,
+              status: 'Fechada',
+              historicoDebitos: listDebs,
+              plantoesCongelados: agends
             });
-          }
 
-          // Associa a folha ao débito MEI automático se existir no histórico
-          const meiDebit = listDebs.find(d => d.id !== 'virtual-mei-debit' && d.motivo === textoMotivo);
-          if (meiDebit && meiDebit.id) {
-            await updateDebitoProfissional({
-              ...meiDebit,
-              status: 'descontado',
-              folhaIdVinculada: savedFolha.id
-            });
+            // 3. Liquidação (Baixa) Automática de débitos pendentes que entraram no cálculo
+            for (const deb of debDocsForProf) {
+              await updateDebitoProfissional({
+                ...deb,
+                status: 'descontado',
+                folhaIdVinculada: savedFolha.id
+              });
+            }
+
+            // Associa a folha ao débito MEI automático se existir no histórico
+            const meiDebit = listDebs.find(d => d.id !== 'virtual-mei-debit' && d.motivo === textoMotivo);
+            if (meiDebit && meiDebit.id) {
+              await updateDebitoProfissional({
+                ...meiDebit,
+                status: 'descontado',
+                folhaIdVinculada: savedFolha.id
+              });
+            }
+
+            successCount++;
+            console.log(`[processBatchPayroll] Folha de pagamento criada para o profissional ${profName} com ID: ${savedFolha.id}`);
+          } catch (profErr) {
+            console.error(`[processBatchPayroll] Falha ao processar folha do profissional ${profName}:`, profErr);
+            skipCount++;
+            skippedProfs.push(profName);
           }
         })
       );
 
-      setNotification('Folhas fechadas com sucesso!');
+      let successMessage = `Folhas fechadas com sucesso para ${successCount} profissional(is).`;
+      if (skipCount > 0) {
+        successMessage += ` Não foi possível gerar para ${skipCount} profissional(is) devido a valor líquido zerado ou outros erros: (${skippedProfs.join(', ')}).`;
+      }
+      
+      setNotification(successMessage);
+      alert(successMessage);
       setSelectedProfissionais([]);
       setShowBatchModal(false);
     } catch (err: any) {
-      console.error(err);
-      alert('Erro ao fechar as folhas em lote: ' + err.message);
+      console.error("[processBatchPayroll] Falha crítica ao fechar as folhas em lote na coleção 'folhas_pagamento':", err);
+      alert('Erro ao fechar as folhas em lote: ' + (err.message || err));
     } finally {
       setIsBatchProcessing(false);
     }
@@ -1894,7 +1956,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                       type="button"
                       id="btn-cnab-gerar-folha"
                       onClick={handleGerarFolhaAutomatizada}
-                      className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-bold transition-all disabled:opacity-50 flex items-center gap-2 h-[38px] cursor-pointer"
+                      className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
                     >
                       🤖 Gerar Folha
                     </button>
@@ -2023,7 +2085,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                           setFolhaSuccess(null);
                           setFolhaResultData(null);
                         }}
-                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                        className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-500 text-white font-medium rounded-lg shadow-lg shadow-emerald-500/40 hover:bg-emerald-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         🔄 Novo Processamento de Lote
                       </button>
@@ -2114,7 +2176,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                           setTempValorMei(String(valorMei));
                           setIsEditingValorMei(true);
                         }}
-                        className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 hover:text-slate-900 rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer font-sans"
+                        className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50 w-full"
                       >
                         <Pencil size={14} className="text-slate-500" />
                         Editar Valor
@@ -2122,7 +2184,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                     </div>
                   ) : (
                     <div className="space-y-4 font-sans">
-                      <div className="space-y-1.5">
+                       <div className="space-y-1.5">
                         <label className="block text-xs font-bold text-slate-600">Valor MEI (R$)</label>
                         <div className="relative rounded-xl shadow-sm">
                           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -2144,14 +2206,14 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                         <button
                           type="button"
                           onClick={() => setIsEditingValorMei(false)}
-                          className="flex-1 py-2 px-4 border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-bold transition-all cursor-pointer font-sans"
+                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
                         >
                           Cancelar
                         </button>
                         <button
                           type="button"
                           onClick={handleSaveValorMei}
-                          className="flex-1 py-2 px-4 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs shadow-md shadow-amber-200 hover:shadow-none transition-all flex items-center justify-center gap-1.5 cursor-pointer font-sans"
+                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-emerald-500 text-white font-medium rounded-lg shadow-lg shadow-emerald-500/40 hover:bg-emerald-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <CheckCircle size={14} />
                           Salvar
@@ -2558,7 +2620,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                                                   setExpandedProfissionais([...expandedProfissionais, p.profId]);
                                                 }
                                               }}
-                                              className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold rounded-lg transition-colors cursor-pointer"
+                                              className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
                                             >
                                               {isExpanded ? '🙈 Ocultar' : '👁️ Ver Plantões'}
                                             </button>
@@ -2566,7 +2628,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                                               type="button"
                                               onClick={() => handleFecharFolhaProfissional(p.profName, p.agends)}
                                               disabled={isSaving}
-                                              className="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold rounded-lg transition-colors cursor-pointer"
+                                              className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-500 text-white font-medium rounded-lg shadow-lg shadow-emerald-500/40 hover:bg-emerald-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                                             >
                                               {isSaving ? '⏳' : '💾 Fechar'}
                                             </button>
@@ -2984,7 +3046,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
             <div className="flex justify-end gap-3 mt-4">
               <button
                 onClick={() => setDeleteConfirmDialog(null)}
-                className="px-4 py-2 border border-slate-200 text-slate-500 rounded-lg text-xs font-bold hover:bg-slate-50 cursor-pointer"
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
               >
                 Não, Cancelar
               </button>
@@ -2998,7 +3060,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                     setDeleteConfirmDialog(null);
                   }
                 }}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold cursor-pointer"
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-red-500 text-white font-medium rounded-lg shadow-lg shadow-red-500/40 hover:bg-red-600 transition-all active:scale-95 disabled:opacity-50"
               >
                 Sim, Confirmar
               </button>
@@ -3148,9 +3210,9 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
     };
 
     // Filter states
-    const [searchFaturaPaciente, setSearchFaturaPaciente] = useState('');
+    const [searchFaturaPaciente, setSearchFaturaPaciente] = useState('all');
     const [searchFaturaData, setSearchFaturaData] = useState('');
-    const [searchFolhaProfissional, setSearchFolhaProfissional] = useState('');
+    const [searchFolhaProfissional, setSearchFolhaProfissional] = useState('all');
     const [searchFolhaData, setSearchFolhaData] = useState('');
 
     // Dynamic Lists from Firestore
@@ -3240,7 +3302,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
             <div className="flex flex-wrap items-center gap-2 print:hidden">
               <button
                 onClick={() => window.print()}
-                className="px-3.5 py-1.5 bg-slate-500 hover:bg-slate-600 text-white rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
               >
                 <Printer className="w-3.5 h-3.5" /> Imprimir Relatório
               </button>
@@ -3313,7 +3375,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                   id="btn-download-resumo-pagamento"
                   onClick={handleExportWord}
                   disabled={selectedHistorico.length === 0}
-                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-lg text-xs font-black transition-colors cursor-pointer"
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
                 >
                   Baixar Resumo para Pagamento
                 </button>
@@ -3321,7 +3383,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
               <div className="flex flex-wrap items-center gap-2 print:hidden">
                 <button
                   onClick={() => window.print()}
-                  className="px-3 py-1.5 bg-slate-500 hover:bg-slate-600 text-white rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
                 >
                   <Printer className="w-3.5 h-3.5" /> Imprimir Relatório
                 </button>
