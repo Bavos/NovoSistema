@@ -158,8 +158,10 @@ export interface Paciente {
   cpf: string;
   nomeResponsavel: string;
   telefoneResponsavel: string;
+  telefoneResponsavel2?: string;
   parentescoResponsavel?: string;
   email: string;
+  telefone?: string;
   altura?: string;
   peso?: string;
   bairro: string;

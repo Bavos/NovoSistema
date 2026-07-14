@@ -219,6 +219,9 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
   // Estado para titularidade de conta bancária (Sim/Não)
   const [isTitularConta, setIsTitularConta] = useState<string>('Sim');
 
+  // Estado para exibir campo de Conselho Profissional
+  const [showConselhoField, setShowConselhoField] = useState<boolean>(false);
+
   // Estado para visualização de documentos em modal
   const [previewDoc, setPreviewDoc] = useState<{ url: string; tipo: string; nome?: string } | null>(null);
 
@@ -471,6 +474,9 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
 
     // Definir estado de titularidade da conta
     setIsTitularConta(prof ? (prof.isTitularConta === 'Não' || prof.isTitularConta === false ? 'Não' : 'Sim') : 'Sim');
+
+    // Definir se exibe conselho profissional (abre aberto se o profissional já tiver conselho cadastrado)
+    setShowConselhoField(!!(prof && prof.conselho));
  
     setFormData(prof ? {
         nome: prof.nome || '',
@@ -2875,12 +2881,37 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Profissão (Obrigatório)</label>
-                        <input type="text" placeholder="Digite a profissão" value={formData.profissao} onChange={e => setFormData({...formData, profissao: e.target.value})} className="p-2 border border-gray-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-[#1a3c2e] focus:border-transparent outline-none bg-white text-gray-800" required />
+                        <input type="text" placeholder="Digite a profissão" value={formData.profissao} onChange={e => setFormData({...formData, profissao: e.target.value})} className="p-2 border border-gray-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-[#1a3c2e] focus:border-transparent outline-none bg-white text-gray-800 mb-1" required />
+                        {!showConselhoField && (
+                          <div className="pt-0.5 pb-1">
+                            <button
+                              type="button"
+                              onClick={() => setShowConselhoField(true)}
+                              className="text-[11px] font-semibold text-[#1a3c2e] hover:text-[#C09A6D] flex items-center gap-1 transition-colors cursor-pointer"
+                            >
+                              <span>+ Conselho / Registro</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      <div className="space-y-1">
-                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Conselho Profissional</label>
-                        <input type="text" placeholder="Digite o conselho" value={formData.conselho} onChange={e => setFormData({...formData, conselho: e.target.value})} className="p-2 border border-gray-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-[#1a3c2e] focus:border-transparent outline-none bg-white text-gray-800" />
-                      </div>
+                      {showConselhoField && (
+                        <div className="space-y-1 animate-in fade-in duration-200">
+                          <div className="flex justify-between items-center">
+                            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Conselho Profissional</label>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowConselhoField(false);
+                                setFormData(prev => ({ ...prev, conselho: '' }));
+                              }}
+                              className="text-[10px] font-bold text-red-600 hover:text-red-800 flex items-center gap-1 transition-colors cursor-pointer"
+                            >
+                              <span>Remover</span>
+                            </button>
+                          </div>
+                          <input type="text" placeholder="Digite o conselho" value={formData.conselho} onChange={e => setFormData({...formData, conselho: e.target.value})} className="p-2 border border-gray-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-[#1a3c2e] focus:border-transparent outline-none bg-white text-gray-800" />
+                        </div>
+                      )}
                       <div className="space-y-1">
                         <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Telefone (Obrigatório)</label>
                         <input type="tel" placeholder="(00) 00000-0000" value={formData.telefone} onChange={e => setFormData({...formData, telefone: mascaraTelefone(e.target.value)})} maxLength={15} className="p-2 border border-gray-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-[#1a3c2e] focus:border-transparent outline-none bg-white text-gray-800" required />

@@ -284,8 +284,8 @@ export const Dashboard: React.FC<{
   };
 
   const quickActions = [
-    { id: 'btn-dash-cadastrar-paciente', title: 'Cadastrar Paciente', icon: UserPlus, tab: 'pacientes' },
-    { id: 'btn-dash-cadastrar-profissional', title: 'Cadastrar Profissional', icon: Users, tab: 'profissionais' },
+    { id: 'btn-dash-cadastrar-paciente', title: 'Paciente', icon: UserPlus, tab: 'pacientes' },
+    { id: 'btn-dash-cadastrar-profissional', title: 'Profissional', icon: Users, tab: 'profissionais' },
     { id: 'btn-dash-cadastrar-debito', title: 'Cadastrar Débito', icon: Receipt, tab: 'financeiro', extra: { financeiroSubTab: 'debitos' } },
     { id: 'btn-dash-gerar-faturamento', title: 'Gerar Faturamento', icon: DollarSign, tab: 'financeiro' },
   ];
@@ -435,12 +435,12 @@ export const Dashboard: React.FC<{
                   id={action.id}
                   key={action.title}
                   onClick={() => setActiveTab(action.tab, (action as any).extra)}
-                  className="w-full text-left py-4 px-5 rounded-full border border-mustard-gold/20 hover:border-mustard-gold bg-white hover:bg-[#e8e4db] hover:shadow-md transition-all duration-300 flex items-center space-x-4 group cursor-pointer"
+                  className="w-full text-left py-4 px-5 rounded-full border border-mustard-gold/20 hover:border-mustard-gold bg-white hover:bg-[#e8e4db] hover:shadow-md transition-all duration-300 flex items-center gap-2 group cursor-pointer"
                 >
                   <div className="p-2.5 bg-[#e8e4db] text-mustard-gold rounded-full transition-all flex items-center justify-center shrink-0">
                     <action.icon size={18} />
                   </div>
-                  <span className="font-bold text-xs uppercase tracking-wider text-forest-green transition-all">{action.title}</span>
+                  <span className="font-bold text-xs uppercase tracking-wider text-forest-green transition-all ml-2">{action.title}</span>
                 </button>
               ))}
             </div>

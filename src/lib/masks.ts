@@ -121,5 +121,40 @@ export const normalizeText = (text: string | null | undefined): string => {
   return text ? text.toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "") : "";
 };
 
+/**
+ * Aplica máscara de Altura (metros/centímetros): X,XX m
+ */
+export const mascaraAltura = (value: string): string => {
+  if (value.endsWith(' ')) {
+    const clean = value.replace(/\D/g, '');
+    if (clean.length <= 1) return clean;
+    return `${clean[0]},${clean.slice(1, 3)}`;
+  }
+  
+  const clean = value.replace(/\D/g, '');
+  if (clean.length === 0) return '';
+  if (clean.length === 1) return clean;
+  if (clean.length === 2) {
+    return `${clean[0]},${clean[1]} m`;
+  }
+  const limited = clean.slice(0, 3);
+  return `${limited[0]},${limited.slice(1)} m`;
+};
+
+/**
+ * Aplica máscara de Peso: XX kg ou XXX kg
+ */
+export const mascaraPeso = (value: string): string => {
+  if (value.endsWith(' ')) {
+    const clean = value.replace(/\D/g, '');
+    return clean.slice(0, 3);
+  }
+  
+  const clean = value.replace(/\D/g, '');
+  if (clean.length === 0) return '';
+  const limited = clean.slice(0, 3);
+  return `${limited} kg`;
+};
+
 
 

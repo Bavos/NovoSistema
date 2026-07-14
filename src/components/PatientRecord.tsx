@@ -13,7 +13,7 @@ import { usePacienteData } from '../hooks/usePacienteData';
 import { ModalInserirDebito, DadosAtalhoCuringa } from './ModalInserirDebito';
 import { CardBase, DataGrid, DataField, SoftBadge } from './ui/DesignSystem';
 import { pacienteSchema } from '../schemas/validationSchemas';
-import { mascaraCPF, mascaraTelefone, mascaraCEP, mascaraMesAno, validarCPF } from '../lib/masks';
+import { mascaraCPF, mascaraTelefone, mascaraCEP, mascaraMesAno, validarCPF, mascaraAltura, mascaraPeso } from '../lib/masks';
 import {
   Save,
   Lock,
@@ -649,8 +649,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const [cpf, setCpf] = useState('');
   const [nomeResponsavel, setNomeResponsavel] = useState('');
   const [telefoneResponsavel, setTelefoneResponsavel] = useState('');
+  const [telefoneResponsavel2, setTelefoneResponsavel2] = useState('');
+  const [showSecondPhone, setShowSecondPhone] = useState(false);
   const [parentescoResponsavel, setParentescoResponsavel] = useState('');
   const [email, setEmail] = useState('');
+  const [telefonePaciente, setTelefonePaciente] = useState('');
+  const [showPacientePhone, setShowPacientePhone] = useState(false);
   const [altura, setAltura] = useState('');
   const [peso, setPeso] = useState('');
   const [bairro, setBairro] = useState('');
@@ -847,8 +851,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       setCpf(paciente.cpf);
       setNomeResponsavel(paciente.nomeResponsavel);
       setTelefoneResponsavel(paciente.telefoneResponsavel);
+      setTelefoneResponsavel2(paciente.telefoneResponsavel2 || '');
+      setShowSecondPhone(!!paciente.telefoneResponsavel2);
       setParentescoResponsavel(paciente.parentescoResponsavel || '');
       setEmail(paciente.email || '');
+      setTelefonePaciente(paciente.telefone || '');
+      setShowPacientePhone(!!paciente.telefone);
       setAltura(paciente.altura || '');
       setPeso(paciente.peso || '');
       setBairro(paciente.bairro || paciente.endereco.bairro);
@@ -999,7 +1007,15 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     }
 
     const cleanCpfVal = (cpf || '').replace(/\D/g, '');
-    const validation = pacienteSchema.safeParse({ nome, cpf: cleanCpfVal, nomeResponsavel, telefoneResponsavel, parentescoResponsavel });
+    const validation = pacienteSchema.safeParse({
+      nome,
+      cpf: cleanCpfVal,
+      nomeResponsavel,
+      telefoneResponsavel,
+      telefoneResponsavel2: showSecondPhone ? telefoneResponsavel2 : undefined,
+      parentescoResponsavel,
+      telefone: showPacientePhone ? telefonePaciente : undefined
+    });
 
     if (!validation.success) {
       toast.error(validation.error.issues[0].message);
@@ -1067,8 +1083,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       cpf,
       nomeResponsavel,
       telefoneResponsavel,
+      telefoneResponsavel2: showSecondPhone ? telefoneResponsavel2 : '',
       parentescoResponsavel,
       email,
+      telefone: showPacientePhone ? telefonePaciente : '',
       altura,
       peso,
       bairro: bairro || 'Copacabana',
@@ -1374,7 +1392,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
     const pickedProf = profissionais.find(p => p.nome === newShiftProf);
     if (pickedProf && isBlockedBidirectional(pickedProf)) {
-      alert('Atenção: Este profissional possui uma restrição de atendimento (bloqueio) para este paciente devido a uma ocorrência passada.');
+      toast.error('Atenção: Este profissional possui uma restrição de atendimento (bloqueio) para este paciente devido a uma ocorrência passada.');
       return;
     }
 
@@ -2889,9 +2907,47 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         type="text"
                         readOnly
                         value={idadeCalculada}
-                        className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-500 bg-slate-50 cursor-default font-normal focus:outline-none"
+                        className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-500 bg-slate-50 cursor-default font-normal focus:outline-none mb-1"
                       />
+                      {!showPacientePhone && (
+                        <div className="pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setShowPacientePhone(true)}
+                            className="text-xs font-semibold text-[#113224] hover:text-[#C09A6D] flex items-center gap-1 transition-colors"
+                          >
+                            <span>+ Adicionar telefone</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
+
+                    {showPacientePhone && (
+                      <div className="space-y-1 col-span-1 md:col-span-1 animate-in fade-in duration-200">
+                        <div className="flex justify-between items-center">
+                          <label className="block text-sm font-medium text-gray-750">Telefone (Opcional)</label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowPacientePhone(false);
+                              setTelefonePaciente('');
+                            }}
+                            className="text-xs font-semibold text-red-600 hover:text-red-800 flex items-center gap-1 transition-colors"
+                          >
+                            <span>Remover</span>
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          disabled={isCurrentlyDeactivated || isColaborador}
+                          value={telefonePaciente}
+                          onChange={(e) => setTelefonePaciente(mascaraTelefone(e.target.value))}
+                          maxLength={15}
+                          className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
+                          placeholder="Ex: (21) 98167-0274"
+                        />
+                      </div>
+                    )}
 
                     <div className="space-y-1 col-span-1 md:col-span-1">
                       <label className="block text-sm font-medium text-gray-750">Altura</label>
@@ -2899,7 +2955,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         type="text"
                         disabled={isCurrentlyDeactivated || isColaborador}
                         value={altura}
-                        onChange={(e) => setAltura(e.target.value)}
+                        onChange={(e) => setAltura(mascaraAltura(e.target.value))}
                         className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
                         placeholder="Ex: 1,70 m"
                       />
@@ -2911,7 +2967,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         type="text"
                         disabled={isCurrentlyDeactivated || isColaborador}
                         value={peso}
-                        onChange={(e) => setPeso(e.target.value)}
+                        onChange={(e) => setPeso(mascaraPeso(e.target.value))}
                         className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
                         placeholder="Ex: 70 kg"
                       />
@@ -2942,9 +2998,21 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     </div>
 
                     <div className="space-y-1 col-span-1">
-                      <label className="block text-xs font-semibold text-gray-600">Telefone do Responsável (Opcional)</label>
+                      <div className="flex justify-between items-center">
+                        <label className="block text-xs font-semibold text-gray-600">Telefone do Responsável *</label>
+                        {!showSecondPhone && (
+                          <button
+                            type="button"
+                            onClick={() => setShowSecondPhone(true)}
+                            className="text-xs font-semibold text-[#113224] hover:text-[#C09A6D] flex items-center gap-1 transition-colors"
+                          >
+                            <span>+ Adicionar outro</span>
+                          </button>
+                        )}
+                      </div>
                       <input
                         type="text"
+                        required
                         disabled={isCurrentlyDeactivated || isColaborador}
                         value={telefoneResponsavel}
                         onChange={(e) => setTelefoneResponsavel(mascaraTelefone(e.target.value))}
@@ -2953,6 +3021,33 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         placeholder="Ex: (21) 90000-0000"
                       />
                     </div>
+
+                    {showSecondPhone && (
+                      <div className="space-y-1 col-span-1">
+                        <div className="flex justify-between items-center">
+                          <label className="block text-xs font-semibold text-gray-600">Segundo Telefone do Responsável (Opcional)</label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowSecondPhone(false);
+                              setTelefoneResponsavel2('');
+                            }}
+                            className="text-xs font-semibold text-red-600 hover:text-red-800 flex items-center gap-1 transition-colors"
+                          >
+                            <span>Remover</span>
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          disabled={isCurrentlyDeactivated || isColaborador}
+                          value={telefoneResponsavel2}
+                          onChange={(e) => setTelefoneResponsavel2(mascaraTelefone(e.target.value))}
+                          maxLength={15}
+                          className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#C09A6D] focus:border-[#C09A6D] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
+                          placeholder="Ex: (21) 90000-0000"
+                        />
+                      </div>
+                    )}
 
                     <div className="space-y-1 col-span-1">
                       <label className="block text-xs font-semibold text-gray-600">Parentesco (Opcional)</label>
@@ -5839,7 +5934,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
                           const pickedProf = profissionais.find(p => p.nome === detailsProfName);
                           if (pickedProf && isBlockedBidirectional(pickedProf)) {
-                            alert('Atenção: Este profissional possui uma restrição de atendimento (bloqueio) para este paciente devido a uma ocorrência passada.');
+                            toast.error('Atenção: Este profissional possui uma restrição de atendimento (bloqueio) para este paciente devido a uma ocorrência passada.');
                             return;
                           }
 
@@ -6912,7 +7007,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     </div>
                     <div>
                       <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Telefone de Contato do Representante:</span>
-                      <p className="font-mono text-slate-756 text-slate-700 mt-1">{telefoneResponsavel || '---'}</p>
+                      <p className="font-mono text-slate-756 text-slate-700 mt-1">
+                        {telefoneResponsavel || '---'}
+                        {paciente?.telefoneResponsavel2 || telefoneResponsavel2 ? ` / ${paciente?.telefoneResponsavel2 || telefoneResponsavel2}` : ''}
+                      </p>
                     </div>
                     <div>
                       <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none text-blue-700 font-extrabold">Responsável pelo Pagamento / Faturas:</span>
