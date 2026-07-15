@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
 import { Paciente, EscalacaoPlano } from '../types';
+import { formatarMoeda, converterMascaraParaNumero } from '../lib/masks';
 
 export function usePacienteData(pacienteId: string | null | undefined, initialPaciente?: Paciente | null) {
   const { pacientes, updatePaciente } = useFirebase();
   const [tipoEscala, setTipoEscala] = useState<string>('Diurno 12h');
   const [horaInicioPadrao, setHoraInicioPadrao] = useState('07:00');
-  const [valorSugeridoPlantao, setValorSugeridoPlantao] = useState<number | ''>(150);
-  const [ajudaCusto, setAjudaCusto] = useState<number | ''>(0);
-  const [valorTransporte, setValorTransporte] = useState<number | ''>(0);
-  const [valorAlimentacao, setValorAlimentacao] = useState<number | ''>(0);
-  const [taxaAdm, setTaxaAdm] = useState<number | ''>(0);
+  const [valorSugeridoPlantao, setValorSugeridoPlantao] = useState<string>('150,00');
+  const [ajudaCusto, setAjudaCusto] = useState<string>('0,00');
+  const [valorTransporte, setValorTransporte] = useState<string>('0,00');
+  const [valorAlimentacao, setValorAlimentacao] = useState<string>('0,00');
+  const [taxaAdm, setTaxaAdm] = useState<string>('0,00');
   const [tiposPlantao, setTiposPlantao] = useState<EscalacaoPlano[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
@@ -24,11 +25,11 @@ export function usePacienteData(pacienteId: string | null | undefined, initialPa
         if (found && found.planoAtendimento) {
           setTipoEscala(found.planoAtendimento.tipoEscala || 'Diurno 12h');
           setHoraInicioPadrao(found.planoAtendimento.horaInicioPadrao || '07:00');
-          setValorSugeridoPlantao(found.planoAtendimento.valorSugeridoPlantao ?? 150);
-          setAjudaCusto(found.planoAtendimento.ajudaCusto ?? 0);
-          setValorTransporte(found.planoAtendimento.valorTransporte ?? found.planoAtendimento.ajudaCusto ?? 0);
-          setValorAlimentacao(found.planoAtendimento.valorAlimentacao ?? 0);
-          setTaxaAdm(found.planoAtendimento.taxaAdm ?? 0);
+          setValorSugeridoPlantao(formatarMoeda(found.planoAtendimento.valorSugeridoPlantao ?? 150));
+          setAjudaCusto(formatarMoeda(found.planoAtendimento.ajudaCusto ?? 0));
+          setValorTransporte(formatarMoeda(found.planoAtendimento.valorTransporte ?? found.planoAtendimento.ajudaCusto ?? 0));
+          setValorAlimentacao(formatarMoeda(found.planoAtendimento.valorAlimentacao ?? 0));
+          setTaxaAdm(formatarMoeda(found.planoAtendimento.taxaAdm ?? 0));
           setTiposPlantao(found.planoAtendimento.tiposPlantao || []);
         }
         setLoading(false);
@@ -84,11 +85,11 @@ export function usePacienteData(pacienteId: string | null | undefined, initialPa
         planoAtendimento: {
           tipoEscala,
           horaInicioPadrao,
-          valorSugeridoPlantao: Number(valorSugeridoPlantao),
-          ajudaCusto: Number(valorTransporte || 0) + Number(valorAlimentacao || 0),
-          valorTransporte: Number(valorTransporte),
-          valorAlimentacao: Number(valorAlimentacao),
-          taxaAdm: Number(taxaAdm),
+          valorSugeridoPlantao: converterMascaraParaNumero(valorSugeridoPlantao),
+          ajudaCusto: converterMascaraParaNumero(valorTransporte) + converterMascaraParaNumero(valorAlimentacao),
+          valorTransporte: converterMascaraParaNumero(valorTransporte),
+          valorAlimentacao: converterMascaraParaNumero(valorAlimentacao),
+          taxaAdm: converterMascaraParaNumero(taxaAdm),
           tiposPlantao,
         }
       };

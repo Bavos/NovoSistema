@@ -1399,9 +1399,13 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
           icon: '✅',
         });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro ao salvar:", err);
-      toast.error("Erro ao salvar profissional. Tente novamente.");
+      if (err?.message?.includes('exceeds the maximum allowed size') || err?.message?.includes('maximum allowed size')) {
+        toast.error("Falha ao salvar: A imagem ou arquivo em anexo é muito pesado. O limite máximo é de 1MB. Reduza o arquivo e tente novamente.");
+        return;
+      }
+      toast.error("Erro ao salvar os dados");
     } finally {
       setLoading(false);
     }

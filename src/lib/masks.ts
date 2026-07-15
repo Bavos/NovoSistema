@@ -156,5 +156,46 @@ export const mascaraPeso = (value: string): string => {
   return `${limited} kg`;
 };
 
+/**
+ * Converte qualquer valor para string no formato de moeda brasileiro (ex: 160,00)
+ */
+export const formatarMoeda = (value: number | string | undefined | null): string => {
+  if (value === undefined || value === null || value === '') return '';
+  const num = typeof value === 'number' ? value : parseFloat(value.toString().replace(/\./g, '').replace(',', '.'));
+  if (isNaN(num)) return '';
+  return num.toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+};
+
+/**
+ * Aplica máscara financeira em tempo de digitação (ex: 16000 -> 160,00)
+ */
+export const mascaraFinanceira = (value: string): string => {
+  const clean = value.replace(/\D/g, '');
+  if (!clean) return '';
+  
+  const centavos = parseInt(clean, 10);
+  const reais = centavos / 100;
+  
+  return reais.toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+};
+
+/**
+ * Converte uma string formatada em moeda brasileiro para número de ponto flutuante
+ */
+export const converterMascaraParaNumero = (value: string | number | undefined | null): number => {
+  if (value === undefined || value === null || value === '') return 0;
+  if (typeof value === 'number') return value;
+  
+  const clean = value.replace(/\./g, '').replace(',', '.');
+  const num = parseFloat(clean);
+  return isNaN(num) ? 0 : num;
+};
+
 
 

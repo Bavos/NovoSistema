@@ -13,7 +13,7 @@ import { usePacienteData } from '../hooks/usePacienteData';
 import { ModalInserirDebito, DadosAtalhoCuringa } from './ModalInserirDebito';
 import { CardBase, DataGrid, DataField, SoftBadge } from './ui/DesignSystem';
 import { pacienteSchema } from '../schemas/validationSchemas';
-import { mascaraCPF, mascaraTelefone, mascaraCEP, mascaraMesAno, validarCPF, mascaraAltura, mascaraPeso } from '../lib/masks';
+import { mascaraCPF, mascaraTelefone, mascaraCEP, mascaraMesAno, validarCPF, mascaraAltura, mascaraPeso, mascaraFinanceira, formatarMoeda, converterMascaraParaNumero } from '../lib/masks';
 import {
   Save,
   Lock,
@@ -452,6 +452,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     cancelText?: string;
   } | null>(null);
   const [deleteRecordConfirmInput, setDeleteRecordConfirmInput] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Editable details form fields (synchronized when we enter edit mode):
   const [detailsProfName, setDetailsProfName] = useState('');
@@ -828,11 +829,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   // States for adding a new plantão type inline to the list
   const [newSubTipoEscala, setNewSubTipoEscala] = useState<string>('Diurno 12h');
   const [newSubHoraInicio, setNewSubHoraInicio] = useState<string>('07:00');
-  const [newSubValorPlantao, setNewSubValorPlantao] = useState<number | ''>(150);
-  const [newSubAjudaCusto, setNewSubAjudaCusto] = useState<number | ''>(0);
-  const [newSubValorTransporte, setNewSubValorTransporte] = useState<number | ''>(0);
-  const [newSubValorAlimentacao, setNewSubValorAlimentacao] = useState<number | ''>(0);
-  const [newSubTaxaAdm, setNewSubTaxaAdm] = useState<number | ''>(0);
+  const [newSubValorPlantao, setNewSubValorPlantao] = useState<string>('150,00');
+  const [newSubAjudaCusto, setNewSubAjudaCusto] = useState<string>('0,00');
+  const [newSubValorTransporte, setNewSubValorTransporte] = useState<string>('0,00');
+  const [newSubValorAlimentacao, setNewSubValorAlimentacao] = useState<string>('0,00');
+  const [newSubTaxaAdm, setNewSubTaxaAdm] = useState<string>('0,00');
   const [editingSubId, setEditingSubId] = useState<string | null>(null);
   const [showExtraForm, setShowExtraForm] = useState<boolean>(false);
 
@@ -986,9 +987,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       id: 'principal',
       tipoEscala: tipoEscala,
       horaInicio: horaInicioPadrao,
-      valorPlantao: Number(valorSugeridoPlantao || 0),
-      ajudaCusto: Number(ajudaCusto || 0),
-      taxaAdm: Number(taxaAdm || 0),
+      valorPlantao: converterMascaraParaNumero(valorSugeridoPlantao),
+      ajudaCusto: converterMascaraParaNumero(ajudaCusto),
+      taxaAdm: converterMascaraParaNumero(taxaAdm),
       isPrincipal: true,
     },
     ...tiposPlantao.map((tp) => ({
@@ -1110,11 +1111,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         ...(paciente?.planoAtendimento || {}),
         tipoEscala,
         horaInicioPadrao,
-        valorSugeridoPlantao: valorSugeridoPlantao === '' ? '' : Number(valorSugeridoPlantao),
-        ajudaCusto: ajudaCusto === '' ? '' : Number(ajudaCusto),
-        valorTransporte: valorTransporte === '' ? '' : Number(valorTransporte),
-        valorAlimentacao: valorAlimentacao === '' ? '' : Number(valorAlimentacao),
-        taxaAdm: taxaAdm === '' ? '' : Number(taxaAdm),
+        valorSugeridoPlantao: valorSugeridoPlantao === '' ? '' : converterMascaraParaNumero(valorSugeridoPlantao),
+        ajudaCusto: ajudaCusto === '' ? '' : converterMascaraParaNumero(ajudaCusto),
+        valorTransporte: valorTransporte === '' ? '' : converterMascaraParaNumero(valorTransporte),
+        valorAlimentacao: valorAlimentacao === '' ? '' : converterMascaraParaNumero(valorAlimentacao),
+        taxaAdm: taxaAdm === '' ? '' : converterMascaraParaNumero(taxaAdm),
         tiposPlantao,
       },
       dadosPagamento: {
@@ -1198,11 +1199,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         planoAtendimento: {
           tipoEscala,
           horaInicioPadrao,
-          valorSugeridoPlantao: Number(valorSugeridoPlantao),
-          ajudaCusto: Number(valorTransporte || 0) + Number(valorAlimentacao || 0),
-          valorTransporte: Number(valorTransporte),
-          valorAlimentacao: Number(valorAlimentacao),
-          taxaAdm: Number(taxaAdm),
+          valorSugeridoPlantao: converterMascaraParaNumero(valorSugeridoPlantao),
+          ajudaCusto: converterMascaraParaNumero(valorTransporte) + converterMascaraParaNumero(valorAlimentacao),
+          valorTransporte: converterMascaraParaNumero(valorTransporte),
+          valorAlimentacao: converterMascaraParaNumero(valorAlimentacao),
+          taxaAdm: converterMascaraParaNumero(taxaAdm),
           tiposPlantao,
         },
       };
@@ -1319,9 +1320,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
           // Also reset editing state if the deleted additional shift was being edited
           if (!isPrincipal && editingSubId === id) {
             setEditingSubId(null);
-            setNewSubValorPlantao(150);
-            setNewSubAjudaCusto(0);
-            setNewSubTaxaAdm(0);
+            setNewSubValorPlantao('150,00');
+            setNewSubAjudaCusto('0,00');
+            setNewSubTaxaAdm('0,00');
           }
         } catch (error: any) {
           console.error("Erro ao deletar configuracao:", error);
@@ -1401,8 +1402,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       
       const { plantaoFinal, taxaAdmFinal, ajudaCusto: finalAjuda } = calculateShiftValues(
         newShiftValor,
-        taxaAdm || 0,
-        ajudaCusto || 0,
+        converterMascaraParaNumero(taxaAdm),
+        converterMascaraParaNumero(ajudaCusto),
         newShiftFeriado
       );
 
@@ -1514,11 +1515,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
           id: 'principal',
           tipoEscala: tipoEscala || 'Diurno 12h',
           horaInicio: horaInicioPadrao || '07:00',
-          valorPlantao: Number(valorSugeridoPlantao || 0),
-          ajudaCusto: Number(ajudaCusto || 0),
-          valorTransporte: Number(valorTransporte || 0),
-          valorAlimentacao: Number(valorAlimentacao || 0),
-          taxaAdm: Number(taxaAdm || 0),
+          valorPlantao: converterMascaraParaNumero(valorSugeridoPlantao),
+          ajudaCusto: converterMascaraParaNumero(ajudaCusto),
+          valorTransporte: converterMascaraParaNumero(valorTransporte),
+          valorAlimentacao: converterMascaraParaNumero(valorAlimentacao),
+          taxaAdm: converterMascaraParaNumero(taxaAdm),
         },
         ...tiposPlantao.map((tp) => ({
           id: tp.id,
@@ -2441,6 +2442,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       confirmText: 'Confirmar e Excluir',
       cancelText: 'Voltar',
       onConfirm: async () => {
+        setIsDeleting(true);
         try {
           for (const m of matches) {
             await deleteAgendamento(m.id);
@@ -2449,6 +2451,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
           alert(`${matches.length} agendamento(s) excluído(s) com sucesso.`);
         } catch (err: any) {
           alert('Erro ao excluir agendamento: ' + (err.message || String(err)));
+        } finally {
+          setIsDeleting(false);
         }
       }
     });
@@ -3419,10 +3423,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   <div className="space-y-1">
                     <label className="block text-xs font-normal text-slate-700">Valor do Plantão (R$)</label>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
                       disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
                       value={valorSugeridoPlantao}
-                      onChange={(e) => setValorSugeridoPlantao(e.target.value === '' ? '' : Number(e.target.value))}
+                      onChange={(e) => setValorSugeridoPlantao(mascaraFinanceira(e.target.value))}
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal text-slate-900"
                       placeholder="Valor plantão"
                     />
@@ -3431,13 +3436,16 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   <div className="space-y-1">
                     <label className="block text-xs font-normal text-slate-700">Valor Transporte (R$)</label>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
                       disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
                       value={valorTransporte}
                       onChange={(e) => {
-                        const val = e.target.value === '' ? '' : Number(e.target.value);
-                        setValorTransporte(val);
-                        setAjudaCusto(Number(val || 0) + Number(valorAlimentacao || 0));
+                        const formatted = mascaraFinanceira(e.target.value);
+                        setValorTransporte(formatted);
+                        const valNum = converterMascaraParaNumero(formatted);
+                        const alimNum = converterMascaraParaNumero(valorAlimentacao);
+                        setAjudaCusto(formatarMoeda(valNum + alimNum));
                       }}
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed text-slate-600"
                       placeholder="Valor transporte"
@@ -3447,13 +3455,16 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   <div className="space-y-1">
                     <label className="block text-xs font-normal text-slate-700">Valor Alimentação (R$)</label>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
                       disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
                       value={valorAlimentacao}
                       onChange={(e) => {
-                        const val = e.target.value === '' ? '' : Number(e.target.value);
-                        setValorAlimentacao(val);
-                        setAjudaCusto(Number(valorTransporte || 0) + Number(val || 0));
+                        const formatted = mascaraFinanceira(e.target.value);
+                        setValorAlimentacao(formatted);
+                        const transNum = converterMascaraParaNumero(valorTransporte);
+                        const valNum = converterMascaraParaNumero(formatted);
+                        setAjudaCusto(formatarMoeda(transNum + valNum));
                       }}
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed text-slate-600"
                       placeholder="Valor alimentação (0 se a casa fornece)"
@@ -3463,10 +3474,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   <div className="space-y-1">
                     <label className="block text-xs font-normal text-slate-700">Tx Adm (R$)</label>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
                       disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
                       value={taxaAdm}
-                      onChange={(e) => setTaxaAdm(e.target.value === '' ? '' : Number(e.target.value))}
+                      onChange={(e) => setTaxaAdm(mascaraFinanceira(e.target.value))}
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed text-slate-600"
                       placeholder="Taxa adm"
                     />
@@ -3530,10 +3542,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           <div className="space-y-1">
                             <label className="block text-[10px] font-normal text-slate-600">Valor Plantão (R$)</label>
                             <input
-                              type="number"
+                              type="text"
+                              inputMode="numeric"
                               disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
                               value={newSubValorPlantao}
-                              onChange={(e) => setNewSubValorPlantao(e.target.value === '' ? '' : Number(e.target.value))}
+                              onChange={(e) => setNewSubValorPlantao(mascaraFinanceira(e.target.value))}
                               className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-white font-normal"
                             />
                           </div>
@@ -3541,13 +3554,16 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           <div className="space-y-1">
                             <label className="block text-[10px] font-normal text-slate-600">Transporte (R$)</label>
                             <input
-                              type="number"
+                              type="text"
+                              inputMode="numeric"
                               disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
                               value={newSubValorTransporte}
                               onChange={(e) => {
-                                const val = e.target.value === '' ? '' : Number(e.target.value);
-                                setNewSubValorTransporte(val);
-                                setNewSubAjudaCusto(Number(val || 0) + Number(newSubValorAlimentacao || 0));
+                                const formatted = mascaraFinanceira(e.target.value);
+                                setNewSubValorTransporte(formatted);
+                                const transNum = converterMascaraParaNumero(formatted);
+                                const alimNum = converterMascaraParaNumero(newSubValorAlimentacao);
+                                setNewSubAjudaCusto(formatarMoeda(transNum + alimNum));
                               }}
                               className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-white font-normal"
                             />
@@ -3556,13 +3572,16 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           <div className="space-y-1">
                             <label className="block text-[10px] font-normal text-slate-600">Alimentação (R$)</label>
                             <input
-                              type="number"
+                              type="text"
+                              inputMode="numeric"
                               disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
                               value={newSubValorAlimentacao}
                               onChange={(e) => {
-                                const val = e.target.value === '' ? '' : Number(e.target.value);
-                                setNewSubValorAlimentacao(val);
-                                setNewSubAjudaCusto(Number(newSubValorTransporte || 0) + Number(val || 0));
+                                const formatted = mascaraFinanceira(e.target.value);
+                                setNewSubValorAlimentacao(formatted);
+                                const transNum = converterMascaraParaNumero(newSubValorTransporte);
+                                const alimNum = converterMascaraParaNumero(formatted);
+                                setNewSubAjudaCusto(formatarMoeda(transNum + alimNum));
                               }}
                               className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-white font-normal"
                             />
@@ -3571,10 +3590,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           <div className="space-y-1">
                             <label className="block text-[10px] font-normal text-slate-600">Tx Adm (R$)</label>
                             <input
-                              type="number"
+                              type="text"
+                              inputMode="numeric"
                               disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
                               value={newSubTaxaAdm}
-                              onChange={(e) => setNewSubTaxaAdm(e.target.value === '' ? '' : Number(e.target.value))}
+                              onChange={(e) => setNewSubTaxaAdm(mascaraFinanceira(e.target.value))}
                               className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-white font-normal"
                             />
                           </div>
@@ -3588,11 +3608,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                               setEditingSubId(null);
                               setNewSubTipoEscala('Diurno 12h');
                               setNewSubHoraInicio('07:00');
-                              setNewSubValorPlantao(150);
-                              setNewSubAjudaCusto(0);
-                              setNewSubValorTransporte(0);
-                              setNewSubValorAlimentacao(0);
-                              setNewSubTaxaAdm(0);
+                              setNewSubValorPlantao('150,00');
+                              setNewSubAjudaCusto('0,00');
+                              setNewSubValorTransporte('0,00');
+                              setNewSubValorAlimentacao('0,00');
+                              setNewSubTaxaAdm('0,00');
                               setShowExtraForm(false);
                             }}
                             className="mr-2 px-3 py-1.5 text-xs font-semibold text-slate-750 bg-slate-100 hover:bg-slate-200 rounded-lg shadow-xs transition-colors cursor-pointer disabled:opacity-50"
@@ -3608,15 +3628,21 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                 return;
                               }
                               if (editingSubId) {
+                                setNewSubValorPlantao(formatarMoeda(converterMascaraParaNumero(newSubValorPlantao)));
+                                setNewSubAjudaCusto(formatarMoeda(converterMascaraParaNumero(newSubAjudaCusto)));
+                                setNewSubValorTransporte(formatarMoeda(converterMascaraParaNumero(newSubValorTransporte)));
+                                setNewSubValorAlimentacao(formatarMoeda(converterMascaraParaNumero(newSubValorAlimentacao)));
+                                setNewSubTaxaAdm(formatarMoeda(converterMascaraParaNumero(newSubTaxaAdm)));
+
                                 setTiposPlantao(tiposPlantao.map(t => t.id === editingSubId ? {
                                   ...t,
                                   tipoEscala: newSubTipoEscala,
                                   horaInicio: newSubHoraInicio,
-                                  valorPlantao: Number(newSubValorPlantao || 0),
-                                  ajudaCusto: Number(newSubAjudaCusto || 0),
-                                  valorTransporte: Number(newSubValorTransporte || 0),
-                                  valorAlimentacao: Number(newSubValorAlimentacao || 0),
-                                  taxaAdm: Number(newSubTaxaAdm || 0)
+                                  valorPlantao: converterMascaraParaNumero(newSubValorPlantao),
+                                  ajudaCusto: converterMascaraParaNumero(newSubAjudaCusto),
+                                  valorTransporte: converterMascaraParaNumero(newSubValorTransporte),
+                                  valorAlimentacao: converterMascaraParaNumero(newSubValorAlimentacao),
+                                  taxaAdm: converterMascaraParaNumero(newSubTaxaAdm)
                                 } : t));
                                 setEditingSubId(null);
                               } else {
@@ -3624,20 +3650,20 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                   id: `tp-${Date.now()}`,
                                   tipoEscala: newSubTipoEscala,
                                   horaInicio: newSubHoraInicio,
-                                  valorPlantao: Number(newSubValorPlantao || 0),
-                                  ajudaCusto: Number(newSubAjudaCusto || 0),
-                                  valorTransporte: Number(newSubValorTransporte || 0),
-                                  valorAlimentacao: Number(newSubValorAlimentacao || 0),
-                                  taxaAdm: Number(newSubTaxaAdm || 0),
+                                  valorPlantao: converterMascaraParaNumero(newSubValorPlantao),
+                                  ajudaCusto: converterMascaraParaNumero(newSubAjudaCusto),
+                                  valorTransporte: converterMascaraParaNumero(newSubValorTransporte),
+                                  valorAlimentacao: converterMascaraParaNumero(newSubValorAlimentacao),
+                                  taxaAdm: converterMascaraParaNumero(newSubTaxaAdm),
                                 };
                                 setTiposPlantao([...tiposPlantao, newType]);
                               }
                               // Reset inputs to default values
-                              setNewSubValorPlantao(150);
-                              setNewSubAjudaCusto(0);
-                              setNewSubValorTransporte(0);
-                              setNewSubValorAlimentacao(0);
-                              setNewSubTaxaAdm(0);
+                              setNewSubValorPlantao('150,00');
+                              setNewSubAjudaCusto('0,00');
+                              setNewSubValorTransporte('0,00');
+                              setNewSubValorAlimentacao('0,00');
+                              setNewSubTaxaAdm('0,00');
                               setShowExtraForm(false);
                             }}
                             className="flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed rounded-lg shadow-xs transition-colors cursor-pointer"
@@ -3675,9 +3701,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                               )}
                             </td>
                             <td className="py-3 px-4 text-center font-mono bg-slate-50/35 text-sm">{tp.horaInicio}</td>
-                            <td className="py-3 px-4 text-right font-normal text-slate-900">R$ {(Number(tp.valorPlantao) || 0).toFixed(2)}</td>
-                            <td className="py-3 px-4 text-right text-slate-600 font-normal">R$ {(Number(tp.ajudaCusto) || 0).toFixed(2)}</td>
-                            <td className="py-3 px-4 text-right text-slate-600 font-normal">R$ {(Number(tp.taxaAdm) || 0).toFixed(2)}</td>
+                            <td className="py-3 px-4 text-right font-normal text-slate-900">R$ {(Number(tp.valorPlantao) || 0).toFixed(2).replace('.', ',')}</td>
+                            <td className="py-3 px-4 text-right text-slate-600 font-normal">R$ {(Number(tp.ajudaCusto) || 0).toFixed(2).replace('.', ',')}</td>
+                            <td className="py-3 px-4 text-right text-slate-600 font-normal">R$ {(Number(tp.taxaAdm) || 0).toFixed(2).replace('.', ',')}</td>
                             <td className="py-3 px-4 text-center">
                               <div className="flex items-center justify-center space-x-2">
                                 {tp.isPrincipal ? (
@@ -3703,11 +3729,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                         setEditingSubId(tp.id);
                                         setNewSubTipoEscala(tp.tipoEscala);
                                         setNewSubHoraInicio(tp.horaInicio);
-                                        setNewSubValorPlantao(tp.valorPlantao);
-                                        setNewSubAjudaCusto(tp.ajudaCusto);
-                                        setNewSubValorTransporte(tp.valorTransporte ?? tp.ajudaCusto ?? 0);
-                                        setNewSubValorAlimentacao(tp.valorAlimentacao ?? 0);
-                                        setNewSubTaxaAdm(tp.taxaAdm);
+                                        setNewSubValorPlantao(formatarMoeda(tp.valorPlantao));
+                                        setNewSubAjudaCusto(formatarMoeda(tp.ajudaCusto));
+                                        setNewSubValorTransporte(formatarMoeda(tp.valorTransporte ?? tp.ajudaCusto ?? 0));
+                                        setNewSubValorAlimentacao(formatarMoeda(tp.valorAlimentacao ?? 0));
+                                        setNewSubTaxaAdm(formatarMoeda(tp.taxaAdm));
                                         setShowExtraForm(true);
                                       }}
                                       className="py-1 px-2.5 border border-blue-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-all font-semibold inline-flex items-center space-x-1 cursor-pointer text-xs"
@@ -7137,19 +7163,19 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     </div>
                     <div className="p-2 border border-slate-200 rounded-lg bg-slate-50/50">
                       <span className="text-[8.5px] font-bold text-slate-450 block uppercase leading-none">Valor Negociado p/ Plantão:</span>
-                      <p className="font-bold text-slate-800 font-mono mt-0.5">R$ {(Number(valorSugeridoPlantao) || 0).toFixed(2)}</p>
+                      <p className="font-bold text-slate-800 font-mono mt-0.5">R$ {converterMascaraParaNumero(valorSugeridoPlantao).toFixed(2).replace('.', ',')}</p>
                     </div>
                     <div className="p-2 border border-slate-200 rounded-lg bg-slate-50/50">
                       <span className="text-[8.5px] font-bold text-slate-450 block uppercase leading-none">Ajuda de Custo Profissional:</span>
-                      <p className="font-bold text-slate-800 font-mono mt-0.5">R$ {(Number(ajudaCusto) || 0).toFixed(2)}</p>
+                      <p className="font-bold text-slate-800 font-mono mt-0.5">R$ {converterMascaraParaNumero(ajudaCusto).toFixed(2).replace('.', ',')}</p>
                     </div>
                     <div className="p-2 border border-slate-200 rounded-lg bg-slate-50/50">
                       <span className="text-[8.5px] font-bold text-slate-450 block uppercase leading-none">Taxa Adm do Fechamento:</span>
-                      <p className="font-bold text-[#1a3c2e] font-mono mt-0.5">R$ {(Number(taxaAdm) || 0).toFixed(2)}</p>
+                      <p className="font-bold text-[#1a3c2e] font-mono mt-0.5">R$ {converterMascaraParaNumero(taxaAdm).toFixed(2).replace('.', ',')}</p>
                     </div>
                     <div className="p-2 border border-emerald-200 rounded-lg bg-emerald-50/20">
                       <span className="text-[8.5px] font-black text-[#1a3c2e] block uppercase leading-none">Consolidado Total por Turno:</span>
-                      <p className="font-extrabold text-[#1a3c2e] font-mono mt-0.5">R$ {(Number(valorSugeridoPlantao || 0) + Number(taxaAdm || 0) + Number(ajudaCusto || 0)).toFixed(2)}</p>
+                      <p className="font-extrabold text-[#1a3c2e] font-mono mt-0.5">R$ {(converterMascaraParaNumero(valorSugeridoPlantao) + converterMascaraParaNumero(taxaAdm) + converterMascaraParaNumero(ajudaCusto)).toFixed(2).replace('.', ',')}</p>
                     </div>
                   </div>
                 </div>
@@ -7422,8 +7448,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             <div className="flex gap-3 pt-2">
               <button
                 type="button"
+                disabled={isDeleting}
                 onClick={() => setDeleteRecordDialog(null)}
-                className="flex-1 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 rounded-full transition-all text-center cursor-pointer shadow-xs"
+                className="flex-1 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 rounded-full transition-all text-center cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {deleteRecordDialog.cancelText || 'Cancelar'}
               </button>
@@ -7442,10 +7469,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     setDeleteRecordDialog(null);
                   }
                 }}
-                disabled={deleteRecordConfirmInput.trim().toUpperCase() !== 'CONFIRMAR'}
-                className="flex-1 py-2 text-xs font-black text-white bg-red-600 hover:bg-red-700 rounded-full transition-all text-center cursor-pointer shadow-md disabled:opacity-45 disabled:cursor-not-allowed"
+                disabled={isDeleting || deleteRecordConfirmInput.trim().toUpperCase() !== 'CONFIRMAR'}
+                className="flex-1 py-2 text-xs font-black text-white bg-red-600 hover:bg-red-700 rounded-full transition-all text-center cursor-pointer shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {deleteRecordDialog.confirmText || 'Confirmar e Excluir'}
+                {isDeleting ? 'Excluindo...' : 'Confirmar e Excluir'}
               </button>
             </div>
           </div>
