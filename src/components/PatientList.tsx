@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Paciente } from '../types';
 import { Edit, Trash, Plus, Filter, Check, EyeOff, ShieldCheck, AlertCircle, Search } from 'lucide-react';
 import { toast } from 'react-hot-toast';
@@ -32,12 +32,30 @@ export const PatientList: React.FC<PatientListProps> = ({
   globalSearchQuery,
   isLoading,
 }) => {
-  const { userRole } = useFirebase();
+  const { 
+    userRole, 
+    fetchNextPage, 
+    fetchPreviousPage, 
+    hasPreviousPage, 
+    hasMore, 
+    loadingPacientes,
+    fetchFirstPagePacientes,
+    totalPacientes
+  } = useFirebase();
   const isColaborador = userRole?.toLowerCase() === 'colaborador';
 
   const [localSearch, setLocalSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [filterPacienteId, setFilterPacienteId] = useState<string>('todos');
+
+  // Trigger server-side fetch with debounce whenever search or filter selection changes
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      fetchFirstPagePacientes(localSearch, filterPacienteId);
+    }, 400);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [localSearch, filterPacienteId]);
 
   // Deactivation confirmation modal for list bulk actions
   const [bulkDeactivateOpen, setBulkDeactivateOpen] = useState(false);
@@ -390,18 +408,39 @@ export const PatientList: React.FC<PatientListProps> = ({
       {/* Dynamic Footer stats container wrapper */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
         {/* Dynamic Footer stats */}
-        <div className="bg-slate-50/75 py-3 px-6 text-xs text-slate-500 flex justify-between items-center">
+        <div className="bg-slate-50/75 py-3 px-6 text-xs text-slate-500 flex flex-col sm:flex-row justify-between items-center gap-4">
           <p>
-            Exibindo <span className="font-semibold text-slate-700">{filteredPacientes.length}</span> de <span className="font-semibold text-slate-700">{pacientes.length}</span> pacientes cadastrados.
+            Exibindo <span className="font-semibold text-slate-700">{filteredPacientes.length}</span> pacientes nesta página.
           </p>
+          
+          {/* Pagination Buttons */}
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={fetchPreviousPage}
+              disabled={!hasPreviousPage || loadingPacientes || isLoading}
+              className="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-600 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-600 transition-all cursor-pointer flex items-center gap-1 border border-transparent hover:border-slate-200"
+              title="Página Anterior"
+            >
+              [&lt; Anterior]
+            </button>
+            <button
+              onClick={fetchNextPage}
+              disabled={!hasMore || loadingPacientes || isLoading}
+              className="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-600 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-600 transition-all cursor-pointer flex items-center gap-1 border border-transparent hover:border-slate-200"
+              title="Próxima Página"
+            >
+              [Próxima &gt;]
+            </button>
+          </div>
+
           <div className="flex space-x-4">
             <span className="flex items-center space-x-1">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-              <span><strong>{pacientes.filter((p) => p.status === 'Ativo').length}</strong> Ativos</span>
+              <span><strong>{totalPacientes.ativos}</strong> Ativos</span>
             </span>
             <span className="flex items-center space-x-1">
               <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
-              <span><strong>{pacientes.filter((p) => p.status === 'Desativado').length}</strong> Desativados</span>
+              <span><strong>{totalPacientes.inativos}</strong> Desativados</span>
             </span>
           </div>
         </div>

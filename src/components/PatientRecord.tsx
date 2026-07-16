@@ -475,6 +475,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const [ocBloquear, setOcBloquear] = useState(false);
   const [editingOcorrenciaId, setEditingOcorrenciaId] = useState<string | null>(null);
   const [savingOcorrencia, setSavingOcorrencia] = useState(false);
+  const [deleteConfirmOc, setDeleteConfirmOc] = useState<any | null>(null);
 
   // Handlers for occurrences (Ocorrências)
   const handleSaveOcorrencia = async (e: React.FormEvent) => {
@@ -594,21 +595,21 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     setOcBloquear(oc.bloquearProfissional || false);
   };
 
-  const handleDeleteOcorrencia = async (ocId: string) => {
-    if (!paciente) return;
+  const handleDeleteOcorrencia = (oc: any) => {
+    setDeleteConfirmOc(oc);
+  };
+
+  const handleConfirmDeleteOcorrencia = async () => {
+    if (!paciente || !deleteConfirmOc || !deleteConfirmOc.id) return;
     const targetPatient = pacientes.find(p => p.id === paciente.id) || paciente;
     if (!targetPatient) return;
 
-    if (!window.confirm('Tem certeza de que deseja excluir esta ocorrência?')) {
-      return;
-    }
-
     try {
       let currentOcs = [...(targetPatient.ocorrencias || [])];
-      const targetOc = currentOcs.find(oc => oc.id === ocId);
+      const targetOc = currentOcs.find(oc => oc.id === deleteConfirmOc.id);
       if (!targetOc) return;
 
-      const updatedOcs = currentOcs.filter(oc => oc.id !== ocId);
+      const updatedOcs = currentOcs.filter(oc => oc.id !== deleteConfirmOc.id);
 
       // Handle block array (profissionaisBloqueados)
       let blockedProfs = [...(targetPatient.profissionaisBloqueados || [])];
@@ -635,6 +636,433 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       });
     } catch (err: any) {
       toast.error('Erro ao excluir ocorrência: ' + err.message);
+    } finally {
+      setDeleteConfirmOc(null);
+    }
+  };
+
+  const handleBaixarOcorrenciasExcel = async () => {
+    if (!paciente) {
+      toast.error('Paciente não selecionado.');
+      return;
+    }
+    const targetPatient = pacientes.find(p => p.id === paciente.id) || paciente;
+    const targetOcs = targetPatient?.ocorrencias || [];
+
+    if (targetOcs.length === 0) {
+      toast.error('Nenhuma ocorrência registrada para este paciente para exportar.');
+      return;
+    }
+
+    let empresaNome = 'RH Cuidado Domiciliar';
+    let empresaCnpj = '12.345.678/0001-99';
+    let empresaEndereco = 'Rua Martins Ferreira, 71';
+    try {
+      const docRef = doc(db, 'configuracoes_empresa', 'empresa');
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.razaoSocial) empresaNome = data.razaoSocial;
+        if (data.cnpj) empresaCnpj = data.cnpj;
+        if (data.endereco) empresaEndereco = data.endereco;
+      }
+    } catch (err) {
+      console.warn("Erro ao buscar dados da empresa para exportação, usando fallbacks:", err);
+    }
+
+    try {
+      const ExcelJS = (await import('exceljs')).default;
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Ocorrências', {
+        views: [{ showGridLines: true }]
+      });
+
+      worksheet.columns = [
+        { key: 'A', width: 15 },
+        { key: 'B', width: 25 },
+        { key: 'C', width: 20 },
+        { key: 'D', width: 50 }
+      ];
+
+      // Logo block: "RH"
+      worksheet.mergeCells('A2:A4');
+      const logoCell = worksheet.getCell('A2');
+      logoCell.value = 'RH';
+      logoCell.font = { name: 'Arial', size: 18, bold: true, color: { argb: 'FFFFFFFF' } };
+      logoCell.alignment = { vertical: 'middle', horizontal: 'center' };
+      logoCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF1A4231' }
+      };
+
+      // Company info
+      const nameCell = worksheet.getCell('B2');
+      nameCell.value = empresaNome;
+      nameCell.font = { name: 'Arial', size: 12, bold: true, color: { argb: 'FF1A4231' } };
+
+      const cnpjCell = worksheet.getCell('B3');
+      cnpjCell.value = `CNPJ: ${empresaCnpj}`;
+      cnpjCell.font = { name: 'Arial', size: 10, color: { argb: 'FF4B5563' } };
+
+      const addressCell = worksheet.getCell('B4');
+      addressCell.value = `Endereço: ${empresaEndereco}`;
+      addressCell.font = { name: 'Arial', size: 9, color: { argb: 'FF6B7280' } };
+
+      // Report header on the right
+      const titleCell = worksheet.getCell('D2');
+      titleCell.value = 'RELATÓRIO DE OCORRÊNCIAS';
+      titleCell.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FF1A4231' } };
+      titleCell.alignment = { horizontal: 'right' };
+
+      const profInfoSub = worksheet.getCell('D3');
+      profInfoSub.value = `Paciente: ${targetPatient.nome}`;
+      profInfoSub.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FF1F2937' } };
+      profInfoSub.alignment = { horizontal: 'right' };
+
+      const extraCell = worksheet.getCell('D4');
+      extraCell.value = `CPF: ${targetPatient.cpf || '---'} | Cidade: ${targetPatient.cidade || '---'}`;
+      extraCell.font = { name: 'Arial', size: 9, italic: true, color: { argb: 'FF4B5563' } };
+      extraCell.alignment = { horizontal: 'right' };
+
+      // Separator line
+      worksheet.getRow(5).height = 10;
+      for (let c = 1; c <= 4; c++) {
+        worksheet.getCell(5, c).border = {
+          bottom: { style: 'medium', color: { argb: 'FFD1D5DB' } }
+        };
+      }
+
+      worksheet.getCell('A7').value = 'Total de Registros:';
+      worksheet.getCell('B7').value = targetOcs.length;
+      worksheet.getCell('A7').font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FF374151' } };
+      worksheet.getCell('B7').font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FF1F2937' } };
+
+      worksheet.getRow(8).height = 15;
+
+      // Table Header (Row 10)
+      const tableHeaderRow = worksheet.getRow(10);
+      tableHeaderRow.height = 24;
+      ['A10', 'B10', 'C10', 'D10'].forEach((cellRef, idx) => {
+        const hCell = worksheet.getCell(cellRef);
+        hCell.value = ['Data', 'Profissional', 'Status', 'Descrição do Motivo'][idx];
+        hCell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+        hCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF1A4231' }
+        };
+        hCell.alignment = { vertical: 'middle', horizontal: 'left' };
+      });
+
+      let currentRow = 11;
+      targetOcs.forEach((oc: any) => {
+        worksheet.getCell(`A${currentRow}`).value = oc.data ? oc.data.split('-').reverse().join('/') : '-';
+        worksheet.getCell(`B${currentRow}`).value = oc.profissionalNome || 'Administrativa / Geral';
+        worksheet.getCell(`C${currentRow}`).value = oc.bloquearProfissional ? 'BLOQUEADO' : 'Registrado';
+        worksheet.getCell(`D${currentRow}`).value = oc.descricao || '';
+
+        ['A', 'B', 'C', 'D'].forEach(col => {
+          const c = worksheet.getCell(`${col}${currentRow}`);
+          c.font = { name: 'Arial', size: 10 };
+          c.border = {
+            bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } }
+          };
+        });
+        currentRow++;
+      });
+
+      // Adjust column styles
+      worksheet.columns.forEach(column => {
+        let maxLen = 12;
+        column?.eachCell?.({ includeEmpty: true }, cell => {
+          const valStr = cell.value ? String(cell.value) : '';
+          if (valStr.length > maxLen) maxLen = valStr.length;
+        });
+        if (column) column.width = Math.min(maxLen + 4, 60);
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const safeName = targetPatient.nome.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '_');
+      link.download = `ocorrencias_paciente_${safeName}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast.success(`Histórico de Ocorrências exportado em Excel (.xlsx)!`);
+    } catch (err) {
+      console.error('Erro ao baixar excel:', err);
+      toast.error('Erro ao gerar o arquivo Excel.');
+    }
+  };
+
+  const handleBaixarOcorrenciasWord = async () => {
+    if (!paciente) {
+      toast.error('Paciente não selecionado.');
+      return;
+    }
+    const targetPatient = pacientes.find(p => p.id === paciente.id) || paciente;
+    const targetOcs = targetPatient?.ocorrencias || [];
+
+    if (targetOcs.length === 0) {
+      toast.error('Nenhuma ocorrência registrada para este paciente para exportar.');
+      return;
+    }
+
+    let empresaNome = 'RH Cuidado Domiciliar';
+    let empresaCnpj = '12.345.678/0001-99';
+    let empresaEndereco = 'Rua Martins Ferreira, 71';
+    try {
+      const docRef = doc(db, 'configuracoes_empresa', 'empresa');
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.razaoSocial) empresaNome = data.razaoSocial;
+        if (data.cnpj) empresaCnpj = data.cnpj;
+        if (data.endereco) empresaEndereco = data.endereco;
+      }
+    } catch (err) {
+      console.warn("Erro ao buscar dados da empresa para exportação, usando fallbacks:", err);
+    }
+
+    try {
+      const docx = await import('docx');
+      const {
+        Document,
+        Packer,
+        Paragraph,
+        TextRun,
+        Table,
+        TableRow,
+        TableCell,
+        AlignmentType,
+        WidthType,
+        BorderStyle
+      } = docx;
+
+      const formatarDataBR = (dateStr: string) => {
+        if (!dateStr) return '';
+        if (dateStr.includes('-')) {
+          return dateStr.split('-').reverse().join('/');
+        }
+        return dateStr;
+      };
+
+      // Header Table of company
+      const headerTable = new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        borders: {
+          top: { style: BorderStyle.NONE },
+          bottom: { style: BorderStyle.NONE },
+          left: { style: BorderStyle.NONE },
+          right: { style: BorderStyle.NONE },
+          insideHorizontal: { style: BorderStyle.NONE },
+          insideVertical: { style: BorderStyle.NONE }
+        },
+        rows: [
+          new TableRow({
+            children: [
+              new TableCell({
+                width: { size: 55, type: WidthType.PERCENTAGE },
+                children: [
+                  new Paragraph({
+                    children: [
+                      new TextRun({ text: empresaNome, bold: true, size: 28, color: "1A4231", font: "Arial" })
+                    ]
+                  }),
+                  new Paragraph({
+                    children: [
+                      new TextRun({ text: `CNPJ: ${empresaCnpj}`, size: 18, color: "555555", font: "Arial" })
+                    ],
+                    spacing: { before: 80 }
+                  }),
+                  new Paragraph({
+                    children: [
+                      new TextRun({ text: `Endereço: ${empresaEndereco}`, size: 18, color: "777777", font: "Arial" })
+                    ],
+                    spacing: { before: 80 }
+                  })
+                ]
+              }),
+              new TableCell({
+                width: { size: 45, type: WidthType.PERCENTAGE },
+                children: [
+                  new Paragraph({
+                    children: [
+                      new TextRun({ text: "OCORRÊNCIAS", bold: true, size: 32, color: "1A4231", font: "Arial" })
+                    ],
+                    alignment: AlignmentType.RIGHT
+                  }),
+                  new Paragraph({
+                    children: [
+                      new TextRun({ text: `Paciente: ${targetPatient.nome}`, bold: true, size: 18, color: "111111", font: "Arial" })
+                    ],
+                    alignment: AlignmentType.RIGHT,
+                    spacing: { before: 80 }
+                  }),
+                  new Paragraph({
+                    children: [
+                      new TextRun({ text: `CPF: ${targetPatient.cpf || '---'} | Cidade: ${targetPatient.cidade || '---'}`, size: 16, color: "555555", font: "Arial" })
+                    ],
+                    alignment: AlignmentType.RIGHT,
+                    spacing: { before: 40 }
+                  })
+                ]
+              })
+            ]
+          })
+        ]
+      });
+
+      // Horizontal divider
+      const separator = new Paragraph({
+        spacing: { before: 200, after: 200 },
+        border: {
+          bottom: { style: BorderStyle.SINGLE, size: 12, color: "D1D5DB" }
+        }
+      });
+
+      // Stats block
+      const statsTable = new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        borders: {
+          top: { style: BorderStyle.SINGLE, size: 4, color: "E5E7EB" },
+          bottom: { style: BorderStyle.SINGLE, size: 4, color: "E5E7EB" },
+          left: { style: BorderStyle.SINGLE, size: 4, color: "E5E7EB" },
+          right: { style: BorderStyle.SINGLE, size: 4, color: "E5E7EB" },
+          insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: "F3F4F6" },
+          insideVertical: { style: BorderStyle.SINGLE, size: 4, color: "F3F4F6" }
+        },
+        rows: [
+          new TableRow({
+            children: [
+              new TableCell({
+                width: { size: 100, type: WidthType.PERCENTAGE },
+                shading: { fill: "FAFAFA" },
+                margins: { top: 120, bottom: 120, left: 150, right: 150 },
+                children: [
+                  new Paragraph({
+                    children: [
+                      new TextRun({ text: "Total de Registros Encontrados: ", bold: true, size: 18, color: "4B5563", font: "Arial" }),
+                      new TextRun({ text: String(targetOcs.length), size: 18, font: "Arial" })
+                    ]
+                  })
+                ]
+              })
+            ]
+          })
+        ]
+      });
+
+      // Occurrences Header Table
+      const listHeader = new TableRow({
+        children: [
+          new TableCell({
+            width: { size: 15, type: WidthType.PERCENTAGE },
+            shading: { fill: "1A4231" },
+            margins: { top: 150, bottom: 150, left: 120, right: 120 },
+            children: [new Paragraph({ children: [new TextRun({ text: "Data", bold: true, color: "FFFFFF", size: 18, font: "Arial" })] })]
+          }),
+          new TableCell({
+            width: { size: 30, type: WidthType.PERCENTAGE },
+            shading: { fill: "1A4231" },
+            margins: { top: 150, bottom: 150, left: 120, right: 120 },
+            children: [new Paragraph({ children: [new TextRun({ text: "Profissional", bold: true, color: "FFFFFF", size: 18, font: "Arial" })] })]
+          }),
+          new TableCell({
+            width: { size: 20, type: WidthType.PERCENTAGE },
+            shading: { fill: "1A4231" },
+            margins: { top: 150, bottom: 150, left: 120, right: 120 },
+            children: [new Paragraph({ children: [new TextRun({ text: "Status", bold: true, color: "FFFFFF", size: 18, font: "Arial" })] })]
+          }),
+          new TableCell({
+            width: { size: 35, type: WidthType.PERCENTAGE },
+            shading: { fill: "1A4231" },
+            margins: { top: 150, bottom: 150, left: 120, right: 120 },
+            children: [new Paragraph({ children: [new TextRun({ text: "Descrição do Motivo", bold: true, color: "FFFFFF", size: 18, font: "Arial" })] })]
+          })
+        ]
+      });
+
+      // Occurrences lists
+      const tableBodyRows = targetOcs.map((oc: any) => {
+        let statusText = oc.bloquearProfissional ? 'BLOQUEADO' : 'Registrado';
+
+        return new TableRow({
+          children: [
+            new TableCell({
+              width: { size: 15, type: WidthType.PERCENTAGE },
+              margins: { top: 120, bottom: 120, left: 120, right: 120 },
+              children: [new Paragraph({ children: [new TextRun({ text: formatarDataBR(oc.data || ''), size: 18, font: "Arial" })] })]
+            }),
+            new TableCell({
+              width: { size: 30, type: WidthType.PERCENTAGE },
+              margins: { top: 120, bottom: 120, left: 120, right: 120 },
+              children: [new Paragraph({ children: [new TextRun({ text: oc.profissionalNome || 'Administrativa / Geral', size: 18, font: "Arial" })] })]
+            }),
+            new TableCell({
+              width: { size: 20, type: WidthType.PERCENTAGE },
+              margins: { top: 120, bottom: 120, left: 120, right: 120 },
+              children: [new Paragraph({ children: [new TextRun({ text: statusText, size: 16, font: "Arial" })] })]
+            }),
+            new TableCell({
+              width: { size: 35, type: WidthType.PERCENTAGE },
+              margins: { top: 120, bottom: 120, left: 120, right: 120 },
+              children: [new Paragraph({ children: [new TextRun({ text: oc.descricao || '', size: 16, font: "Arial" })] })]
+            })
+          ]
+        });
+      });
+
+      const listTable = new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        borders: {
+          top: { style: BorderStyle.SINGLE, size: 6, color: "1A4231" },
+          bottom: { style: BorderStyle.SINGLE, size: 6, color: "1A4231" },
+          left: { style: BorderStyle.SINGLE, size: 4, color: "E5E7EB" },
+          right: { style: BorderStyle.SINGLE, size: 4, color: "E5E7EB" },
+          insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: "E5E7EB" },
+          insideVertical: { style: BorderStyle.SINGLE, size: 4, color: "E5E7EB" }
+        },
+        rows: [listHeader, ...tableBodyRows]
+      });
+
+      // Build Document
+      const docObj = new Document({
+        sections: [{
+          properties: {},
+          children: [
+            headerTable,
+            separator,
+            new Paragraph({ children: [new TextRun({ text: "ESTATÍSTICAS DA GESTÃO DE OCORRÊNCIAS", bold: true, size: 20, color: "1A4231", font: "Arial" })], spacing: { after: 120 } }),
+            statsTable,
+            new Paragraph({ text: "", spacing: { before: 180, after: 180 } }),
+            new Paragraph({ children: [new TextRun({ text: "HISTÓRICO DETALHADO DE REGISTROS", bold: true, size: 20, color: "1A4231", font: "Arial" })], spacing: { after: 120 } }),
+            listTable
+          ]
+        }]
+      });
+
+      const packerBlob = await Packer.toBlob(docObj);
+      const url = URL.createObjectURL(packerBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      const safeName = targetPatient.nome.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '_');
+      link.download = `ocorrencias_paciente_${safeName}.docx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast.success(`Histórico de Ocorrências exportado em Word (.docx)!`);
+    } catch (err) {
+      console.error('Erro ao baixar docx:', err);
+      toast.error('Erro ao gerar o arquivo Word.');
     }
   };
 
@@ -3763,23 +4191,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   </div>
                 </div>
 
-                <div className="flex justify-end pt-4 border-t border-slate-100 items-center justify-between">
-                  {userRole?.toLowerCase() === 'colaborador' ? (
+                {userRole?.toLowerCase() === 'colaborador' && (
+                  <div className="flex justify-end pt-4 border-t border-slate-100 items-center justify-between">
                     <span className="text-xs text-amber-600 font-semibold italic flex items-center gap-1.5 bg-amber-50 border border-amber-200 p-2 rounded-lg">
                       ⚠️ Apenas administradores podem alterar as regras e valores do Plano de Atendimento.
                     </span>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={isCurrentlyDeactivated}
-                      onClick={handleSavePlanoAtendimento}
-                      className="flex items-center space-x-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0"
-                      id="save-plano-atendimento"
-                    >
-                      <span>💾 Salvar Plano de Atendimento</span>
-                    </button>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -4829,9 +5247,29 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
                 {/* Histórico list */}
                 <div className="pt-6 border-t border-slate-100 font-sans">
-                  <h4 className="text-xs font-bold text-slate-700 mb-3 uppercase tracking-wider italic">
-                    Histórico de Ocorrências ({((pacientes.find(p => p.id === paciente?.id) || paciente)?.ocorrencias || []).length})
-                  </h4>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2 mb-3">
+                    <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider block">
+                      Histórico de Ocorrências ({((pacientes.find(p => p.id === paciente?.id) || paciente)?.ocorrencias || []).length})
+                    </h4>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleBaixarOcorrenciasExcel}
+                        className="flex items-center space-x-1 px-2.5 py-1.5 text-[10px] font-bold bg-[#1a3c2e] hover:bg-[#25523f] text-white rounded-lg transition active:scale-95"
+                      >
+                        <Receipt size={12} />
+                        <span>Excel (.xlsx)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleBaixarOcorrenciasWord}
+                        className="flex items-center space-x-1 px-2.5 py-1.5 text-[10px] font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition active:scale-95"
+                      >
+                        <Printer size={12} />
+                        <span>Word (.docx)</span>
+                      </button>
+                    </div>
+                  </div>
                   
                   {(((pacientes.find(p => p.id === paciente?.id) || paciente)?.ocorrencias || []).length === 0) ? (
                     <div className="p-6 text-center text-xs text-slate-400 italic border border-dashed border-slate-200 rounded-xl">
@@ -4877,8 +5315,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                   <div className="flex justify-end gap-2">
                                          <button
                                       type="button"
-                                      onClick={() => handleDeleteOcorrencia(oc.id)}
-                                      className="py-1 px-2.5 bg-red-54 bg-red-50 text-red-700 border border-red-200 hover:bg-red-105 rounded transition-colors text-xs font-medium cursor-pointer"
+                                      onClick={() => handleDeleteOcorrencia(oc)}
+                                      className="py-1 px-2.5 bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 rounded transition-colors text-xs font-medium cursor-pointer"
                                     >
                                       Excluir
                                     </button>
@@ -7473,6 +7911,38 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 className="flex-1 py-2 text-xs font-black text-white bg-red-600 hover:bg-red-700 rounded-full transition-all text-center cursor-pointer shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isDeleting ? 'Excluindo...' : 'Confirmar e Excluir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteConfirmOc && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[150] animate-in fade-in-30">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl p-6 max-w-md w-full mx-4 space-y-4 font-sans text-left">
+            <div className="flex items-start space-x-3 text-red-650">
+              <span className="text-2xl mt-0.5 flex-shrink-0">⚠️</span>
+              <div>
+                <h3 className="font-bold text-sm text-slate-800">Confirmar Exclusão de Ocorrência</h3>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  Tem certeza que deseja excluir permanentemente esta ocorrência de data <strong>{deleteConfirmOc.data ? deleteConfirmOc.data.split('-').reverse().join('/') : '-'}</strong> relacionada ao profissional <strong>{deleteConfirmOc.profissionalNome || 'Administrativa / Geral'}</strong>? Esta ação não pode ser desfeita.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end space-x-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmOc(null)}
+                className="px-4 py-2 hover:bg-slate-100 font-medium text-xs text-slate-600 rounded-lg transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteOcorrencia}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 font-extrabold text-xs text-white rounded-lg transition-colors shadow-sm cursor-pointer"
+              >
+                Excluir Ocorrência
               </button>
             </div>
           </div>

@@ -27,7 +27,8 @@ import {
   where,
   orderBy,
   limit,
-  startAfter
+  startAfter,
+  getCountFromServer
 } from 'firebase/firestore';
 
 interface FirebaseContextType {
@@ -35,6 +36,12 @@ interface FirebaseContextType {
   loadingPacientes: boolean;
   hasMore: boolean;
   loadMorePacientes: () => Promise<void>;
+  fetchFirstPagePacientes: (search?: string, filterId?: string) => Promise<void>;
+  fetchNextPage: () => Promise<void>;
+  fetchPreviousPage: () => Promise<void>;
+  hasPreviousPage: boolean;
+  totalPacientes: { ativos: number; inativos: number };
+  fetchCounts: () => Promise<void>;
   plantoes: Plantao[];
   agendamentos: Agendamento[];
   loading: boolean;
@@ -99,15 +106,96 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Pagination states for patients
+  // Pagination and count states for patients
+  const [totalPacientes, setTotalPacientes] = useState<{ ativos: number; inativos: number }>({ ativos: 0, inativos: 0 });
+  const [currentSearch, setCurrentSearch] = useState('');
+  const [currentFilterId, setCurrentFilterId] = useState('todos');
   const [loadingPacientes, setLoadingPacientes] = useState(false);
   const [lastVisible, setLastVisible] = useState<any>(null);
   const [hasMore, setHasMore] = useState(true);
+  const [pageHistory, setPageHistory] = useState<any[]>([]);
 
-  const fetchFirstPagePacientes = async () => {
+  const hasPreviousPage = pageHistory.length > 0;
+
+  const fetchCounts = async () => {
+    try {
+      const coll = collection(db, 'pacientes');
+      const qAtivos = query(coll, where('status', '==', 'Ativo'));
+      const qInativos = query(coll, where('status', '==', 'Desativado'));
+
+      const [snapAtivos, snapInativos] = await Promise.all([
+        getCountFromServer(qAtivos),
+        getCountFromServer(qInativos)
+      ]);
+
+      setTotalPacientes({
+        ativos: snapAtivos.data().count,
+        inativos: snapInativos.data().count
+      });
+    } catch (err) {
+      console.error("Erro ao obter contagem de pacientes:", err);
+    }
+  };
+
+  const buildPacienteQuery = (search: string, filterId: string) => {
+    let q = query(collection(db, 'pacientes'), orderBy('nome'));
+
+    if (filterId && filterId !== 'todos') {
+      q = query(collection(db, 'pacientes'), where('id', '==', filterId));
+    } else if (search) {
+      const normalizedSearch = search.trim();
+      const capitalizedSearch = normalizedSearch.charAt(0).toUpperCase() + normalizedSearch.slice(1);
+      q = query(
+        collection(db, 'pacientes'),
+        where('nome', '>=', capitalizedSearch),
+        where('nome', '<=', capitalizedSearch + '\uf8ff'),
+        orderBy('nome')
+      );
+    }
+    return q;
+  };
+
+  const fetchFirstPagePacientes = async (search = '', filterId = 'todos') => {
+    setLoadingPacientes(true);
+    setCurrentSearch(search);
+    setCurrentFilterId(filterId);
+    try {
+      const qBase = buildPacienteQuery(search, filterId);
+      const q = query(qBase, limit(20));
+      const snap = await getDocs(q);
+      const list: Paciente[] = [];
+      snap.forEach((d) => list.push(d.data() as Paciente));
+      setPacientes(list);
+      
+      if (!snap.empty) {
+        const lastDoc = snap.docs[snap.docs.length - 1];
+        setLastVisible(lastDoc);
+        setHasMore(snap.docs.length === 20);
+      } else {
+        setLastVisible(null);
+        setHasMore(false);
+      }
+      setPageHistory([]);
+    } catch (error) {
+      console.error("Erro ao carregar primeira página de pacientes:", error);
+      handleFirestoreError(error, OperationType.GET, 'pacientes');
+    } finally {
+      setLoadingPacientes(false);
+      setLoading(false);
+    }
+  };
+
+  const loadMorePacientes = async () => {
+    await fetchNextPage();
+  };
+
+  const fetchNextPage = async () => {
+    if (!hasMore || loadingPacientes || !lastVisible) return;
     setLoadingPacientes(true);
     try {
-      const q = query(collection(db, 'pacientes'), orderBy('nome'), limit(20));
+      setPageHistory((prev) => [...prev, lastVisible]);
+      const qBase = buildPacienteQuery(currentSearch, currentFilterId);
+      const q = query(qBase, startAfter(lastVisible), limit(20));
       const snap = await getDocs(q);
       const list: Paciente[] = [];
       snap.forEach((d) => list.push(d.data() as Paciente));
@@ -122,38 +210,43 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setHasMore(false);
       }
     } catch (error) {
-      console.error("Erro ao carregar primeira página de pacientes:", error);
+      console.error("Erro ao carregar próxima página de pacientes:", error);
       handleFirestoreError(error, OperationType.GET, 'pacientes');
     } finally {
       setLoadingPacientes(false);
-      setLoading(false);
     }
   };
 
-  const loadMorePacientes = async () => {
-    if (!hasMore || loadingPacientes || !lastVisible) return;
+  const fetchPreviousPage = async () => {
+    if (pageHistory.length === 0 || loadingPacientes) return;
     setLoadingPacientes(true);
     try {
-      const q = query(
-        collection(db, 'pacientes'),
-        orderBy('nome'),
-        startAfter(lastVisible),
-        limit(20)
-      );
+      const prevCursor = pageHistory.length >= 2 ? pageHistory[pageHistory.length - 2] : null;
+      const qBase = buildPacienteQuery(currentSearch, currentFilterId);
+      
+      let q;
+      if (prevCursor) {
+        q = query(qBase, startAfter(prevCursor), limit(20));
+      } else {
+        q = query(qBase, limit(20));
+      }
+
       const snap = await getDocs(q);
       const list: Paciente[] = [];
       snap.forEach((d) => list.push(d.data() as Paciente));
+      setPacientes(list);
       
-      if (list.length > 0) {
-        setPacientes((prev) => [...prev, ...list]);
+      if (!snap.empty) {
         const lastDoc = snap.docs[snap.docs.length - 1];
         setLastVisible(lastDoc);
         setHasMore(snap.docs.length === 20);
       } else {
+        setLastVisible(null);
         setHasMore(false);
       }
+      setPageHistory((prev) => prev.slice(0, -1));
     } catch (error) {
-      console.error("Erro ao carregar mais pacientes:", error);
+      console.error("Erro ao carregar página anterior de pacientes:", error);
       handleFirestoreError(error, OperationType.GET, 'pacientes');
     } finally {
       setLoadingPacientes(false);
@@ -359,8 +452,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
       */
 
-      // 3. Load paginated patients first page
+      // 3. Load paginated patients first page and count absolute totals
       fetchFirstPagePacientes();
+      fetchCounts();
 
       unsubscribePlantoes = onSnapshot(collection(db, 'plantoes'), (snap) => {
         const list: Plantao[] = [];
@@ -491,8 +585,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       await setDoc(doc(db, 'pacientes', id), fullPaciente);
       setPacientes((prev) => [fullPaciente, ...prev]);
       await addAuditLog('CREATE', 'pacientes', id, `Paciente criado: ${fullPaciente.nome}`);
+      fetchCounts();
       if (!skipNotification) {
-        setNotification(`Paciente '${fullPaciente.nome}' criado com sucesso.`);
+        setNotification(`Paciente '${fullPaciente.nome}' created successfully.`);
       }
       return fullPaciente;
     } catch (err) {
@@ -509,6 +604,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         prev.map((p) => (p.id === updatedPac.id ? updatedPac : p))
       );
       await addAuditLog('UPDATE', 'pacientes', updatedPac.id, `Paciente atualizado: ${updatedPac.nome}`);
+      fetchCounts();
       if (!skipNotification) {
         setNotification(`Paciente '${updatedPac.nome}' atualizado com sucesso.`);
       }
@@ -534,6 +630,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         )
       );
       await addAuditLog('UPDATE', 'pacientes', id, `Paciente desativado: ${motivo}`);
+      fetchCounts();
       setNotification(`Paciente desativado com sucesso.`);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `pacientes/${id}`);
@@ -556,6 +653,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         )
       );
       await addAuditLog('UPDATE', 'pacientes', id, `Paciente reativado`);
+      fetchCounts();
       setNotification(`Paciente reativado com sucesso.`);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `pacientes/${id}`);
@@ -814,6 +912,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       );
       console.log("Exclusão lógica realizada com sucesso para:", id);
       await addAuditLog('DELETE', 'pacientes', id, `Paciente inativado via exclusão lógica`);
+      fetchCounts();
       setNotification('Paciente desativado logicamente com sucesso.');
     } catch (err) {
       console.error("Erro na exclusão lógica:", err);
@@ -1101,6 +1200,12 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         loadingPacientes,
         hasMore,
         loadMorePacientes,
+        fetchFirstPagePacientes,
+        fetchNextPage,
+        fetchPreviousPage,
+        hasPreviousPage,
+        totalPacientes,
+        fetchCounts,
         plantoes,
         agendamentos,
         loading,
