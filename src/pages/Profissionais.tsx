@@ -14,6 +14,8 @@ import { toast } from 'react-hot-toast';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { CardSkeleton } from '../components/ui/CardSkeleton';
 import { GlossyButton } from '../components/GlossyButton';
+import ExcelJS from 'exceljs';
+import * as docx from 'docx';
 
 interface ProfissionaisProps {
   initialSelectedProfId?: string;
@@ -706,7 +708,6 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
     }
 
     try {
-      const ExcelJS = (await import('exceljs')).default;
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet('Ocorrências', {
         views: [{ showGridLines: true }]
@@ -921,7 +922,6 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
     }
 
     try {
-      const docx = await import('docx');
       const {
         Document,
         Packer,

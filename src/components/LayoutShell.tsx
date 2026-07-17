@@ -29,7 +29,7 @@ export const LayoutShell: React.FC<LayoutShellProps> = ({
   onSelectProfRedirect,
 }) => {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState<boolean>(false);
-  const { notification, setNotification } = useFirebase();
+  const { notification, setNotification, isQuotaExceeded } = useFirebase();
 
   return (
     <div className="min-h-screen bg-off-white text-forest-green font-sans flex overflow-x-hidden relative" id="layout-shell-container">
@@ -92,6 +92,22 @@ export const LayoutShell: React.FC<LayoutShellProps> = ({
 
         {/* 6. Universal Content Container (100% Mobile, side-aligned on Desktop) */}
         <main className="w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 space-y-6 min-w-0 flex-1" id="global-content-container">
+          {isQuotaExceeded && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 text-red-900 shadow-sm mb-4 print:hidden animate-in fade-in slide-in-from-top-4" id="quota-exceeded-contingency-banner">
+              <AlertCircle className="text-red-600 shrink-0 mt-0.5 sm:mt-0" size={20} />
+              <div className="flex-1 text-sm leading-normal">
+                <span className="font-bold">Modo de Contingência Ativo:</span> O banco de dados atingiu o limite de leitura gratuita diária do Firestore. Suas alterações e cadastros serão salvos localmente neste navegador de forma segura.
+              </div>
+              <a
+                href="https://console.firebase.google.com/project/ec969b01-95ac-467f-b5b7-48efe433d663/firestore/databases/ai-studio-ec969b01-95ac-467f-b5b7-48efe433d663/data?openUpgradeDialog=true"
+                target="_blank"
+                rel="noreferrer"
+                className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
+              >
+                Ver Banco de Dados
+              </a>
+            </div>
+          )}
           {/* Dashboard Page Header block */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-4 print:hidden" id="page-header-block">
             <div className="space-y-1 min-w-0">

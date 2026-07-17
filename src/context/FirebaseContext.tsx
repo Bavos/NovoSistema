@@ -5,7 +5,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Paciente, Plantao, Profissional, CancelingReason, AuditLog, Agendamento, UsuarioSistema, DebitoProfissional, FaturaPaciente, FolhaPagamento } from '../types';
-import { INITIAL_PACIENTES, INITIAL_PLANTOES } from '../mockData';
+import { INITIAL_PACIENTES, INITIAL_PLANTOES, INITIAL_PROFESSIONALS } from '../mockData';
 import { db, auth, storage, OperationType, handleFirestoreError } from '../lib/firebase';
 import { signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, sendEmailVerification, User } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -33,6 +33,7 @@ import {
 
 interface FirebaseContextType {
   pacientes: Paciente[];
+  isQuotaExceeded: boolean;
   loadingPacientes: boolean;
   hasMore: boolean;
   loadMorePacientes: () => Promise<void>;
@@ -92,10 +93,22 @@ interface FirebaseContextType {
   addAuditLog: (action: AuditLog['action'], collectionName: string, documentId: string, description: string) => Promise<void>;
 }
 
+const isQuotaError = (error: any): boolean => {
+  if (!error) return false;
+  const msg = error instanceof Error ? error.message : String(error);
+  return (
+    msg.toLowerCase().includes('quota') ||
+    msg.toLowerCase().includes('exceeded') ||
+    msg.toLowerCase().includes('limit') ||
+    (typeof error === 'object' && ('code' in error && String((error as any).code).toLowerCase().includes('resource-exhausted')))
+  );
+};
+
 const FirebaseContext = createContext<FirebaseContextType | undefined>(undefined);
 
 export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [pacientes, setPacientes] = useState<Paciente[]>([]);
+  const [isQuotaExceeded, setIsQuotaExceeded] = useState<boolean>(false);
   const [plantoes, setPlantoes] = useState<Plantao[]>([]);
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [profissionais, setProfissionais] = useState<Profissional[]>([]);
@@ -134,6 +147,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       });
     } catch (err) {
       console.error("Erro ao obter contagem de pacientes:", err);
+      if (isQuotaError(err)) {
+        setIsQuotaExceeded(true);
+      }
     }
   };
 
@@ -178,6 +194,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setPageHistory([]);
     } catch (error) {
       console.error("Erro ao carregar primeira página de pacientes:", error);
+      if (isQuotaError(error)) {
+        setIsQuotaExceeded(true);
+      }
       handleFirestoreError(error, OperationType.GET, 'pacientes');
     } finally {
       setLoadingPacientes(false);
@@ -211,6 +230,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     } catch (error) {
       console.error("Erro ao carregar próxima página de pacientes:", error);
+      if (isQuotaError(error)) {
+        setIsQuotaExceeded(true);
+      }
       handleFirestoreError(error, OperationType.GET, 'pacientes');
     } finally {
       setLoadingPacientes(false);
@@ -247,6 +269,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setPageHistory((prev) => prev.slice(0, -1));
     } catch (error) {
       console.error("Erro ao carregar página anterior de pacientes:", error);
+      if (isQuotaError(error)) {
+        setIsQuotaExceeded(true);
+      }
       handleFirestoreError(error, OperationType.GET, 'pacientes');
     } finally {
       setLoadingPacientes(false);
@@ -410,133 +435,285 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Perform Background Authentication and Real-time Live Firestore Mirroring
   useEffect(() => {
-    let unsubscribePlantoes: (() => void) | null = null;
-    let unsubscribeAgendamentos: (() => void) | null = null;
-    let unsubscribeProfissionais: (() => void) | null = null;
-    let unsubscribeUsuariosSistema: (() => void) | null = null;
-    let unsubscribeDebitosProfissionais: (() => void) | null = null;
-    let unsubscribeFaturasPacientes: (() => void) | null = null;
-    let unsubscribeFolhasPagamento: (() => void) | null = null;
-    let unsubscribeLogsAuditoria: (() => void) | null = null;
-
-    const initFirebaseSync = async () => {
-      // 1. Validate connection on initial boot
-      try {
-        await getDocFromServer(doc(db, 'test', 'connection'));
-      } catch (connErr) {
-        if (connErr instanceof Error && connErr.message.toLowerCase().includes('offline')) {
-          console.warn("Please check your Firebase configuration.");
-        } else {
-          console.log("Firestore initialized. Live mirroring active. Database is connecting dynamically.");
-        }
+    // 1. Validate connection on initial boot asynchronously to prevent blocking subscription cleanup
+    getDocFromServer(doc(db, 'test', 'connection')).catch((connErr) => {
+      if (isQuotaError(connErr)) {
+        setIsQuotaExceeded(true);
       }
-
-      // 2. Seed Firestore database automatically if empty (Disabled to prevent deleted mock documents from resurrecting)
-      /*
-      try {
-        const pSnap = await getDocs(collection(db, 'pacientes'));
-        if (pSnap.empty) {
-          for (const item of INITIAL_PACIENTES) {
-            await setDoc(doc(db, 'pacientes', item.id), item);
-          }
-        }
-
-        const plSnap = await getDocs(collection(db, 'plantoes'));
-        if (plSnap.empty) {
-          for (const item of INITIAL_PLANTOES) {
-            await setDoc(doc(db, 'plantoes', item.id), item);
-          }
-        }
-      } catch (seedErr) {
-        console.warn("Skipped Firebase seeding:", seedErr);
+      if (connErr instanceof Error && connErr.message.toLowerCase().includes('offline')) {
+        console.warn("Please check your Firebase configuration.");
+      } else {
+        console.log("Firestore initialized. Live mirroring active. Database is connecting dynamically.");
       }
-      */
+    });
 
-      // 3. Load paginated patients first page and count absolute totals
-      fetchFirstPagePacientes();
-      fetchCounts();
+    // 2. Load paginated patients first page and count absolute totals
+    fetchFirstPagePacientes();
+    fetchCounts();
 
-      unsubscribePlantoes = onSnapshot(collection(db, 'plantoes'), (snap) => {
-        const list: Plantao[] = [];
-        snap.forEach((d) => list.push(d.data() as Plantao));
-        setPlantoes(list);
-      }, (error) => handleFirestoreError(error, OperationType.GET, 'plantoes'));
+    // 3. Register real-time listeners synchronously to prevent memory leaks during unmount or HMR
+    const unsubscribePlantoes = onSnapshot(collection(db, 'plantoes'), (snap) => {
+      const list: Plantao[] = [];
+      snap.forEach((d) => list.push(d.data() as Plantao));
+      setPlantoes(list);
+    }, (error) => {
+      if (isQuotaError(error)) setIsQuotaExceeded(true);
+      handleFirestoreError(error, OperationType.GET, 'plantoes');
+    });
 
-      unsubscribeAgendamentos = onSnapshot(collection(db, 'agendamentos'), (snap) => {
-        const list: Agendamento[] = [];
-        snap.forEach((d) => list.push({ ...d.data(), id: d.id } as Agendamento));
-        setAgendamentos(list);
-      }, (error) => handleFirestoreError(error, OperationType.GET, 'agendamentos'));
+    const unsubscribeAgendamentos = onSnapshot(collection(db, 'agendamentos'), (snap) => {
+      const list: Agendamento[] = [];
+      snap.forEach((d) => list.push({ ...d.data(), id: d.id } as Agendamento));
+      setAgendamentos(list);
+    }, (error) => {
+      if (isQuotaError(error)) setIsQuotaExceeded(true);
+      handleFirestoreError(error, OperationType.GET, 'agendamentos');
+    });
 
-      unsubscribeProfissionais = onSnapshot(collection(db, 'profissionais'), (snap) => {
-        const list: Profissional[] = [];
-        snap.forEach((d) => list.push({ ...d.data(), id: d.id } as Profissional));
-        setProfissionais(list);
-      }, (error) => handleFirestoreError(error, OperationType.GET, 'profissionais'));
-      
-      unsubscribeUsuariosSistema = onSnapshot(collection(db, 'usuarios_sistema'), (snap) => {
-        const list: UsuarioSistema[] = [];
-        snap.forEach((d) => list.push({ ...d.data(), id: d.id } as UsuarioSistema));
-        setUsuariosSistema(list);
-      }, (error) => handleFirestoreError(error, OperationType.GET, 'usuarios_sistema'));
+    const unsubscribeProfissionais = onSnapshot(collection(db, 'profissionais'), (snap) => {
+      const list: Profissional[] = [];
+      snap.forEach((d) => list.push({ ...d.data(), id: d.id } as Profissional));
+      setProfissionais(list);
+    }, (error) => {
+      if (isQuotaError(error)) setIsQuotaExceeded(true);
+      handleFirestoreError(error, OperationType.GET, 'profissionais');
+    });
+    
+    const unsubscribeUsuariosSistema = onSnapshot(collection(db, 'usuarios_sistema'), (snap) => {
+      const list: UsuarioSistema[] = [];
+      snap.forEach((d) => list.push({ ...d.data(), id: d.id } as UsuarioSistema));
+      setUsuariosSistema(list);
+    }, (error) => {
+      if (isQuotaError(error)) setIsQuotaExceeded(true);
+      handleFirestoreError(error, OperationType.GET, 'usuarios_sistema');
+    });
 
-      unsubscribeDebitosProfissionais = onSnapshot(collection(db, 'debitos_profissionais'), (snap) => {
-        const list: DebitoProfissional[] = [];
-        snap.forEach((d) => list.push({ ...d.data(), id: d.id } as DebitoProfissional));
-        setDebitosProfissionais(list);
-      }, (error) => handleFirestoreError(error, OperationType.GET, 'debitos_profissionais'));
+    const unsubscribeDebitosProfissionais = onSnapshot(collection(db, 'debitos_profissionais'), (snap) => {
+      const list: DebitoProfissional[] = [];
+      snap.forEach((d) => list.push({ ...d.data(), id: d.id } as DebitoProfissional));
+      setDebitosProfissionais(list);
+    }, (error) => {
+      if (isQuotaError(error)) setIsQuotaExceeded(true);
+      handleFirestoreError(error, OperationType.GET, 'debitos_profissionais');
+    });
 
-      unsubscribeFaturasPacientes = onSnapshot(collection(db, 'faturas_pacientes'), (snap) => {
-        const list: FaturaPaciente[] = [];
-        snap.forEach((d) => list.push({ ...d.data(), id: d.id } as FaturaPaciente));
-        setFaturasPacientes(list);
-      }, (error) => handleFirestoreError(error, OperationType.GET, 'faturas_pacientes'));
+    const unsubscribeFaturasPacientes = onSnapshot(collection(db, 'faturas_pacientes'), (snap) => {
+      const list: FaturaPaciente[] = [];
+      snap.forEach((d) => list.push({ ...d.data(), id: d.id } as FaturaPaciente));
+      setFaturasPacientes(list);
+    }, (error) => {
+      if (isQuotaError(error)) setIsQuotaExceeded(true);
+      handleFirestoreError(error, OperationType.GET, 'faturas_pacientes');
+    });
 
-      unsubscribeFolhasPagamento = onSnapshot(collection(db, 'folhas_pagamento'), (snap) => {
-        const list: FolhaPagamento[] = [];
-        snap.forEach((d) => list.push({ ...d.data(), id: d.id } as FolhaPagamento));
-        setFolhasPagamento(list);
-      }, (error) => handleFirestoreError(error, OperationType.GET, 'folhas_pagamento'));
+    const unsubscribeFolhasPagamento = onSnapshot(collection(db, 'folhas_pagamento'), (snap) => {
+      const list: FolhaPagamento[] = [];
+      snap.forEach((d) => list.push({ ...d.data(), id: d.id } as FolhaPagamento));
+      setFolhasPagamento(list);
+    }, (error) => {
+      if (isQuotaError(error)) setIsQuotaExceeded(true);
+      handleFirestoreError(error, OperationType.GET, 'folhas_pagamento');
+    });
 
-      unsubscribeLogsAuditoria = onSnapshot(collection(db, 'LogsAuditoria'), (snap) => {
-        const list: AuditLog[] = [];
-        snap.forEach((d) => list.push({ ...d.data(), id: d.id } as AuditLog));
-        setLogsAuditoria(list);
-      }, (error) => handleFirestoreError(error, OperationType.GET, 'LogsAuditoria'));
-    };
-
-    initFirebaseSync();
+    // OPTIMIZATION: Limit real-time sync of Audit Logs to the last 100 entries to prevent massive read quota drainage
+    const qLogs = query(collection(db, 'LogsAuditoria'), limit(100));
+    const unsubscribeLogsAuditoria = onSnapshot(qLogs, (snap) => {
+      const list: AuditLog[] = [];
+      snap.forEach((d) => list.push({ ...d.data(), id: d.id } as AuditLog));
+      setLogsAuditoria(list);
+    }, (error) => {
+      if (isQuotaError(error)) setIsQuotaExceeded(true);
+      handleFirestoreError(error, OperationType.GET, 'LogsAuditoria');
+    });
 
     return () => {
-      if (unsubscribePlantoes) unsubscribePlantoes();
-      if (unsubscribeAgendamentos) unsubscribeAgendamentos();
-      if (unsubscribeProfissionais) unsubscribeProfissionais();
-      if (unsubscribeUsuariosSistema) unsubscribeUsuariosSistema();
-      if (unsubscribeDebitosProfissionais) unsubscribeDebitosProfissionais();
-      if (unsubscribeFaturasPacientes) unsubscribeFaturasPacientes();
-      if (unsubscribeFolhasPagamento) unsubscribeFolhasPagamento();
-      if (unsubscribeLogsAuditoria) unsubscribeLogsAuditoria();
+      unsubscribePlantoes();
+      unsubscribeAgendamentos();
+      unsubscribeProfissionais();
+      unsubscribeUsuariosSistema();
+      unsubscribeDebitosProfissionais();
+      unsubscribeFaturasPacientes();
+      unsubscribeFolhasPagamento();
+      unsubscribeLogsAuditoria();
     };
   }, []);
 
   // Update localStorage back cache passively for robust standalone offline mode
   useEffect(() => {
-    if (pacientes.length > 0) {
+    if (pacientes.length > 0 && !isQuotaExceeded) {
       localStorage.setItem('firebase_simulated_pacientes', JSON.stringify(pacientes));
     }
-  }, [pacientes]);
+  }, [pacientes, isQuotaExceeded]);
 
   useEffect(() => {
-    if (plantoes.length > 0) {
+    if (plantoes.length > 0 && !isQuotaExceeded) {
       localStorage.setItem('firebase_simulated_plantoes', JSON.stringify(plantoes));
     }
-  }, [plantoes]);
+  }, [plantoes, isQuotaExceeded]);
 
   useEffect(() => {
-    if (profissionais.length >= 0) {
+    if (profissionais.length > 0 && !isQuotaExceeded) {
       localStorage.setItem('firebase_simulated_profissionais', JSON.stringify(profissionais));
     }
-  }, [profissionais]);
+  }, [profissionais, isQuotaExceeded]);
+
+  // Load contingency data immediately if quota limit is exceeded
+  useEffect(() => {
+    if (isQuotaExceeded) {
+      console.warn("Modo Contingência Local Ativo: Carregando dados simulados/locais.");
+      setNotification("Limite de uso gratuito do Firestore excedido. Carregando modo de contingência offline local.");
+      
+      // Stop all spinner loaders
+      setLoading(false);
+      setLoadingPacientes(false);
+
+      // Load Pacientes
+      const storedPacientes = localStorage.getItem('firebase_simulated_pacientes');
+      let loadedPacientes: Paciente[] = [];
+      if (storedPacientes) {
+        try {
+          loadedPacientes = JSON.parse(storedPacientes);
+        } catch {
+          loadedPacientes = INITIAL_PACIENTES as Paciente[];
+        }
+      } else {
+        loadedPacientes = INITIAL_PACIENTES as Paciente[];
+        localStorage.setItem('firebase_simulated_pacientes', JSON.stringify(loadedPacientes));
+      }
+      setPacientes(loadedPacientes);
+      
+      const ativosCount = loadedPacientes.filter(p => p.status === 'Ativo').length;
+      const inativosCount = loadedPacientes.filter(p => p.status === 'Desativado').length;
+      setTotalPacientes({ ativos: ativosCount, inativos: inativosCount });
+
+      // Load Plantoes
+      const storedPlantoes = localStorage.getItem('firebase_simulated_plantoes');
+      let loadedPlantoes: Plantao[] = [];
+      if (storedPlantoes) {
+        try {
+          loadedPlantoes = JSON.parse(storedPlantoes);
+        } catch {
+          loadedPlantoes = INITIAL_PLANTOES as Plantao[];
+        }
+      } else {
+        loadedPlantoes = INITIAL_PLANTOES as Plantao[];
+        localStorage.setItem('firebase_simulated_plantoes', JSON.stringify(loadedPlantoes));
+      }
+      setPlantoes(loadedPlantoes);
+
+      // Load Profissionais
+      const storedProfissionais = localStorage.getItem('firebase_simulated_profissionais');
+      let loadedProfissionais: Profissional[] = [];
+      if (storedProfissionais) {
+        try {
+          loadedProfissionais = JSON.parse(storedProfissionais);
+        } catch {
+          loadedProfissionais = INITIAL_PROFESSIONALS as unknown as Profissional[];
+        }
+      } else {
+        loadedProfissionais = INITIAL_PROFESSIONALS as unknown as Profissional[];
+        localStorage.setItem('firebase_simulated_profissionais', JSON.stringify(loadedProfissionais));
+      }
+      setProfissionais(loadedProfissionais);
+
+      // Load Agendamentos
+      const storedAgendamentos = localStorage.getItem('firebase_simulated_agendamentos');
+      let loadedAgendamentos: Agendamento[] = [];
+      if (storedAgendamentos) {
+        try {
+          loadedAgendamentos = JSON.parse(storedAgendamentos);
+        } catch {}
+      }
+      setAgendamentos(loadedAgendamentos);
+
+      // Load Usuarios Sistema
+      const storedUsuarios = localStorage.getItem('firebase_simulated_usuarios_sistema');
+      let loadedUsuarios: UsuarioSistema[] = [];
+      if (storedUsuarios) {
+        try {
+          loadedUsuarios = JSON.parse(storedUsuarios);
+        } catch {}
+      } else {
+        loadedUsuarios = [
+          {
+            id: 'user-admin',
+            nome: 'Renato B. Z.',
+            email: 'renatobz@gmail.com',
+            nivelAcesso: 'Administrador',
+            status: 'Ativo'
+          }
+        ];
+        localStorage.setItem('firebase_simulated_usuarios_sistema', JSON.stringify(loadedUsuarios));
+      }
+      setUsuariosSistema(loadedUsuarios);
+
+      // Load Debitos Profissionais
+      const storedDebitos = localStorage.getItem('firebase_simulated_debitos_profissionais');
+      let loadedDebitos: DebitoProfissional[] = [];
+      if (storedDebitos) {
+        try {
+          loadedDebitos = JSON.parse(storedDebitos);
+        } catch {}
+      }
+      setDebitosProfissionais(loadedDebitos);
+
+      // Load Faturas Pacientes
+      const storedFaturas = localStorage.getItem('firebase_simulated_faturas_pacientes');
+      let loadedFaturas: FaturaPaciente[] = [];
+      if (storedFaturas) {
+        try {
+          loadedFaturas = JSON.parse(storedFaturas);
+        } catch {}
+      }
+      setFaturasPacientes(loadedFaturas);
+
+      // Load Folhas Pagamento
+      const storedFolhas = localStorage.getItem('firebase_simulated_folhas_pagamento');
+      let loadedFolhas: FolhaPagamento[] = [];
+      if (storedFolhas) {
+        try {
+          loadedFolhas = JSON.parse(storedFolhas);
+        } catch {}
+      }
+      setFolhasPagamento(loadedFolhas);
+
+      // Load Logs Auditoria
+      const storedLogs = localStorage.getItem('firebase_simulated_logs_auditoria');
+      let loadedLogs: AuditLog[] = [];
+      if (storedLogs) {
+        try {
+          loadedLogs = JSON.parse(storedLogs);
+        } catch {}
+      }
+      setLogsAuditoria(loadedLogs);
+    }
+  }, [isQuotaExceeded]);
+
+  const addAuditLogLocal = (
+    action: AuditLog['action'],
+    collectionName: string,
+    documentId: string,
+    description: string
+  ) => {
+    const currentUserEmail = auth.currentUser?.email?.toLowerCase() || '';
+    const usuario = usuariosSistema.find(u => u.email?.toLowerCase() === currentUserEmail);
+    const userId = usuario
+      ? (usuario.id || (usuario as any).uid || (usuario as any).idDoc || auth.currentUser?.uid || currentUserEmail)
+      : (auth.currentUser?.uid || auth.currentUser?.email || 'anonymous');
+
+    const log: AuditLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      timestamp: new Date().toISOString(),
+      userId,
+      action,
+      collection: collectionName,
+      documentId,
+      description,
+    };
+    const updated = [log, ...logsAuditoria];
+    setLogsAuditoria(updated);
+    localStorage.setItem('firebase_simulated_logs_auditoria', JSON.stringify(updated));
+  };
 
   const addAuditLog = async (
     action: AuditLog['action'],
@@ -544,6 +721,10 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     documentId: string,
     description: string
   ) => {
+    if (isQuotaExceeded) {
+      addAuditLogLocal(action, collectionName, documentId, description);
+      return;
+    }
     try {
       const currentUserEmail = auth.currentUser?.email?.toLowerCase() || '';
       const usuario = usuariosSistema.find(u => u.email?.toLowerCase() === currentUserEmail);
@@ -580,6 +761,20 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       desativadoMotivo: null,
     };
 
+    if (isQuotaExceeded) {
+      const updatedList = [fullPaciente, ...pacientes];
+      setPacientes(updatedList);
+      localStorage.setItem('firebase_simulated_pacientes', JSON.stringify(updatedList));
+      addAuditLogLocal('CREATE', 'pacientes', id, `Paciente criado: ${fullPaciente.nome}`);
+      const ativosCount = updatedList.filter(p => p.status === 'Ativo').length;
+      const inativosCount = updatedList.filter(p => p.status === 'Desativado').length;
+      setTotalPacientes({ ativos: ativosCount, inativos: inativosCount });
+      if (!skipNotification) {
+        setNotification(`Paciente '${fullPaciente.nome}' cadastrado com sucesso.`);
+      }
+      return fullPaciente;
+    }
+
     try {
       console.log(`[Firebase] setDoc, paciente id: ${id}`);
       await setDoc(doc(db, 'pacientes', id), fullPaciente);
@@ -598,6 +793,19 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const updatePaciente = async (updatedPac: Paciente, skipNotification?: boolean) => {
+    if (isQuotaExceeded) {
+      const updatedList = pacientes.map((p) => (p.id === updatedPac.id ? updatedPac : p));
+      setPacientes(updatedList);
+      localStorage.setItem('firebase_simulated_pacientes', JSON.stringify(updatedList));
+      addAuditLogLocal('UPDATE', 'pacientes', updatedPac.id, `Paciente atualizado: ${updatedPac.nome}`);
+      const ativosCount = updatedList.filter(p => p.status === 'Ativo').length;
+      const inativosCount = updatedList.filter(p => p.status === 'Desativado').length;
+      setTotalPacientes({ ativos: ativosCount, inativos: inativosCount });
+      if (!skipNotification) {
+        setNotification(`Paciente '${updatedPac.nome}' atualizado com sucesso.`);
+      }
+      return;
+    }
     try {
       await setDoc(doc(db, 'pacientes', updatedPac.id), updatedPac);
       setPacientes((prev) =>
@@ -616,6 +824,21 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const deactivatePaciente = async (id: string, motivo: string) => {
     const todayStr = new Date().toLocaleDateString('pt-BR');
+    if (isQuotaExceeded) {
+      const updatedList = pacientes.map((p) =>
+        p.id === id
+          ? { ...p, status: 'Desativado' as const, desativadoEm: todayStr, desativadoMotivo: motivo }
+          : p
+      );
+      setPacientes(updatedList);
+      localStorage.setItem('firebase_simulated_pacientes', JSON.stringify(updatedList));
+      addAuditLogLocal('UPDATE', 'pacientes', id, `Paciente desativado: ${motivo}`);
+      const ativosCount = updatedList.filter(p => p.status === 'Ativo').length;
+      const inativosCount = updatedList.filter(p => p.status === 'Desativado').length;
+      setTotalPacientes({ ativos: ativosCount, inativos: inativosCount });
+      setNotification(`Paciente desativado com sucesso.`);
+      return;
+    }
     try {
       await updateDoc(doc(db, 'pacientes', id), {
         status: 'Desativado',
@@ -639,6 +862,21 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const reactivatePaciente = async (id: string) => {
+    if (isQuotaExceeded) {
+      const updatedList = pacientes.map((p) =>
+        p.id === id
+          ? { ...p, status: 'Ativo' as const, desativadoEm: null, desativadoMotivo: null }
+          : p
+      );
+      setPacientes(updatedList);
+      localStorage.setItem('firebase_simulated_pacientes', JSON.stringify(updatedList));
+      addAuditLogLocal('UPDATE', 'pacientes', id, `Paciente reativado`);
+      const ativosCount = updatedList.filter(p => p.status === 'Ativo').length;
+      const inativosCount = updatedList.filter(p => p.status === 'Desativado').length;
+      setTotalPacientes({ ativos: ativosCount, inativos: inativosCount });
+      setNotification(`Paciente reativado com sucesso.`);
+      return;
+    }
     try {
       await updateDoc(doc(db, 'pacientes', id), {
         status: 'Ativo',
@@ -662,6 +900,16 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const cancelPlantao = async (id: string, motivo: CancelingReason) => {
+    if (isQuotaExceeded) {
+      const updatedList = plantoes.map((p) =>
+        p.id === id ? { ...p, status: 'Cancelado' as const, motivoCancelamento: motivo } : p
+      );
+      setPlantoes(updatedList);
+      localStorage.setItem('firebase_simulated_plantoes', JSON.stringify(updatedList));
+      addAuditLogLocal('UPDATE', 'plantoes', id, `Plantão cancelado: ${motivo}`);
+      setNotification(`Plantão cancelado com sucesso.`);
+      return;
+    }
     try {
       await updateDoc(doc(db, 'plantoes', id), {
         status: 'Cancelado',
@@ -682,6 +930,15 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       id,
     };
 
+    if (isQuotaExceeded) {
+      const updatedList = [fullPlantao, ...plantoes];
+      setPlantoes(updatedList);
+      localStorage.setItem('firebase_simulated_plantoes', JSON.stringify(updatedList));
+      addAuditLogLocal('CREATE', 'plantoes', id, `Plantão criado para paciente: ${newPlantao.pacienteId}`);
+      setNotification(`Plantão criado com sucesso.`);
+      return fullPlantao;
+    }
+
     try {
       console.log(`[Firebase] Adding plantao: ${id} for patient: ${newPlantao.pacienteId}`);
       await setDoc(doc(db, 'plantoes', id), fullPlantao);
@@ -696,6 +953,14 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const updatePlantao = async (updatedPlantao: Plantao) => {
+    if (isQuotaExceeded) {
+      const updatedList = plantoes.map((p) => p.id === updatedPlantao.id ? updatedPlantao : p);
+      setPlantoes(updatedList);
+      localStorage.setItem('firebase_simulated_plantoes', JSON.stringify(updatedList));
+      addAuditLogLocal('UPDATE', 'plantoes', updatedPlantao.id, `Plantão atualizado`);
+      setNotification(`Plantão atualizado com sucesso.`);
+      return;
+    }
     try {
       console.log(`[Firebase] Updating plantao: ${updatedPlantao.id}`);
       await setDoc(doc(db, 'plantoes', updatedPlantao.id), updatedPlantao);
@@ -709,6 +974,14 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const deletePlantao = async (id: string) => {
+    if (isQuotaExceeded) {
+      const updatedList = plantoes.filter((p) => p.id !== id);
+      setPlantoes(updatedList);
+      localStorage.setItem('firebase_simulated_plantoes', JSON.stringify(updatedList));
+      addAuditLogLocal('DELETE', 'plantoes', id, `Plantão excluído`);
+      setNotification(`Plantão excluído com sucesso.`);
+      return;
+    }
     try {
       console.log(`[Firebase] Deleting plantao: ${id}`);
       await deleteDoc(doc(db, 'plantoes', id));
@@ -722,6 +995,15 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const deletePlantoes = async (ids: string[]) => {
+    if (isQuotaExceeded) {
+      const updatedList = plantoes.filter((p) => !ids.includes(p.id));
+      setPlantoes(updatedList);
+      localStorage.setItem('firebase_simulated_plantoes', JSON.stringify(updatedList));
+      for (const id of ids) {
+        addAuditLogLocal('DELETE', 'plantoes', id, `Plantão excluído em lote`);
+      }
+      return;
+    }
     try {
       const batch = writeBatch(db);
       for (const id of ids) {
@@ -738,6 +1020,16 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const addAgendamento = async (newAg: Omit<Agendamento, 'id'>) => {
+    const id = `ag-${Date.now()}`;
+    const fullAgToSave: Agendamento = { ...newAg, id, status: 'Aberta' as const } as Agendamento;
+    if (isQuotaExceeded) {
+      const updatedList = [fullAgToSave, ...agendamentos];
+      setAgendamentos(updatedList);
+      localStorage.setItem('firebase_simulated_agendamentos', JSON.stringify(updatedList));
+      addAuditLogLocal('CREATE', 'agendamentos', id, `Agendamento criado: ${fullAgToSave.data}`);
+      setNotification('Agendamento criado com sucesso.');
+      return fullAgToSave;
+    }
     try {
       const fullAgToSave = { ...newAg, status: 'Aberta' as const } as any;
       // Removendo campos 'undefined' antes de enviar ao Firestore para evitar erros de tipo incompatível
@@ -758,6 +1050,14 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const updateAgendamento = async (ag: Agendamento) => {
+    if (isQuotaExceeded) {
+      const updatedList = agendamentos.map((a) => a.id === ag.id ? ag : a);
+      setAgendamentos(updatedList);
+      localStorage.setItem('firebase_simulated_agendamentos', JSON.stringify(updatedList));
+      addAuditLogLocal('UPDATE', 'agendamentos', ag.id, `Agendamento atualizado: ${ag.id}`);
+      setNotification('Agendamento atualizado.');
+      return;
+    }
     try {
       const agToSave = { ...ag } as any;
       // Removendo campos 'undefined' antes de enviar ao Firestore para evitar erros de tipo incompatível
@@ -776,12 +1076,20 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const deleteAgendamento = async (id: string) => {
+    const existing = agendamentos.find(a => a.id === id);
+    if (existing && (existing.escalaCongelada || existing.status === 'Concluido')) {
+      toast.error('Escala fechada. Não é possível excluir esse plantão.');
+      return;
+    }
+    if (isQuotaExceeded) {
+      const updatedList = agendamentos.filter((a) => a.id !== id);
+      setAgendamentos(updatedList);
+      localStorage.setItem('firebase_simulated_agendamentos', JSON.stringify(updatedList));
+      addAuditLogLocal('DELETE', 'agendamentos', id, `Agendamento excluído`);
+      setNotification('Agendamento excluído.');
+      return;
+    }
     try {
-      const existing = agendamentos.find(a => a.id === id);
-      if (existing && (existing.escalaCongelada || existing.status === 'Concluido')) {
-        toast.error('Escala fechada. Não é possível excluir esse plantão.');
-        return;
-      }
       await deleteDoc(doc(db, 'agendamentos', id));
       await addAuditLog('DELETE', 'agendamentos', id, `Agendamento excluído`);
       setNotification('Agendamento excluído.');
@@ -800,6 +1108,17 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       createdAt: new Date().toISOString(),
     };
 
+    if (isQuotaExceeded) {
+      const updatedList = [fullProfissional, ...profissionais];
+      setProfissionais(updatedList);
+      localStorage.setItem('firebase_simulated_profissionais', JSON.stringify(updatedList));
+      addAuditLogLocal('CREATE', 'profissionais', id, `Profissional criado: ${fullProfissional.nome}`);
+      if (!skipNotification) {
+        setNotification(`Cuidador '${fullProfissional.nome}' cadastrado com sucesso.`);
+      }
+      return fullProfissional;
+    }
+
     try {
       await setDoc(doc(db, 'profissionais', id), fullProfissional);
       await addAuditLog('CREATE', 'profissionais', id, `Profissional criado: ${fullProfissional.nome}`);
@@ -814,6 +1133,15 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const addUsuarioSistema = async (newUser: Omit<UsuarioSistema, 'id'>) => {
+    const id = `user-${Date.now()}`;
+    const fullUser: UsuarioSistema = { ...newUser, id };
+    if (isQuotaExceeded) {
+      const updatedList = [fullUser, ...usuariosSistema];
+      setUsuariosSistema(updatedList);
+      localStorage.setItem('firebase_simulated_usuarios_sistema', JSON.stringify(updatedList));
+      setNotification(`Utilizador '${newUser.nome}' adicionado com sucesso.`);
+      return fullUser;
+    }
     try {
       // Generate document reference and id in advance to guarantee the id field is explicitly saved inside the document
       const docRef = doc(collection(db, 'usuarios_sistema'));
@@ -830,6 +1158,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const deleteUsuarioSistema = async (id: string) => {
+    if (isQuotaExceeded) {
+      const updatedList = usuariosSistema.filter(u => u.id !== id);
+      setUsuariosSistema(updatedList);
+      localStorage.setItem('firebase_simulated_usuarios_sistema', JSON.stringify(updatedList));
+      setNotification('Utilizador removido com sucesso.');
+      return;
+    }
     try {
       const targetUser = usuariosSistema.find(u => u.id === id);
       const emailAlvo = targetUser?.email || '';
@@ -853,6 +1188,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const updateUsuarioSistema = async (user: UsuarioSistema) => {
+    if (isQuotaExceeded) {
+      const updatedList = usuariosSistema.map(u => u.id === user.id ? user : u);
+      setUsuariosSistema(updatedList);
+      localStorage.setItem('firebase_simulated_usuarios_sistema', JSON.stringify(updatedList));
+      setNotification(`Utilizador '${user.nome}' atualizado com sucesso.`);
+      return;
+    }
     try {
       // Ensure that the id field is explicitly saved inside the document upon updating
       const updatedUser = { ...user, id: user.id };
@@ -866,6 +1208,16 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const updateProfissional = async (updatedProf: Profissional, skipNotification?: boolean) => {
+    if (isQuotaExceeded) {
+      const updatedList = profissionais.map(p => p.id === updatedProf.id ? updatedProf : p);
+      setProfissionais(updatedList);
+      localStorage.setItem('firebase_simulated_profissionais', JSON.stringify(updatedList));
+      addAuditLogLocal('UPDATE', 'profissionais', updatedProf.id, `Profissional atualizado: ${updatedProf.nome}`);
+      if (!skipNotification) {
+        setNotification(`Cuidador '${updatedProf.nome}' atualizado com sucesso.`);
+      }
+      return;
+    }
     try {
       await setDoc(doc(db, 'profissionais', updatedProf.id), updatedProf);
       await addAuditLog('UPDATE', 'profissionais', updatedProf.id, `Profissional atualizado: ${updatedProf.nome}`);
@@ -879,6 +1231,14 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const deleteProfissional = async (id: string) => {
+    if (isQuotaExceeded) {
+      const updatedList = profissionais.filter(p => p.id !== id);
+      setProfissionais(updatedList);
+      localStorage.setItem('firebase_simulated_profissionais', JSON.stringify(updatedList));
+      addAuditLogLocal('DELETE', 'profissionais', id, `Profissional excluído`);
+      setNotification('Cuidador excluído com sucesso.');
+      return;
+    }
     try {
       await deleteDoc(doc(db, 'profissionais', id));
       await addAuditLog('DELETE', 'profissionais', id, `Profissional excluído`);
@@ -892,6 +1252,26 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const deletePaciente = async (id: string) => {
     console.log("Iniciando exclusão lógica do paciente:", id);
     const todayStr = new Date().toLocaleDateString('pt-BR');
+    if (isQuotaExceeded) {
+      const updatedList = pacientes.map((p) =>
+        p.id === id
+          ? {
+              ...p,
+              status: 'Desativado' as const,
+              desativadoEm: todayStr,
+              desativadoMotivo: 'Exclusão lógica do registro (Inativo de acordo com diretrizes de segurança)',
+            }
+          : p
+      );
+      setPacientes(updatedList);
+      localStorage.setItem('firebase_simulated_pacientes', JSON.stringify(updatedList));
+      addAuditLogLocal('DELETE', 'pacientes', id, `Paciente inativado via exclusão lógica`);
+      const ativosCount = updatedList.filter(p => p.status === 'Ativo').length;
+      const inativosCount = updatedList.filter(p => p.status === 'Desativado').length;
+      setTotalPacientes({ ativos: ativosCount, inativos: inativosCount });
+      setNotification('Paciente desativado logicamente com sucesso.');
+      return;
+    }
     try {
       await updateDoc(doc(db, 'pacientes', id), {
         status: 'Desativado',
@@ -922,11 +1302,21 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const addDebitoProfissional = async (debito: Omit<DebitoProfissional, 'id'>) => {
+    const id = `deb-${Date.now()}`;
+    const dataToSave: DebitoProfissional = {
+      ...debito,
+      id,
+      status: debito.status || 'pendente'
+    };
+    if (isQuotaExceeded) {
+      const updatedList = [dataToSave, ...debitosProfissionais];
+      setDebitosProfissionais(updatedList);
+      localStorage.setItem('firebase_simulated_debitos_profissionais', JSON.stringify(updatedList));
+      addAuditLogLocal('CREATE', 'debitos_profissionais', id, `Débito adicionado para o profissional ${debito.nomeProfissional}: R$ ${debito.valor}`);
+      setNotification(`Débito de R$ ${debito.valor} registrado com sucesso para ${debito.nomeProfissional}.`);
+      return dataToSave;
+    }
     try {
-      const dataToSave = {
-        ...debito,
-        status: debito.status || 'pendente'
-      };
       const docRef = await addDoc(collection(db, 'debitos_profissionais'), dataToSave);
       await addAuditLog('CREATE', 'debitos_profissionais', docRef.id, `Débito adicionado para o profissional ${debito.nomeProfissional}: R$ ${debito.valor}`);
 
@@ -937,7 +1327,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           dateStr = new Date().toISOString().split('T')[0];
         } else {
           try {
-            let dObj: Date;
+            let dObj: Date = new Date();
             if (typeof debito.data.toDate === 'function') {
               dObj = debito.data.toDate();
             } else if (debito.data instanceof Date) {
@@ -978,7 +1368,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
 
       setNotification(`Débito de R$ ${debito.valor} registrado com sucesso para ${debito.nomeProfissional}.`);
-      return { id: docRef.id, ...dataToSave } as DebitoProfissional;
+      return { ...dataToSave, id: docRef.id } as DebitoProfissional;
     } catch (err) {
       console.error("Erro ao adicionar débito:", err);
       handleFirestoreError(err, OperationType.CREATE, 'debitos_profissionais');
@@ -987,6 +1377,14 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const deleteDebitoProfissional = async (id: string) => {
+    if (isQuotaExceeded) {
+      const updatedList = debitosProfissionais.filter((d) => d.id !== id);
+      setDebitosProfissionais(updatedList);
+      localStorage.setItem('firebase_simulated_debitos_profissionais', JSON.stringify(updatedList));
+      addAuditLogLocal('DELETE', 'debitos_profissionais', id, `Débito excluído`);
+      setNotification('Débito removido com sucesso.');
+      return;
+    }
     try {
       // Fetch the debit first to find out which professional it belongs to
       try {
@@ -1018,6 +1416,14 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const updateDebitoProfissional = async (debito: DebitoProfissional) => {
+    if (isQuotaExceeded) {
+      const updatedList = debitosProfissionais.map((d) => d.id === debito.id ? debito : d);
+      setDebitosProfissionais(updatedList);
+      localStorage.setItem('firebase_simulated_debitos_profissionais', JSON.stringify(updatedList));
+      addAuditLogLocal('UPDATE', 'debitos_profissionais', debito.id, `Débito atualizado para o profissional ${debito.nomeProfissional}: R$ ${debito.valor}`);
+      setNotification(`Débito de R$ ${debito.valor} atualizado com sucesso.`);
+      return;
+    }
     try {
       await setDoc(doc(db, 'debitos_profissionais', debito.id), debito);
       await addAuditLog('UPDATE', 'debitos_profissionais', debito.id, `Débito atualizado para o profissional ${debito.nomeProfissional}: R$ ${debito.valor}`);
@@ -1030,6 +1436,16 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const addFaturaPaciente = async (fatura: Omit<FaturaPaciente, 'id'>) => {
+    const id = `fat-${Date.now()}`;
+    const fullFatura: FaturaPaciente = { id, ...fatura } as FaturaPaciente;
+    if (isQuotaExceeded) {
+      const updatedList = [fullFatura, ...faturasPacientes];
+      setFaturasPacientes(updatedList);
+      localStorage.setItem('firebase_simulated_faturas_pacientes', JSON.stringify(updatedList));
+      addAuditLogLocal('CREATE', 'faturas_pacientes', id, `Fatura criada para paciente ${fatura.nomePaciente}: ${fatura.numeroFatura}`);
+      setNotification('Fatura salva com sucesso.');
+      return fullFatura;
+    }
     try {
       const docRef = await addDoc(collection(db, 'faturas_pacientes'), fatura);
       await addAuditLog('CREATE', 'faturas_pacientes', docRef.id, `Fatura criada para paciente ${fatura.nomePaciente}: ${fatura.numeroFatura}`);
@@ -1043,6 +1459,14 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const deleteFaturaPaciente = async (id: string) => {
+    if (isQuotaExceeded) {
+      const updatedList = faturasPacientes.filter((f) => f.id !== id);
+      setFaturasPacientes(updatedList);
+      localStorage.setItem('firebase_simulated_faturas_pacientes', JSON.stringify(updatedList));
+      addAuditLogLocal('DELETE', 'faturas_pacientes', id, `Fatura excluída`);
+      setNotification('Fatura removida com sucesso.');
+      return;
+    }
     try {
       await deleteDoc(doc(db, 'faturas_pacientes', id));
       await addAuditLog('DELETE', 'faturas_pacientes', id, `Fatura excluída`);
@@ -1055,6 +1479,14 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const deleteFolhaPagamento = async (id: string) => {
+    if (isQuotaExceeded) {
+      const updatedList = folhasPagamento.filter((f) => f.id !== id);
+      setFolhasPagamento(updatedList);
+      localStorage.setItem('firebase_simulated_folhas_pagamento', JSON.stringify(updatedList));
+      addAuditLogLocal('DELETE', 'folhas_pagamento', id, `Folha excluída`);
+      setNotification('Folha removida com sucesso.');
+      return;
+    }
     try {
       await deleteDoc(doc(db, 'folhas_pagamento', id));
       await addAuditLog('DELETE', 'folhas_pagamento', id, `Folha excluída`);
@@ -1181,6 +1613,16 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const addFolhaPagamento = async (folha: Omit<FolhaPagamento, 'id'>) => {
+    const id = `fol-${Date.now()}`;
+    const fullFolha: FolhaPagamento = { id, ...folha } as FolhaPagamento;
+    if (isQuotaExceeded) {
+      const updatedList = [fullFolha, ...folhasPagamento];
+      setFolhasPagamento(updatedList);
+      localStorage.setItem('firebase_simulated_folhas_pagamento', JSON.stringify(updatedList));
+      addAuditLogLocal('CREATE', 'folhas_pagamento', id, `Folha fechada para profissional ${folha.nomeProfissional}`);
+      setNotification('Folha fechada com sucesso.');
+      return fullFolha;
+    }
     try {
       const docRef = await addDoc(collection(db, 'folhas_pagamento'), folha);
       await addAuditLog('CREATE', 'folhas_pagamento', docRef.id, `Folha fechada para profissional ${folha.nomeProfissional}`);
@@ -1197,6 +1639,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     <FirebaseContext.Provider
       value={{
         pacientes,
+        isQuotaExceeded,
         loadingPacientes,
         hasMore,
         loadMorePacientes,

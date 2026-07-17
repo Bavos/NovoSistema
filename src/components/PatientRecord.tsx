@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { updateDoc, doc, getDoc, addDoc, collection, serverTimestamp, getDocs, query, where, deleteDoc } from 'firebase/firestore';
+import { updateDoc, doc, getDoc, addDoc, collection, serverTimestamp, getDocs, query, where, deleteDoc, limit } from 'firebase/firestore';
 import { fetchCep, fetchBanks, getHolidays } from '../lib/brasilApi';
 import { Paciente, Plantao, CancelingReason, EscalacaoPlano, Agendamento } from '../types';
 import { useFirebase } from '../context/FirebaseContext';
@@ -47,6 +47,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { GlossyButton } from './GlossyButton';
+import ExcelJS from 'exceljs';
+import * as docx from 'docx';
 
 
 // Helper to remove accents and lower case for better searching
@@ -671,7 +673,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     }
 
     try {
-      const ExcelJS = (await import('exceljs')).default;
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet('Ocorrências', {
         views: [{ showGridLines: true }]
@@ -721,7 +722,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       profInfoSub.alignment = { horizontal: 'right' };
 
       const extraCell = worksheet.getCell('D4');
-      extraCell.value = `CPF: ${targetPatient.cpf || '---'} | Cidade: ${targetPatient.cidade || '---'}`;
+      extraCell.value = `CPF: ${targetPatient.cpf || '---'} | Cidade: ${targetPatient.endereco?.cidade || '---'}`;
       extraCell.font = { name: 'Arial', size: 9, italic: true, color: { argb: 'FF4B5563' } };
       extraCell.alignment = { horizontal: 'right' };
 
@@ -831,7 +832,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     }
 
     try {
-      const docx = await import('docx');
       const {
         Document,
         Packer,
@@ -907,7 +907,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   }),
                   new Paragraph({
                     children: [
-                      new TextRun({ text: `CPF: ${targetPatient.cpf || '---'} | Cidade: ${targetPatient.cidade || '---'}`, size: 16, color: "555555", font: "Arial" })
+                      new TextRun({ text: `CPF: ${targetPatient.cpf || '---'} | Cidade: ${targetPatient.endereco?.cidade || '---'}`, size: 16, color: "555555", font: "Arial" })
                     ],
                     alignment: AlignmentType.RIGHT,
                     spacing: { before: 40 }
@@ -1157,6 +1157,36 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const [calendarView, setCalendarView] = useState<'lista' | 'calendario'>('calendario'); // default to visual calendar view
   const [isFaturaModalOpen, setIsFaturaModalOpen] = useState(false);
 
+  // Local Audit Logs on-demand loader to avoid downloading the entire collection in real-time
+  const [localAuditLogs, setLocalAuditLogs] = useState<any[]>([]);
+  const [loadingAuditLogs, setLoadingAuditLogs] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (activeTab === 'auditoria' && paciente?.id) {
+      setLoadingAuditLogs(true);
+      const q = query(
+        collection(db, 'LogsAuditoria'),
+        where('documentId', '==', paciente.id),
+        limit(100)
+      );
+      getDocs(q).then((snap) => {
+        if (!isMounted) return;
+        const list: any[] = [];
+        snap.forEach((d) => list.push({ ...d.data(), id: d.id }));
+        list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        setLocalAuditLogs(list);
+      }).catch((err) => {
+        console.error("Error loading patient audit logs on-demand:", err);
+      }).finally(() => {
+        if (isMounted) setLoadingAuditLogs(false);
+      });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [activeTab, paciente?.id]);
+
   // Dynamic holidays fetched from BrasilAPI + custom RJ municipal/state holidays
   const [brasilApiHolidays, setBrasilApiHolidays] = useState<Record<string, string>>({});
 
@@ -1313,11 +1343,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
       setTipoEscala(paciente.planoAtendimento?.tipoEscala || 'Diurno 12h');
       setHoraInicioPadrao(paciente.planoAtendimento?.horaInicioPadrao || '07:00');
-      setValorSugeridoPlantao(paciente.planoAtendimento?.valorSugeridoPlantao || 150);
-      setAjudaCusto(paciente.planoAtendimento?.ajudaCusto || 0);
-      setValorTransporte(paciente.planoAtendimento?.valorTransporte ?? paciente.planoAtendimento?.ajudaCusto ?? 0);
-      setValorAlimentacao(paciente.planoAtendimento?.valorAlimentacao ?? 0);
-      setTaxaAdm(paciente.planoAtendimento?.taxaAdm || 0);
+      setValorSugeridoPlantao(formatarMoeda(paciente.planoAtendimento?.valorSugeridoPlantao || 150));
+      setAjudaCusto(formatarMoeda(paciente.planoAtendimento?.ajudaCusto || 0));
+      setValorTransporte(formatarMoeda(paciente.planoAtendimento?.valorTransporte ?? paciente.planoAtendimento?.ajudaCusto ?? 0));
+      setValorAlimentacao(formatarMoeda(paciente.planoAtendimento?.valorAlimentacao ?? 0));
+      setTaxaAdm(formatarMoeda(paciente.planoAtendimento?.taxaAdm || 0));
       setTiposPlantao(paciente.planoAtendimento?.tiposPlantao || []);
       
       const val = paciente.planoAtendimento?.valorSugeridoPlantao || 150;
@@ -1362,11 +1392,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
       setTipoEscala('Diurno 12h');
       setHoraInicioPadrao('07:00');
-      setValorSugeridoPlantao(150);
-      setAjudaCusto(0);
-      setValorTransporte(0);
-      setValorAlimentacao(0);
-      setTaxaAdm(0);
+      setValorSugeridoPlantao(formatarMoeda(150));
+      setAjudaCusto(formatarMoeda(0));
+      setValorTransporte(formatarMoeda(0));
+      setValorAlimentacao(formatarMoeda(0));
+      setTaxaAdm(formatarMoeda(0));
       setTiposPlantao([]);
 
       setPStatus('Ativo');
@@ -1382,11 +1412,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       if (found && found.planoAtendimento) {
         setTipoEscala(found.planoAtendimento.tipoEscala || 'Diurno 12h');
         setHoraInicioPadrao(found.planoAtendimento.horaInicioPadrao || '07:00');
-        setValorSugeridoPlantao(found.planoAtendimento.valorSugeridoPlantao ?? 150);
-        setAjudaCusto(found.planoAtendimento.ajudaCusto ?? 0);
-        setValorTransporte(found.planoAtendimento.valorTransporte ?? found.planoAtendimento.ajudaCusto ?? 0);
-        setValorAlimentacao(found.planoAtendimento.valorAlimentacao ?? 0);
-        setTaxaAdm(found.planoAtendimento.taxaAdm ?? 0);
+        setValorSugeridoPlantao(formatarMoeda(found.planoAtendimento.valorSugeridoPlantao ?? 150));
+        setAjudaCusto(formatarMoeda(found.planoAtendimento.ajudaCusto ?? 0));
+        setValorTransporte(formatarMoeda(found.planoAtendimento.valorTransporte ?? found.planoAtendimento.ajudaCusto ?? 0));
+        setValorAlimentacao(formatarMoeda(found.planoAtendimento.valorAlimentacao ?? 0));
+        setTaxaAdm(formatarMoeda(found.planoAtendimento.taxaAdm ?? 0));
         setTiposPlantao(found.planoAtendimento.tiposPlantao || []);
       }
     }
@@ -1506,7 +1536,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       }
     }
 
-    const patientPayload = {
+    const patientPayload: Omit<Paciente, 'id' | 'createdAt' | 'status'> = {
       nome,
       dataNascimento,
       cpf,
@@ -2301,7 +2331,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     }
 
     try {
-      const ExcelJS = (await import('exceljs')).default;
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet('Fatura', {
         views: [{ showGridLines: true }]
@@ -2538,7 +2567,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     }
 
     try {
-      const docx = await import('docx');
       const {
         Document,
         Packer,
@@ -4307,86 +4335,241 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   </div>
                 </div>
 
+                {calendarView === 'calendario' && (() => {
+                  const gridDays = getDaysInMonthGrid(calendarMonth, calendarYear, brasilApiHolidays);
+                  const currentMonthDays = gridDays.filter(cell => cell.isCurrentMonth);
+                  
+                  // Filter agendamentos for this patient in the current month
+                  const patientAgendamentosThisMonth = agendamentos.filter(
+                    (s) => s.idPaciente === (paciente?.id || '') && s.data.startsWith(`${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}`)
+                  );
 
-                {calendarView === 'calendario' && (
-                  <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-4 animate-in fade-in-30">
-                    {/* Navigation control */}
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-100 pb-3">
-                      <div className="flex items-center space-x-3">
-                        <div className="flex bg-slate-100 p-1 border border-slate-200/80 rounded-lg">
+                  // Extract unique professionals from these agendamentos, fallback if empty
+                  let uniqueProfsThisMonth = Array.from(new Set(
+                    patientAgendamentosThisMonth.map(s => s.nomeProfissional || 'Administrativa / Geral')
+                  )).sort();
+
+                  if (uniqueProfsThisMonth.length === 0) {
+                    uniqueProfsThisMonth = ['Administrativa / Geral'];
+                  }
+
+                  const getDayOfWeekName = (dateStr: string) => {
+                    const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+                    const d = new Date(dateStr + 'T12:00:00');
+                    return days[d.getDay()] || '';
+                  };
+
+                  return (
+                    <div className="bg-white border border-gray-200 rounded-2xl p-6 md:p-8 shadow-sm space-y-6 animate-in fade-in-30">
+                      {/* Navigation control */}
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-100 pb-4">
+                        <div className="flex items-center space-x-3">
+                          <div className="flex bg-slate-100 p-1 border border-slate-200/80 rounded-lg">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (calendarMonth === 0) {
+                                  setCalendarMonth(11);
+                                  setCalendarYear(calendarYear - 1);
+                                } else {
+                                  setCalendarMonth(calendarMonth - 1);
+                                }
+                              }}
+                              className="p-1 hover:bg-white text-slate-700 rounded transition-colors cursor-pointer"
+                            >
+                              <ChevronLeft size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (calendarMonth === 11) {
+                                  setCalendarMonth(0);
+                                  setCalendarYear(calendarYear + 1);
+                                } else {
+                                  setCalendarMonth(calendarMonth + 1);
+                                }
+                              }}
+                              className="p-1 hover:bg-white text-slate-700 rounded transition-colors cursor-pointer"
+                            >
+                              <ChevronRight size={14} />
+                            </button>
+                          </div>
+
                           <button
                             type="button"
                             onClick={() => {
-                              if (calendarMonth === 0) {
-                                setCalendarMonth(11);
-                                setCalendarYear(calendarYear - 1);
-                              } else {
-                                setCalendarMonth(calendarMonth - 1);
-                              }
+                              const today = new Date();
+                              setCalendarMonth(today.getMonth());
+                              setCalendarYear(today.getFullYear());
                             }}
-                            className="p-1 hover:bg-white text-slate-700 rounded transition-colors cursor-pointer"
+                            className="px-2.5 py-1 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer"
                           >
-                            <ChevronLeft size={14} />
+                            MÊS
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (calendarMonth === 11) {
-                                setCalendarMonth(0);
-                                setCalendarYear(calendarYear + 1);
-                              } else {
-                                setCalendarMonth(calendarMonth + 1);
-                              }
-                            }}
-                            className="p-1 hover:bg-white text-slate-700 rounded transition-colors cursor-pointer"
-                          >
-                            <ChevronRight size={14} />
-                          </button>
+
+                          <h2 className="text-sm font-black text-slate-800 tracking-tight font-sans">
+                            {['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][calendarMonth]} {calendarYear}
+                          </h2>
                         </div>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const today = new Date();
-                            setCalendarMonth(today.getMonth());
-                            setCalendarYear(today.getFullYear());
-                          }}
-                          className="px-2.5 py-1 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer"
-                        >
-                          MÊS
-                        </button>
-
-                        <h2 className="text-sm font-black text-slate-800 tracking-tight font-sans">
-                          {['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][calendarMonth]} {calendarYear}
-                        </h2>
                       </div>
-                    </div>
 
-                    {/* Monthly grid */}
-                    <div className="grid grid-cols-7 gap-1">
-                      {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day) => (
-                        <div key={day} className="py-2 text-center text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">
-                          {day}
+                      {/* Desktop View: Classic Grade (Grid Cols-7) */}
+                      <div className="hidden md:block">
+                        <div className="grid grid-cols-7 gap-px bg-gray-200 border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                          {/* Weekdays Header */}
+                          {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day) => (
+                            <div key={day} className="bg-slate-50 py-2.5 text-center text-xs font-black text-slate-500 uppercase tracking-wider border-b border-gray-200">
+                              {day}
+                            </div>
+                          ))}
+
+                          {/* Days Cells */}
+                          {gridDays.map((cell) => {
+                            const today = new Date();
+                            const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                            const isToday = cell.dateStr === todayStr;
+                            const isSpecialHoliday = cell.holiday !== undefined;
+                            
+                            const cellDateObj = new Date(cell.dateStr + 'T12:00:00');
+                            const dayOfWeekNum = cellDateObj.getDay();
+                            const isWeekend = dayOfWeekNum === 0 || dayOfWeekNum === 6;
+
+                            // Filter agendamentos for this date and patient
+                            const dayAgendamentos = agendamentos.filter(
+                              (s) => s.data === cell.dateStr && s.idPaciente === (paciente?.id || '')
+                            );
+
+                            return (
+                              <div
+                                key={cell.dateStr}
+                                onContextMenu={(e) => {
+                                  e.preventDefault();
+                                  setContextMenu({
+                                    x: e.clientX,
+                                    y: e.clientY,
+                                    type: 'day',
+                                    targetDate: cell.dateStr
+                                  });
+                                }}
+                                className={`min-h-[120px] border border-gray-200 p-2 flex flex-col justify-between transition-all relative ${
+                                  isWeekend ? 'bg-gray-50' : 'bg-white'
+                                } ${!cell.isCurrentMonth ? 'opacity-40' : ''}`}
+                              >
+                                {/* Day Number Header */}
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <span className={`text-xs font-black ${
+                                    isToday
+                                      ? 'text-amber-700 font-extrabold bg-amber-100/80 px-1.5 py-0.5 rounded-full'
+                                      : cell.isCurrentMonth
+                                        ? 'text-slate-800'
+                                        : 'text-slate-400'
+                                  }`}>
+                                    {cell.dayNumber}
+                                  </span>
+                                  {isSpecialHoliday && (
+                                    <span className="text-[8px] font-bold text-rose-700 bg-rose-50 border border-rose-100 px-1 py-0.2 rounded truncate max-w-[65px]" title={cell.holiday}>
+                                      🎉 {cell.holiday}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Shift Cards (Compact text-xs) */}
+                                <div className="flex-1 flex flex-col gap-1 overflow-y-auto max-h-[120px]">
+                                  {dayAgendamentos.length > 0 ? (
+                                    dayAgendamentos.map((ag) => {
+                                      const isCancelled = ag.status === 'Cancelado';
+                                      const isConcluido = ag.status === 'Concluido';
+
+                                      return (
+                                        <div
+                                          key={ag.id}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedShiftForDetails(ag);
+                                            setDetailsPlantaoOptionId('principal');
+                                            setDetailsTipoDia(ag.tipoDia || 'Normal');
+                                            setDetailsCuringa(!!ag.isCuringa || ag.observacao === 'CURINGA');
+                                            setDetailsProfName(ag.nomeProfissional);
+                                            setDetailsDate(ag.data);
+                                            setIsEditingDetails(false);
+                                            setIsConfirmingDelete(false);
+                                            setDetailsModalOpen(true);
+                                          }}
+                                          onContextMenu={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            setContextMenu({
+                                              x: e.clientX,
+                                              y: e.clientY,
+                                              type: 'shift',
+                                              targetShift: ag
+                                            });
+                                          }}
+                                          className={`text-[10px] p-1.5 border rounded-lg cursor-pointer flex flex-col text-left w-full transition-all duration-150 relative space-y-0.5 hover:-translate-y-0.5 hover:shadow-2xs group/shift ${
+                                            isCancelled
+                                              ? 'bg-slate-100 border-slate-200 text-slate-400 line-through'
+                                              : isConcluido
+                                                ? 'bg-indigo-50 border-indigo-200 text-indigo-950 font-bold'
+                                                : 'bg-emerald-50 border-emerald-200 text-emerald-950 font-bold hover:bg-emerald-100 hover:border-emerald-300'
+                                          }`}
+                                          title={ag.observacao || 'Inspecionar Plantão'}
+                                        >
+                                          {/* Copy Shift Button */}
+                                          <button
+                                            type="button"
+                                            onClick={(e) => handleCopyShift(ag, e)}
+                                            className="absolute right-1 top-1 hidden group-hover/shift:inline-flex items-center justify-center text-[7px] bg-white hover:bg-blue-50 text-slate-550 hover:text-blue-600 p-0.5 rounded border border-slate-200 transition-all shadow-3xs z-25 cursor-pointer"
+                                            title="Copiar este Plantão"
+                                          >
+                                            <Copy size={7} />
+                                          </button>
+
+                                          <div className="flex justify-between items-center gap-1">
+                                            <span className="truncate block font-bold text-[9px] text-slate-800 pr-3">
+                                              {ag.nomeProfissional || 'Geral'}
+                                            </span>
+                                            <div className="flex items-center space-x-0.5 shrink-0">
+                                              {(ag.isCuringa || ag.observacao?.includes('CURINGA')) && (
+                                                <span className="px-0.5 py-[0.1px] text-[6px] font-black uppercase bg-amber-200 text-amber-900 rounded-3xs">CUR</span>
+                                              )}
+                                              {isConcluido && <span className="text-[8px]">🔒</span>}
+                                            </div>
+                                          </div>
+                                          <div className="flex justify-between items-center text-[8px] text-slate-500 font-medium">
+                                            <span>{ag.horario || getShiftNameForAgendamento(ag)}</span>
+                                            <span className="truncate max-w-[40px]">{getShiftNameForAgendamento(ag)}</span>
+                                          </div>
+                                        </div>
+                                      );
+                                    })
+                                  ) : (
+                                    <div className="flex-1 flex items-center justify-center text-[10px] text-slate-300 italic select-none">
+                                      -
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
-                      ))}
+                      </div>
 
-                       {(() => {
-                        const gridDays = getDaysInMonthGrid(calendarMonth, calendarYear, brasilApiHolidays);
-                        return gridDays.map((cell, idx) => {
+                      {/* Mobile View: List of Cards */}
+                      <div className="block md:hidden space-y-3">
+                        {currentMonthDays.map((cell) => {
                           const today = new Date();
                           const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
                           const isToday = cell.dateStr === todayStr;
                           const isSpecialHoliday = cell.holiday !== undefined;
-                          
-                          // Filter agendamentos matching date
-                          const dailyAgendamentos = agendamentos.filter(
+                          const dayOfWeek = getDayOfWeekName(cell.dateStr);
+
+                          const dayAgendamentos = agendamentos.filter(
                             (s) => s.data === cell.dateStr && s.idPaciente === (paciente?.id || '')
                           );
-                          // console.log(`Date: ${cell.dateStr}, Agendamentos:`, agendamentos);
 
                           return (
                             <div
-                              key={idx}
+                              key={cell.dateStr}
                               onContextMenu={(e) => {
                                 e.preventDefault();
                                 setContextMenu({
@@ -4396,216 +4579,187 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                   targetDate: cell.dateStr
                                 });
                               }}
-                              className={`min-h-[130px] border-2 p-1 rounded-lg flex flex-col transition-all duration-150 group/cell relative ${
-                                isToday 
-                                  ? 'bg-[#fefcf4] border-amber-300 ring-1 ring-amber-100 shadow-xs' 
-                                  : cell.isCurrentMonth
-                                    ? 'bg-white border-slate-400'
-                                    : 'bg-slate-50/40 opacity-40 border-slate-300'
-                              } ${
-                                isSpecialHoliday && !isToday ? 'bg-rose-50/70 border-rose-200 ring-1 ring-rose-100 shadow-xs' : ''
+                              className={`border rounded-xl p-4 bg-white shadow-xs transition-colors relative ${
+                                isToday ? 'border-amber-400 bg-amber-50/10' : 'border-gray-200'
                               }`}
                             >
-                              <div className="flex items-center justify-between p-0.5">
-                                <div className="flex items-center gap-1 flex-wrap">
-                                  <span className={`text-[9px] font-bold select-none px-1.5 py-0.5 rounded-full ${
-                                    isToday
-                                      ? 'bg-amber-600 text-white font-extrabold flex items-center justify-center'
-                                      : cell.isCurrentMonth ? (isSpecialHoliday ? 'text-rose-900 bg-rose-100/70' : 'text-slate-700') : 'text-slate-300'
-                                  }`}>
-                                    {cell.dayNumber} {isToday && 'Hoje'}
+                              <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-3">
+                                <div className="flex items-center space-x-2">
+                                  <span className={`text-base font-black tracking-tight ${isToday ? 'text-amber-700 font-extrabold' : 'text-slate-800'}`}>
+                                    {cell.dayNumber}
                                   </span>
-                                  {dailyAgendamentos.length > 0 && (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => handleCopyDay(cell.dateStr, dailyAgendamentos, e)}
-                                      className="hidden group-hover/cell:inline-flex items-center text-[8px] bg-slate-100 hover:bg-slate-200 text-slate-650 px-1 py-0.5 rounded border border-slate-250 transition-all font-sans cursor-pointer shrink-0"
-                                      title="Copiar todos os plantões deste dia"
-                                    >
-                                      <Copy size={8} className="mr-0.5" />
-                                      Copiar Dia
-                                    </button>
-                                  )}
-                                  {(copiedShift || (copiedDayShifts && copiedDayShifts.length > 0)) && (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => handlePasteToDate(cell.dateStr, e)}
-                                      className="inline-flex items-center text-[8px] bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold px-1 py-0.5 rounded border border-blue-200 transition-all animate-pulse font-sans cursor-pointer shrink-0"
-                                      title={`Colar aqui (${copiedShift ? 'Plantão de ' + copiedShift.nomeProfissional : copiedDayShifts?.length + ' plantões'})`}
-                                    >
-                                      📋 Colar
-                                    </button>
+                                  <span className={`text-xs font-bold uppercase tracking-wider ${isToday ? 'text-amber-600' : 'text-slate-400'}`}>
+                                    {dayOfWeek}
+                                  </span>
+                                  {isToday && (
+                                    <span className="bg-amber-100 text-amber-800 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded">Hoje</span>
                                   )}
                                 </div>
                                 {isSpecialHoliday && (
-                                  <span className="text-[7.5px] font-bold text-rose-700 bg-rose-100/90 border border-rose-200 px-1 py-0.2 rounded max-w-[65px] truncate select-none" title={cell.holiday}>
+                                  <span className="text-[9px] font-bold text-rose-700 bg-rose-100/60 border border-rose-200 px-2 py-0.5 rounded truncate max-w-[150px]" title={cell.holiday}>
                                     🎉 {cell.holiday}
                                   </span>
                                 )}
                               </div>
 
-                              <div className="space-y-1 mt-1 flex-1 w-full">
-                                {dailyAgendamentos.map((ag) => {
-                                  
-                                  return (
-                                    <div
-                                      key={ag.id}
-                                      onClick={() => {
-                                        setSelectedShiftForDetails(ag);
-                                        setDetailsPlantaoOptionId('principal');
-                                        setDetailsTipoDia(ag.tipoDia || 'Normal');
-                                        setDetailsCuringa(!!ag.isCuringa || ag.observacao === 'CURINGA');
-                                        setDetailsProfName(ag.nomeProfissional);
-                                        setDetailsDate(ag.data);
-                                        setIsEditingDetails(false);
-                                        setIsConfirmingDelete(false);
-                                        setDetailsModalOpen(true);
-                                      }}
-                                      className={`text-[9.5px] p-1.5 border rounded-lg cursor-pointer flex flex-col text-left w-full transition-all duration-150 relative space-y-0.5 hover:-translate-y-0.5 hover:shadow-xs group/shift ${
-                                        ag.status === 'Cancelado'
-                                          ? 'bg-slate-100 border-slate-300 text-slate-500 line-through'
-                                          : ag.status === 'Concluido'
-                                            ? 'bg-indigo-55 bg-indigo-100 border-indigo-200 text-indigo-900 font-bold'
-                                            : 'bg-emerald-55 bg-emerald-50 border-emerald-250 text-emerald-900 font-extrabold hover:bg-emerald-100 hover:border-emerald-300'
-                                      }`}
-                                      onContextMenu={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        setContextMenu({
-                                          x: e.clientX,
-                                          y: e.clientY,
-                                          type: 'shift',
-                                          targetShift: ag
-                                        });
-                                      }}
-                                      title={ag.observacao || 'Inspecionar Plantão'}
-                                    >
-                                        <button
-                                          type="button"
-                                          onClick={(e) => handleCopyShift(ag, e)}
-                                          className="absolute right-1 top-1 hidden group-hover/shift:inline-flex items-center justify-center text-[8px] bg-white hover:bg-blue-50 text-slate-550 hover:text-blue-600 p-0.5 rounded border border-slate-200 transition-all shadow-2xs z-20 cursor-pointer"
-                                          title="Copiar este Plantão"
-                                        >
-                                          <Copy size={9} />
-                                        </button>
+                              <div className="space-y-2">
+                                {dayAgendamentos.length > 0 ? (
+                                  dayAgendamentos.map((ag) => {
+                                    const isCancelled = ag.status === 'Cancelado';
+                                    const isConcluido = ag.status === 'Concluido';
 
-                                        <div className="flex justify-between items-center w-full gap-1">
-                                          {ag.status === 'Concluido' && (
-                                            <span className="font-extrabold shrink-0 text-slate-800">
-                                              🔒
+                                    return (
+                                      <div
+                                        key={ag.id}
+                                        onClick={() => {
+                                          setSelectedShiftForDetails(ag);
+                                          setDetailsPlantaoOptionId('principal');
+                                          setDetailsTipoDia(ag.tipoDia || 'Normal');
+                                          setDetailsCuringa(!!ag.isCuringa || ag.observacao === 'CURINGA');
+                                          setDetailsProfName(ag.nomeProfissional);
+                                          setDetailsDate(ag.data);
+                                          setIsEditingDetails(false);
+                                          setIsConfirmingDelete(false);
+                                          setDetailsModalOpen(true);
+                                        }}
+                                        onContextMenu={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          setContextMenu({
+                                            x: e.clientX,
+                                            y: e.clientY,
+                                            type: 'shift',
+                                            targetShift: ag
+                                          });
+                                        }}
+                                        className={`text-xs p-3 border-2 rounded-xl cursor-pointer flex flex-col text-left w-full transition-all duration-150 relative space-y-2 hover:shadow-xs group/shift ${
+                                          isCancelled
+                                            ? 'bg-slate-100 border-slate-300 text-slate-400 line-through'
+                                            : isConcluido
+                                              ? 'bg-indigo-50 border-indigo-200 text-indigo-950 font-bold'
+                                              : 'bg-emerald-50 border-emerald-200 text-emerald-950 font-bold hover:bg-emerald-100 hover:border-emerald-300'
+                                        }`}
+                                        title={ag.observacao || 'Inspecionar Plantão'}
+                                      >
+                                        <div className="flex justify-between items-start gap-2">
+                                          <div className="flex items-center space-x-2">
+                                            <div className="w-5 h-5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 flex items-center justify-center font-extrabold text-[8px] uppercase">
+                                              {(ag.nomeProfissional || 'Administrativa / Geral').split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                            </div>
+                                            <span className="font-extrabold text-[11px] truncate text-slate-850">
+                                              {ag.nomeProfissional || 'Administrativa / Geral'}
                                             </span>
-                                          )}
-                                          <div className="flex flex-wrap items-center gap-1 justify-end shrink-0">
+                                          </div>
+
+                                          <div className="flex items-center space-x-1 shrink-0">
                                             {(ag.isCuringa || ag.observacao?.includes('CURINGA')) && (
-                                              <span className="px-1 py-[1px] text-[7px] font-black uppercase tracking-wider bg-amber-200 text-amber-900 rounded-sm">Curinga</span>
+                                              <span className="px-1 py-[0.5px] text-[7px] font-black uppercase tracking-wider bg-amber-200 text-amber-900 rounded-xs">Curinga</span>
                                             )}
                                             {(ag.tipoDia === 'Feriado 20%' || ag.tipoDia?.includes('20%') || ag.observacao?.includes('20%')) && (
-                                              <span className="px-1 py-[1px] text-[7px] font-black uppercase tracking-wider bg-blue-200 text-blue-900 rounded-sm">+20%</span>
+                                              <span className="px-1 py-[0.5px] text-[7px] font-black uppercase tracking-wider bg-blue-250 text-white rounded-xs">+20%</span>
                                             )}
                                             {(ag.tipoDia === 'Feriado 50%' || ag.tipoDia?.includes('50%') || ag.observacao?.includes('50%')) && (
-                                              <span className="px-1 py-[1px] text-[7px] font-black uppercase tracking-wider bg-rose-200 text-rose-900 rounded-sm">+50%</span>
+                                              <span className="px-1 py-[0.5px] text-[7px] font-black uppercase tracking-wider bg-rose-250 text-white rounded-xs">+50%</span>
+                                            )}
+                                            {isConcluido && (
+                                              <span className="text-[9px]">🔒</span>
                                             )}
                                           </div>
                                         </div>
-                                        <span 
-                                          className={`truncate block font-medium pr-3 ${ag.considerarFalta ? 'text-slate-500 line-through decoration-red-500 decoration-2 opacity-80' : 'text-slate-950 opacity-90'}`}
-                                          title={ag.considerarFalta ? `Falta registrada: ${ag.motivoFalta || 'Não Informado'}` : undefined}
-                                        >
-                                          {ag.nomeProfissional}
-                                        </span>
-                                        <span className={`text-[8.5px] font-bold block truncate mt-0.5 ${
-                                          ag.status === 'Cancelado'
-                                            ? 'text-slate-400'
-                                            : ag.status === 'Concluido'
-                                              ? 'text-indigo-750/90'
-                                              : 'text-emerald-700/90'
-                                        }`}>
-                                          {getShiftNameForAgendamento(ag)}
-                                        </span>
-                                    </div>
-                                  );
-                                })}
+
+                                        <div className="flex items-center justify-between text-[10px] text-slate-600 font-medium">
+                                          <span>Horário: <strong className="text-slate-800">{ag.horario || getShiftNameForAgendamento(ag)}</strong></span>
+                                          <span className="text-[9px] opacity-75">{getShiftNameForAgendamento(ag)}</span>
+                                        </div>
+                                      </div>
+                                    );
+                                  })
+                                ) : (
+                                  <div className="text-center py-2 text-[10px] text-slate-300 italic">
+                                    Nenhum plantão agendado para este dia.
+                                  </div>
+                                )}
                               </div>
                             </div>
                           );
-                        });
-                      })()}
-                    </div>
-
-                    <div className="flex flex-col sm:flex-row items-center justify-between text-[10px] text-slate-400 bg-slate-50 p-3 rounded-xl gap-2 font-mono">
-                      <span>💡 <strong>Metadados Auditores:</strong> Clique em qualquer plantão no calendário para inspecionar criadores, horas fiscais e logs de modificação.</span>
-                      <div className="flex items-center space-x-2.5 shrink-0 font-bold">
-                        <span className="flex items-center"><span className="w-2 h-2 bg-emerald-400 rounded-full mr-1"></span> Ativo</span>
-                        <span className="flex items-center"><span className="w-2 h-2 bg-indigo-400 rounded-full mr-1"></span> Fechado 🔒</span>
-                        <span className="flex items-center"><span className="w-2 h-2 bg-red-405 bg-red-400 rounded-full mr-1"></span> Cancelado 🔴</span>
+                        })}
                       </div>
-                    </div>
 
-                    {/* Custom Right-Click Context Menu */}
-                    {contextMenu && (
-                      <>
-                        {/* Backdrop overlay to close menu on click */}
-                        <div
-                          className="fixed inset-0 z-40"
-                          onClick={() => setContextMenu(null)}
-                          onContextMenu={(e) => {
-                            e.preventDefault();
-                            setContextMenu(null);
-                          }}
-                        />
-                        <div
-                          className="fixed bg-white border border-slate-200 rounded-xl shadow-xl py-1.5 z-50 min-w-[200px] text-slate-700 animate-in fade-in zoom-in-95 duration-100"
-                          style={{
-                            top: contextMenu.y,
-                            left: contextMenu.x,
-                          }}
-                        >
-                          {contextMenu.type === 'shift' && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setClipboardAgendamento(contextMenu.targetShift || null);
-                                toast.success('Agendamento copiado');
-                                setContextMenu(null);
-                              }}
-                              className="w-full px-3.5 py-2 text-left text-xs font-semibold hover:bg-slate-50 flex items-center space-x-2 text-slate-700 cursor-pointer"
-                            >
-                              <Copy size={13.5} className="text-slate-400" />
-                              <span>Copiar Agendamento</span>
-                            </button>
-                          )}
-
-                          {contextMenu.type === 'day' && (
-                            <>
-                              <div className="px-3.5 py-1.5 border-b border-slate-100 text-[9px] font-black text-slate-400 uppercase tracking-wider select-none font-sans">
-                                Opções de Agendamento
-                              </div>
-                              {clipboardAgendamento ? (
-                                <button
-                                  type="button"
-                                  onClick={async () => {
-                                    if (contextMenu.targetDate) {
-                                      await handlePasteClipboardToDate(contextMenu.targetDate);
-                                    }
-                                    setContextMenu(null);
-                                  }}
-                                  className="w-full px-3.5 py-2 text-left text-xs font-bold hover:bg-emerald-50 hover:text-emerald-700 flex items-center space-x-2 text-emerald-600 cursor-pointer font-sans"
-                                >
-                                  <Check size={13.5} className="text-emerald-500" />
-                                  <span>Colar Agendamento</span>
-                                </button>
-                              ) : (
-                                <div className="px-3.5 py-2 text-left text-xs text-slate-400 italic select-none font-sans">
-                                  Nenhum agendamento copiado
-                                </div>
-                              )}
-                            </>
-                          )}
+                      {/* Legend and tips */}
+                      <div className="flex flex-col sm:flex-row items-center justify-between text-[10px] text-slate-400 bg-slate-50 p-3.5 rounded-xl gap-2 font-mono border border-slate-100">
+                        <span>💡 <strong>Metadados Auditores:</strong> Clique em qualquer plantão no calendário para inspecionar criadores, horas fiscais e logs de modificação.</span>
+                        <div className="flex items-center space-x-2.5 shrink-0 font-extrabold">
+                          <span className="flex items-center"><span className="w-2 h-2 bg-emerald-400 rounded-full mr-1.5 border border-emerald-500/20"></span> Ativo</span>
+                          <span className="flex items-center"><span className="w-2 h-2 bg-indigo-400 rounded-full mr-1.5 border border-indigo-500/20"></span> Fechado 🔒</span>
+                          <span className="flex items-center"><span className="w-2 h-2 bg-red-400 rounded-full mr-1.5 border border-red-500/20"></span> Cancelado 🔴</span>
                         </div>
-                      </>
-                    )}
-                  </div>
-                )}
+                      </div>
+
+                      {/* Context Menus */}
+                      {contextMenu && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-40"
+                            onClick={() => setContextMenu(null)}
+                            onContextMenu={(e) => {
+                              e.preventDefault();
+                              setContextMenu(null);
+                            }}
+                          />
+                          <div
+                            className="fixed bg-white border border-slate-200 rounded-xl shadow-xl py-1.5 z-50 min-w-[200px] text-slate-700 animate-in fade-in zoom-in-95 duration-100"
+                            style={{
+                              top: contextMenu.y,
+                              left: contextMenu.x,
+                            }}
+                          >
+                            {contextMenu.type === 'shift' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setClipboardAgendamento(contextMenu.targetShift || null);
+                                  toast.success('Agendamento copiado');
+                                  setContextMenu(null);
+                                }}
+                                className="w-full px-3.5 py-2 text-left text-xs font-semibold hover:bg-slate-50 flex items-center space-x-2 text-slate-700 cursor-pointer"
+                              >
+                                <Copy size={13.5} className="text-slate-400" />
+                                <span>Copiar Agendamento</span>
+                              </button>
+                            )}
+
+                            {contextMenu.type === 'day' && (
+                              <>
+                                <div className="px-3.5 py-1.5 border-b border-slate-100 text-[9px] font-black text-slate-400 uppercase tracking-wider select-none font-sans">
+                                  Opções de Agendamento
+                                </div>
+                                {clipboardAgendamento ? (
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      if (contextMenu.targetDate) {
+                                        await handlePasteClipboardToDate(contextMenu.targetDate);
+                                      }
+                                      setContextMenu(null);
+                                    }}
+                                    className="w-full px-3.5 py-2 text-left text-xs font-bold hover:bg-emerald-50 hover:text-emerald-700 flex items-center space-x-2 text-emerald-600 cursor-pointer font-sans"
+                                  >
+                                    <Check size={13.5} className="text-emerald-500" />
+                                    <span>Colar Agendamento</span>
+                                  </button>
+                                ) : (
+                                  <div className="px-3.5 py-2 text-left text-xs text-slate-400 italic select-none font-sans">
+                                    Nenhum agendamento copiado
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
  
                  {/* Quick Add block for scales, ONLY displayed if patient exists and is Ativo */}
                 {false && !isNew && !isCurrentlyDeactivated ? (
@@ -5123,31 +5277,52 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             {activeTab === 'auditoria' && (
               <div className="w-full max-w-3xl mx-auto bg-white rounded-2xl shadow-xl border border-gray-200 p-6 md:p-8 mt-6 mb-12 space-y-6 animate-in fade-in-30 slide-in-from-right-3">
                 <h4 className="text-xs font-bold text-slate-700 border-b border-slate-100 pb-2 uppercase tracking-wider italic">HISTÓRICO DE AUDITORIA</h4>
-                <div className="overflow-x-auto rounded-xl border border-slate-100 shadow-xs">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b border-slate-200 bg-slate-50/50">
-                        <th className="text-left py-3.5 px-4 text-slate-500 font-bold uppercase tracking-wider text-[10px]">Data</th>
-                        <th className="text-left py-3.5 px-4 text-slate-500 font-bold uppercase tracking-wider text-[10px]">Usuário</th>
-                        <th className="text-left py-3.5 px-4 text-slate-500 font-bold uppercase tracking-wider text-[10px]">Ação</th>
-                        <th className="text-left py-3.5 px-4 text-slate-500 font-medium uppercase tracking-wider text-[10px]">Descrição</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {logsAuditoria
-                        .filter(log => log.documentId === paciente?.id)
-                        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-                        .map(log => (
-                          <tr key={log.id} className="hover:bg-slate-50/60 transition-all duration-150 align-top">
-                            <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap font-medium">{new Date(log.timestamp).toLocaleString()}</td>
-                            <td className="py-3.5 px-4 text-slate-700 max-w-[130px] truncate leading-relaxed" title={log.userId}>{log.userId || 'Sistema'}</td>
-                            <td className="py-3.5 px-4 text-slate-705 font-bold text-emerald-700 leading-relaxed">{log.action}</td>
-                            <td className="py-3.5 px-4 text-slate-600 leading-relaxed">{log.description}</td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
-                </div>
+                {loadingAuditLogs ? (
+                  <div className="flex justify-center items-center py-10">
+                    <svg className="animate-spin h-6 w-6 text-[#254A34]" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span className="ml-3 text-xs text-slate-500">Carregando logs do paciente...</span>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-slate-100 shadow-xs">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50/50">
+                          <th className="text-left py-3.5 px-4 text-slate-500 font-bold uppercase tracking-wider text-[10px]">Data</th>
+                          <th className="text-left py-3.5 px-4 text-slate-500 font-bold uppercase tracking-wider text-[10px]">Usuário</th>
+                          <th className="text-left py-3.5 px-4 text-slate-500 font-bold uppercase tracking-wider text-[10px]">Ação</th>
+                          <th className="text-left py-3.5 px-4 text-slate-500 font-medium uppercase tracking-wider text-[10px]">Descrição</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {(() => {
+                          const logsToDisplay = localAuditLogs.length > 0 
+                            ? localAuditLogs 
+                            : logsAuditoria.filter(log => log.documentId === paciente?.id).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+                          if (logsToDisplay.length === 0) {
+                            return (
+                              <tr>
+                                <td colSpan={4} className="py-8 text-center text-slate-400">Nenhum log encontrado para este paciente.</td>
+                              </tr>
+                            );
+                          }
+
+                          return logsToDisplay.map(log => (
+                            <tr key={log.id} className="hover:bg-slate-50/60 transition-all duration-150 align-top">
+                              <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap font-medium">{new Date(log.timestamp).toLocaleString()}</td>
+                              <td className="py-3.5 px-4 text-slate-700 max-w-[130px] truncate leading-relaxed" title={log.userId}>{log.userId || 'Sistema'}</td>
+                              <td className="py-3.5 px-4 text-slate-705 font-bold text-emerald-700 leading-relaxed">{log.action}</td>
+                              <td className="py-3.5 px-4 text-slate-600 leading-relaxed">{log.description}</td>
+                            </tr>
+                          ));
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
 

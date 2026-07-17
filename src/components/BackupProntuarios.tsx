@@ -903,7 +903,7 @@ export const BackupProntuarios: React.FC = () => {
                         <div className="flex items-center gap-1.5 transition-all animate-in fade-in zoom-in-95 bg-red-50 p-1 rounded-lg border border-red-100">
                           <span className="text-[9px] text-red-600 font-bold uppercase select-none px-1">Excluir?</span>
                           <button
-                            type="button; e.stopPropagation();"
+                            type="button"
                             onClick={async (e) => {
                               e.stopPropagation();
                               await handleDeleteBackup(bk.id);
