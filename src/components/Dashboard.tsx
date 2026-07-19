@@ -10,7 +10,7 @@ export const Dashboard: React.FC<{
   setActiveTab: (tab: string, extraOptions?: { financeiroSubTab?: 'folhas' | 'debitos' }) => void;
   onSelectPatientRedirect?: (paciente: any) => void;
 }> = ({ setActiveTab, onSelectPatientRedirect }) => {
-  const { pacientes, profissionais, updatePaciente } = useFirebase();
+  const { pacientes, profissionais, updatePaciente, debitosProfissionais, isQuotaExceeded } = useFirebase();
   const [debitosDoDia, setDebitosDoDia] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -162,6 +162,24 @@ export const Dashboard: React.FC<{
   };
 
   useEffect(() => {
+    if (isQuotaExceeded) {
+      const list: any[] = [];
+      const today = new Date();
+      (debitosProfissionais || []).forEach((d) => {
+        if (shouldShowDebit(d, today)) {
+          list.push(d);
+        }
+      });
+      list.sort((a, b) => {
+        const tA = getDebitDateObj(a.data)?.getTime() || 0;
+        const tB = getDebitDateObj(b.data)?.getTime() || 0;
+        return tB - tA;
+      });
+      setDebitosDoDia(list);
+      setLoading(false);
+      return;
+    }
+
     const q = query(collection(db, 'debitos_profissionais'));
 
     const unsub = onSnapshot(q, (snapshot) => {
@@ -185,12 +203,32 @@ export const Dashboard: React.FC<{
       setDebitosDoDia(list);
       setLoading(false);
     }, (error) => {
-      console.error("Erro na query de débitos do dia:", error);
+      const errStr = String(error).toLowerCase();
+      const isQuota = errStr.includes('quota') || errStr.includes('exhausted') || errStr.includes('limit exceeded') || errStr.includes('limit_exceeded') || errStr.includes('resource-exhausted');
+      if (isQuota) {
+        console.warn("[Dashboard Quota Fallback] Cota do Firebase excedida na query de débitos do dia. Alternando para dados locais.");
+        // Process from debitosProfissionais
+        const list: any[] = [];
+        const today = new Date();
+        (debitosProfissionais || []).forEach((d) => {
+          if (shouldShowDebit(d, today)) {
+            list.push(d);
+          }
+        });
+        list.sort((a, b) => {
+          const tA = getDebitDateObj(a.data)?.getTime() || 0;
+          const tB = getDebitDateObj(b.data)?.getTime() || 0;
+          return tB - tA;
+        });
+        setDebitosDoDia(list);
+      } else {
+        console.error("Erro na query de débitos do dia:", error);
+      }
       setLoading(false);
     });
 
     return unsub;
-  }, []);
+  }, [isQuotaExceeded, debitosProfissionais]);
 
   const getTargetReadjustmentMonthYear = (): string => {
     const today = new Date();

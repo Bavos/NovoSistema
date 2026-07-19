@@ -26,7 +26,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
   initialSelectedProfId,
   clearInitialSelectedProfId
 }) => {
-  const { profissionais, pacientes, addProfissional, updateProfissional, deleteProfissional, uploadLogo, uploadProfissionalFoto, uploadPdf, userRole, loading: firebaseLoading } = useFirebase();
+  const { profissionais, pacientes, addProfissional, updateProfissional, deleteProfissional, uploadLogo, uploadProfissionalFoto, uploadPdf, userRole, loading: firebaseLoading, agendamentos, isQuotaExceeded } = useFirebase();
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -249,6 +249,24 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
   useEffect(() => {
     if (editingProf && activeTab === 'agenda') {
       setLoadingAgenda(true);
+
+      if (isQuotaExceeded) {
+        const agList = (agendamentos || []).filter(a => a.idProfissional === editingProf.id);
+        agList.sort((a, b) => {
+          const dateA = a.data || '';
+          const dateB = b.data || '';
+          if (dateA !== dateB) {
+            return dateB.localeCompare(dateA);
+          }
+          const timeA = a.horario || '';
+          const timeB = b.horario || '';
+          return timeB.localeCompare(timeA);
+        });
+        setAgendamentosProf(agList);
+        setLoadingAgenda(false);
+        return;
+      }
+
       const q = query(
         collection(db, 'agendamentos'),
         where('idProfissional', '==', editingProf.id),
@@ -302,10 +320,15 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
       setAgendamentosProf([]);
       setLoadingAgenda(false);
     }
-  }, [editingProf, activeTab]);
+  }, [editingProf, activeTab, isQuotaExceeded, agendamentos]);
 
   useEffect(() => {
     if (editingProf && activeTab === 'ocorrencias') {
+      if (isQuotaExceeded) {
+        setOcorrencias([]);
+        return;
+      }
+
       const q = query(
         collection(db, 'profissionais', editingProf.id, 'ocorrencias'),
         orderBy('data', 'desc')
@@ -327,7 +350,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
       setTermoBusca('');
       setMesFiltro('Todos');
     }
-  }, [editingProf, activeTab]);
+  }, [editingProf, activeTab, isQuotaExceeded]);
 
   const [formData, setFormData] = useState({
     nome: '',

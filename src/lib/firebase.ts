@@ -20,13 +20,13 @@ const firebaseConfig = {
   messagingSenderId: getEnvVal(import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID, staticConfig.messagingSenderId),
   appId: getEnvVal(import.meta.env.VITE_FIREBASE_APP_ID, staticConfig.appId),
   measurementId: getEnvVal(import.meta.env.VITE_FIREBASE_MEASUREMENT_ID, staticConfig.measurementId),
-  firestoreDatabaseId: getEnvVal(import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID, "ai-studio-ec969b01-95ac-467f-b5b7-48efe433d663"),
+  firestoreDatabaseId: "ai-studio-ec969b01-95ac-467f-b5b7-48efe433d663",
 };
 
 const app = initializeApp(firebaseConfig);
 
 // Apontando explicitamente para o banco nomeado
-export const db = getFirestore(app, "ai-studio-ec969b01-95ac-467f-b5b7-48efe433d663");
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth();
 export const storage = getStorage(app);
 
@@ -84,7 +84,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     errMessage.toLowerCase().includes('insufficient') ||
     (error && typeof error === 'object' && 'code' in error && String((error as any).code).toLowerCase().includes('permission'));
 
-  if (isPermissionErr) {
+  if (isPermissionErr && operationType !== OperationType.GET) {
     throw new Error(JSON.stringify(errInfo));
   }
 }

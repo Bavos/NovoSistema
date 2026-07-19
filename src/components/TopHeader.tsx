@@ -24,17 +24,23 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   const [showNotifications, setShowNotifications] = useState(false);
   const [empresa, setEmpresa] = useState<any>(null);
 
-  const { user, userRole, usuariosSistema, logout } = useFirebase();
+  const { user, userRole, usuariosSistema, logout, isQuotaExceeded } = useFirebase();
 
   useEffect(() => {
+    if (!user || isQuotaExceeded) {
+      setEmpresa(null);
+      return;
+    }
     const docRef = doc(db, 'configuracoes_empresa', 'empresa');
     const unsub = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         setEmpresa(docSnap.data());
       }
+    }, (error) => {
+      console.warn("TopHeader company settings subscription failed:", error);
     });
     return unsub;
-  }, []);
+  }, [user, isQuotaExceeded]);
 
   const currentUserProfile = (usuariosSistema || []).find(u => {
     const uEmail = u?.email;

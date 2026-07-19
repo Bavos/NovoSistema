@@ -57,7 +57,7 @@ function DashboardContent() {
   const [initialSelectedPatient, setInitialSelectedPatient] = useState<any>(null);
   const [initialSelectedProfId, setInitialSelectedProfId] = useState<string>('');
 
-  const { pacientes, loading, userRole, user, usuariosSistema } = useFirebase();
+  const { pacientes, profissionais, loading, userRole, user, usuariosSistema, isQuotaExceeded, seedDatabase } = useFirebase();
 
   const currentUserProfile = (usuariosSistema || []).find(u => {
     const uEmail = u?.email;
@@ -181,6 +181,28 @@ function DashboardContent() {
         </div>
       }
     >
+      {pacientes.length === 0 && profissionais.length === 0 && !loading && !isQuotaExceeded && (
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4 rounded-xl shadow-lg border border-indigo-100 flex flex-col md:flex-row items-center justify-between gap-3 mb-6 animate-in fade-in duration-300" id="firestore-empty-seed-banner">
+          <div className="space-y-1">
+            <h3 className="text-sm font-extrabold flex items-center gap-2">
+              <span>✨ Banco de dados Firestore Vazio</span>
+            </h3>
+            <p className="text-xs text-indigo-100">
+              Seu banco de dados do Firestore está conectado, mas atualmente não contém dados de demonstração. Deseja popular o banco agora com pacientes, profissionais e plantões de teste?
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              if (seedDatabase) {
+                seedDatabase();
+              }
+            }}
+            className="bg-white text-indigo-600 hover:bg-indigo-50 px-4 py-2 rounded-lg font-bold text-xs shadow-md transition-all active:scale-95 shrink-0 cursor-pointer"
+          >
+            Popular Banco de Dados
+          </button>
+        </div>
+      )}
       <AnimatePresence mode="wait">
         <motion.div
           key={activeSidebarTab}
