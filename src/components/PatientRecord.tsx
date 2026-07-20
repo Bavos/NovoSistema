@@ -4534,7 +4534,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                           </div>
                                         </div>
                                         <div className="flex justify-between items-center text-[8px] text-slate-500 font-medium">
-                                          <span>{ag.horario || getShiftNameForAgendamento(ag)}</span>
+                                          <span>{(ag as any).tipoPlantao || (ag as any).turno || (ag as any).tipo || (ag as any).tipoEscala || getShiftNameForAgendamento(ag)}</span>
                                           <span className="truncate max-w-[40px]">{getShiftNameForAgendamento(ag)}</span>
                                         </div>
                                       </div>
