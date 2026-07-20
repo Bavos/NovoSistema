@@ -4413,26 +4413,31 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         </div>
                       </div>
 
-                      {/* Desktop View: Classic Grade (Grid Cols-7) */}
-                      <div className="hidden md:block">
-                        <div className="grid grid-cols-7 gap-px bg-gray-200 border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-                          {/* Weekdays Header */}
-                          {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day) => (
-                            <div key={day} className="bg-slate-50 py-2.5 text-center text-xs font-black text-slate-500 uppercase tracking-wider border-b border-gray-200">
-                              {day}
+                      {/* Contêiner Externo (Proteção Mobile) */}
+                      <div className="w-full overflow-x-auto shadow-sm">
+                        {/* A Grade (O Calendário em si) */}
+                        <div className="min-w-[700px] lg:min-w-0 w-full grid grid-cols-7 gap-px bg-gray-300 border border-gray-300">
+                          {/* Cabeçalho (Dias da Semana) */}
+                          {[
+                            { label: 'Domingo', color: 'bg-rose-500' },
+                            { label: 'Segunda', color: 'bg-orange-500' },
+                            { label: 'Terça', color: 'bg-sky-500' },
+                            { label: 'Quarta', color: 'bg-green-600' },
+                            { label: 'Quinta', color: 'bg-amber-500' },
+                            { label: 'Sexta', color: 'bg-blue-600' },
+                            { label: 'Sábado', color: 'bg-lime-600' }
+                          ].map((day) => (
+                            <div key={day.label} className={`p-3 text-center text-white font-bold ${day.color}`}>
+                              {day.label}
                             </div>
                           ))}
 
-                          {/* Days Cells */}
+                          {/* Células dos Dias (Os Quadrados) */}
                           {gridDays.map((cell) => {
                             const today = new Date();
                             const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
                             const isToday = cell.dateStr === todayStr;
                             const isSpecialHoliday = cell.holiday !== undefined;
-                            
-                            const cellDateObj = new Date(cell.dateStr + 'T12:00:00');
-                            const dayOfWeekNum = cellDateObj.getDay();
-                            const isWeekend = dayOfWeekNum === 0 || dayOfWeekNum === 6;
 
                             // Filter agendamentos for this date and patient
                             const dayAgendamentos = agendamentos.filter(
@@ -4451,167 +4456,33 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                     targetDate: cell.dateStr
                                   });
                                 }}
-                                className={`min-h-[120px] border border-gray-200 p-2 flex flex-col justify-between transition-all relative ${
-                                  isWeekend ? 'bg-gray-50' : 'bg-white'
-                                } ${!cell.isCurrentMonth ? 'opacity-40' : ''}`}
+                                className={`bg-white min-h-[140px] p-2 flex flex-col hover:bg-gray-50 transition-colors ${!cell.isCurrentMonth ? 'opacity-40' : ''}`}
                               >
-                                {/* Day Number Header */}
-                                <div className="flex items-center justify-between mb-1.5">
-                                  <span className={`text-xs font-black ${
-                                    isToday
-                                      ? 'text-amber-700 font-extrabold bg-amber-100/80 px-1.5 py-0.5 rounded-full'
-                                      : cell.isCurrentMonth
-                                        ? 'text-slate-800'
-                                        : 'text-slate-400'
-                                  }`}>
-                                    {cell.dayNumber}
-                                  </span>
-                                  {isSpecialHoliday && (
-                                    <span className="text-[8px] font-bold text-rose-700 bg-rose-50 border border-rose-100 px-1 py-0.2 rounded truncate max-w-[65px]" title={cell.holiday}>
+                                {/* Número do Dia isolado no topo à direita com holiday se houver */}
+                                <div className="flex items-center justify-between">
+                                  {isSpecialHoliday ? (
+                                    <span className="text-[8px] font-bold text-rose-700 bg-rose-50 border border-rose-100 px-1 py-0.2 rounded truncate max-w-[75px]" title={cell.holiday}>
                                       🎉 {cell.holiday}
                                     </span>
-                                  )}
-                                </div>
-
-                                {/* Shift Cards (Compact text-xs) */}
-                                <div className="flex-1 flex flex-col gap-1 overflow-y-auto max-h-[120px]">
-                                  {dayAgendamentos.length > 0 ? (
-                                    dayAgendamentos.map((ag) => {
-                                      const isCancelled = ag.status === 'Cancelado';
-                                      const isConcluido = ag.status === 'Concluido';
-
-                                      return (
-                                        <div
-                                          key={ag.id}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setSelectedShiftForDetails(ag);
-                                            setDetailsPlantaoOptionId('principal');
-                                            setDetailsTipoDia(ag.tipoDia || 'Normal');
-                                            setDetailsCuringa(!!ag.isCuringa || ag.observacao === 'CURINGA');
-                                            setDetailsProfName(ag.nomeProfissional);
-                                            setDetailsDate(ag.data);
-                                            setIsEditingDetails(false);
-                                            setIsConfirmingDelete(false);
-                                            setDetailsModalOpen(true);
-                                          }}
-                                          onContextMenu={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            setContextMenu({
-                                              x: e.clientX,
-                                              y: e.clientY,
-                                              type: 'shift',
-                                              targetShift: ag
-                                            });
-                                          }}
-                                          className={`text-[10px] p-1.5 border rounded-lg cursor-pointer flex flex-col text-left w-full transition-all duration-150 relative space-y-0.5 hover:-translate-y-0.5 hover:shadow-2xs group/shift ${
-                                            isCancelled
-                                              ? 'bg-slate-100 border-slate-200 text-slate-400 line-through'
-                                              : isConcluido
-                                                ? 'bg-indigo-50 border-indigo-200 text-indigo-950 font-bold'
-                                                : 'bg-emerald-50 border-emerald-200 text-emerald-950 font-bold hover:bg-emerald-100 hover:border-emerald-300'
-                                          }`}
-                                          title={ag.observacao || 'Inspecionar Plantão'}
-                                        >
-                                          {/* Copy Shift Button */}
-                                          <button
-                                            type="button"
-                                            onClick={(e) => handleCopyShift(ag, e)}
-                                            className="absolute right-1 top-1 hidden group-hover/shift:inline-flex items-center justify-center text-[7px] bg-white hover:bg-blue-50 text-slate-550 hover:text-blue-600 p-0.5 rounded border border-slate-200 transition-all shadow-3xs z-25 cursor-pointer"
-                                            title="Copiar este Plantão"
-                                          >
-                                            <Copy size={7} />
-                                          </button>
-
-                                          <div className="flex justify-between items-center gap-1">
-                                            <span className="truncate block font-bold text-[9px] text-slate-800 pr-3">
-                                              {ag.nomeProfissional || 'Geral'}
-                                            </span>
-                                            <div className="flex items-center space-x-0.5 shrink-0">
-                                              {(ag.isCuringa || ag.observacao?.includes('CURINGA')) && (
-                                                <span className="px-0.5 py-[0.1px] text-[6px] font-black uppercase bg-amber-200 text-amber-900 rounded-3xs">CUR</span>
-                                              )}
-                                              {isConcluido && <span className="text-[8px]">🔒</span>}
-                                            </div>
-                                          </div>
-                                          <div className="flex justify-between items-center text-[8px] text-slate-500 font-medium">
-                                            <span>{ag.horario || getShiftNameForAgendamento(ag)}</span>
-                                            <span className="truncate max-w-[40px]">{getShiftNameForAgendamento(ag)}</span>
-                                          </div>
-                                        </div>
-                                      );
-                                    })
                                   ) : (
-                                    <div className="flex-1 flex items-center justify-center text-[10px] text-slate-300 italic select-none">
-                                      -
-                                    </div>
+                                    <div />
                                   )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* Mobile View: List of Cards */}
-                      <div className="block md:hidden space-y-3">
-                        {currentMonthDays.map((cell) => {
-                          const today = new Date();
-                          const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-                          const isToday = cell.dateStr === todayStr;
-                          const isSpecialHoliday = cell.holiday !== undefined;
-                          const dayOfWeek = getDayOfWeekName(cell.dateStr);
-
-                          const dayAgendamentos = agendamentos.filter(
-                            (s) => s.data === cell.dateStr && s.idPaciente === (paciente?.id || '')
-                          );
-
-                          return (
-                            <div
-                              key={cell.dateStr}
-                              onContextMenu={(e) => {
-                                e.preventDefault();
-                                setContextMenu({
-                                  x: e.clientX,
-                                  y: e.clientY,
-                                  type: 'day',
-                                  targetDate: cell.dateStr
-                                });
-                              }}
-                              className={`border rounded-xl p-4 bg-white shadow-xs transition-colors relative ${
-                                isToday ? 'border-amber-400 bg-amber-50/10' : 'border-gray-200'
-                              }`}
-                            >
-                              <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-3">
-                                <div className="flex items-center space-x-2">
-                                  <span className={`text-base font-black tracking-tight ${isToday ? 'text-amber-700 font-extrabold' : 'text-slate-800'}`}>
+                                  <span className={`text-right text-sm font-semibold ${isToday ? 'text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full font-black' : 'text-gray-700'}`}>
                                     {cell.dayNumber}
                                   </span>
-                                  <span className={`text-xs font-bold uppercase tracking-wider ${isToday ? 'text-amber-600' : 'text-slate-400'}`}>
-                                    {dayOfWeek}
-                                  </span>
-                                  {isToday && (
-                                    <span className="bg-amber-100 text-amber-800 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded">Hoje</span>
-                                  )}
                                 </div>
-                                {isSpecialHoliday && (
-                                  <span className="text-[9px] font-bold text-rose-700 bg-rose-100/60 border border-rose-200 px-2 py-0.5 rounded truncate max-w-[150px]" title={cell.holiday}>
-                                    🎉 {cell.holiday}
-                                  </span>
-                                )}
-                              </div>
 
-                              <div className="space-y-2">
-                                {dayAgendamentos.length > 0 ? (
-                                  dayAgendamentos.map((ag) => {
+                                {/* Área de Plantões/Consultas */}
+                                <div className="flex-1 mt-2 space-y-1 overflow-y-auto">
+                                  {dayAgendamentos.map((ag) => {
                                     const isCancelled = ag.status === 'Cancelado';
                                     const isConcluido = ag.status === 'Concluido';
 
                                     return (
                                       <div
                                         key={ag.id}
-                                        onClick={() => {
+                                        onClick={(e) => {
+                                          e.stopPropagation();
                                           setSelectedShiftForDetails(ag);
                                           setDetailsPlantaoOptionId('principal');
                                           setDetailsTipoDia(ag.tipoDia || 'Normal');
@@ -4632,57 +4503,48 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                             targetShift: ag
                                           });
                                         }}
-                                        className={`text-xs p-3 border-2 rounded-xl cursor-pointer flex flex-col text-left w-full transition-all duration-150 relative space-y-2 hover:shadow-xs group/shift ${
+                                        className={`text-[10px] p-1.5 border rounded-lg cursor-pointer flex flex-col text-left w-full transition-all duration-150 relative space-y-0.5 hover:-translate-y-0.5 hover:shadow-2xs group/shift ${
                                           isCancelled
-                                            ? 'bg-slate-100 border-slate-300 text-slate-400 line-through'
+                                            ? 'bg-slate-100 border-slate-200 text-slate-400 line-through'
                                             : isConcluido
                                               ? 'bg-indigo-50 border-indigo-200 text-indigo-950 font-bold'
                                               : 'bg-emerald-50 border-emerald-200 text-emerald-950 font-bold hover:bg-emerald-100 hover:border-emerald-300'
                                         }`}
                                         title={ag.observacao || 'Inspecionar Plantão'}
                                       >
-                                        <div className="flex justify-between items-start gap-2">
-                                          <div className="flex items-center space-x-2">
-                                            <div className="w-5 h-5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 flex items-center justify-center font-extrabold text-[8px] uppercase">
-                                              {(ag.nomeProfissional || 'Administrativa / Geral').split(' ').map(n => n[0]).join('').slice(0, 2)}
-                                            </div>
-                                            <span className="font-extrabold text-[11px] truncate text-slate-850">
-                                              {ag.nomeProfissional || 'Administrativa / Geral'}
-                                            </span>
-                                          </div>
+                                        {/* Copy Shift Button */}
+                                        <button
+                                          type="button"
+                                          onClick={(e) => handleCopyShift(ag, e)}
+                                          className="absolute right-1 top-1 hidden group-hover/shift:inline-flex items-center justify-center text-[7px] bg-white hover:bg-blue-50 text-slate-550 hover:text-blue-600 p-0.5 rounded border border-slate-200 transition-all shadow-3xs z-25 cursor-pointer"
+                                          title="Copiar este Plantão"
+                                        >
+                                          <Copy size={7} />
+                                        </button>
 
-                                          <div className="flex items-center space-x-1 shrink-0">
+                                        <div className="flex justify-between items-center gap-1">
+                                          <span className="truncate block font-bold text-[9px] text-slate-800 pr-3">
+                                            {ag.nomeProfissional || 'Geral'}
+                                          </span>
+                                          <div className="flex items-center space-x-0.5 shrink-0">
                                             {(ag.isCuringa || ag.observacao?.includes('CURINGA')) && (
-                                              <span className="px-1 py-[0.5px] text-[7px] font-black uppercase tracking-wider bg-amber-200 text-amber-900 rounded-xs">Curinga</span>
+                                              <span className="px-0.5 py-[0.1px] text-[6px] font-black uppercase bg-amber-200 text-amber-900 rounded-3xs font-sans">CUR</span>
                                             )}
-                                            {(ag.tipoDia === 'Feriado 20%' || ag.tipoDia?.includes('20%') || ag.observacao?.includes('20%')) && (
-                                              <span className="px-1 py-[0.5px] text-[7px] font-black uppercase tracking-wider bg-blue-250 text-white rounded-xs">+20%</span>
-                                            )}
-                                            {(ag.tipoDia === 'Feriado 50%' || ag.tipoDia?.includes('50%') || ag.observacao?.includes('50%')) && (
-                                              <span className="px-1 py-[0.5px] text-[7px] font-black uppercase tracking-wider bg-rose-250 text-white rounded-xs">+50%</span>
-                                            )}
-                                            {isConcluido && (
-                                              <span className="text-[9px]">🔒</span>
-                                            )}
+                                            {isConcluido && <span className="text-[8px]">🔒</span>}
                                           </div>
                                         </div>
-
-                                        <div className="flex items-center justify-between text-[10px] text-slate-600 font-medium">
-                                          <span>Horário: <strong className="text-slate-800">{ag.horario || getShiftNameForAgendamento(ag)}</strong></span>
-                                          <span className="text-[9px] opacity-75">{getShiftNameForAgendamento(ag)}</span>
+                                        <div className="flex justify-between items-center text-[8px] text-slate-500 font-medium">
+                                          <span>{ag.horario || getShiftNameForAgendamento(ag)}</span>
+                                          <span className="truncate max-w-[40px]">{getShiftNameForAgendamento(ag)}</span>
                                         </div>
                                       </div>
                                     );
-                                  })
-                                ) : (
-                                  <div className="text-center py-2 text-[10px] text-slate-300 italic">
-                                    Nenhum plantão agendado para este dia.
-                                  </div>
-                                )}
+                                  })}
+                                </div>
                               </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
                       </div>
 
                       {/* Legend and tips */}
