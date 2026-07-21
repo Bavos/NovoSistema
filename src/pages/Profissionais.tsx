@@ -1638,20 +1638,28 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
 
     useEffect(() => {
       const fetchConfig = async () => {
+        if (isQuotaExceeded) {
+          setLoadingConfig(false);
+          return;
+        }
         try {
           const docRef = doc(db, 'configuracoes_empresa', 'empresa');
           const docSnap = await getDoc(docRef);
           if (docSnap.exists()) {
             setConfig(docSnap.data() as any);
           }
-        } catch (err) {
-          console.error("Erro ao buscar configurações:", err);
+        } catch (err: any) {
+          if (err?.message?.includes('Quota') || err?.code === 'resource-exhausted') {
+            console.warn("Quota limit exceeded when fetching configurações (ignorado).");
+          } else {
+            console.error("Erro ao buscar configurações:", err);
+          }
         } finally {
           setLoadingConfig(false);
         }
       };
       fetchConfig();
-    }, []);
+    }, [isQuotaExceeded]);
 
     // Load and convert both Logo and Profile photo to Base64 strings to preempt CORS exceptions in html2canvas
     useEffect(() => {

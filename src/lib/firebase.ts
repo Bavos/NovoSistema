@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import staticConfig from '../../firebase-applet-config.json';
 
@@ -25,8 +25,10 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-// Apontando explicitamente para o banco nomeado
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+// Apontando explicitamente para o banco nomeado e forçando long-polling para evitar bloqueios de rede no contêiner
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+}, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth();
 export const storage = getStorage(app);
 

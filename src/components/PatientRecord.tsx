@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { updateDoc, doc, getDoc, addDoc, collection, serverTimestamp, getDocs, query, where, deleteDoc, limit } from 'firebase/firestore';
+import { updateDoc, doc, getDoc, addDoc, collection, serverTimestamp, getDocs, query, where, deleteDoc, limit, writeBatch } from 'firebase/firestore';
 import { fetchCep, fetchBanks, getHolidays } from '../lib/brasilApi';
 import { Paciente, Plantao, CancelingReason, EscalacaoPlano, Agendamento } from '../types';
 import { useFirebase } from '../context/FirebaseContext';
@@ -43,7 +43,8 @@ import {
   Receipt,
   Copy,
   MessageSquare,
-  Phone
+  Phone,
+  Download
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { GlossyButton } from './GlossyButton';
@@ -158,12 +159,16 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     profissionais,
     agendamentos,
     addAgendamento,
+    addAgendamentosBatch,
     updateAgendamento,
     deleteAgendamento,
+    deleteAgendamentosBatch,
     userRole,
     logsAuditoria,
     faturasPacientes,
-    addAuditLog
+    addAuditLog,
+    addFaturaPaciente,
+    isQuotaExceeded
   } = useFirebase();
 
   const handleCopyToClipboard = async (text: string) => {
@@ -211,13 +216,19 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         return;
       }
 
-      const newAg = {
+      const payload: any = {
         ...rest,
         data: targetDateStr,
-        status: clipboardAgendamento.status || ('Aberta' as const),
+        status: clipboardAgendamento.status || 'Aberta',
+        idPaciente: paciente?.id || rest.idPaciente
       };
+      Object.keys(payload).forEach(key => {
+        if (payload[key] === undefined) {
+          delete payload[key];
+        }
+      });
+      await addAgendamentosBatch([payload]);
 
-      await addAgendamento(newAg);
       toast.success('Agendamento colado com sucesso');
     } catch (error) {
       console.error('Erro ao colar agendamento:', error);
@@ -251,32 +262,50 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     }
 
     try {
+      const payloads: any[] = [];
+
       if (copiedShift) {
         const { id, data, ...rest } = copiedShift;
-        const newAg = {
+        const payload: any = {
           ...rest,
           data: targetDateStr,
-          status: 'Aberta' as const
+          status: 'Aberta',
+          idPaciente: paciente?.id || rest.idPaciente
         };
-        await addAgendamento(newAg);
-        toast.success(`Plantão colado com sucesso no dia ${targetDateStr.split('-').reverse().join('/')}!`);
+        Object.keys(payload).forEach(key => {
+          if (payload[key] === undefined) {
+            delete payload[key];
+          }
+        });
+        payloads.push(payload);
       } else if (copiedDayShifts && copiedDayShifts.length > 0) {
         for (const shift of copiedDayShifts) {
           const { id, data, ...rest } = shift;
-          const newAg = {
+          const payload: any = {
             ...rest,
             data: targetDateStr,
-            status: 'Aberta' as const
+            status: 'Aberta',
+            idPaciente: paciente?.id || rest.idPaciente
           };
-          await addAgendamento(newAg);
+          Object.keys(payload).forEach(key => {
+            if (payload[key] === undefined) {
+              delete payload[key];
+            }
+          });
+          payloads.push(payload);
         }
-        toast.success(`${copiedDayShifts.length} plantão(ões) colado(s) com sucesso no dia ${targetDateStr.split('-').reverse().join('/')}!`);
       } else {
         toast.error('Nenhum plantão copiado.');
+        return;
+      }
+
+      if (payloads.length > 0) {
+        await addAgendamentosBatch(payloads);
+        toast.success(`${payloads.length} plantão(ões) colado(s) com sucesso no dia ${targetDateStr.split('-').reverse().join('/')}!`);
       }
     } catch (err) {
       console.error('Erro ao colar plantão:', err);
-      toast.error('Erro ao colar os plantões.');
+      toast.error('Erro ao colar plantão');
     }
   };
 
@@ -294,6 +323,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   };
 
   // Basic layout tab states
+  const [faturaParaBaixar, setFaturaParaBaixar] = useState<any | null>(null);
+  const [empresaInfo, setEmpresaInfo] = useState<any>(null);
+  const tempFaturaRef = useRef<HTMLDivElement>(null);
+
   const [activeTab, setActiveTab] = useState<'geral' | 'endereco' | 'medico' | 'plano' | 'agendamento' | 'ocorrencias' | 'auditoria'>('geral');
   const [alertDeactivateOpen, setAlertDeactivateOpen] = useState(false);
   const [deactivateReasonInput, setDeactivateReasonInput] = useState('');
@@ -1165,27 +1198,34 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     let isMounted = true;
     if (activeTab === 'auditoria' && paciente?.id) {
       setLoadingAuditLogs(true);
-      const q = query(
-        collection(db, 'LogsAuditoria'),
-        where('documentId', '==', paciente.id),
-        limit(100)
-      );
-      getDocs(q).then((snap) => {
-        if (!isMounted) return;
-        const list: any[] = [];
-        snap.forEach((d) => list.push({ ...d.data(), id: d.id }));
-        list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-        setLocalAuditLogs(list);
-      }).catch((err) => {
-        console.error("Error loading patient audit logs on-demand:", err);
-      }).finally(() => {
-        if (isMounted) setLoadingAuditLogs(false);
-      });
+      if (isQuotaExceeded) {
+        const list = logsAuditoria.filter(log => log.documentId === paciente.id);
+        const sorted = [...list].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        setLocalAuditLogs(sorted);
+        setLoadingAuditLogs(false);
+      } else {
+        const q = query(
+          collection(db, 'LogsAuditoria'),
+          where('documentId', '==', paciente.id),
+          limit(100)
+        );
+        getDocs(q).then((snap) => {
+          if (!isMounted) return;
+          const list: any[] = [];
+          snap.forEach((d) => list.push({ ...d.data(), id: d.id }));
+          list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+          setLocalAuditLogs(list);
+        }).catch((err) => {
+          console.error("Error loading patient audit logs on-demand:", err);
+        }).finally(() => {
+          if (isMounted) setLoadingAuditLogs(false);
+        });
+      }
     }
     return () => {
       isMounted = false;
     };
-  }, [activeTab, paciente?.id]);
+  }, [activeTab, paciente?.id, isQuotaExceeded, logsAuditoria]);
 
   // Dynamic holidays fetched from BrasilAPI + custom RJ municipal/state holidays
   const [brasilApiHolidays, setBrasilApiHolidays] = useState<Record<string, string>>({});
@@ -1491,19 +1531,33 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     const cpfOptions = [cleanCpfVal, formattedCpfVal].filter(Boolean);
 
     try {
-      const pacQuery = query(collection(db, 'pacientes'), where('cpf', 'in', cpfOptions));
-      const pacSnap = await getDocs(pacQuery);
-      const duplicatePac = pacSnap.docs.find(doc => isNew || doc.id !== paciente?.id);
-      if (duplicatePac) {
-        toast.error('Falha no cadastro: Este CPF já se encontra registrado em nosso sistema.');
-        return;
-      }
+      if (isQuotaExceeded) {
+        const duplicatePac = pacientes.find(p => p.cpf && cpfOptions.includes(p.cpf) && (isNew || p.id !== paciente?.id));
+        if (duplicatePac) {
+          toast.error('Falha no cadastro: Este CPF já se encontra registrado em nosso sistema.');
+          return;
+        }
 
-      const profQuery = query(collection(db, 'profissionais'), where('cpf', 'in', cpfOptions));
-      const profSnap = await getDocs(profQuery);
-      if (!profSnap.empty) {
-        toast.error('Falha no cadastro: Este CPF já se encontra registrado em nosso sistema.');
-        return;
+        const duplicateProf = profissionais.find(p => p.cpf && cpfOptions.includes(p.cpf));
+        if (duplicateProf) {
+          toast.error('Falha no cadastro: Este CPF já se encontra registrado em nosso sistema.');
+          return;
+        }
+      } else {
+        const pacQuery = query(collection(db, 'pacientes'), where('cpf', 'in', cpfOptions));
+        const pacSnap = await getDocs(pacQuery);
+        const duplicatePac = pacSnap.docs.find(doc => isNew || doc.id !== paciente?.id);
+        if (duplicatePac) {
+          toast.error('Falha no cadastro: Este CPF já se encontra registrado em nosso sistema.');
+          return;
+        }
+
+        const profQuery = query(collection(db, 'profissionais'), where('cpf', 'in', cpfOptions));
+        const profSnap = await getDocs(profQuery);
+        if (!profSnap.empty) {
+          toast.error('Falha no cadastro: Este CPF já se encontra registrado em nosso sistema.');
+          return;
+        }
       }
     } catch (dbErr) {
       console.error("Erro ao verificar duplicidade de CPF:", dbErr);
@@ -1692,7 +1746,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       cancelText: 'Voltar',
       onConfirm: async () => {
         try {
-          await deletePlantao(id);
+          await deleteDoc(doc(db, 'agendamentos', id));
           toast.success('Agendamento excluído com sucesso!', {
             icon: '✅',
           });
@@ -2031,7 +2085,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       };
 
       // Criar agendamento individual para cada data selecionada
+      const payloads: any[] = [];
       let activeParentId = '';
+
       for (const curItem of selectedDates) {
         const curData = curItem.date;
         const curCycle = curItem.cycle || 1;
@@ -2070,7 +2126,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
           }
         }
 
-        await addAgendamento({
+        payloads.push({
           idPaciente: paciente.id,
           idProfissional: pickedProf ? pickedProf.id : 'n/a',
           nomeProfissional: avulsoProf,
@@ -2087,11 +2143,15 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
           tipoDia: avulsoTipoDia as 'Normal' | 'Feriado 20%' | 'Feriado 50%',
           isCuringa: avulsoCuringa,
           ciclo: curCycle,
-          idAgendamentoPai: activeParentId || undefined
+          idAgendamentoPai: activeParentId || null
         });
       }
 
-      const totalQuantity = selectedDates.length;
+      if (payloads.length > 0) {
+        await addAgendamentosBatch(payloads);
+      }
+
+      const totalQuantity = payloads.length;
       setAvulsoProf('');
       setAvulsoPlantaoOptionId('principal');
       setAvulsoTipoDia('Normal');
@@ -2137,13 +2197,15 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     }
 
     try {
-      for (const s of matches) {
-        await updateAgendamento({
-          ...s,
-          status: 'Concluido',
-          escalaCongelada: true,
-        });
-      }
+      await Promise.all(
+        matches.map((s) =>
+          updateAgendamento({
+            ...s,
+            status: 'Concluido',
+            escalaCongelada: true,
+          })
+        )
+      );
       setConcluirModalOpen(false);
       alert(`Escala concluída (congelada) com sucesso de ${concluirStartDate.split('-').reverse().join('/')} a ${concluirEndDate.split('-').reverse().join('/')}. ${matches.length} turnos foram afetados.`);
     } catch (err) {
@@ -2178,16 +2240,26 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
     try {
       // 2. Correção da Query (A Trava Real de Duplicidade)
-      const faturasColl = collection(db, 'faturas_pacientes');
-      const qDuplicidade = query(
-        faturasColl,
-        where('pacienteId', '==', paciente.id),
-        where('mesReferencia', '==', mesDaEscalaAtual)
-      );
-      const querySnapshot = await getDocs(qDuplicidade);
-      if (!querySnapshot.empty) {
-        toast.error('Emissão bloqueada: A fatura de ' + mesDaEscalaAtual + ' para este paciente já foi emitida.');
-        return;
+      if (isQuotaExceeded) {
+        const faturaExistente = faturasPacientes.some(
+          (f) => f.idPaciente === paciente.id && (f as any).mesReferencia === mesDaEscalaAtual
+        );
+        if (faturaExistente) {
+          toast.error('Emissão bloqueada: A fatura de ' + mesDaEscalaAtual + ' para este paciente já foi emitida.');
+          return;
+        }
+      } else {
+        const faturasColl = collection(db, 'faturas_pacientes');
+        const qDuplicidade = query(
+          faturasColl,
+          where('pacienteId', '==', paciente.id),
+          where('mesReferencia', '==', mesDaEscalaAtual)
+        );
+        const querySnapshot = await getDocs(qDuplicidade);
+        if (!querySnapshot.empty) {
+          toast.error('Emissão bloqueada: A fatura de ' + mesDaEscalaAtual + ' para este paciente já foi emitida.');
+          return;
+        }
       }
 
       // 3. Consolidação e Integração com "Histórico Financeiro" (Firestore)
@@ -2217,7 +2289,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       const numFatSuffix = Math.floor(1000 + Math.random() * 9000);
       const numeroFatura = `FAT-${calendarYear}${String(calendarMonth + 1).padStart(2, '0')}-${numFatSuffix}`;
 
-      await addDoc(collection(db, 'faturas_pacientes'), {
+      await addFaturaPaciente({
         idPaciente: paciente.id,
         pacienteId: paciente.id,
         pacienteNome: nomePaciente,
@@ -2227,12 +2299,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         valorTotalFatura: valorTotalFatura,
         valorTotal: valorTotalFatura,
         dataEmissao: new Date().toISOString(), // Compatible with other new Date(f.dataEmissao) parses
-        dataEmissaoTimestamp: serverTimestamp(), // Match server timestamp required by the prompt
+        dataEmissaoTimestamp: isQuotaExceeded ? new Date().toISOString() : serverTimestamp(), // Match server timestamp required by the prompt, safe fallback
         statusPagamento: 'Pendente',
         status: 'Aberta',
         periodoApurado: { 
           inicio: `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-01`, 
-          fim: `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-30` 
+          fim: `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(new Date(calendarYear, calendarMonth + 1, 0).getDate()).padStart(2, '0')}` 
         },
         plantoesCongelados: agendamentosPacienteMes.map(a => ({
           id: a.id,
@@ -2247,14 +2319,18 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
           ajudaCusto: a.ajudaCusto || 0,
           tipoDia: a.tipoDia || ''
         }))
-      });
+      } as any);
 
       // 3. Feedback Real para o Usuário
       toast.success('Fatura gerada e enviada para o Histórico Financeiro!');
       setIsFaturaModalOpen(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao gerar fatura:', error);
-      toast.error('Erro ao gerar a fatura. Tente novamente.');
+      if (error?.message?.includes('Quota') || error?.code === 'resource-exhausted') {
+        toast.error('Limite de cota excedido. A fatura foi salva localmente no modo de contingência.');
+      } else {
+        toast.error('Erro ao gerar a fatura. Tente novamente.');
+      }
     }
   };
 
@@ -2276,13 +2352,15 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     }
 
     try {
-      for (const s of matches) {
-        await updateAgendamento({
-          ...s,
-          status: 'Aberta',
-          escalaCongelada: false,
-        });
-      }
+      await Promise.all(
+        matches.map((s) =>
+          updateAgendamento({
+            ...s,
+            status: 'Aberta',
+            escalaCongelada: false,
+          })
+        )
+      );
       setReabrirModalOpen(false);
       alert(`Escala reaberta com sucesso de ${reabrirStartDate.split('-').reverse().join('/')} a ${reabrirEndDate.split('-').reverse().join('/')}. Os turnos estão disponíveis para edição.`);
     } catch (err) {
@@ -2852,6 +2930,114 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     }
   };
 
+  const fetchEmpresaInfo = async () => {
+    try {
+      const docRef = doc(db, 'configuracoes_empresa', 'empresa');
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setEmpresaInfo(data);
+        return data;
+      }
+    } catch (err) {
+      console.warn("Erro ao buscar dados da empresa para PNG, usando fallbacks:", err);
+    }
+    const fallback = {
+      razaoSocial: 'RH Cuidado Domiciliar',
+      cnpj: '12.345.678/0001-99',
+      endereco: 'Rua Martins Ferreira, 71',
+      logoUrl: ''
+    };
+    setEmpresaInfo(fallback);
+    return fallback;
+  };
+
+  const handleBaixarFaturaPng = async () => {
+    if (!paciente || !paciente.id) {
+      toast.error('Paciente não identificado.');
+      return;
+    }
+
+    const monthPrefix = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}`;
+    const matchedFatura = (faturasPacientes || []).find((f: any) => {
+      const matchesPaciente = f.idPaciente === paciente.id || f.pacienteId === paciente.id || f.nomePaciente?.toLowerCase() === paciente.nome?.toLowerCase();
+      const matchesPeriodo = f.mesReferencia === monthPrefix || (f.periodoApurado?.inicio && f.periodoApurado.inicio.startsWith(monthPrefix));
+      return matchesPaciente && matchesPeriodo;
+    });
+
+    if (!matchedFatura) {
+      const mesNome = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][calendarMonth];
+      toast.error(`Aviso: A fatura de ${mesNome}/${calendarYear} para este paciente ainda não foi emitida.`);
+      return;
+    }
+
+    const toastId = toast.loading('Preparando download da fatura em PNG...');
+
+    try {
+      // Carrega dados da empresa se necessário
+      const emp = empresaInfo || await fetchEmpresaInfo();
+
+      // Ativa renderização offscreen
+      setFaturaParaBaixar(matchedFatura);
+
+      // Dá tempo pro DOM renderizar
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      const printElement = tempFaturaRef.current;
+      if (!printElement) {
+        throw new Error('Elemento de faturamento para PNG não renderizado no DOM.');
+      }
+
+      const html2canvas = (await import('html2canvas')).default;
+      const canvas = await html2canvas(printElement, {
+        backgroundColor: '#fcf8f2',
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        onclone: (clonedDoc) => {
+          try {
+            const allElements = clonedDoc.getElementsByTagName('*');
+            for (let i = 0; i < allElements.length; i++) {
+              const el = allElements[i] as HTMLElement;
+              const style = window.getComputedStyle(el);
+              if (!style) continue;
+              
+              if (style.backgroundColor && (style.backgroundColor.includes('oklab') || style.backgroundColor.includes('oklch'))) {
+                el.style.setProperty('background-color', '#fcf8f2', 'important');
+              }
+              if (style.color && (style.color.includes('oklab') || style.color.includes('oklch'))) {
+                el.style.setProperty('color', '#1a3c2e', 'important');
+              }
+              if (style.borderColor && (style.borderColor.includes('oklab') || style.borderColor.includes('oklch'))) {
+                el.style.setProperty('border-color', '#b8860b', 'important');
+              }
+            }
+          } catch (e) {
+            console.warn("Erro ao higienizar oklab no clone", e);
+          }
+        }
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const formattedDate = matchedFatura.dataEmissao?.includes('T') ? matchedFatura.dataEmissao.split('T')[0] : (matchedFatura.dataEmissao?.replace(/\//g, '-') || 'Data');
+      const safeName = (matchedFatura.nomePaciente || paciente.nome || 'Paciente').replace(/\s+/g, '_');
+
+      const link = document.createElement('a');
+      link.href = imgData;
+      link.download = `Fatura_${safeName}_${formattedDate}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast.success('Fatura baixada com sucesso!', { id: toastId });
+    } catch (err: any) {
+      console.error('Erro ao gerar PNG:', err);
+      toast.error('Erro ao baixar a fatura em PNG.', { id: toastId });
+    } finally {
+      setFaturaParaBaixar(null);
+    }
+  };
+
   const handleBaixarFaturaRecente = async () => {
     await handleBaixarFaturaExcel();
   };
@@ -2900,9 +3086,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       onConfirm: async () => {
         setIsDeleting(true);
         try {
-          for (const m of matches) {
-            await deleteAgendamento(m.id);
-          }
+          await deleteAgendamentosBatch(matches.map((m) => m.id));
           setExcluirModalOpen(false);
           alert(`${matches.length} agendamento(s) excluído(s) com sucesso.`);
         } catch (err: any) {
@@ -4276,8 +4460,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       type="button"
                       disabled={isCurrentlyDeactivated}
                       onClick={() => {
+                        const lastDay = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+                        const formattedLastDay = String(lastDay).padStart(2, '0');
                         setConcluirStartDate(`${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-01`);
-                        setConcluirEndDate(`${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-30`);
+                        setConcluirEndDate(`${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${formattedLastDay}`);
                         setConcluirModalOpen(true);
                       }}
                       className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-indigo-950 hover:bg-indigo-900 text-white rounded-lg transition-all shadow-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer font-sans"
@@ -4290,8 +4476,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       type="button"
                       disabled={isCurrentlyDeactivated}
                       onClick={() => {
+                        const lastDay = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+                        const formattedLastDay = String(lastDay).padStart(2, '0');
                         setReabrirStartDate(`${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-01`);
-                        setReabrirEndDate(`${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-30`);
+                        setReabrirEndDate(`${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${formattedLastDay}`);
                         setReabrirModalOpen(true);
                       }}
                       className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-all shadow-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer font-sans"
@@ -4304,8 +4492,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       type="button"
                       disabled={isCurrentlyDeactivated}
                       onClick={() => {
+                        const lastDay = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+                        const formattedLastDay = String(lastDay).padStart(2, '0');
                         setExcluirStartDate(`${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-01`);
-                        setExcluirEndDate(`${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-30`);
+                        setExcluirEndDate(`${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${formattedLastDay}`);
                         setExcluirModalOpen(true);
                       }}
                       className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-red-600 hover:bg-red-750 text-white rounded-lg transition-all shadow-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer font-sans"
@@ -4330,6 +4520,15 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     >
                       <Printer size={13.5} />
                       <span>Word (.docx)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleBaixarFaturaPng}
+                      className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-all shadow-xs cursor-pointer font-sans"
+                    >
+                      <Download size={13.5} />
+                      <span>Baixar Fatura</span>
                     </button>
                     
                   </div>
@@ -4439,10 +4638,18 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                             const isToday = cell.dateStr === todayStr;
                             const isSpecialHoliday = cell.holiday !== undefined;
 
-                            // Filter agendamentos for this date and patient
-                            const dayAgendamentos = agendamentos.filter(
+                            // Filter agendamentos for this date and patient (Garantia de vínculo: data e idPaciente)
+                            const rawDayAgendamentos = agendamentos.filter(
                               (s) => s.data === cell.dateStr && s.idPaciente === (paciente?.id || '')
                             );
+                            const dayAgendamentos: Agendamento[] = [];
+                            const seenIds = new Set<string>();
+                            for (const s of rawDayAgendamentos) {
+                              if (s.id && !seenIds.has(s.id)) {
+                                seenIds.add(s.id);
+                                dayAgendamentos.push(s);
+                              }
+                            }
 
                             return (
                               <div
@@ -7995,6 +8202,108 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
           }}
           dadosAtalhoCuringa={curingaShortcutData}
         />
+      )}
+
+      {/* Hidden off-screen Fatura rendering container for PNG download */}
+      {faturaParaBaixar && (
+        <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', width: '210mm', pointerEvents: 'none' }}>
+          <div ref={tempFaturaRef} className="w-[210mm] p-[10mm] bg-[#fcf8f2] text-black border border-slate-300 font-sans" style={{ color: '#1a3c2e' }}>
+            {/* Header with Company Logo etc */}
+            <div className="flex justify-between items-start border-b-2 border-[#b8860b] pb-4 mb-6">
+                <div className="flex items-center gap-4">
+                     {empresaInfo?.logoUrl && (
+                       <img src={empresaInfo.logoUrl} alt="Logo" className="w-24 h-12 object-contain" />
+                     )}
+                     <div className="text-[#1a3c2e]">
+                       <h2 className="text-xl font-black">{empresaInfo?.razaoSocial || 'EMPRESA PADRÃO'}</h2>
+                       <p className="text-sm text-gray-600 font-bold mt-1">CNPJ: {empresaInfo?.cnpj || '00.000.000/0000-00'}</p>
+                       <p className="text-sm text-gray-600 mt-0.5">{empresaInfo?.endereco || 'Endereço Indisponível'}</p>
+                     </div>
+                </div>
+                <div className="text-right text-[#1a3c2e]">
+                     <h2 className="text-lg font-black">FATURA</h2>
+                     <p className="text-xs font-mono">Nº: {faturaParaBaixar.numeroFatura || 'XXXX'}</p>
+                </div>
+            </div>
+            {/* Data Grid */}
+            <div className="grid grid-cols-2 gap-4 mb-6 text-[11px]">
+                <div><span className="font-bold">Emissão:</span> {faturaParaBaixar.dataEmissao ? (faturaParaBaixar.dataEmissao.includes('T') ? new Date(faturaParaBaixar.dataEmissao).toLocaleDateString('pt-BR') : faturaParaBaixar.dataEmissao) : ''}</div>
+                <div><span className="font-bold">Status:</span> {faturaParaBaixar.status}</div>
+                <div><span className="font-bold">Paciente:</span> {faturaParaBaixar.nomePaciente || paciente?.nome || ''}</div>
+                <div><span className="font-bold">Valor Total:</span> R$ {faturaParaBaixar.valorTotalFatura ? faturaParaBaixar.valorTotalFatura.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (faturaParaBaixar.valorTotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            </div>
+            {/* Plantões Table */}
+            <table className="w-full text-[11px] border-collapse mb-6">
+              <thead>
+                <tr className="bg-[#1a3c2e] text-white border-b-2 border-[#b8860b]">
+                  <th className="p-2 text-left">Data</th>
+                  <th className="p-2 text-left">Profissional</th>
+                  <th className="p-2 text-left">Serviço</th>
+                  <th className="p-2 text-right">Valor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(faturaParaBaixar.plantoesCongelados || [])
+                  .filter((p: any) => !p.considerarFalta && p.status !== 'falta' && p.status !== 'Falta')
+                  .sort((a: any, b: any) => {
+                    const parseDate = (dateStr: string): number => {
+                      if (!dateStr) return 0;
+                      if (dateStr.includes('-')) {
+                        const parts = dateStr.split('-');
+                        if (parts.length === 3) {
+                          return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])).getTime();
+                        }
+                      } else if (dateStr.includes('/')) {
+                        const parts = dateStr.split('/');
+                        if (parts.length === 3) {
+                          return new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0])).getTime();
+                        }
+                      }
+                      return new Date(dateStr).getTime() || 0;
+                    };
+                    return parseDate(a.data) - parseDate(b.data);
+                  })
+                  .map((p: any, i: number) => {
+                    const base = p.valorPlantao || 0;
+                    const adm = p.taxaAdm || 0;
+                    const ajuda = p.ajudaCusto || 0;
+                    let mult = 1.0;
+                    if (p.tipoDia === 'Feriado 20%') mult = 1.2;
+                    else if (p.tipoDia === 'Feriado 50%') mult = 1.5;
+                    const valorLinha = (base * mult) + (adm * mult) + ajuda;
+
+                    const formatDateBR = (dateStr: string) => {
+                      if (!dateStr) return '';
+                      if (dateStr.includes('-')) {
+                        return dateStr.split('-').reverse().join('/');
+                      }
+                      return dateStr;
+                    };
+
+                    return (
+                      <tr key={i} className="border-b border-[#b8860b]/30">
+                        <td className="p-2">{formatDateBR(p.data)}</td>
+                        <td className="p-2">{p.profissional || p.nomeProfissional || 'A Definir'}</td>
+                        <td className="p-2">{p.tipoDia || 'Plantão Normal'}</td>
+                        <td className="p-2 text-right text-[#1a3c2e] font-bold font-mono">
+                          R$ {valorLinha.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    );
+                  })
+                }
+              </tbody>
+              <tfoot>
+                <tr className="font-bold bg-emerald-50 text-[#1a3c2e] text-xs">
+                  <td colSpan={3} className="p-2 text-right uppercase">TOTAL</td>
+                  <td className="p-2 text-right text-[#1a3c2e] font-black font-mono">
+                    R$ {(faturaParaBaixar.valorTotalFatura || faturaParaBaixar.valorTotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
       )}
     </div>
   );

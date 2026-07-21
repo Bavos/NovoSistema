@@ -285,8 +285,12 @@ export const BackupProntuarios: React.FC = () => {
           await triggerBackup(true);
         }
       }
-    } catch (err) {
-      console.error('Erro ao buscar backups ou configurações:', err);
+    } catch (err: any) {
+      if (err?.message?.includes('Quota') || err?.code === 'resource-exhausted') {
+        console.warn('Quota excedida ao buscar backups ou configurações (ignorado).');
+      } else {
+        console.error('Erro ao buscar backups ou configurações:', err);
+      }
     } finally {
       setLoadingBackups(false);
     }

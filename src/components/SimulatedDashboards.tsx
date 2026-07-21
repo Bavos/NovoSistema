@@ -266,7 +266,8 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
     addFaturaPaciente,
     folhasPagamento,
     addFolhaPagamento,
-    setNotification
+    setNotification,
+    isQuotaExceeded
   } = useFirebase();
 
   const activePacientes = pacientes.filter(p => p.status === 'Ativo' || p.status?.toLowerCase() === 'ativo');
@@ -358,13 +359,32 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
 
   React.useEffect(() => {
     const fetchEmpresa = async () => {
-        const docRef = doc(db, 'configuracoes_empresa', 'empresa');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-            setEmpresa(docSnap.data());
+        if (isQuotaExceeded) {
+            setEmpresa({ nome: "Empresa Contingência", cnpj: "00.000.000/0001-00" });
+            return;
+        }
+        try {
+            const docRef = doc(db, 'configuracoes_empresa', 'empresa');
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                setEmpresa(docSnap.data());
+            }
+        } catch (err: any) {
+            if (err?.message?.includes('Quota') || err?.code === 'resource-exhausted') {
+                console.warn("Quota limit exceeded when fetching empresa (ignorado).");
+                setEmpresa({ nome: "Empresa Contingência", cnpj: "00.000.000/0001-00" });
+            } else {
+                console.error("Error loading empresa: ", err);
+            }
         }
     };
     const fetchValorMei = async () => {
+        if (isQuotaExceeded) {
+            setValorMei(81);
+            setTempValorMei("81");
+            setLoadingValorMei(false);
+            return;
+        }
         setLoadingValorMei(true);
         try {
             const docRef = doc(db, 'configs', 'valor_mei');
@@ -374,15 +394,21 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                 setValorMei(data.valor || 0);
                 setTempValorMei(String(data.valor || 0));
             }
-        } catch (err) {
-            console.error("Error loading valor_mei: ", err);
+        } catch (err: any) {
+            if (err?.message?.includes('Quota') || err?.code === 'resource-exhausted') {
+                console.warn("Quota limit exceeded when fetching valor_mei (ignorado).");
+                setValorMei(81);
+                setTempValorMei("81");
+            } else {
+                console.error("Error loading valor_mei: ", err);
+            }
         } finally {
             setLoadingValorMei(false);
         }
     };
     fetchEmpresa();
     fetchValorMei();
-  }, []);
+  }, [isQuotaExceeded]);
 
   const handleSaveValorMei = async () => {
     const numericValue = parseFloat(tempValorMei || '0');
@@ -3075,7 +3101,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
 
 
 export const HistoricoFinanceiroDashboard: React.FC = () => {
-    const { faturasPacientes, folhasPagamento, deleteFaturaPaciente, deleteFolhaPagamento, pacientes } = useFirebase();
+    const { faturasPacientes, folhasPagamento, deleteFaturaPaciente, deleteFolhaPagamento, pacientes, profissionais, isQuotaExceeded } = useFirebase();
     const [deleteConfirm, setDeleteConfirm] = useState<{isOpen: boolean, id: string, type: 'fatura' | 'folha' } | null>(null);
     const [viewDoc, setViewDoc] = useState<{data: any, type: 'fatura' | 'folha' } | null>(null);
     const [empresa, setEmpresa] = useState<any>(null);
@@ -3221,6 +3247,20 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
 
     React.useEffect(() => {
         const fetchFiltersData = async () => {
+            if (isQuotaExceeded) {
+                const pacs = pacientes.map(p => ({
+                    id: p.id,
+                    nome: p.nome || ''
+                })).filter(p => !!p.nome).sort((a, b) => a.nome.localeCompare(b.nome));
+                setDropdownPacientes(pacs);
+
+                const profs = profissionais.map(p => ({
+                    id: p.id,
+                    nome: p.nome || ''
+                })).filter(p => !!p.nome).sort((a, b) => a.nome.localeCompare(b.nome));
+                setDropdownProfissionais(profs);
+                return;
+            }
             try {
                 // Fetch patients map from 'pacientes' collection
                 const pacSnap = await getDocs(collection(db, 'pacientes'));
@@ -3237,22 +3277,51 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                     nome: doc.data().nome || ''
                 })).filter(p => !!p.nome).sort((a, b) => a.nome.localeCompare(b.nome));
                 setDropdownProfissionais(profs);
-            } catch (err) {
-                console.error("Erro ao carregar dados dos selects:", err);
+            } catch (err: any) {
+                if (err?.message?.includes('Quota') || err?.code === 'resource-exhausted') {
+                    console.warn("Quota limit exceeded when loading dropdown options (ignorado).");
+                    // fallback using local context arrays
+                    const pacs = pacientes.map(p => ({
+                        id: p.id,
+                        nome: p.nome || ''
+                    })).filter(p => !!p.nome).sort((a, b) => a.nome.localeCompare(b.nome));
+                    setDropdownPacientes(pacs);
+
+                    const profs = profissionais.map(p => ({
+                        id: p.id,
+                        nome: p.nome || ''
+                    })).filter(p => !!p.nome).sort((a, b) => a.nome.localeCompare(b.nome));
+                    setDropdownProfissionais(profs);
+                } else {
+                    console.error("Erro ao carregar dados dos selects:", err);
+                }
             }
         };
 
         const fetchEmpresa = async () => {
-            const docRef = doc(db, 'configuracoes_empresa', 'empresa');
-            const docSnap = await getDoc(docRef);
-            if (docSnap.exists()) {
-                setEmpresa(docSnap.data());
+            if (isQuotaExceeded) {
+                setEmpresa({ nome: "Empresa Contingência", cnpj: "00.000.000/0001-00" });
+                return;
+            }
+            try {
+                const docRef = doc(db, 'configuracoes_empresa', 'empresa');
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    setEmpresa(docSnap.data());
+                }
+            } catch (err: any) {
+                if (err?.message?.includes('Quota') || err?.code === 'resource-exhausted') {
+                    console.warn("Quota limit exceeded when fetching empresa in Historico (ignorado).");
+                    setEmpresa({ nome: "Empresa Contingência", cnpj: "00.000.000/0001-00" });
+                } else {
+                    console.error("Erro ao buscar empresa:", err);
+                }
             }
         };
 
         fetchFiltersData();
         fetchEmpresa();
-    }, []);
+    }, [isQuotaExceeded, pacientes, profissionais]);
 
     const filteredFaturas = faturasPacientes.filter(f => {
         const matchesPaciente = !searchFaturaPaciente || searchFaturaPaciente === 'all' || f.nomePaciente === searchFaturaPaciente;

@@ -66,8 +66,10 @@ interface FirebaseContextType {
   deletePlantao: (id: string) => Promise<void>;
   deletePlantoes: (ids: string[]) => Promise<void>;
   addAgendamento: (agendamento: Omit<Agendamento, 'id'>) => Promise<Agendamento>;
+  addAgendamentosBatch: (agendamentos: Omit<Agendamento, 'id'>[]) => Promise<Agendamento[]>;
   updateAgendamento: (agendamento: Agendamento) => Promise<void>;
   deleteAgendamento: (id: string) => Promise<void>;
+  deleteAgendamentosBatch: (ids: string[]) => Promise<void>;
   deletePaciente: (id: string) => Promise<void>;
   addProfissional: (profissional: Omit<Profissional, 'id' | 'createdAt' | 'status'>, skipNotification?: boolean) => Promise<Profissional>;
   addUsuarioSistema: (user: Omit<UsuarioSistema, 'id'>) => Promise<UsuarioSistema>;
@@ -560,7 +562,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     });
 
     const unsubscribePlantoes = onSnapshot(
-      query(collection(db, 'plantoes'), limit(50)),
+      query(collection(db, 'plantoes'), limit(2000)),
       (snap) => {
         const list: Plantao[] = [];
         snap.forEach((d) => list.push(d.data() as Plantao));
@@ -574,7 +576,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     );
 
     const unsubscribeAgendamentos = onSnapshot(
-      query(collection(db, 'agendamentos'), limit(50)),
+      query(collection(db, 'agendamentos'), orderBy('data', 'desc'), limit(5000)),
       (snap) => {
         const list: Agendamento[] = [];
         snap.forEach((d) => list.push({ ...d.data(), id: d.id } as Agendamento));
@@ -588,7 +590,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     );
 
     const unsubscribeProfissionais = onSnapshot(
-      query(collection(db, 'profissionais'), limit(50)),
+      query(collection(db, 'profissionais'), limit(1000)),
       (snap) => {
         const list: Profissional[] = [];
         snap.forEach((d) => list.push({ ...d.data(), id: d.id } as Profissional));
@@ -602,7 +604,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     );
     
     const unsubscribeUsuariosSistema = onSnapshot(
-      query(collection(db, 'usuarios_sistema'), limit(50)),
+      query(collection(db, 'usuarios_sistema'), limit(1000)),
       (snap) => {
         const list: UsuarioSistema[] = [];
         snap.forEach((d) => list.push({ ...d.data(), id: d.id } as UsuarioSistema));
@@ -616,7 +618,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     );
 
     const unsubscribeDebitosProfissionais = onSnapshot(
-      query(collection(db, 'debitos_profissionais'), limit(50)),
+      query(collection(db, 'debitos_profissionais'), limit(3000)),
       (snap) => {
         const list: DebitoProfissional[] = [];
         snap.forEach((d) => list.push({ ...d.data(), id: d.id } as DebitoProfissional));
@@ -630,7 +632,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     );
 
     const unsubscribeFaturasPacientes = onSnapshot(
-      query(collection(db, 'faturas_pacientes'), limit(50)),
+      query(collection(db, 'faturas_pacientes'), limit(3000)),
       (snap) => {
         const list: FaturaPaciente[] = [];
         snap.forEach((d) => list.push({ ...d.data(), id: d.id } as FaturaPaciente));
@@ -644,7 +646,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     );
 
     const unsubscribeFolhasPagamento = onSnapshot(
-      query(collection(db, 'folhas_pagamento'), limit(50)),
+      query(collection(db, 'folhas_pagamento'), limit(3000)),
       (snap) => {
         const list: FolhaPagamento[] = [];
         snap.forEach((d) => list.push({ ...d.data(), id: d.id } as FolhaPagamento));
@@ -658,7 +660,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     );
 
     const unsubscribeLogsAuditoria = onSnapshot(
-      query(collection(db, 'LogsAuditoria'), limit(50)),
+      query(collection(db, 'LogsAuditoria'), limit(1000)),
       (snap) => {
         const list: AuditLog[] = [];
         snap.forEach((d) => list.push({ ...d.data(), id: d.id } as AuditLog));
@@ -984,7 +986,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     try {
-      const fullAgToSave = { ...newAg, status: 'Aberta' as const } as any;
+      const fullAgToSave = { ...newAg, status: newAg.status || 'Aberta' } as any;
       Object.keys(fullAgToSave).forEach(key => {
         if (fullAgToSave[key] === undefined) {
           delete fullAgToSave[key];
@@ -993,10 +995,56 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const docRef = await addDoc(collection(db, 'agendamentos'), fullAgToSave);
       const fullAgendamento: Agendamento = { ...fullAgToSave, id: docRef.id };
       await addAuditLog('CREATE', 'agendamentos', docRef.id, `Agendamento criado: ${fullAgendamento.data}`);
+      setAgendamentos(prev => [fullAgendamento, ...prev]);
       setNotification('Agendamento criado com sucesso.');
       return fullAgendamento;
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'agendamentos');
+      throw err;
+    }
+  };
+
+  const addAgendamentosBatch = async (newAgs: Omit<Agendamento, 'id'>[]) => {
+    if (isQuotaExceeded) {
+      const fullAgs: Agendamento[] = newAgs.map((newAg, idx) => ({
+        ...newAg,
+        id: `ag-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 5)}`,
+        status: newAg.status || 'Aberta'
+      }));
+      const updatedList = [...fullAgs, ...agendamentos];
+      setAgendamentos(updatedList);
+      localStorage.setItem('contingency_agendamentos', JSON.stringify(updatedList));
+      setNotification(`${fullAgs.length} agendamentos criados com sucesso (Contingência Local).`);
+      return fullAgs;
+    }
+
+    try {
+      const batch = writeBatch(db);
+      const createdAgs: Agendamento[] = [];
+      
+      for (const newAg of newAgs) {
+        const newRef = doc(collection(db, 'agendamentos'));
+        const fullAgToSave = { ...newAg, status: newAg.status || 'Aberta' } as any;
+        Object.keys(fullAgToSave).forEach(key => {
+          if (fullAgToSave[key] === undefined) {
+            delete fullAgToSave[key];
+          }
+        });
+        batch.set(newRef, fullAgToSave);
+        createdAgs.push({ ...fullAgToSave, id: newRef.id });
+      }
+
+      await batch.commit();
+
+      for (const ag of createdAgs) {
+        await addAuditLog('CREATE', 'agendamentos', ag.id, `Agendamento criado em lote: ${ag.data}`);
+      }
+
+      setAgendamentos(prev => [...createdAgs, ...prev]);
+      setNotification(`${createdAgs.length} agendamentos criados com sucesso.`);
+      return createdAgs;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'agendamentos/batch');
       throw err;
     }
   };
@@ -1019,6 +1067,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       });
       await setDoc(doc(db, 'agendamentos', ag.id), agToSave);
       await addAuditLog('UPDATE', 'agendamentos', ag.id, `Agendamento atualizado: ${ag.id}`);
+      setAgendamentos(prev => prev.map((a) => (a.id === ag.id ? ag : a)));
       setNotification('Agendamento atualizado.');
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `agendamentos/${ag.id}`);
@@ -1044,9 +1093,45 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     try {
       await deleteDoc(doc(db, 'agendamentos', id));
       await addAuditLog('DELETE', 'agendamentos', id, `Agendamento excluído`);
+      setAgendamentos(prev => prev.filter((a) => a.id !== id));
       setNotification('Agendamento excluído.');
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `agendamentos/${id}`);
+      throw err;
+    }
+  };
+
+  const deleteAgendamentosBatch = async (ids: string[]) => {
+    const toDelete = agendamentos.filter(a => ids.includes(a.id));
+    const invalid = toDelete.some(a => a.escalaCongelada || a.status === 'Concluido');
+    if (invalid) {
+      toast.error('Algum dos plantões selecionados está com escala fechada ou concluído.');
+      return;
+    }
+
+    if (isQuotaExceeded) {
+      const updatedList = agendamentos.filter((a) => !ids.includes(a.id));
+      setAgendamentos(updatedList);
+      localStorage.setItem('contingency_agendamentos', JSON.stringify(updatedList));
+      setNotification(`${ids.length} agendamentos excluídos (Contingência Local).`);
+      return;
+    }
+
+    try {
+      const batch = writeBatch(db);
+      for (const id of ids) {
+        batch.delete(doc(db, 'agendamentos', id));
+      }
+      await batch.commit();
+
+      for (const id of ids) {
+        await addAuditLog('DELETE', 'agendamentos', id, `Agendamento excluído em lote`);
+      }
+
+      setAgendamentos(prev => prev.filter((a) => !ids.includes(a.id)));
+      setNotification(`${ids.length} agendamentos excluídos com sucesso.`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, 'agendamentos/batch');
       throw err;
     }
   };
@@ -1629,8 +1714,10 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         deletePlantao,
         deletePlantoes,
         addAgendamento,
+        addAgendamentosBatch,
         updateAgendamento,
         deleteAgendamento,
+        deleteAgendamentosBatch,
         deletePaciente,
         profissionais,
         usuariosSistema,
