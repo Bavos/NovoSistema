@@ -1448,6 +1448,9 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
         toast.error("Erro ao enviar foto. Tente novamente.", { id: loadingToast });
       } finally {
         setUploading(false);
+        if (e.target) {
+          e.target.value = '';
+        }
       }
     }
   };

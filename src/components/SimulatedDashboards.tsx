@@ -27,7 +27,8 @@ import {
   ChevronDown,
   Cpu,
   ShieldCheck,
-  FileText
+  FileText,
+  Filter
 } from 'lucide-react';
 import { INITIAL_PROFESSIONALS } from '../mockData';
 import { useFirebase } from '../context/FirebaseContext';
@@ -457,8 +458,37 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   const [isInsertingDebit, setIsInsertingDebit] = useState(false);
   const [editingDebitId, setEditingDebitId] = useState<string | null>(null);
   const [newDebitPacienteId, setNewDebitPacienteId] = useState('');
+  const [debitFilterType, setDebitFilterType] = useState<'data' | 'paciente' | 'profissional'>('data');
   const [debitFilterStartDate, setDebitFilterStartDate] = useState('');
   const [debitFilterEndDate, setDebitFilterEndDate] = useState('');
+  const [debitFilterPatientId, setDebitFilterPatientId] = useState('');
+  const [debitFilterProfId, setDebitFilterProfId] = useState('');
+
+  const allPatientsForFilter = React.useMemo(() => {
+    const map = new Map<string, { id: string; nome: string }>();
+    (pacientes || []).forEach(p => {
+      if (p.id && p.nome) map.set(p.id, { id: p.id, nome: p.nome });
+    });
+    (debitosProfissionais || []).forEach(d => {
+      if (d.idPaciente && d.nomePaciente && !map.has(d.idPaciente)) {
+        map.set(d.idPaciente, { id: d.idPaciente, nome: d.nomePaciente });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [pacientes, debitosProfissionais]);
+
+  const allProfsForFilter = React.useMemo(() => {
+    const map = new Map<string, { id: string; nome: string }>();
+    (profissionais || []).forEach(p => {
+      if (p.id && p.nome) map.set(p.id, { id: p.id, nome: p.nome });
+    });
+    (debitosProfissionais || []).forEach(d => {
+      if (d.idProfissional && d.nomeProfissional && !map.has(d.idProfissional)) {
+        map.set(d.idProfissional, { id: d.idProfissional, nome: d.nomeProfissional });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [profissionais, debitosProfissionais]);
   const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<{
     isOpen: boolean;
     title: string;
@@ -474,12 +504,23 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   const formatDebitDateDisplay = (val: any): string => {
     if (!val) return '';
     try {
+      if (typeof val === 'string') {
+        const cleanVal = val.trim();
+        if (cleanVal.includes('-')) {
+          const parts = cleanVal.slice(0, 10).split('-');
+          if (parts.length === 3) {
+            return `${parts[2].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[0]}`;
+          }
+        } else if (cleanVal.includes('/')) {
+          return cleanVal;
+        }
+      }
       let dObj: Date;
-      if (typeof val.toDate === 'function') {
+      if (typeof val?.toDate === 'function') {
         dObj = val.toDate();
       } else if (val instanceof Date) {
         dObj = val;
-      } else if (val.seconds) {
+      } else if (val?.seconds) {
         dObj = new Date(val.seconds * 1000);
       } else {
         dObj = new Date(val);
@@ -497,12 +538,26 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   const getDebitDateObj = (val: any): Date | null => {
     if (!val) return null;
     try {
-      if (typeof val.toDate === 'function') {
+      if (typeof val?.toDate === 'function') {
         return val.toDate();
       } else if (val instanceof Date) {
         return val;
-      } else if (val.seconds) {
+      } else if (val?.seconds) {
         return new Date(val.seconds * 1000);
+      } else if (typeof val === 'string') {
+        const cleanVal = val.trim();
+        if (cleanVal.includes('-')) {
+          const parts = cleanVal.slice(0, 10).split('-').map(Number);
+          if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+            return new Date(parts[0], parts[1] - 1, parts[2]);
+          }
+        } else if (cleanVal.includes('/')) {
+          const parts = cleanVal.split('/').map(Number);
+          if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+            return new Date(parts[2], parts[1] - 1, parts[0]);
+          }
+        }
+        return new Date(cleanVal);
       } else {
         return new Date(val);
       }
@@ -2881,38 +2936,117 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                 <p className="text-xs text-slate-500 font-semibold">Consolidação de Débitos Ativos (Salvos na nuvem em tempo real)</p>
               </div>
               
-              {/* Filtro por Data */}
+              {/* Filtro por ... */}
               <div className="flex flex-wrap items-center gap-2 print:hidden">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Filtrar por Data:</span>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="date"
-                    value={debitFilterStartDate}
-                    onChange={(e) => setDebitFilterStartDate(e.target.value)}
-                    className="px-2 py-1 border border-slate-200 rounded-lg text-xs bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#1a3c2e] focus:border-[#1a3c2e]"
-                    placeholder="Início"
-                  />
-                  <span className="text-slate-400 text-[10px] font-bold">até</span>
-                  <input
-                    type="date"
-                    value={debitFilterEndDate}
-                    onChange={(e) => setDebitFilterEndDate(e.target.value)}
-                    className="px-2 py-1 border border-slate-200 rounded-lg text-xs bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#1a3c2e] focus:border-[#1a3c2e]"
-                    placeholder="Fim"
-                  />
-                  {(debitFilterStartDate || debitFilterEndDate) && (
-                    <button
-                      onClick={() => {
-                        setDebitFilterStartDate('');
-                        setDebitFilterEndDate('');
-                      }}
-                      className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
-                      title="Limpar filtros"
-                    >
-                      Limpar
-                    </button>
-                  )}
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Filtrar por:</span>
+                  <select
+                    value={debitFilterType}
+                    onChange={(e) => {
+                      setDebitFilterType(e.target.value as 'paciente' | 'data' | 'profissional');
+                    }}
+                    className="px-2.5 py-1 border border-slate-200 rounded-lg text-xs font-bold bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#1a3c2e] focus:border-[#1a3c2e]"
+                  >
+                    <option value="paciente">Paciente</option>
+                    <option value="data">Data</option>
+                    <option value="profissional">Profissional</option>
+                  </select>
                 </div>
+
+                {debitFilterType === 'data' && (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!debitFilterStartDate && !debitFilterEndDate) {
+                          toast.error("Selecione um período de datas para filtrar.", { id: 'filter-date-empty' });
+                        } else {
+                          toast.success("Filtro de data aplicado com sucesso!", { id: 'filter-date-success' });
+                        }
+                      }}
+                      className="px-2.5 py-1 bg-[#1a3c2e] hover:bg-[#122b21] text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 active:scale-95 shadow-sm"
+                      title="Aplicar filtro por data"
+                    >
+                      <Filter size={12} />
+                      Filtrar
+                    </button>
+                    <input
+                      type="date"
+                      value={debitFilterStartDate}
+                      onChange={(e) => setDebitFilterStartDate(e.target.value)}
+                      className="px-2 py-1 border border-slate-200 rounded-lg text-xs bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#1a3c2e] focus:border-[#1a3c2e]"
+                      placeholder="Início"
+                    />
+                    <span className="text-slate-400 text-[10px] font-bold">até</span>
+                    <input
+                      type="date"
+                      value={debitFilterEndDate}
+                      onChange={(e) => setDebitFilterEndDate(e.target.value)}
+                      className="px-2 py-1 border border-slate-200 rounded-lg text-xs bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#1a3c2e] focus:border-[#1a3c2e]"
+                      placeholder="Fim"
+                    />
+                    {(debitFilterStartDate || debitFilterEndDate) && (
+                      <button
+                        onClick={() => {
+                          setDebitFilterStartDate('');
+                          setDebitFilterEndDate('');
+                        }}
+                        className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                        title="Limpar filtros"
+                      >
+                        Limpar
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {debitFilterType === 'paciente' && (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <select
+                      value={debitFilterPatientId}
+                      onChange={(e) => setDebitFilterPatientId(e.target.value)}
+                      className="px-2.5 py-1 border border-slate-200 rounded-lg text-xs font-medium bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#1a3c2e] focus:border-[#1a3c2e] max-w-[240px]"
+                    >
+                      <option value="">Todos os Pacientes</option>
+                      {allPatientsForFilter.map(p => (
+                        <option key={p.id} value={p.id}>{p.nome}</option>
+                      ))}
+                    </select>
+                    {debitFilterPatientId && (
+                      <button
+                        onClick={() => setDebitFilterPatientId('')}
+                        className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                        title="Limpar filtro de paciente"
+                      >
+                        Limpar
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {debitFilterType === 'profissional' && (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <select
+                      value={debitFilterProfId}
+                      onChange={(e) => setDebitFilterProfId(e.target.value)}
+                      className="px-2.5 py-1 border border-slate-200 rounded-lg text-xs font-medium bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#1a3c2e] focus:border-[#1a3c2e] max-w-[240px]"
+                    >
+                      <option value="">Todos os Profissionais</option>
+                      {allProfsForFilter.map(p => (
+                        <option key={p.id} value={p.id}>{p.nome}</option>
+                      ))}
+                    </select>
+                    {debitFilterProfId && (
+                      <button
+                        onClick={() => setDebitFilterProfId('')}
+                        className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                        title="Limpar filtro de profissional"
+                      >
+                        Limpar
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             
@@ -2931,30 +3065,64 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                 <tbody className="divide-y divide-slate-100">
                   {(() => {
                     const filteredDebitos = (debitosProfissionais || []).filter(d => {
-                      const dObj = getDebitDateObj(d.data);
-                      if (!dObj) return true;
-                      
-                      const year = dObj.getFullYear();
-                      const month = String(dObj.getMonth() + 1).padStart(2, '0');
-                      const day = String(dObj.getDate()).padStart(2, '0');
-                      const formattedDateStr = `${year}-${month}-${day}`;
+                      if (debitFilterType === 'data') {
+                        if (!debitFilterStartDate && !debitFilterEndDate) return true;
+                        const dObj = getDebitDateObj(d.data);
+                        if (!dObj) return true;
+                        
+                        const year = dObj.getFullYear();
+                        const month = String(dObj.getMonth() + 1).padStart(2, '0');
+                        const day = String(dObj.getDate()).padStart(2, '0');
+                        const formattedDateStr = `${year}-${month}-${day}`;
 
-                      if (debitFilterStartDate && formattedDateStr < debitFilterStartDate) {
+                        if (debitFilterStartDate && formattedDateStr < debitFilterStartDate) {
+                          return false;
+                        }
+                        if (debitFilterEndDate && formattedDateStr > debitFilterEndDate) {
+                          return false;
+                        }
+                        return true;
+                      }
+
+                      if (debitFilterType === 'paciente') {
+                        if (!debitFilterPatientId) return true;
+                        const selectedPatient = allPatientsForFilter.find(p => p.id === debitFilterPatientId);
+                        const targetName = selectedPatient?.nome?.toLowerCase().trim();
+
+                        if (d.idPaciente === debitFilterPatientId) return true;
+                        if (targetName && d.nomePaciente && d.nomePaciente.toLowerCase().trim() === targetName) return true;
                         return false;
                       }
-                      if (debitFilterEndDate && formattedDateStr > debitFilterEndDate) {
+
+                      if (debitFilterType === 'profissional') {
+                        if (!debitFilterProfId) return true;
+                        const selectedProf = allProfsForFilter.find(p => p.id === debitFilterProfId);
+                        const targetName = selectedProf?.nome?.toLowerCase().trim();
+
+                        if (d.idProfissional === debitFilterProfId) return true;
+                        if (targetName && d.nomeProfissional && d.nomeProfissional.toLowerCase().trim() === targetName) return true;
                         return false;
                       }
+
                       return true;
                     });
 
                     if (filteredDebitos.length === 0) {
+                      let emptyMessage = "Nenhum débito encontrado.";
+                      if (debitosProfissionais.length === 0) {
+                        emptyMessage = "Nenhum débito registrado para profissionais cuidador.";
+                      } else if (debitFilterType === 'data') {
+                        emptyMessage = "Nenhum débito encontrado para o período selecionado.";
+                      } else if (debitFilterType === 'paciente') {
+                        emptyMessage = "Nenhum débito encontrado para o paciente selecionado.";
+                      } else if (debitFilterType === 'profissional') {
+                        emptyMessage = "Nenhum débito encontrado para o profissional selecionado.";
+                      }
+
                       return (
                         <tr>
                           <td colSpan={6} className="py-12 text-center text-slate-400 italic">
-                            {debitosProfissionais.length === 0 
-                              ? "Nenhum débito registrado para profissionais cuidador." 
-                              : "Nenhum débito encontrado para o período selecionado."}
+                            {emptyMessage}
                           </td>
                         </tr>
                       );

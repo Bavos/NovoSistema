@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { useFirebase } from '../context/FirebaseContext';
+import { mascaraFinanceira, formatarMoeda, converterMascaraParaNumero } from '../lib/masks';
 
 export interface DadosAtalhoCuringa {
   profissional?: string; // nome do profissional
@@ -9,6 +10,7 @@ export interface DadosAtalhoCuringa {
   pacienteId?: string; // ID do paciente
   data?: string; // data em formato YYYY-MM-DD
   motivo?: string;
+  valor?: number | string;
 }
 
 interface ModalInserirDebitoProps {
@@ -54,7 +56,7 @@ export const ModalInserirDebito: React.FC<ModalInserirDebitoProps> = ({
       // a) Se houver dados de Edição (lógica que já existe), use-os.
       setNewDebitProfId(editingDebit.idProfissional || '');
       setNewDebitPacienteId(editingDebit.idPaciente || '');
-      setNewDebitValor(String(editingDebit.valor || ''));
+      setNewDebitValor(editingDebit.valor !== undefined && editingDebit.valor !== null ? formatarMoeda(editingDebit.valor) : '');
       setNewDebitMotivo(editingDebit.motivo || 'Curinga');
       
       if (editingDebit.data) {
@@ -104,7 +106,7 @@ export const ModalInserirDebito: React.FC<ModalInserirDebitoProps> = ({
         return `${yr}-${mo}-${dy}`;
       })());
 
-      setNewDebitValor('');
+      setNewDebitValor(dadosAtalhoCuringa.valor !== undefined && dadosAtalhoCuringa.valor !== null && dadosAtalhoCuringa.valor !== '' ? formatarMoeda(dadosAtalhoCuringa.valor) : '');
       setNewDebitMotivo(dadosAtalhoCuringa.motivo || 'Curinga');
     } else {
       // c) Se nenhum dos dois existir, inicie os campos vazios.
@@ -129,7 +131,7 @@ export const ModalInserirDebito: React.FC<ModalInserirDebitoProps> = ({
       return;
     }
 
-    const valNumber = parseFloat(newDebitValor);
+    const valNumber = converterMascaraParaNumero(newDebitValor);
     if (isNaN(valNumber) || valNumber <= 0) {
       alert('O valor deve ser um número maior que zero.');
       return;
@@ -245,12 +247,11 @@ export const ModalInserirDebito: React.FC<ModalInserirDebitoProps> = ({
             <div className="relative">
               <span className="absolute left-3 top-2.5 text-sm text-slate-400 font-bold font-mono">R$</span>
               <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                placeholder="0.00"
+                type="text"
+                inputMode="numeric"
+                placeholder="0,00"
                 value={newDebitValor}
-                onChange={(e) => setNewDebitValor(e.target.value)}
+                onChange={(e) => setNewDebitValor(mascaraFinanceira(e.target.value))}
                 className="w-full pl-9 pr-3 p-2.5 border border-slate-200 rounded-lg text-sm bg-white font-mono font-bold text-slate-800"
                 required
               />

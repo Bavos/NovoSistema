@@ -626,26 +626,26 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     );
 
-    // ============================================================================
-    // OTIMIZAÇÃO DE PERFORMANCE - LAZY LOADING
-    // ============================================================================
-    // As chamadas para coleções secundárias foram removidas do boot inicial para 
-    // evitar concorrência excessiva e bloqueio da renderização principal (Escala).
-    //
-    // As seguintes coleções devem ser carregadas sob demanda em seus respectivos 
-    // componentes apenas quando o usuário navegar para elas:
-    //
-    // - faturas_pacientes      -> Movido para o componente de Histórico Financeiro
-    // - folhas_pagamento       -> Movido para o componente de Histórico Financeiro
-    // - debitos_profissionais  -> Movido para o componente de Gestão de Débitos
-    // - LogsAuditoria          -> Movido para o componente de Auditoria
-    // ============================================================================
+    const unsubscribeDebitos = onSnapshot(
+      query(collection(db, 'debitos_profissionais'), limit(2000)),
+      (snap) => {
+        const list: DebitoProfissional[] = [];
+        snap.forEach((d) => list.push({ ...d.data(), id: d.id } as DebitoProfissional));
+        setDebitosProfissionais(list);
+      },
+      (error) => {
+        if (!handleQuotaError(error, 'debitos_profissionais')) {
+          console.error("Error subscribing to debitos_profissionais:", error);
+        }
+      }
+    );
 
     return () => {
       unsubscribePlantoes();
       unsubscribeAgendamentos();
       unsubscribeProfissionais();
       unsubscribeUsuariosSistema();
+      unsubscribeDebitos();
     };
   }, [user, isQuotaExceeded]);
 
@@ -1565,38 +1565,71 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     try {
       const compressedBlob = await compressImage(file, 180);
       const storageRef = ref(storage, `logos/${file.name}`);
-      await uploadBytes(storageRef, compressedBlob);
-      return await getDownloadURL(storageRef);
+      const uploadPromise = uploadBytes(storageRef, compressedBlob).then(res => getDownloadURL(res.ref));
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('TIMEOUT: Firebase Storage logo upload timeout')), 2500)
+      );
+      return await Promise.race([uploadPromise, timeoutPromise]);
     } catch (error: any) {
-      console.error(`Erro no uploadLogo:`, error);
-      throw new Error(`Erro ao enviar logo: ${error.message || String(error)}`);
+      console.warn("Erro no uploadLogo no Firebase Storage, usando fallback Base64:", error);
+      try {
+        const compressedBlob = await compressImage(file, 180);
+        return await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(compressedBlob);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (e) => reject(e);
+        });
+      } catch (err) {
+        return await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(file);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (e) => reject(e);
+        });
+      }
     }
   };
 
   const uploadProfissionalFoto = async (file: File): Promise<string> => {
     try {
       const storageRef = ref(storage, `profissional_fotos/${Date.now()}_${file.name}`);
-      await uploadBytes(storageRef, file);
-      return await getDownloadURL(storageRef);
+      const uploadPromise = uploadBytes(storageRef, file).then(res => getDownloadURL(res.ref));
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('TIMEOUT: Firebase Storage photo upload timeout')), 2500)
+      );
+      return await Promise.race([uploadPromise, timeoutPromise]);
     } catch (error: any) {
-      console.warn("Firebase Storage PDF upload failed, converting to Base64 fallback:", error);
-      const compressedBlob = await compressImage(file, 250);
-      return new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(compressedBlob);
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = (e) => reject(e);
-      });
+      console.warn("Firebase Storage photo upload failed or timed out, converting to Base64 fallback:", error);
+      try {
+        const compressedBlob = await compressImage(file, 250);
+        return await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(compressedBlob);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (e) => reject(e);
+        });
+      } catch (compressErr) {
+        return await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(file);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (e) => reject(e);
+        });
+      }
     }
   };
 
   const uploadPdf = async (file: File, path: string): Promise<string> => {
     try {
       const storageRef = ref(storage, path);
-      await uploadBytes(storageRef, file);
-      return await getDownloadURL(storageRef);
+      const uploadPromise = uploadBytes(storageRef, file).then(res => getDownloadURL(res.ref));
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('TIMEOUT: Firebase Storage PDF upload timeout')), 2500)
+      );
+      return await Promise.race([uploadPromise, timeoutPromise]);
     } catch (err: any) {
-      console.warn("Firebase Storage PDF upload failed, converting to Base64 fallback:", err);
+      console.warn("Firebase Storage PDF upload failed or timed out, converting to Base64 fallback:", err);
       return new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.readAsDataURL(file);

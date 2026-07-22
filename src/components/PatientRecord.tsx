@@ -1882,6 +1882,14 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     }
   };
 
+  // Helper for parsing currency strings or numbers safely
+  const parseNum = (val: any, fallback = 0): number => {
+    if (val === undefined || val === null || val === '') return fallback;
+    if (typeof val === 'number') return isNaN(val) ? fallback : val;
+    const num = converterMascaraParaNumero(val);
+    return isNaN(num) ? fallback : num;
+  };
+
   // Helper for strict financial calculations
   const calculateShiftValues = (basePlantao: number, baseTaxa: number, baseAjuda: number, feriado: '20%' | '50%' | null) => {
     // Return base values. Acréscimo percent will be applied dynamically in reports and displays.
@@ -2028,21 +2036,21 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
           id: 'principal',
           tipoEscala: tipoEscala || 'Diurno 12h',
           horaInicio: horaInicioPadrao || '07:00',
-          valorPlantao: converterMascaraParaNumero(valorSugeridoPlantao),
-          ajudaCusto: converterMascaraParaNumero(ajudaCusto),
-          valorTransporte: converterMascaraParaNumero(valorTransporte),
-          valorAlimentacao: converterMascaraParaNumero(valorAlimentacao),
-          taxaAdm: converterMascaraParaNumero(taxaAdm),
+          valorPlantao: parseNum(valorSugeridoPlantao, 150),
+          ajudaCusto: parseNum(ajudaCusto, 0),
+          valorTransporte: parseNum(valorTransporte, 0),
+          valorAlimentacao: parseNum(valorAlimentacao, 0),
+          taxaAdm: parseNum(taxaAdm, 0),
         },
         ...tiposPlantao.map((tp) => ({
           id: tp.id,
           tipoEscala: tp.tipoEscala,
           horaInicio: tp.horaInicio,
-          valorPlantao: Number(tp.valorPlantao || 0),
-          ajudaCusto: Number(tp.ajudaCusto || 0),
-          valorTransporte: Number(tp.valorTransporte ?? tp.ajudaCusto ?? 0),
-          valorAlimentacao: Number(tp.valorAlimentacao ?? 0),
-          taxaAdm: Number(tp.taxaAdm || 0),
+          valorPlantao: parseNum(tp.valorPlantao, 150),
+          ajudaCusto: parseNum(tp.ajudaCusto, 0),
+          valorTransporte: parseNum(tp.valorTransporte ?? tp.ajudaCusto, 0),
+          valorAlimentacao: parseNum(tp.valorAlimentacao, 0),
+          taxaAdm: parseNum(tp.taxaAdm, 0),
         })),
       ];
 
@@ -2274,9 +2282,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       let sumTaxa = 0;
       agendamentosPacienteMes.forEach(s => {
         if (s.status !== 'Cancelado') {
-          let base = Number(s.valorPlantao) || Number(paciente?.planoAtendimento?.valorSugeridoPlantao) || 150;
-          let extra = Number(s.ajudaCusto) || Number(paciente?.planoAtendimento?.ajudaCusto) || 0;
-          let baseTaxa = Number(s.taxaAdm) || Number(paciente?.planoAtendimento?.taxaAdm) || 0;
+          let base = parseNum(s.valorPlantao) || parseNum(paciente?.planoAtendimento?.valorSugeridoPlantao, 150);
+          let extra = parseNum(s.ajudaCusto) || parseNum(paciente?.planoAtendimento?.ajudaCusto, 0);
+          let baseTaxa = parseNum(s.taxaAdm) || parseNum(paciente?.planoAtendimento?.taxaAdm, 0);
           if (s.tipoDia === 'Feriado 20%') {
             sumRepasse += (base * 1.20) + extra;
             sumTaxa += baseTaxa * 1.20;
@@ -3156,18 +3164,18 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       id: 'principal',
       tipoEscala: tipoEscala || 'Diurno 12h',
       horaInicio: horaInicioPadrao || '07:00',
-      valorPlantao: Number(valorSugeridoPlantao || 0),
-      ajudaCusto: Number(ajudaCusto || 0),
-      taxaAdm: Number(taxaAdm || 0),
+      valorPlantao: parseNum(valorSugeridoPlantao, 150),
+      ajudaCusto: parseNum(ajudaCusto, 0),
+      taxaAdm: parseNum(taxaAdm, 0),
       label: `${tipoEscala || 'Diurno 12h'} (Principal)`
     },
     ...tiposPlantao.map(tp => ({
       id: tp.id,
       tipoEscala: tp.tipoEscala,
       horaInicio: tp.horaInicio,
-      valorPlantao: Number(tp.valorPlantao || 0),
-      ajudaCusto: Number(tp.ajudaCusto || 0),
-      taxaAdm: Number(tp.taxaAdm || 0),
+      valorPlantao: parseNum(tp.valorPlantao, 150),
+      ajudaCusto: parseNum(tp.ajudaCusto, 0),
+      taxaAdm: parseNum(tp.taxaAdm, 0),
       label: `${tp.tipoEscala} (Adicional)`
     }))
   ];
@@ -4696,6 +4704,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                   {dayAgendamentos.map((ag) => {
                                     const isCancelled = ag.status === 'Cancelado';
                                     const isConcluido = ag.status === 'Concluido';
+                                    const isFalta = ag.considerarFalta === true || (ag as any).atendimentoRealizado === 'Não' || ag.status === 'Falta' || ag.status === 'falta';
 
                                     return (
                                       <div
@@ -4725,11 +4734,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                         className={`text-[10px] p-1.5 border rounded-lg cursor-pointer flex flex-col text-left w-full transition-all duration-150 relative space-y-0.5 hover:-translate-y-0.5 hover:shadow-2xs group/shift ${
                                           isCancelled
                                             ? 'bg-slate-100 border-slate-200 text-slate-400 line-through'
-                                            : isConcluido
-                                              ? 'bg-indigo-50 border-indigo-200 text-indigo-950 font-bold'
-                                              : 'bg-emerald-50 border-emerald-200 text-emerald-950 font-bold hover:bg-emerald-100 hover:border-emerald-300'
+                                            : isFalta
+                                              ? 'bg-rose-50 border-rose-200 text-rose-950 font-medium'
+                                              : isConcluido
+                                                ? 'bg-indigo-50 border-indigo-200 text-indigo-950 font-bold'
+                                                : 'bg-emerald-50 border-emerald-200 text-emerald-950 font-bold hover:bg-emerald-100 hover:border-emerald-300'
                                         }`}
-                                        title={ag.observacao || 'Inspecionar Plantão'}
+                                        title={ag.observacao || (isFalta ? 'Falta Registrada' : 'Inspecionar Plantão')}
                                       >
                                         {/* Copy Shift Button */}
                                         <button
@@ -4742,10 +4753,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                         </button>
 
                                         <div className="flex justify-between items-center gap-1">
-                                          <span className="truncate block font-bold text-[9px] text-slate-800 pr-3">
+                                          <span className={`truncate block font-bold text-[9px] pr-3 ${isFalta ? 'line-through text-slate-500' : 'text-slate-800'}`}>
                                             {ag.nomeProfissional || 'Geral'}
                                           </span>
                                           <div className="flex items-center space-x-0.5 shrink-0">
+                                            {isFalta && (
+                                              <span className="px-0.5 py-[0.1px] text-[6px] font-black uppercase bg-rose-200 text-rose-900 rounded-3xs font-sans">FALTA</span>
+                                            )}
                                             {(ag.isCuringa || ag.observacao?.includes('CURINGA')) && (
                                               <span className="px-0.5 py-[0.1px] text-[6px] font-black uppercase bg-amber-200 text-amber-900 rounded-3xs font-sans">CUR</span>
                                             )}
@@ -6163,9 +6177,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     viewMultiplier = 1.5;
                   }
 
-                  const viewRepasseValue = (selectedShiftForDetails.valorRepasse || 0) * viewMultiplier;
-                  const viewTaxaValue = (selectedShiftForDetails.taxaAdm || 0) * viewMultiplier;
-                  const viewAjudaValue = selectedShiftForDetails.ajudaCusto || 0;
+                  const rawRepasse = parseNum(selectedShiftForDetails.valorRepasse || selectedShiftForDetails.valorPlantao);
+                  const fallbackBase = rawRepasse > 0 ? rawRepasse : parseNum(paciente?.planoAtendimento?.valorSugeridoPlantao, 150);
+                  const viewRepasseValue = (selectedShiftForDetails.considerarFalta ? 0 : fallbackBase) * viewMultiplier;
+                  const viewTaxaValue = (selectedShiftForDetails.considerarFalta ? 0 : parseNum(selectedShiftForDetails.taxaAdm, parseNum(taxaAdm, 0))) * viewMultiplier;
+                  const viewAjudaValue = selectedShiftForDetails.considerarFalta ? 0 : parseNum(selectedShiftForDetails.ajudaCusto, parseNum(ajudaCusto, 0));
                   const viewTotalValue = viewRepasseValue + viewTaxaValue + viewAjudaValue;
 
                   const fullAddress = paciente && paciente.endereco
@@ -6357,7 +6373,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                   pacienteId: selectedShiftForDetails.idPaciente || '',
                                   paciente: paciente?.nome || '',
                                   data: selectedShiftForDetails.data || '',
-                                  motivo: 'Curinga'
+                                  motivo: 'Curinga',
+                                  valor: viewRepasseValue + viewAjudaValue
                                 });
                                 setIsCuringaShortcutModalOpen(true);
                                 setDetailsModalOpen(false);
@@ -6612,7 +6629,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         
                         try {
                           const chosenOpt = availableShifts.find((s) => s.id === detailsPlantaoOptionId) || availableShifts[0];
-                          const baseRepasseValue = chosenOpt.valorPlantao;
+                          const baseRepasseValue = chosenOpt.valorPlantao || parseNum(paciente?.planoAtendimento?.valorSugeridoPlantao, 150);
                           const baseAjudaValue = chosenOpt.ajudaCusto;
                           const baseTaxaValue = chosenOpt.taxaAdm;
                           const chosenHoraInicio = chosenOpt.horaInicio;
@@ -7403,7 +7420,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                               let sum = 0;
                               filteredShiftsForPatient.forEach(s => {
                                 if (s.status !== 'Cancelado') {
-                                  let baseTaxa = Number(s.taxaAdm) || Number(paciente?.planoAtendimento?.taxaAdm) || 0;
+                                  let baseTaxa = parseNum(s.taxaAdm) || parseNum(paciente?.planoAtendimento?.taxaAdm, 0);
                                   if (s.feriado === '20%') {
                                     sum += baseTaxa * 1.20;
                                   } else if (s.feriado === '50%') {
@@ -7427,9 +7444,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                               let sumTaxa = 0;
                               filteredShiftsForPatient.forEach(s => {
                                 if (s.status !== 'Cancelado') {
-                                  let base = Number(s.valorPlantao) || Number(paciente?.planoAtendimento?.valorSugeridoPlantao) || 150;
-                                  let extra = Number(s.ajudaCusto) || Number(paciente?.planoAtendimento?.ajudaCusto) || 0;
-                                  let baseTaxa = Number(s.taxaAdm) || Number(paciente?.planoAtendimento?.taxaAdm) || 0;
+                                  let base = parseNum(s.valorPlantao) || parseNum(paciente?.planoAtendimento?.valorSugeridoPlantao, 150);
+                                  let extra = parseNum(s.ajudaCusto) || parseNum(paciente?.planoAtendimento?.ajudaCusto, 0);
+                                  let baseTaxa = parseNum(s.taxaAdm) || parseNum(paciente?.planoAtendimento?.taxaAdm, 0);
                                   if (s.feriado === '20%') {
                                     sumRepasse += (base * 1.20) + extra;
                                     sumTaxa += baseTaxa * 1.20;
@@ -7476,9 +7493,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         </tr>
                       ) : (
                         filteredShiftsForPatient.filter(x => x.status !== 'Cancelado').map((item, index) => {
-                          const base = Number(item.valorPlantao) || Number(paciente?.planoAtendimento?.valorSugeridoPlantao) || 150;
-                          const extra = Number(item.ajudaCusto) || Number(paciente?.planoAtendimento?.ajudaCusto) || 0;
-                          const baseTaxa = Number(item.taxaAdm) || Number(paciente?.planoAtendimento?.taxaAdm) || 0;
+                          const base = parseNum(item.valorPlantao) || parseNum(paciente?.planoAtendimento?.valorSugeridoPlantao, 150);
+                          const extra = parseNum(item.ajudaCusto) || parseNum(paciente?.planoAtendimento?.ajudaCusto, 0);
+                          const baseTaxa = parseNum(item.taxaAdm) || parseNum(paciente?.planoAtendimento?.taxaAdm, 0);
                           let repasseCalculado = base + extra;
                           let taxaCalculada = baseTaxa;
                           if (item.feriado === '20%') {
@@ -7944,9 +7961,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 ativos++;
               }
 
-              let base = Number(s.valorPlantao) || Number(paciente?.planoAtendimento?.valorSugeridoPlantao) || 150;
-              let extra = Number(s.ajudaCusto) || Number(paciente?.planoAtendimento?.ajudaCusto) || 0;
-              let baseTaxa = Number(s.taxaAdm) || Number(paciente?.planoAtendimento?.taxaAdm) || 0;
+              let base = parseNum(s.valorPlantao) || parseNum(paciente?.planoAtendimento?.valorSugeridoPlantao, 150);
+              let extra = parseNum(s.ajudaCusto) || parseNum(paciente?.planoAtendimento?.ajudaCusto, 0);
+              let baseTaxa = parseNum(s.taxaAdm) || parseNum(paciente?.planoAtendimento?.taxaAdm, 0);
               if (s.tipoDia === 'Feriado 20%') {
                 countFeriado20++;
                 sumRep += (base * 1.20) + extra;
