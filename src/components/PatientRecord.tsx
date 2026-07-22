@@ -161,6 +161,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     addAgendamento,
     addAgendamentosBatch,
     updateAgendamento,
+    updateAgendamentosBatch,
     deleteAgendamento,
     deleteAgendamentosBatch,
     userRole,
@@ -2182,7 +2183,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const handleConfirmConcluir = async () => {
     if (!paciente) return;
     if (!concluirStartDate || !concluirEndDate) {
-      alert('Defina o início e o fim do período.');
+      toast.error('Defina o início e o fim do período.');
       return;
     }
 
@@ -2191,25 +2192,31 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       (s) => s.data >= concluirStartDate && s.data <= concluirEndDate && s.status !== 'Concluido' && s.status !== 'Cancelado'
     );
 
+    console.log(`Tentando concluir agendamentos do paciente ${paciente.id} de ${concluirStartDate} a ${concluirEndDate}.`);
+    console.log(`Total de agendamentos no período: ${agendamentosPaciente.filter(s => s.data >= concluirStartDate && s.data <= concluirEndDate).length}`);
+    console.log(`Agendamentos filtrados (ativos): ${matches.length}`);
+
     if (matches.length === 0) {
-      alert('Nenhum agendamento ativo foi encontrado neste período para ser concluído.');
+      toast.error('Nenhum agendamento ativo foi encontrado neste período para ser concluído.');
       return;
     }
 
+    const toastId = toast.loading('Processando conclusão...');
+
     try {
-      await Promise.all(
-        matches.map((s) =>
-          updateAgendamento({
-            ...s,
-            status: 'Concluido',
-            escalaCongelada: true,
-          })
-        )
+      await updateAgendamentosBatch(
+        matches.map(s => ({
+          id: s.id,
+          status: 'Concluido',
+          escalaCongelada: true
+        }))
       );
+
       setConcluirModalOpen(false);
-      alert(`Escala concluída (congelada) com sucesso de ${concluirStartDate.split('-').reverse().join('/')} a ${concluirEndDate.split('-').reverse().join('/')}. ${matches.length} turnos foram afetados.`);
-    } catch (err) {
-      alert('Erro ao congelar escala.');
+      toast.success(`Escala concluída com sucesso! ${matches.length} turnos foram congelados.`, { id: toastId });
+    } catch (err: any) {
+      console.error("Erro ao processar batch de conclusão:", err);
+      toast.error('Erro ao congelar escala: ' + (err.message || String(err)), { id: toastId });
     }
   };
 
@@ -2337,7 +2344,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const handleConfirmReabrir = async () => {
     if (!paciente) return;
     if (!reabrirStartDate || !reabrirEndDate) {
-      alert('Defina o início e o fim do período.');
+      toast.error('Defina o início e o fim do período.');
       return;
     }
 
@@ -2346,25 +2353,30 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       (s) => s.data >= reabrirStartDate && s.data <= reabrirEndDate && s.status === 'Concluido'
     );
 
+    console.log(`Tentando reabrir agendamentos do paciente ${paciente.id} de ${reabrirStartDate} a ${reabrirEndDate}.`);
+    console.log(`Agendamentos filtrados (concluídos): ${matches.length}`);
+
     if (matches.length === 0) {
-      alert('Nenhum agendamento concluído foi encontrado neste período para ser reaberto.');
+      toast.error('Nenhum agendamento concluído foi encontrado neste período para ser reaberto.');
       return;
     }
 
+    const toastId = toast.loading('Processando reabertura da escala...');
+
     try {
-      await Promise.all(
-        matches.map((s) =>
-          updateAgendamento({
-            ...s,
-            status: 'Aberta',
-            escalaCongelada: false,
-          })
-        )
+      await updateAgendamentosBatch(
+        matches.map(s => ({
+          id: s.id,
+          status: 'Aberta',
+          escalaCongelada: false
+        }))
       );
+
       setReabrirModalOpen(false);
-      alert(`Escala reaberta com sucesso de ${reabrirStartDate.split('-').reverse().join('/')} a ${reabrirEndDate.split('-').reverse().join('/')}. Os turnos estão disponíveis para edição.`);
-    } catch (err) {
-      alert('Erro ao reabrir escala.');
+      toast.success(`Escala reaberta com sucesso! ${matches.length} turnos estão disponíveis para edição.`, { id: toastId });
+    } catch (err: any) {
+      console.error("Erro ao processar batch de reabertura:", err);
+      toast.error('Erro ao reabrir escala: ' + (err.message || String(err)), { id: toastId });
     }
   };
 

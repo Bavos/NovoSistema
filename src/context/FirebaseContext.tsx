@@ -68,6 +68,7 @@ interface FirebaseContextType {
   addAgendamento: (agendamento: Omit<Agendamento, 'id'>) => Promise<Agendamento>;
   addAgendamentosBatch: (agendamentos: Omit<Agendamento, 'id'>[]) => Promise<Agendamento[]>;
   updateAgendamento: (agendamento: Agendamento) => Promise<void>;
+  updateAgendamentosBatch: (agendamentos: (Partial<Agendamento> & { id: string })[]) => Promise<void>;
   deleteAgendamento: (id: string) => Promise<void>;
   deleteAgendamentosBatch: (ids: string[]) => Promise<void>;
   deletePaciente: (id: string) => Promise<void>;
@@ -97,6 +98,8 @@ interface FirebaseContextType {
 
 const FirebaseContext = createContext<FirebaseContextType | undefined>(undefined);
 
+let lastQuotaToastTime = 0;
+
 export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isQuotaExceeded, setIsQuotaExceeded] = useState<boolean>(false);
 
@@ -106,10 +109,16 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (isQuota) {
       if (!isQuotaExceeded) {
         setIsQuotaExceeded(true);
+      }
+      
+      const now = Date.now();
+      if (now - lastQuotaToastTime > 10000) {
+        lastQuotaToastTime = now;
         console.warn(`[Firebase Quota Fallback] Cota excedida detectada em: ${source}. Ativando modo de contingência local.`);
         toast.error("⚠️ Limite de Cota do Firebase Excedido: Operando temporariamente em Modo de Contingência Local.", {
           duration: 8000,
-          position: 'top-center'
+          position: 'top-center',
+          id: 'quota-error'
         });
       }
       return true;
@@ -617,71 +626,26 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     );
 
-    const unsubscribeDebitosProfissionais = onSnapshot(
-      query(collection(db, 'debitos_profissionais'), limit(3000)),
-      (snap) => {
-        const list: DebitoProfissional[] = [];
-        snap.forEach((d) => list.push({ ...d.data(), id: d.id } as DebitoProfissional));
-        setDebitosProfissionais(list);
-      },
-      (error) => {
-        if (!handleQuotaError(error, 'debitos_profissionais')) {
-          console.error("Error subscribing to debitos_profissionais:", error);
-        }
-      }
-    );
-
-    const unsubscribeFaturasPacientes = onSnapshot(
-      query(collection(db, 'faturas_pacientes'), limit(3000)),
-      (snap) => {
-        const list: FaturaPaciente[] = [];
-        snap.forEach((d) => list.push({ ...d.data(), id: d.id } as FaturaPaciente));
-        setFaturasPacientes(list);
-      },
-      (error) => {
-        if (!handleQuotaError(error, 'faturas_pacientes')) {
-          console.error("Error subscribing to faturas_pacientes:", error);
-        }
-      }
-    );
-
-    const unsubscribeFolhasPagamento = onSnapshot(
-      query(collection(db, 'folhas_pagamento'), limit(3000)),
-      (snap) => {
-        const list: FolhaPagamento[] = [];
-        snap.forEach((d) => list.push({ ...d.data(), id: d.id } as FolhaPagamento));
-        setFolhasPagamento(list);
-      },
-      (error) => {
-        if (!handleQuotaError(error, 'folhas_pagamento')) {
-          console.error("Error subscribing to folhas_pagamento:", error);
-        }
-      }
-    );
-
-    const unsubscribeLogsAuditoria = onSnapshot(
-      query(collection(db, 'LogsAuditoria'), limit(1000)),
-      (snap) => {
-        const list: AuditLog[] = [];
-        snap.forEach((d) => list.push({ ...d.data(), id: d.id } as AuditLog));
-        setLogsAuditoria(list);
-      },
-      (error) => {
-        if (!handleQuotaError(error, 'LogsAuditoria')) {
-          console.error("Error subscribing to LogsAuditoria:", error);
-        }
-      }
-    );
+    // ============================================================================
+    // OTIMIZAÇÃO DE PERFORMANCE - LAZY LOADING
+    // ============================================================================
+    // As chamadas para coleções secundárias foram removidas do boot inicial para 
+    // evitar concorrência excessiva e bloqueio da renderização principal (Escala).
+    //
+    // As seguintes coleções devem ser carregadas sob demanda em seus respectivos 
+    // componentes apenas quando o usuário navegar para elas:
+    //
+    // - faturas_pacientes      -> Movido para o componente de Histórico Financeiro
+    // - folhas_pagamento       -> Movido para o componente de Histórico Financeiro
+    // - debitos_profissionais  -> Movido para o componente de Gestão de Débitos
+    // - LogsAuditoria          -> Movido para o componente de Auditoria
+    // ============================================================================
 
     return () => {
       unsubscribePlantoes();
       unsubscribeAgendamentos();
       unsubscribeProfissionais();
       unsubscribeUsuariosSistema();
-      unsubscribeDebitosProfissionais();
-      unsubscribeFaturasPacientes();
-      unsubscribeFolhasPagamento();
-      unsubscribeLogsAuditoria();
     };
   }, [user, isQuotaExceeded]);
 
@@ -1057,7 +1021,6 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setNotification('Agendamento atualizado (Contingência Local).');
       return;
     }
-
     try {
       const agToSave = { ...ag} as any;
       Object.keys(agToSave).forEach(key => {
@@ -1071,6 +1034,50 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setNotification('Agendamento atualizado.');
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `agendamentos/${ag.id}`);
+      throw err;
+    }
+  };
+
+  const updateAgendamentosBatch = async (agendamentosToUpdate: (Partial<Agendamento> & { id: string })[]) => {
+    if (isQuotaExceeded) {
+      const updatedList = agendamentos.map(a => {
+        const update = agendamentosToUpdate.find(upd => upd.id === a.id);
+        return update ? { ...a, ...update } as Agendamento : a;
+      });
+      setAgendamentos(updatedList);
+      localStorage.setItem('contingency_agendamentos', JSON.stringify(updatedList));
+      setNotification(`${agendamentosToUpdate.length} agendamentos atualizados (Contingência Local).`);
+      return;
+    }
+    
+    try {
+      const chunks = [];
+      for (let i = 0; i < agendamentosToUpdate.length; i += 500) {
+        chunks.push(agendamentosToUpdate.slice(i, i + 500));
+      }
+
+      for (const chunk of chunks) {
+        const batch = writeBatch(db);
+        chunk.forEach((ag) => {
+          const agToSave = { ...ag } as any;
+          Object.keys(agToSave).forEach(key => {
+            if (agToSave[key] === undefined) {
+              delete agToSave[key];
+            }
+          });
+          const ref = doc(db, 'agendamentos', ag.id);
+          batch.set(ref, agToSave, { merge: true });
+        });
+        await batch.commit();
+      }
+      
+      setAgendamentos(prev => prev.map(a => {
+        const update = agendamentosToUpdate.find(upd => upd.id === a.id);
+        return update ? { ...a, ...update } as Agendamento : a;
+      }));
+      setNotification(`${agendamentosToUpdate.length} agendamentos atualizados em lote.`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'agendamentos/batch');
       throw err;
     }
   };
@@ -1716,6 +1723,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         addAgendamento,
         addAgendamentosBatch,
         updateAgendamento,
+        updateAgendamentosBatch,
         deleteAgendamento,
         deleteAgendamentosBatch,
         deletePaciente,
