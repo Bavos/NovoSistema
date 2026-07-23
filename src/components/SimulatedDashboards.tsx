@@ -3987,8 +3987,12 @@ export const EmpresaDashboard: React.FC = () => {
             setDominiosAutorizados(Array.isArray(data.dominiosAutorizados) ? data.dominiosAutorizados.join(', ') : data.dominiosAutorizados);
           }
         }
-      } catch (err) {
-        console.error("Erro ao carregar dados da matriz:", err);
+      } catch (err: any) {
+        if (err?.message?.includes('Quota') || err?.code === 'resource-exhausted' || err?.message?.includes('quota')) {
+          console.warn("Quota limit exceeded ao carregar dados da matriz (ignorado).");
+        } else {
+          console.error("Erro ao carregar dados da matriz:", err);
+        }
       } finally {
         setLoadingConfig(false);
       }

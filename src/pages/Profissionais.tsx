@@ -1837,90 +1837,112 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
           </div>
         </div>
         
-        {/* Crachá Integrado no Estilo da Simulação (image_15) */}
+        {/* Crachá Integrado no Estilo da Simulação (100% Dinâmico) */}
         <div 
           ref={badgeRef}
           className="relative w-[580px] h-[380px] bg-white rounded-2xl border-2 border-[#C5A059] p-1.5 shadow-xl overflow-hidden font-sans select-none"
         >
           <div className="relative w-full h-full border border-[#C5A059]/70 rounded-xl p-5 flex flex-col items-center justify-between bg-white overflow-hidden">
             
-            {/* Marca d'Água (Watermark Background) com Símbolo de Coração e Folha em Opacidade de ~7% */}
-            <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-[0.08]" xmlns="http://www.w3.org/2000/svg">
+            {/* Marca d'Água (Watermark Background) com Símbolo de Coração e Folha em Opacidade de ~6% */}
+            <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-[0.06] z-0" xmlns="http://www.w3.org/2000/svg">
               <defs>
-                <pattern id="heart-leaf-watermark" x="0" y="0" width="70" height="70" patternUnits="userSpaceOnUse">
+                <pattern id="heart-leaf-watermark" x="0" y="0" width="55" height="55" patternUnits="userSpaceOnUse">
                   <g stroke="#C5A059" strokeWidth="1.2" fill="none">
-                    <path d="M 25 15 C 20 10 12 12 10 18 C 7 26 15 32 25 40 C 35 32 43 26 40 18 C 38 12 30 10 25 15 Z" fill="#C5A059" fillOpacity="0.3" />
-                    <path d="M 25 22 C 22 17 18 19 16 23 C 14 28 19 32 25 37 C 31 32 36 28 34 23 C 32 19 28 17 25 22 Z" fill="#C5A059" fillOpacity="0.5" />
+                    <path d="M 22 10 C 17 5 10 7 8 13 C 5 21 13 27 22 35 C 31 27 39 21 36 13 C 34 7 27 5 22 10 Z" fill="#C5A059" fillOpacity="0.3" />
+                    <path d="M 27 12 C 32 15 30 23 23 27 C 22 28 20 22 24 16 C 26 13 27 12 27 12 Z" fill="#1a3c2e" fillOpacity="0.4" />
                   </g>
                 </pattern>
               </defs>
               <rect width="100%" height="100%" fill="url(#heart-leaf-watermark)" />
             </svg>
 
-            {/* Logotipo Principal no Canto Superior Esquerdo sem Caixa Branca (Integrado Naturalmente) */}
-            <div className="absolute top-4 left-5 z-10">
+            {/* Arcos Decorativos Dourados (Top & Bottom Metallic Arches - Perfectly Framing Photo and Text) */}
+            <svg className="absolute inset-0 w-full h-full pointer-events-none z-0" viewBox="0 0 580 380" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="badge-gold-arc-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#C5A059" stopOpacity="0.08" />
+                  <stop offset="20%" stopColor="#D4AF37" stopOpacity="0.85" />
+                  <stop offset="50%" stopColor="#F3E5AB" stopOpacity="1" />
+                  <stop offset="80%" stopColor="#D4AF37" stopOpacity="0.85" />
+                  <stop offset="100%" stopColor="#C5A059" stopOpacity="0.08" />
+                </linearGradient>
+              </defs>
+              {/* Arco Superior Reposicionado (Descido para abraçar a foto e harmonizar o espaço negativo) */}
+              <path d="M 45 110 Q 290 54 535 110 Q 290 68 45 110 Z" fill="url(#badge-gold-arc-grad)" />
+              {/* Arco Inferior Sweeping Low Below Details (Subido 2 pontos) */}
+              <path d="M 45 280 Q 290 336 535 280 Q 290 322 45 280 Z" fill="url(#badge-gold-arc-grad)" />
+            </svg>
+
+            {/* Logotipo Principal no Canto Superior Esquerdo (bg-transparent + mix-blend-multiply na img) */}
+            <div className="absolute top-3.5 left-5 z-10 flex items-center bg-transparent pointer-events-none">
               {loadingConfig ? (
-                <div className="w-28 h-10 bg-slate-100 animate-pulse rounded" />
+                <div className="w-28 h-10 bg-slate-100/50 animate-pulse rounded" />
               ) : logoBase64 ? (
                 <img 
                   src={logoBase64} 
-                  alt="Logo" 
-                  className="h-14 w-auto object-contain mix-blend-multiply" 
+                  alt="Logo da Empresa" 
+                  className="h-13 w-auto object-contain mix-blend-multiply bg-transparent" 
                   crossOrigin="anonymous" 
                 />
               ) : (
-                <div className="flex items-center gap-2">
-                  <svg className="w-10 h-10 text-[#C5A059]" viewBox="0 0 100 100" fill="none">
+                <div className="flex items-center gap-2 bg-transparent">
+                  <svg className="w-10 h-10 text-[#C5A059] bg-transparent" viewBox="0 0 100 100" fill="none">
                     <path d="M 50 18 C 38 8 20 12 16 26 C 10 44 28 58 50 76 C 72 58 90 44 84 26 C 80 12 62 8 50 18 Z" fill="#C5A059" />
                     <path d="M 50 30 C 42 22 32 24 29 31 C 24 40 36 49 50 60 C 64 49 76 40 71 31 C 68 24 58 22 50 30 Z" fill="#1a3c2e" />
                   </svg>
-                  <div className="flex flex-col text-left">
-                    <span className="text-lg font-bold text-[#1a3c2e] leading-none">RH</span>
-                    <span className="text-[10px] font-bold text-[#1a3c2e] tracking-wider uppercase">Gestão Domiciliar</span>
+                  <div className="flex flex-col text-left bg-transparent">
+                    <span className="text-lg font-extrabold text-[#1a3c2e] leading-none tracking-tight">RH</span>
+                    <span className="text-[9px] font-bold text-[#1a3c2e] tracking-wider uppercase mt-0.5">Gestão Domiciliar</span>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Layout Central: Foto Centralizada com Borda Dourada e Informações Organizadas */}
-            <div className="z-10 flex flex-col items-center mt-3 w-full">
-              {/* Foto do Funcionário com Borda Dourada Fina */}
-              <div className="w-32 h-40 border-2 border-[#C5A059] rounded-sm overflow-hidden bg-slate-50 shadow-sm flex items-center justify-center">
-                {fotoBase64 || profData.foto ? (
+            {/* Layout Central: Foto Centralizada com Moldura Dourada Fina e Dados Dinâmicos - Alinhamento Óptico Perfeito entre os Arcos */}
+            <div className="z-10 flex flex-col items-center justify-center my-auto w-full pt-3 pb-1">
+              {/* Foto do Profissional com Moldura Dourada Fina e Cantos Arredondados */}
+              <div className="w-28 h-36 border-[2.5px] border-[#C5A059] rounded-2xl overflow-hidden bg-slate-50 shadow-md flex items-center justify-center shrink-0">
+                {fotoBase64 || profData?.foto ? (
                   <img 
                     src={fotoBase64 || profData.foto} 
-                    alt="Foto do Profissional" 
-                    className="w-full h-full object-cover" 
+                    alt={profData?.nome || 'Foto do Profissional'} 
+                    className="w-full h-full object-cover rounded-[13px]" 
                     crossOrigin="anonymous" 
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-slate-100 text-slate-400 text-xs font-bold">
-                    Sem Foto
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 text-slate-400 p-2 text-center">
+                    <svg className="w-10 h-10 text-[#C5A059]/60 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    <span className="text-[9px] font-bold text-slate-500 uppercase">Sem Foto</span>
                   </div>
                 )}
               </div>
 
-              {/* Informações Organizadas do Funcionário (Abaixo da Foto) */}
-              <div className="mt-3.5 text-center space-y-1">
-                <div className="text-sm text-slate-800">
-                  <span className="font-normal text-slate-600">Nome: </span>
-                  <span className="font-bold text-slate-900">{profData.nome || "Ana Paula Pereira Araújo"}</span>
+              {/* Informações Organizadas do Profissional (Abaixo da Foto - Flutuando perfeitamente no centro) */}
+              <div className="mt-2.5 text-center space-y-0.5">
+                <div className="text-sm md:text-base text-slate-800 leading-tight">
+                  <span className="font-normal text-slate-700">Nome: </span>
+                  <span className="font-bold text-slate-900">{profData?.nome || "Profissional não identificado"}</span>
                 </div>
-                <div className="text-sm text-slate-800">
-                  <span className="font-normal text-slate-600">CPF: </span>
-                  <span className="font-semibold text-slate-800">{profData.cpf || "665.343.303-00"}</span>
+                <div className="text-xs md:text-sm text-slate-800 leading-tight">
+                  <span className="font-normal text-slate-700">CPF: </span>
+                  <span className="font-semibold text-slate-800">{profData?.cpf || "000.000.000-00"}</span>
                 </div>
-                <div className="text-sm text-slate-800">
-                  <span className="font-normal text-slate-600">Cargo: </span>
-                  <span className="font-semibold text-slate-800">{profData.profissao || profData.especialidade || "Cuidadora"}</span>
+                <div className="text-xs md:text-sm text-slate-800 leading-tight">
+                  <span className="font-normal text-slate-700">Cargo: </span>
+                  <span className="font-semibold text-slate-800">
+                    {(profData as any)?.cargo || profData?.profissao || profData?.especialidade || "Cuidadora"}
+                  </span>
                 </div>
               </div>
             </div>
 
             {/* Integração de Dados Corporativos (Canto Inferior Direito) */}
-            <div className="absolute bottom-4 right-5 z-10 text-right text-xs leading-tight">
+            <div className="absolute bottom-4 right-5 z-10 text-right text-xs leading-tight font-sans">
               <div className="font-bold text-slate-900">{config.razaoSocial || "RH Gestão Domiciliar"}</div>
-              <div className="text-[11px] text-slate-700 font-semibold">{config.cnpj ? `CNPJ: ${config.cnpj}` : "CNPJ: 68.152.234/0001-98"}</div>
+              <div className="text-[11px] text-slate-800 font-semibold">{config.cnpj ? `CNPJ: ${config.cnpj}` : "CNPJ: 68.152.234/0001-98"}</div>
             </div>
 
           </div>
