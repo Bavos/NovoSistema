@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import html2canvas from 'html2canvas';
+import { sanitizeClonedDocForHtml2Canvas } from '../lib/html2canvasSanitizer';
 import { useFirebase } from '../context/FirebaseContext';
 import { Profissional, Agendamento, DocumentoAnexo, Ocorrencia } from '../types';
 import { Plus, Edit2, Trash2, X, Check, CalendarDays, Paperclip, AlertCircle, Printer, Download, FileImage, Search, Clock, User, Calendar, Receipt, Copy, Save } from 'lucide-react';
@@ -1716,21 +1717,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
             logging: false,
             backgroundColor: '#fcf8f2',
             onclone: (clonedDoc) => {
-              const allElements = clonedDoc.getElementsByTagName('*');
-              for (let i = 0; i < allElements.length; i++) {
-                const el = allElements[i] as HTMLElement;
-                const computedStyle = window.getComputedStyle(el);
-                
-                if (computedStyle.backgroundColor.includes('oklab') || computedStyle.backgroundColor.includes('oklch')) {
-                  el.style.setProperty('background-color', '#fcf8f2', 'important');
-                }
-                if (computedStyle.color.includes('oklab') || computedStyle.color.includes('oklch')) {
-                  el.style.setProperty('color', '#1a3c2e', 'important');
-                }
-                if (computedStyle.borderColor.includes('oklab') || computedStyle.borderColor.includes('oklch')) {
-                  el.style.setProperty('border-color', '#b8860b', 'important');
-                }
-              }
+              sanitizeClonedDocForHtml2Canvas(clonedDoc, '#fcf8f2', '#1a3c2e');
             }
           });
           
@@ -1763,26 +1750,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
             logging: false,
             backgroundColor: '#fcf8f2',
             onclone: (clonedDoc) => {
-              try {
-                const allElements = clonedDoc.getElementsByTagName('*');
-                for (let i = 0; i < allElements.length; i++) {
-                  const el = allElements[i] as HTMLElement;
-                  const style = window.getComputedStyle(el);
-                  if (!style) continue;
-                  
-                  if (style.backgroundColor && (style.backgroundColor.includes('oklab') || style.backgroundColor.includes('oklch'))) {
-                    el.style.setProperty('background-color', '#fcf8f2', 'important');
-                  }
-                  if (style.color && (style.color.includes('oklab') || style.color.includes('oklch'))) {
-                    el.style.setProperty('color', '#1a3c2e', 'important');
-                  }
-                  if (style.borderColor && (style.borderColor.includes('oklab') || style.borderColor.includes('oklch'))) {
-                    el.style.setProperty('border-color', '#b8860b', 'important');
-                  }
-                }
-              } catch (e) {
-                console.warn("Erro ao higienizar oklab no clone", e);
-              }
+              sanitizeClonedDocForHtml2Canvas(clonedDoc, '#fcf8f2', '#1a3c2e');
             }
           });
           

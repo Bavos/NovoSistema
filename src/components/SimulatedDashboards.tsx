@@ -5,6 +5,7 @@
 
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell } from 'docx';
 import React, { useState, useRef } from 'react';
+import { sanitizeClonedDocForHtml2Canvas } from '../lib/html2canvasSanitizer';
 import {
   Briefcase,
   Calendar,
@@ -259,6 +260,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   const { 
     pacientes, 
     profissionais, 
+    agendamentos,
     debitosProfissionais, 
     addDebitoProfissional, 
     updateDebitoProfissional,
@@ -591,6 +593,103 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
     
     setIsGenerating(true);
     setHasGenerated(false);
+
+    const filterLocalData = () => {
+      let startStr = dataInicial;
+      let endStr = dataFinal;
+      if (financeTab === 'mei') {
+        startStr = `${referenciaAno}-${String(referenciaMes).padStart(2, '0')}-01`;
+        const maxDays = new Date(referenciaAno, referenciaMes, 0).getDate();
+        endStr = `${referenciaAno}-${String(referenciaMes).padStart(2, '0')}-${String(maxDays).padStart(2, '0')}`;
+      }
+
+      const docs = (agendamentos || []).filter(data => {
+        if (data.status === 'Cancelado') return false;
+        if (data.data < startStr || data.data > endStr) return false;
+        if (financeTab === 'fatura') {
+          if (pacienteSelecionado !== 'ALL' && data.idPaciente !== pacienteSelecionado) return false;
+        } else if (financeTab !== 'mei') {
+          if (profissionalSelecionado !== 'ALL' && data.idProfissional !== profissionalSelecionado) return false;
+        }
+        return true;
+      });
+
+      let todasFechadas = true;
+      docs.forEach(data => {
+        if (!data.escalaCongelada && data.status !== 'Concluido') {
+          todasFechadas = false;
+        }
+      });
+
+      if (financeTab === 'fatura' && !todasFechadas) {
+        alert('⚠️ Acesso Negado: A escala de um ou mais pacientes precisa de ser consolidada e fechada na aba de Agendamentos antes da emissão da faturação.');
+        setIsGenerating(false);
+        return false;
+      }
+
+      if (financeTab === 'mei') {
+        const selectedMEIProfs = activeProfissionais.filter(
+          p => p.temMei && !p.meiIrregular && p.cnpj && p.cnpj.trim() !== '' && meiProfissionaisSelecionados.includes(p.id)
+        );
+
+        const profsWithPlantoes = selectedMEIProfs.filter(prof => {
+          return docs.some(ag => ag.idProfissional === prof.id && ag.status !== 'Cancelado');
+        });
+
+        const resultList = profsWithPlantoes.map(p => ({
+          profissionalId: p.id,
+          nome: p.nome,
+          cnpj: p.cnpj || ''
+        }));
+
+        setMeiResult(resultList);
+      }
+
+      const parseDebitDateString = (val: any): string => {
+        if (!val) return '';
+        try {
+          let dObj: Date;
+          if (typeof val?.toDate === 'function') {
+            dObj = val.toDate();
+          } else if (val instanceof Date) {
+            dObj = val;
+          } else if (val?.seconds) {
+            dObj = new Date(val.seconds * 1000);
+          } else {
+            dObj = new Date(val);
+          }
+          const yr = dObj.getFullYear();
+          const mo = String(dObj.getMonth() + 1).padStart(2, '0');
+          const dy = String(dObj.getDate()).padStart(2, '0');
+          return `${yr}-${mo}-${dy}`;
+        } catch (e) {
+          return '';
+        }
+      };
+
+      const activeDebs = (debitosProfissionais || []).filter(d => {
+        const debitDateStr = parseDebitDateString(d.data);
+        const matchesDate = financeTab === 'mei' ? false : (debitDateStr >= dataInicial && debitDateStr <= dataFinal);
+        let matchesProf = true;
+        if (profissionalSelecionado !== 'ALL' && d.idProfissional !== profissionalSelecionado) {
+          matchesProf = false;
+        }
+        return matchesDate && matchesProf;
+      });
+
+      setDebitosNoPeriodo(activeDebs);
+      setAgendamentosGerados(docs);
+      setSelectedProfissionais([]);
+      setHasGenerated(true);
+      return true;
+    };
+
+    if (isQuotaExceeded) {
+      filterLocalData();
+      setIsGenerating(false);
+      return;
+    }
+
     try {
       const agendamentosRef = collection(db, 'agendamentos');
       
@@ -725,7 +824,13 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       setHasGenerated(true);
     } catch (error) {
       console.error('Erro ao gerar relatórios:', error);
-      alert('Ocorreu um erro ao buscar os dados.');
+      const errStr = String(error).toLowerCase();
+      if (errStr.includes('quota') || errStr.includes('exhausted') || errStr.includes('limit')) {
+        console.warn('[Firebase Quota Fallback] Cota excedida ao buscar relatórios. Alternando para contingência local.');
+        filterLocalData();
+      } else {
+        alert('Ocorreu um erro ao buscar os dados.');
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -3351,26 +3456,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                     useCORS: true,
                     logging: false,
                     onclone: (clonedDoc) => {
-                        try {
-                            const allElements = clonedDoc.getElementsByTagName('*');
-                            for (let i = 0; i < allElements.length; i++) {
-                                const el = allElements[i] as HTMLElement;
-                                const style = window.getComputedStyle(el);
-                                if (!style) continue;
-                                
-                                if (style.backgroundColor && (style.backgroundColor.includes('oklab') || style.backgroundColor.includes('oklch'))) {
-                                    el.style.setProperty('background-color', '#fcf8f2', 'important');
-                                }
-                                if (style.color && (style.color.includes('oklab') || style.color.includes('oklch'))) {
-                                    el.style.setProperty('color', '#1a3c2e', 'important');
-                                }
-                                if (style.borderColor && (style.borderColor.includes('oklab') || style.borderColor.includes('oklch'))) {
-                                    el.style.setProperty('border-color', '#b8860b', 'important');
-                                }
-                            }
-                        } catch (e) {
-                            console.warn("Erro ao higienizar oklab no clone", e);
-                        }
+                        sanitizeClonedDocForHtml2Canvas(clonedDoc, '#fcf8f2', '#1a3c2e');
                     }
                 });
                 

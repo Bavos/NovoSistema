@@ -10,6 +10,7 @@ import { fetchCep, fetchBanks, getHolidays } from '../lib/brasilApi';
 import { Paciente, Plantao, CancelingReason, EscalacaoPlano, Agendamento } from '../types';
 import { useFirebase } from '../context/FirebaseContext';
 import { usePacienteData } from '../hooks/usePacienteData';
+import { sanitizeClonedDocForHtml2Canvas } from '../lib/html2canvasSanitizer';
 import { ModalInserirDebito, DadosAtalhoCuringa } from './ModalInserirDebito';
 import { CardBase, DataGrid, DataField, SoftBadge } from './ui/DesignSystem';
 import { pacienteSchema } from '../schemas/validationSchemas';
@@ -1286,6 +1287,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const [excluirModalOpen, setExcluirModalOpen] = useState(false);
   const [imprimirModalOpen, setImprimirModalOpen] = useState(false);
   const [imprimirProntuarioModalOpen, setImprimirProntuarioModalOpen] = useState(false);
+  const [isGeneratingProntuarioPDF, setIsGeneratingProntuarioPDF] = useState(false);
 
   // Modal Fields - Avulso
   const [avulsoAtendimento, setAvulsoAtendimento] = useState('Plantão');
@@ -1851,21 +1853,27 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       toast.error('Obrigatório preencher a justificativa da desativação do paciente.');
       return;
     }
-    if (deactivateConfirmInput !== 'CONFIRMAR') {
+    if (deactivateConfirmInput.trim().toUpperCase() !== 'CONFIRMAR') {
       toast.error("Por favor, digite 'CONFIRMAR' para confirmar a ação.");
       return;
     }
     if (paciente) {
-      await deactivatePaciente(paciente.id, deactivateReasonInput);
-      setPStatus('Desativado');
-      const todayStr = new Date().toLocaleDateString('pt-BR');
-      setPDeactDate(todayStr);
-      setPDeactReason(deactivateReasonInput);
-      setAlertDeactivateOpen(false);
-      setDeactivateReasonInput('');
-      toast.success('Paciente desativado no sistema.', {
-        icon: '✅',
-      });
+      try {
+        await deactivatePaciente(paciente.id, deactivateReasonInput.trim());
+        setPStatus('Desativado');
+        const todayStr = new Date().toLocaleDateString('pt-BR');
+        setPDeactDate(todayStr);
+        setPDeactReason(deactivateReasonInput.trim());
+        setAlertDeactivateOpen(false);
+        setDeactivateReasonInput('');
+        setDeactivateConfirmInput('');
+        toast.success('Paciente desativado no sistema.', {
+          icon: '✅',
+        });
+      } catch (err: any) {
+        console.error("Erro ao desativar paciente:", err);
+        toast.error("Erro ao desativar paciente: " + (err?.message || 'Falha ao salvar.'));
+      }
     }
   };
 
@@ -3015,26 +3023,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         useCORS: true,
         logging: false,
         onclone: (clonedDoc) => {
-          try {
-            const allElements = clonedDoc.getElementsByTagName('*');
-            for (let i = 0; i < allElements.length; i++) {
-              const el = allElements[i] as HTMLElement;
-              const style = window.getComputedStyle(el);
-              if (!style) continue;
-              
-              if (style.backgroundColor && (style.backgroundColor.includes('oklab') || style.backgroundColor.includes('oklch'))) {
-                el.style.setProperty('background-color', '#fcf8f2', 'important');
-              }
-              if (style.color && (style.color.includes('oklab') || style.color.includes('oklch'))) {
-                el.style.setProperty('color', '#1a3c2e', 'important');
-              }
-              if (style.borderColor && (style.borderColor.includes('oklab') || style.borderColor.includes('oklch'))) {
-                el.style.setProperty('border-color', '#b8860b', 'important');
-              }
-            }
-          } catch (e) {
-            console.warn("Erro ao higienizar oklab no clone", e);
-          }
+          sanitizeClonedDocForHtml2Canvas(clonedDoc, '#fcf8f2', '#1a3c2e');
         }
       });
 
@@ -3060,6 +3049,82 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
   const handleBaixarFaturaRecente = async () => {
     await handleBaixarFaturaExcel();
+  };
+
+  const handleGenerateProntuarioPDF = async () => {
+    setIsGeneratingProntuarioPDF(true);
+    const toastId = toast.loading('Gerando arquivo PDF do Prontuário Clínico...');
+    try {
+      const element = document.getElementById('print-prontuario-area');
+      if (!element) {
+        throw new Error('Elemento do prontuário para impressão não encontrado.');
+      }
+
+      const html2canvas = (await import('html2canvas')).default;
+      const { jsPDF } = await import('jspdf');
+
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        windowWidth: 1200,
+        onclone: (clonedDoc) => {
+          sanitizeClonedDocForHtml2Canvas(clonedDoc, '#ffffff', '#1e293b');
+          const printEl = clonedDoc.getElementById('print-prontuario-area');
+          if (printEl) {
+            printEl.style.visibility = 'visible';
+            printEl.style.display = 'block';
+            printEl.style.maxHeight = 'none';
+            printEl.style.overflow = 'visible';
+            printEl.style.width = '820px';
+            printEl.style.maxWidth = '820px';
+            printEl.style.boxSizing = 'border-box';
+            printEl.style.backgroundColor = '#ffffff';
+            printEl.style.margin = '0';
+            printEl.style.padding = '24px';
+          }
+        }
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();   // 210mm
+      const pdfHeight = pdf.internal.pageSize.getHeight(); // 297mm
+
+      // Ajuste proporcional exato para caber estritamente em 1 página A4
+      let renderWidth = pdfWidth;
+      let renderHeight = (canvas.height * pdfWidth) / canvas.width;
+
+      if (renderHeight > pdfHeight) {
+        renderHeight = pdfHeight;
+        renderWidth = (canvas.width * pdfHeight) / canvas.height;
+      }
+
+      // Centraliza a imagem no papel A4 caso haja margem
+      const xOffset = (pdfWidth - renderWidth) / 2;
+      const yOffset = 0;
+
+      pdf.addImage(imgData, 'JPEG', xOffset, yOffset, renderWidth, renderHeight);
+
+      const safeName = (paciente?.nome || 'Paciente').replace(/[^a-zA-Z0-9_\-]/g, '_');
+      const fileName = `Prontuario_Clinico_${safeName}.pdf`;
+
+      // Download direto em página única
+      pdf.save(fileName);
+
+      toast.success('Prontuário baixado em PDF com sucesso!', { id: toastId });
+    } catch (err: any) {
+      console.error('Erro ao gerar PDF do Prontuário:', err);
+      toast.error('Erro ao gerar PDF: ' + (err?.message || 'Falha na geração'), { id: toastId });
+    } finally {
+      setIsGeneratingProntuarioPDF(false);
+    }
   };
 
   const handleConfirmExcluir = async () => {
@@ -3258,7 +3323,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 space-y-6" id="patient-record-container">
       {/* Return       <div className="flex items-center justify-between">
         <button
-          onClick={onBack}
+          onClick={(e) => {
+            alert('Ação disparada no botão: ← Voltar');
+            onBack(e);
+          }}
           className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded hover:bg-slate-50 transition-colors flex items-center space-x-1"
           id="btn-voltar-listagem"
         >
@@ -3400,7 +3468,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
           <nav className="border-b border-gray-200 flex overflow-x-auto whitespace-nowrap gap-6 pb-0 w-full no-scrollbar md:flex-nowrap md:overflow-x-auto">
             <button
               type="button"
-              onClick={() => setActiveTab('geral')}
+              onClick={() => {
+                alert('Ação disparada no botão: Geral & Contato');
+                setActiveTab('geral');
+              }}
               className={`shrink-0 flex items-center space-x-1.5 pb-2.5 px-1 text-xs md:text-sm font-semibold transition-all border-b-2 ${
                 activeTab === 'geral'
                   ? 'border-emerald-500 text-emerald-600 font-bold bg-transparent'
@@ -3412,7 +3483,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab('endereco')}
+              onClick={() => {
+                alert('Ação disparada no botão: Endereço');
+                setActiveTab('endereco');
+              }}
               className={`shrink-0 flex items-center space-x-1.5 pb-2.5 px-1 text-xs md:text-sm font-semibold transition-all border-b-2 ${
                 activeTab === 'endereco'
                   ? 'border-emerald-500 text-emerald-600 font-bold bg-transparent'
@@ -3424,7 +3498,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab('medico')}
+              onClick={() => {
+                alert('Ação disparada no botão: Info Médica');
+                setActiveTab('medico');
+              }}
               className={`shrink-0 flex items-center space-x-1.5 pb-2.5 px-1 text-xs md:text-sm font-semibold transition-all border-b-2 ${
                 activeTab === 'medico'
                   ? 'border-emerald-500 text-emerald-600 font-bold bg-transparent'
@@ -3437,7 +3514,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             {!isColaborador && (
               <button
                 type="button"
-                onClick={() => setActiveTab('plano')}
+                onClick={() => {
+                  alert('Ação disparada no botão: Plano de Atendimento');
+                  setActiveTab('plano');
+                }}
                 className={`shrink-0 flex items-center space-x-1.5 pb-2.5 px-1 text-xs md:text-sm font-semibold transition-all border-b-2 ${
                   activeTab === 'plano'
                     ? 'border-emerald-500 text-emerald-600 font-bold bg-transparent'
@@ -3450,7 +3530,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             )}
             <button
               type="button"
-              onClick={() => setActiveTab('agendamento')}
+              onClick={() => {
+                alert('Ação disparada no botão: Agendamento');
+                setActiveTab('agendamento');
+              }}
               className={`shrink-0 flex items-center space-x-1.5 pb-2.5 px-1 text-xs md:text-sm font-semibold transition-all border-b-2 ${
                 activeTab === 'agendamento'
                   ? 'border-emerald-500 text-emerald-600 font-bold bg-transparent'
@@ -3462,7 +3545,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab('ocorrencias')}
+              onClick={() => {
+                alert('Ação disparada no botão: Ocorrências');
+                setActiveTab('ocorrencias');
+              }}
               className={`shrink-0 flex items-center space-x-1.5 pb-2.5 px-1 text-xs md:text-sm font-semibold transition-all border-b-2 ${
                 activeTab === 'ocorrencias'
                   ? 'border-emerald-500 text-emerald-600 font-bold bg-transparent'
@@ -4704,7 +4790,26 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                   {dayAgendamentos.map((ag) => {
                                     const isCancelled = ag.status === 'Cancelado';
                                     const isConcluido = ag.status === 'Concluido';
-                                    const isFalta = ag.considerarFalta === true || (ag as any).atendimentoRealizado === 'Não' || ag.status === 'Falta' || ag.status === 'falta';
+                                    const isFalta = ag.considerarFalta === true || (ag as any).atendimentoRealizado === 'Não' || (ag.status as string) === 'Falta' || (ag.status as string) === 'falta';
+
+                                    const isCuringa = !!ag.isCuringa || ag.observacao?.toUpperCase().includes('CURINGA');
+                                    const is50 = ag.tipoDia === 'Feriado 50%' || ag.tipoDia?.includes('50%') || ag.observacao?.includes('50%');
+                                    const is20 = ag.tipoDia === 'Feriado 20%' || ag.tipoDia?.includes('20%') || ag.observacao?.includes('20%');
+
+                                    let cardBgBorder = 'bg-blue-50/90 border-slate-250 text-slate-800 hover:bg-blue-100/90 hover:border-blue-300 shadow-3xs';
+                                    if (isCancelled) {
+                                      cardBgBorder = 'bg-slate-100 border-slate-200 text-slate-400 line-through';
+                                    } else if (isFalta) {
+                                      cardBgBorder = 'bg-rose-50 border-rose-300 text-rose-950 font-medium';
+                                    } else if (isCuringa) {
+                                      cardBgBorder = 'bg-purple-50 border-purple-300 text-purple-950 font-bold hover:bg-purple-100 hover:border-purple-400 shadow-3xs';
+                                    } else if (is50) {
+                                      cardBgBorder = 'bg-orange-50 border-orange-300 text-orange-950 font-bold hover:bg-orange-100 hover:border-orange-400 shadow-3xs';
+                                    } else if (is20) {
+                                      cardBgBorder = 'bg-amber-50 border-amber-300 text-amber-950 font-bold hover:bg-amber-100 hover:border-amber-400 shadow-3xs';
+                                    } else if (isConcluido) {
+                                      cardBgBorder = 'bg-slate-100 border-slate-300 text-slate-700 font-bold';
+                                    }
 
                                     return (
                                       <div
@@ -4731,15 +4836,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                             targetShift: ag
                                           });
                                         }}
-                                        className={`text-[10px] p-1.5 border rounded-lg cursor-pointer flex flex-col text-left w-full transition-all duration-150 relative space-y-0.5 hover:-translate-y-0.5 hover:shadow-2xs group/shift ${
-                                          isCancelled
-                                            ? 'bg-slate-100 border-slate-200 text-slate-400 line-through'
-                                            : isFalta
-                                              ? 'bg-rose-50 border-rose-200 text-rose-950 font-medium'
-                                              : isConcluido
-                                                ? 'bg-indigo-50 border-indigo-200 text-indigo-950 font-bold'
-                                                : 'bg-emerald-50 border-emerald-200 text-emerald-950 font-bold hover:bg-emerald-100 hover:border-emerald-300'
-                                        }`}
+                                        className={`text-[10px] p-1.5 border rounded-lg cursor-pointer flex flex-col text-left w-full transition-all duration-150 relative space-y-0.5 hover:-translate-y-0.5 group/shift ${cardBgBorder}`}
                                         title={ag.observacao || (isFalta ? 'Falta Registrada' : 'Inspecionar Plantão')}
                                       >
                                         {/* Copy Shift Button */}
@@ -4753,22 +4850,31 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                         </button>
 
                                         <div className="flex justify-between items-center gap-1">
-                                          <span className={`truncate block font-bold text-[9px] pr-3 ${isFalta ? 'line-through text-slate-500' : 'text-slate-800'}`}>
+                                          <span className={`truncate block font-bold text-[9px] pr-2 ${isFalta ? 'line-through text-slate-500' : 'text-slate-900'}`}>
                                             {ag.nomeProfissional || 'Geral'}
                                           </span>
                                           <div className="flex items-center space-x-0.5 shrink-0">
                                             {isFalta && (
-                                              <span className="px-0.5 py-[0.1px] text-[6px] font-black uppercase bg-rose-200 text-rose-900 rounded-3xs font-sans">FALTA</span>
+                                              <span className="px-1 py-[0.2px] text-[6.5px] font-black uppercase bg-rose-200 text-rose-900 border border-rose-300 rounded font-sans">FALTA</span>
                                             )}
-                                            {(ag.isCuringa || ag.observacao?.includes('CURINGA')) && (
-                                              <span className="px-0.5 py-[0.1px] text-[6px] font-black uppercase bg-amber-200 text-amber-900 rounded-3xs font-sans">CUR</span>
+                                            {isCuringa && (
+                                              <span className="px-1 py-[0.2px] text-[6.5px] font-black uppercase bg-purple-200 text-purple-900 border border-purple-300 rounded font-sans" title="Plantão Curinga">Curinga</span>
                                             )}
-                                            {isConcluido && <span className="text-[8px]">🔒</span>}
+                                            {is50 && (
+                                              <span className="px-1 py-[0.2px] text-[6.5px] font-black uppercase bg-orange-200 text-orange-900 border border-orange-300 rounded font-sans" title="Feriado +50%">50%</span>
+                                            )}
+                                            {is20 && (
+                                              <span className="px-1 py-[0.2px] text-[6.5px] font-black uppercase bg-amber-200 text-amber-900 border border-amber-300 rounded font-sans" title="Feriado +20%">20%</span>
+                                            )}
+                                            {!isCuringa && !is50 && !is20 && !isFalta && !isCancelled && (
+                                              <span className="px-1 py-[0.2px] text-[6.5px] font-bold uppercase bg-blue-100 text-blue-800 border border-blue-200 rounded font-sans">Normal</span>
+                                            )}
+                                            {isConcluido && <span className="text-[8px]" title="Escala Fechada">🔒</span>}
                                           </div>
                                         </div>
-                                        <div className="flex justify-between items-center text-[8px] text-slate-500 font-medium">
+                                        <div className="flex justify-between items-center text-[8px] text-slate-600 font-medium">
                                           <span>{(ag as any).tipoPlantao || (ag as any).turno || (ag as any).tipo || (ag as any).tipoEscala || getShiftNameForAgendamento(ag)}</span>
-                                          <span className="truncate max-w-[40px]">{getShiftNameForAgendamento(ag)}</span>
+                                          <span className="truncate max-w-[45px] font-mono">{ag.horario}</span>
                                         </div>
                                       </div>
                                     );
@@ -4782,11 +4888,14 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
                       {/* Legend and tips */}
                       <div className="flex flex-col sm:flex-row items-center justify-between text-[10px] text-slate-400 bg-slate-50 p-3.5 rounded-xl gap-2 font-mono border border-slate-100">
-                        <span>💡 <strong>Metadados Auditores:</strong> Clique em qualquer plantão no calendário para inspecionar criadores, horas fiscais e logs de modificação.</span>
-                        <div className="flex items-center space-x-2.5 shrink-0 font-extrabold">
-                          <span className="flex items-center"><span className="w-2 h-2 bg-emerald-400 rounded-full mr-1.5 border border-emerald-500/20"></span> Ativo</span>
-                          <span className="flex items-center"><span className="w-2 h-2 bg-indigo-400 rounded-full mr-1.5 border border-indigo-500/20"></span> Fechado 🔒</span>
-                          <span className="flex items-center"><span className="w-2 h-2 bg-red-400 rounded-full mr-1.5 border border-red-500/20"></span> Cancelado 🔴</span>
+                        <span>💡 <strong>Legenda do Calendário:</strong> Identificação visual por tipo de dia e adicional.</span>
+                        <div className="flex items-center space-x-2 shrink-0 font-extrabold flex-wrap gap-y-1">
+                          <span className="flex items-center"><span className="w-2.5 h-2.5 bg-blue-100 border border-slate-300 rounded-xs mr-1"></span> Normal</span>
+                          <span className="flex items-center"><span className="w-2.5 h-2.5 bg-amber-100 border border-amber-300 rounded-xs mr-1"></span> 20%</span>
+                          <span className="flex items-center"><span className="w-2.5 h-2.5 bg-orange-100 border border-orange-300 rounded-xs mr-1"></span> 50%</span>
+                          <span className="flex items-center"><span className="w-2.5 h-2.5 bg-purple-100 border border-purple-300 rounded-xs mr-1"></span> Curinga</span>
+                          <span className="flex items-center"><span className="w-2.5 h-2.5 bg-slate-200 border border-slate-300 rounded-xs mr-1"></span> Fechado 🔒</span>
+                          <span className="flex items-center"><span className="w-2.5 h-2.5 bg-rose-200 border border-rose-300 rounded-xs mr-1"></span> Falta/Cancelado 🔴</span>
                         </div>
                       </div>
 
@@ -5657,7 +5766,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               <button
                 type="button"
                 onClick={handleDeactivateConfirm}
-                disabled={deactivateConfirmInput !== 'CONFIRMAR'}
+                disabled={deactivateConfirmInput.trim().toUpperCase() !== 'CONFIRMAR'}
                 className="px-4 py-2 text-xs text-white bg-red-600 hover:bg-red-700 rounded-lg font-bold shadow-md shadow-red-500/10 cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed transition-all"
               >
                 Confirmar Suspensão
@@ -6224,16 +6333,16 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
                       <div className="space-y-1">
                         <span className="text-[10px] uppercase font-bold text-slate-400">Profissional Cuidador</span>
-                        <p className="text-sm font-bold text-slate-850 flex items-center gap-1.5">
+                        <p className="text-sm font-bold text-slate-850 flex items-center gap-1.5 flex-wrap">
                           <span>{selectedShiftForDetails.nomeProfissional}</span>
-                          {(selectedShiftForDetails.isCuringa || selectedShiftForDetails.observacao?.includes('CURINGA')) && (
-                            <span className="px-1.5 py-0.2 text-[8px] font-black uppercase tracking-wide bg-amber-100 text-amber-800 border border-amber-200 rounded">Curinga</span>
+                          {(selectedShiftForDetails.isCuringa || selectedShiftForDetails.observacao?.toUpperCase().includes('CURINGA')) && (
+                            <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wide bg-purple-100 text-purple-900 border border-purple-300 rounded shadow-3xs">⚡ Curinga</span>
                           )}
                           {(selectedShiftForDetails.tipoDia === 'Feriado 20%' || selectedShiftForDetails.tipoDia?.includes('20%') || selectedShiftForDetails.observacao?.includes('20%')) && (
-                            <span className="px-1.5 py-0.2 text-[8px] font-black uppercase tracking-wide bg-blue-100 text-blue-800 border border-blue-200 rounded">+20%</span>
+                            <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wide bg-amber-100 text-amber-900 border border-amber-300 rounded shadow-3xs">⭐ +20%</span>
                           )}
                           {(selectedShiftForDetails.tipoDia === 'Feriado 50%' || selectedShiftForDetails.tipoDia?.includes('50%') || selectedShiftForDetails.observacao?.includes('50%')) && (
-                            <span className="px-1.5 py-0.2 text-[8px] font-black uppercase tracking-wide bg-rose-100 text-rose-800 border border-rose-200 rounded">+50%</span>
+                            <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wide bg-orange-100 text-orange-900 border border-orange-300 rounded shadow-3xs">🔥 +50%</span>
                           )}
                         </p>
                       </div>
@@ -6270,16 +6379,35 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       </div>
 
                       <div>
-                        <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Tipo de Dia</span>
-                        <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-extrabold ${
-                          selectedShiftForDetails.tipoDia === 'Feriado 50%'
-                            ? 'bg-rose-50 text-rose-700 border border-rose-100'
-                            : selectedShiftForDetails.tipoDia === 'Feriado 20%'
-                              ? 'bg-amber-50 text-amber-700 border border-amber-100'
-                              : 'bg-slate-50 text-slate-600 border border-slate-100'
-                        }`}>
-                          {selectedShiftForDetails.tipoDia || 'Dia Normal (Sem Adicional)'}
-                        </span>
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Tipo de Dia / Categoria</span>
+                        <div className="flex flex-wrap gap-1.5 items-center">
+                          {(selectedShiftForDetails.isCuringa || selectedShiftForDetails.observacao?.toUpperCase().includes('CURINGA')) && (
+                            <span className="px-3 py-1.5 rounded-lg text-xs font-black bg-purple-100 text-purple-900 border border-purple-300 shadow-3xs inline-flex items-center gap-1">
+                              <span>⚡</span>
+                              <span>Plantão Curinga (Substituição)</span>
+                            </span>
+                          )}
+                          {(selectedShiftForDetails.tipoDia === 'Feriado 50%' || selectedShiftForDetails.tipoDia?.includes('50%')) && (
+                            <span className="px-3 py-1.5 rounded-lg text-xs font-black bg-orange-100 text-orange-900 border border-orange-300 shadow-3xs inline-flex items-center gap-1">
+                              <span>🔥</span>
+                              <span>Feriado 50% (Acréscimo +50%)</span>
+                            </span>
+                          )}
+                          {(selectedShiftForDetails.tipoDia === 'Feriado 20%' || selectedShiftForDetails.tipoDia?.includes('20%')) && (
+                            <span className="px-3 py-1.5 rounded-lg text-xs font-black bg-amber-100 text-amber-900 border border-amber-300 shadow-3xs inline-flex items-center gap-1">
+                              <span>⭐</span>
+                              <span>Feriado 20% (Acréscimo +20%)</span>
+                            </span>
+                          )}
+                          {!(selectedShiftForDetails.isCuringa || selectedShiftForDetails.observacao?.toUpperCase().includes('CURINGA')) &&
+                           !(selectedShiftForDetails.tipoDia === 'Feriado 50%' || selectedShiftForDetails.tipoDia?.includes('50%')) &&
+                           !(selectedShiftForDetails.tipoDia === 'Feriado 20%' || selectedShiftForDetails.tipoDia?.includes('20%')) && (
+                            <span className="px-3 py-1.5 rounded-lg text-xs font-extrabold bg-emerald-100 text-emerald-900 border border-emerald-300 shadow-3xs inline-flex items-center gap-1">
+                              <span>📅</span>
+                              <span>Dia Normal (Sem Adicional)</span>
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       {selectedShiftForDetails.considerarFalta && (
@@ -7591,11 +7719,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               <div className="flex items-center space-x-2">
                 <button
                   type="button"
-                  onClick={() => window.print()}
-                  className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-extrabold rounded-lg shadow-sm flex items-center space-x-1 transition-all cursor-pointer"
+                  disabled={isGeneratingProntuarioPDF}
+                  onClick={handleGenerateProntuarioPDF}
+                  className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-extrabold rounded-lg shadow-sm flex items-center space-x-1 transition-all cursor-pointer disabled:opacity-50"
+                  title="Baixar arquivo PDF do Prontuário Clínico"
                 >
                   <Printer size={13} className="mr-1" />
-                  <span>Imprimir PDF</span>
+                  <span>{isGeneratingProntuarioPDF ? 'Gerando PDF...' : 'Baixar Prontuário (PDF)'}</span>
                 </button>
                 <button
                   type="button"
@@ -7896,24 +8026,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   O prontuário acima compreende dados confidenciais e de uso clínico estrito da coordenadoria do RH Cuidado Domiciliar Ltda. em conformidade com as diretivas do CFM (Conselho Federal de Medicina), COFEN e a Lei Geral de Proteção de Dados (LGPD). É de inteira obrigação das partes a confidencialidade e zelo no arquivamento deste registro impresso.
                 </div>
 
-                {/* Bloco de Assinaturas */}
-                <div className="grid grid-cols-2 gap-8 pt-6 text-[10px]">
-                  <div className="space-y-4 text-center">
-                    <p className="border-t border-slate-400 pt-1.5 font-bold uppercase font-sans text-slate-800">
-                      Responsável Clínico / Direção Médica
-                    </p>
-                    <p className="text-[8.5px] text-slate-400 leading-none font-mono">Conselho Profissional Ativo Autorizado</p>
-                  </div>
-                  <div className="space-y-4 text-center">
-                    <p className="border-t border-slate-400 pt-1.5 font-bold uppercase font-sans text-slate-800">
-                      Responsável pelo Paciente / Família
-                    </p>
-                    <p className="text-[9px] text-slate-500 leading-none font-sans">
-                      {nomeResponsavel || '---'} {parentescoResponsavel ? `(${parentescoResponsavel})` : ''}
-                    </p>
-                  </div>
-                </div>
-
               </div>
             </div>
 
@@ -7921,7 +8033,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             <div className="bg-slate-50 p-3.5 border-t border-slate-200 text-right print:hidden">
               <button
                 type="button"
-                onClick={() => setImprimirProntuarioModalOpen(false)}
+                onClick={() => {
+                  alert('Ação disparada no botão: Retornar ao Prontuário');
+                  setImprimirProntuarioModalOpen(false);
+                }}
                 className="px-5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-705 text-slate-700 text-xs font-bold rounded-lg transition-all cursor-pointer font-sans"
               >
                 Retornar ao Prontuário

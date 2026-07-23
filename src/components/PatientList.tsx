@@ -236,6 +236,7 @@ export const PatientList: React.FC<PatientListProps> = ({
           {(filterPacienteId !== 'todos' || localSearch) && (
             <button
               onClick={() => {
+                alert('Ação disparada no botão: Resetar Filtros');
                 setLocalSearch('');
                 setFilterPacienteId('todos');
               }}
@@ -416,7 +417,10 @@ export const PatientList: React.FC<PatientListProps> = ({
           {/* Pagination Buttons */}
           <div className="flex items-center space-x-2">
             <button
-              onClick={fetchPreviousPage}
+              onClick={() => {
+                alert('Ação disparada no botão: [< Anterior]');
+                fetchPreviousPage();
+              }}
               disabled={!hasPreviousPage || loadingPacientes || isLoading}
               className="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-600 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-600 transition-all cursor-pointer flex items-center gap-1 border border-transparent hover:border-slate-200"
               title="Página Anterior"
@@ -424,7 +428,10 @@ export const PatientList: React.FC<PatientListProps> = ({
               [&lt; Anterior]
             </button>
             <button
-              onClick={fetchNextPage}
+              onClick={() => {
+                alert('Ação disparada no botão: [Próxima >]');
+                fetchNextPage();
+              }}
               disabled={!hasMore || loadingPacientes || isLoading}
               className="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-600 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-600 transition-all cursor-pointer flex items-center gap-1 border border-transparent hover:border-slate-200"
               title="Próxima Página"
@@ -488,7 +495,7 @@ export const PatientList: React.FC<PatientListProps> = ({
               </button>
               <button
                 onClick={handleBulkDeactivate}
-                disabled={deactivateConfirmText !== 'CONFIRMAR'}
+                disabled={deactivateConfirmText.trim().toUpperCase() !== 'CONFIRMAR'}
                 className="px-3.5 py-1.5 text-xs text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-45 disabled:cursor-not-allowed font-bold shadow-md shadow-red-100 transition-colors"
               >
                 Confirmar Desativação Múltipla

@@ -42,13 +42,15 @@ body {
 
   /* Isolate print area and make it and its descendants visible */
   #print-area, #print-area *,
+  #printable-area, #printable-area *,
+  #print-prontuario-area, #print-prontuario-area *,
   #escalas-dashboard, #escalas-dashboard *,
   #financeiro-dashboard, #financeiro-dashboard * {
     visibility: visible !important;
   }
 
   /* Precision position of the printed document on the physical sheet */
-  #print-area, #escalas-dashboard, #financeiro-dashboard {
+  #print-area, #printable-area, #print-prontuario-area, #escalas-dashboard, #financeiro-dashboard {
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;
