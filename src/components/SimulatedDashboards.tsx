@@ -3966,6 +3966,8 @@ export const EmpresaDashboard: React.FC = () => {
   const [resetConfirmText, setResetConfirmText] = useState('');
 
   // Diagnostic states
+  const logoFileInputRef = useRef<HTMLInputElement>(null);
+  const [confirmDeleteLogo, setConfirmDeleteLogo] = useState(false);
   const [uploadDiagnostics, setUploadDiagnostics] = useState<string[]>([]);
   const [diagnosticError, setDiagnosticError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -3980,7 +3982,7 @@ export const EmpresaDashboard: React.FC = () => {
           if (data.razaoSocial) setRazaoSocial(data.razaoSocial);
           if (data.cnpj) setCnpj(data.cnpj);
           if (data.endereco) setUnidadeOperacao(data.endereco);
-          if (data.logoUrl) setLogoUrl(data.logoUrl);
+          setLogoUrl(data.logoUrl || '');
           if (data.dominiosAutorizados) {
             setDominiosAutorizados(Array.isArray(data.dominiosAutorizados) ? data.dominiosAutorizados.join(', ') : data.dominiosAutorizados);
           }
@@ -4083,6 +4085,40 @@ export const EmpresaDashboard: React.FC = () => {
       const errMsg = err.message || String(err);
       setDiagnosticError(`Falha ao salvar logo: ${errMsg}`);
       alert(`Erro ao fazer upload da logo da empresa: ${errMsg}`);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleDeleteLogo = async () => {
+    if (!isAdmin) {
+      toast.error("Apenas administradores podem alterar as informações.");
+      return;
+    }
+    setUploadDiagnostics([]);
+    setDiagnosticError(null);
+    setIsUploading(true);
+    setUploadDiagnostics([`[LOG 1/2] Solicitando exclusão do logotipo da empresa...`]);
+
+    try {
+      const docRef = doc(db, 'configuracoes_empresa', 'empresa');
+      await setDoc(docRef, { logoUrl: '', updatedAt: new Date().toISOString() }, { merge: true });
+
+      setLogoUrl('');
+      setTempLogo(null);
+      setShouldClearLogo(true);
+      setConfirmDeleteLogo(false);
+      if (logoFileInputRef.current) {
+        logoFileInputRef.current.value = '';
+      }
+
+      setUploadDiagnostics(prev => [...prev, `[LOG 2/2] Logotipo removido com sucesso do banco de dados e da tela!`]);
+      toast.success('Logotipo removido com sucesso.');
+    } catch (err: any) {
+      console.error("[Diagnóstico de Erro] Erro ao excluir logotipo:", err);
+      const errMsg = err.message || String(err);
+      setDiagnosticError(`Falha ao excluir logotipo: ${errMsg}`);
+      toast.error(`Erro ao excluir logotipo: ${errMsg}`);
     } finally {
       setIsUploading(false);
     }
@@ -4250,6 +4286,7 @@ export const EmpresaDashboard: React.FC = () => {
                         )}
                         <div className="flex-1 flex flex-col gap-1">
                           <input 
+                            ref={logoFileInputRef}
                             type="file" 
                             onChange={e => {
                               const file = e.target.files?.[0];
@@ -4264,30 +4301,35 @@ export const EmpresaDashboard: React.FC = () => {
                           <p className="text-[10px] text-slate-400">O logotipo selecionado é otimizado e salvo imediatamente.</p>
                         </div>
                         {logoUrl && (
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              if (window.confirm("Deseja realmente excluir o logotipo da empresa?")) {
-                                try {
-                                  setIsUploading(true);
-                                  const docRef = doc(db, 'configuracoes_empresa', 'empresa');
-                                  await setDoc(docRef, { logoUrl: '', updatedAt: new Date().toISOString() }, { merge: true });
-                                  setLogoUrl('');
-                                  setTempLogo(null);
-                                  setShouldClearLogo(true);
-                                  toast.success('Logotipo removido com sucesso.');
-                                } catch (err: any) {
-                                  alert(`Erro ao excluir logotipo: ${err.message || String(err)}`);
-                                } finally {
-                                  setIsUploading(false);
-                                }
-                              }
-                            }}
-                            className="px-2 py-1 text-[10px] font-bold text-red-600 hover:text-red-800 transition-colors bg-red-50 hover:bg-red-100 rounded border border-red-200 cursor-pointer"
-                            disabled={isUploading}
-                          >
-                            Excluir Logo
-                          </button>
+                          confirmDeleteLogo ? (
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={handleDeleteLogo}
+                                disabled={isUploading}
+                                className="px-2 py-1 text-[10px] font-bold text-white bg-red-600 hover:bg-red-700 rounded transition-colors cursor-pointer shadow-sm"
+                              >
+                                Confirmar Exclusão
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteLogo(false)}
+                                disabled={isUploading}
+                                className="px-2 py-1 text-[10px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded transition-colors cursor-pointer"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteLogo(true)}
+                              className="px-2.5 py-1 text-[10px] font-bold text-red-600 hover:text-red-800 transition-colors bg-red-50 hover:bg-red-100 rounded border border-red-200 cursor-pointer"
+                              disabled={isUploading}
+                            >
+                              Excluir Logo
+                            </button>
+                          )
                         )}
                       </div>
 

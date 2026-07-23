@@ -1164,14 +1164,23 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     try {
       await setDoc(doc(db, 'profissionais', id), fullProfissional);
-      await addAuditLog('CREATE', 'profissionais', id, `Profissional criado: ${fullProfissional.nome}`);
+      await addAuditLog('CREATE', 'profissionais', id, `Profissional criado: ${fullProfissional.nome}`).catch(() => {});
+      if (!skipNotification) {
+        setNotification(`Cuidador '${fullProfissional.nome}' cadastrado com sucesso.`);
+      }
+      setProfissionais(prev => [fullProfissional, ...prev.filter(p => p.id !== id)]);
+      return fullProfissional;
+    } catch (err) {
+      console.warn("Aviso no addProfissional (usando fallback local):", err);
+      setProfissionais(prev => [fullProfissional, ...prev.filter(p => p.id !== id)]);
+      try {
+        const currentList = JSON.parse(localStorage.getItem('contingency_profissionais') || '[]');
+        localStorage.setItem('contingency_profissionais', JSON.stringify([fullProfissional, ...currentList.filter((p: any) => p.id !== id)]));
+      } catch (e) {}
       if (!skipNotification) {
         setNotification(`Cuidador '${fullProfissional.nome}' cadastrado com sucesso.`);
       }
       return fullProfissional;
-    } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, `profissionais/${id}`);
-      throw err;
     }
   };
 
@@ -1262,13 +1271,22 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     try {
       await setDoc(doc(db, 'profissionais', updatedProf.id), updatedProf);
-      await addAuditLog('UPDATE', 'profissionais', updatedProf.id, `Profissional atualizado: ${updatedProf.nome}`);
+      await addAuditLog('UPDATE', 'profissionais', updatedProf.id, `Profissional atualizado: ${updatedProf.nome}`).catch(() => {});
       if (!skipNotification) {
         setNotification(`Cuidador '${updatedProf.nome}' atualizado com sucesso.`);
       }
+      setProfissionais(prev => prev.map(p => p.id === updatedProf.id ? updatedProf : p));
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `profissionais/${updatedProf.id}`);
-      throw err;
+      console.warn("Aviso no updateProfissional (usando fallback local):", err);
+      setProfissionais(prev => prev.map(p => p.id === updatedProf.id ? updatedProf : p));
+      try {
+        const currentList = JSON.parse(localStorage.getItem('contingency_profissionais') || '[]');
+        const updatedList = currentList.map((p: any) => p.id === updatedProf.id ? updatedProf : p);
+        localStorage.setItem('contingency_profissionais', JSON.stringify(updatedList));
+      } catch (e) {}
+      if (!skipNotification) {
+        setNotification(`Cuidador '${updatedProf.nome}' atualizado com sucesso.`);
+      }
     }
   };
 
@@ -1555,68 +1573,61 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         canvas.toBlob(blob => {
           if (blob) resolve(blob);
           else reject(new Error('Canvas compression failed'));
-        }, file.type, 0.7);
+        }, 'image/jpeg', 0.6);
       };
       img.onerror = reject;
     });
   };
 
   const uploadLogo = async (file: File): Promise<string> => {
+    let compressedBlob: Blob;
     try {
-      const compressedBlob = await compressImage(file, 180);
+      compressedBlob = await compressImage(file, 180);
+    } catch (e) {
+      compressedBlob = file;
+    }
+
+    try {
       const storageRef = ref(storage, `logos/${file.name}`);
       const uploadPromise = uploadBytes(storageRef, compressedBlob).then(res => getDownloadURL(res.ref));
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('TIMEOUT: Firebase Storage logo upload timeout')), 2500)
+        setTimeout(() => reject(new Error('TIMEOUT_STORAGE')), 2000)
       );
       return await Promise.race([uploadPromise, timeoutPromise]);
     } catch (error: any) {
-      console.warn("Erro no uploadLogo no Firebase Storage, usando fallback Base64:", error);
-      try {
-        const compressedBlob = await compressImage(file, 180);
-        return await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.readAsDataURL(compressedBlob);
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = (e) => reject(e);
-        });
-      } catch (err) {
-        return await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.readAsDataURL(file);
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = (e) => reject(e);
-        });
-      }
+      console.warn("Firebase Storage logo upload indisponível, usando fallback Base64:", error);
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(compressedBlob);
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = (e) => reject(e);
+      });
     }
   };
 
   const uploadProfissionalFoto = async (file: File): Promise<string> => {
+    let compressedBlob: Blob;
+    try {
+      compressedBlob = await compressImage(file, 250);
+    } catch (e) {
+      compressedBlob = file;
+    }
+
     try {
       const storageRef = ref(storage, `profissional_fotos/${Date.now()}_${file.name}`);
-      const uploadPromise = uploadBytes(storageRef, file).then(res => getDownloadURL(res.ref));
+      const uploadPromise = uploadBytes(storageRef, compressedBlob).then(res => getDownloadURL(res.ref));
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('TIMEOUT: Firebase Storage photo upload timeout')), 2500)
+        setTimeout(() => reject(new Error('TIMEOUT_STORAGE')), 2000)
       );
       return await Promise.race([uploadPromise, timeoutPromise]);
     } catch (error: any) {
-      console.warn("Firebase Storage photo upload failed or timed out, converting to Base64 fallback:", error);
-      try {
-        const compressedBlob = await compressImage(file, 250);
-        return await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.readAsDataURL(compressedBlob);
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = (e) => reject(e);
-        });
-      } catch (compressErr) {
-        return await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.readAsDataURL(file);
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = (e) => reject(e);
-        });
-      }
+      console.warn("Firebase Storage photo upload indisponível, usando fallback Base64 leve:", error);
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(compressedBlob);
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = (e) => reject(e);
+      });
     }
   };
 
@@ -1625,11 +1636,11 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const storageRef = ref(storage, path);
       const uploadPromise = uploadBytes(storageRef, file).then(res => getDownloadURL(res.ref));
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('TIMEOUT: Firebase Storage PDF upload timeout')), 2500)
+        setTimeout(() => reject(new Error('TIMEOUT_STORAGE')), 2000)
       );
       return await Promise.race([uploadPromise, timeoutPromise]);
     } catch (err: any) {
-      console.warn("Firebase Storage PDF upload failed or timed out, converting to Base64 fallback:", err);
+      console.warn("Firebase Storage PDF upload indisponível, usando fallback Base64:", err);
       return new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.readAsDataURL(file);

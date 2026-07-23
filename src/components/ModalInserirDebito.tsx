@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, ChevronDown, Check } from 'lucide-react';
 import { useFirebase } from '../context/FirebaseContext';
 import { mascaraFinanceira, formatarMoeda, converterMascaraParaNumero } from '../lib/masks';
 
@@ -19,6 +19,159 @@ interface ModalInserirDebitoProps {
   editingDebitId?: string | null;
   dadosAtalhoCuringa?: DadosAtalhoCuringa | null;
 }
+
+interface SearchableOption {
+  id: string;
+  label: string;
+  sublabel?: string;
+}
+
+interface SearchableSelectProps {
+  options: SearchableOption[];
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  emptyOptionLabel?: string;
+}
+
+const SearchableSelect: React.FC<SearchableSelectProps> = ({
+  options,
+  value,
+  onChange,
+  placeholder = "Digite o nome para buscar...",
+  emptyOptionLabel
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const selectedOption = options.find(o => o.id === value);
+
+  useEffect(() => {
+    if (selectedOption) {
+      setSearchTerm(selectedOption.label);
+    } else {
+      setSearchTerm('');
+    }
+  }, [value, selectedOption?.label]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+        if (selectedOption) {
+          setSearchTerm(selectedOption.label);
+        } else {
+          setSearchTerm('');
+        }
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [selectedOption]);
+
+  const filteredOptions = options.filter(o => {
+    if (!searchTerm || (selectedOption && searchTerm === selectedOption.label)) {
+      return true;
+    }
+    return o.label.toLowerCase().includes(searchTerm.toLowerCase());
+  });
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <div className="relative flex items-center">
+        <input
+          type="text"
+          value={searchTerm}
+          placeholder={placeholder}
+          onFocus={(e) => {
+            setIsOpen(true);
+            e.target.select();
+          }}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            setIsOpen(true);
+            if (e.target.value.trim() === '') {
+              onChange('');
+            } else {
+              const exactMatch = options.find(
+                o => o.label.toLowerCase() === e.target.value.trim().toLowerCase()
+              );
+              if (exactMatch) {
+                onChange(exactMatch.id);
+              }
+            }
+          }}
+          onClick={() => setIsOpen(true)}
+          className="w-full p-2.5 pr-8 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-sans cursor-pointer"
+        />
+        {searchTerm ? (
+          <button
+            type="button"
+            onClick={() => {
+              onChange('');
+              setSearchTerm('');
+              setIsOpen(true);
+            }}
+            className="absolute right-2.5 text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer"
+            title="Limpar seleção"
+          >
+            <X size={14} />
+          </button>
+        ) : (
+          <div className="absolute right-2.5 text-slate-400 pointer-events-none">
+            <ChevronDown size={16} />
+          </div>
+        )}
+      </div>
+
+      {isOpen && (
+        <div className="absolute z-[110] left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl py-1 text-sm font-sans animate-in fade-in duration-100">
+          {emptyOptionLabel && (
+            <button
+              type="button"
+              onClick={() => {
+                onChange('');
+                setSearchTerm('');
+                setIsOpen(false);
+              }}
+              className="w-full text-left px-3 py-2 text-xs text-slate-400 italic hover:bg-slate-50 transition-colors cursor-pointer border-b border-slate-100"
+            >
+              {emptyOptionLabel}
+            </button>
+          )}
+
+          {filteredOptions.length === 0 ? (
+            <div className="px-3 py-2 text-xs text-slate-400 text-center">
+              Nenhum resultado encontrado para "{searchTerm}"
+            </div>
+          ) : (
+            filteredOptions.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => {
+                  onChange(opt.id);
+                  setSearchTerm(opt.label);
+                  setIsOpen(false);
+                }}
+                className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-emerald-50 hover:text-emerald-900 transition-colors cursor-pointer ${
+                  opt.id === value ? 'bg-emerald-50 font-bold text-emerald-900' : 'text-slate-700'
+                }`}
+              >
+                <div className="flex flex-col">
+                  <span>{opt.label}</span>
+                  {opt.sublabel && <span className="text-[10px] text-slate-400 font-normal">{opt.sublabel}</span>}
+                </div>
+                {opt.id === value && <Check size={14} className="text-emerald-600" />}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const ModalInserirDebito: React.FC<ModalInserirDebitoProps> = ({
   isOpen,
@@ -204,31 +357,30 @@ export const ModalInserirDebito: React.FC<ModalInserirDebitoProps> = ({
         <div className="space-y-4">
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">Profissional *</label>
-            <select
+            <SearchableSelect
+              options={activeProfissionais.map(p => ({
+                id: p.id,
+                label: p.nome,
+                sublabel: p.especialidade || p.profissao || undefined
+              }))}
               value={newDebitProfId}
-              onChange={(e) => setNewDebitProfId(e.target.value)}
-              className="w-full p-2.5 border border-slate-200 rounded-lg text-sm bg-white"
-              required
-            >
-              <option value="">Selecione o profissional...</option>
-              {activeProfissionais.map(p => (
-                <option key={p.id} value={p.id}>{p.nome}</option>
-              ))}
-            </select>
+              onChange={(val) => setNewDebitProfId(val)}
+              placeholder="Digite para buscar profissional..."
+            />
           </div>
 
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">Paciente (Opcional)</label>
-            <select
+            <SearchableSelect
+              options={activePacientes.map(p => ({
+                id: p.id,
+                label: p.nome
+              }))}
               value={newDebitPacienteId}
-              onChange={(e) => setNewDebitPacienteId(e.target.value)}
-              className="w-full p-2.5 border border-slate-200 rounded-lg text-sm bg-white"
-            >
-              <option value="">Nenhum paciente selecionado</option>
-              {activePacientes.map(p => (
-                <option key={p.id} value={p.id}>{p.nome}</option>
-              ))}
-            </select>
+              onChange={(val) => setNewDebitPacienteId(val)}
+              placeholder="Digite para buscar paciente (opcional)..."
+              emptyOptionLabel="Nenhum paciente selecionado"
+            />
           </div>
 
           <div>

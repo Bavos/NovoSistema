@@ -1264,7 +1264,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
     try {
       const profQuery = query(collection(db, 'profissionais'), where('cpf', 'in', cpfOptions));
       const profSnap = await getDocs(profQuery);
-      const duplicateProf = profSnap.docs.find(doc => !editingProf || doc.id !== editingProf?.id);
+      const duplicateProf = profSnap.docs.find((doc: any) => !editingProf || doc.id !== editingProf?.id);
       if (duplicateProf) {
         toast.error('Falha no cadastro: Este CPF já se encontra registrado em nosso sistema.');
         return;
@@ -1277,7 +1277,15 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
         return;
       }
     } catch (dbErr) {
-      console.error("Erro ao verificar duplicidade de CPF:", dbErr);
+      console.warn("Aviso na verificação de CPF (usando verificação local):", dbErr);
+      const cpfEmPacientes = (pacientes || []).some(p => {
+        const pCpf = (p.cpf || '').replace(/\D/g, '');
+        return pCpf === cleanCpfVal;
+      });
+      if (cpfEmPacientes) {
+        toast.error('Falha no cadastro: Este CPF já se encontra registrado em nosso sistema.');
+        return;
+      }
     }
 
     // Validação de Tipo de Conta obrigatório caso agência e conta estejam preenchidos
@@ -1524,13 +1532,12 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
         const pathRef = `profissionais/${id}/${arquivoAnexo.name}`;
         const storageRef = ref(storage, pathRef);
         
-        const uploadPromise = uploadBytes(storageRef, arquivoAnexo);
+        const uploadPromise = uploadBytes(storageRef, arquivoAnexo).then(res => getDownloadURL(res.ref));
         const timeoutPromise = new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('TIMEOUT: Limite de tempo excedido ao carregar no Firebase Storage.')), 3000)
+          setTimeout(() => reject(new Error('TIMEOUT_STORAGE')), 2000)
         );
 
-        const uploadResult = await Promise.race([uploadPromise, timeoutPromise]);
-        downloadUrl = await getDownloadURL(uploadResult.ref);
+        downloadUrl = await Promise.race([uploadPromise, timeoutPromise]);
       } catch (storageError) {
         console.warn("Upload via Firebase Storage falhou ou expirou, usando fallback Base64:", storageError);
         // Fallback: carregar como base64 data URL
@@ -1816,72 +1823,106 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
     };
 
     return (
-      <div className="space-y-4 p-4 print:p-0 print:m-0">
-        <div className="flex flex-col items-center gap-2 print:hidden mb-4">
+      <div className="space-y-4 p-4 print:p-0 print:m-0 flex flex-col items-center">
+        <div className="flex flex-col items-center gap-2 print:hidden mb-2">
           <div className="flex flex-wrap justify-center gap-3">
             <button
               type="button"
               onClick={handleDownloadPng}
               disabled={loading || loadingConfig}
-              className="px-6 py-2.5 bg-[#1a3c2e] text-[#b8860b] font-bold text-xs rounded-lg hover:opacity-90 transition-opacity flex items-center gap-2 disabled:bg-gray-400 cursor-pointer shadow-sm border border-[#b8860b]"
+              className="px-6 py-2.5 bg-[#1a3c2e] text-[#C5A059] font-bold text-xs rounded-lg hover:opacity-90 transition-opacity flex items-center gap-2 disabled:bg-gray-400 cursor-pointer shadow-sm border border-[#C5A059]"
             >
-              {loading ? 'Preparando...' : <><FileImage size={14} /> Baixar</>}
+              {loading ? 'Preparando...' : <><FileImage size={14} /> Baixar Crachá (PNG)</>}
             </button>
           </div>
         </div>
         
-        {/* We move ref={badgeRef} to the actual card container only, so downloading excludes the button and any surrounding non-badge UI elements */}
-        <div className="flex flex-row gap-0 justify-center items-stretch print:flex-row print:gap-0 p-4 bg-[#fcf8f2] border-2 border-[#b8860b] rounded-xl shadow-sm divide-x divide-gray-200 w-[700px] h-[400px]" ref={badgeRef}>
-          {/* Lado Esquerdo (Frente) */}
-          <div className="w-1/2 p-6 flex flex-col items-center justify-between text-center">
-             <div className="w-full flex justify-center mb-4">
-                {loadingConfig ? (
-                  <div className="w-32 h-16 bg-gray-100 animate-pulse rounded" />
-                ) : logoBase64 ? (
-                  <img src={logoBase64} alt="Logo" className="object-contain h-20 w-auto mix-blend-multiply" crossOrigin="anonymous" />
-                ) : <div className="w-32 h-16 bg-gray-100 flex items-center justify-center text-[10px] text-gray-400">Sem Logo</div>}
-             </div>
-                
-             <div className="flex-grow flex items-center justify-center">
-                  <div className="w-32 h-40 object-cover rounded-sm border border-gray-300 overflow-hidden">
-                      {fotoBase64 ? (
-                        <img src={fotoBase64} alt="Foto" className="w-full h-full object-cover" crossOrigin="anonymous" />
-                      ) : (
-                        <div className="w-full h-full bg-gray-150 flex items-center justify-center text-slate-400 text-xs font-bold">Sem Foto</div>
-                      )}
+        {/* Crachá Integrado no Estilo da Simulação (image_15) */}
+        <div 
+          ref={badgeRef}
+          className="relative w-[580px] h-[380px] bg-white rounded-2xl border-2 border-[#C5A059] p-1.5 shadow-xl overflow-hidden font-sans select-none"
+        >
+          <div className="relative w-full h-full border border-[#C5A059]/70 rounded-xl p-5 flex flex-col items-center justify-between bg-white overflow-hidden">
+            
+            {/* Marca d'Água (Watermark Background) com Símbolo de Coração e Folha em Opacidade de ~7% */}
+            <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-[0.08]" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <pattern id="heart-leaf-watermark" x="0" y="0" width="70" height="70" patternUnits="userSpaceOnUse">
+                  <g stroke="#C5A059" strokeWidth="1.2" fill="none">
+                    <path d="M 25 15 C 20 10 12 12 10 18 C 7 26 15 32 25 40 C 35 32 43 26 40 18 C 38 12 30 10 25 15 Z" fill="#C5A059" fillOpacity="0.3" />
+                    <path d="M 25 22 C 22 17 18 19 16 23 C 14 28 19 32 25 37 C 31 32 36 28 34 23 C 32 19 28 17 25 22 Z" fill="#C5A059" fillOpacity="0.5" />
+                  </g>
+                </pattern>
+              </defs>
+              <rect width="100%" height="100%" fill="url(#heart-leaf-watermark)" />
+            </svg>
+
+            {/* Logotipo Principal no Canto Superior Esquerdo sem Caixa Branca (Integrado Naturalmente) */}
+            <div className="absolute top-4 left-5 z-10">
+              {loadingConfig ? (
+                <div className="w-28 h-10 bg-slate-100 animate-pulse rounded" />
+              ) : logoBase64 ? (
+                <img 
+                  src={logoBase64} 
+                  alt="Logo" 
+                  className="h-14 w-auto object-contain mix-blend-multiply" 
+                  crossOrigin="anonymous" 
+                />
+              ) : (
+                <div className="flex items-center gap-2">
+                  <svg className="w-10 h-10 text-[#C5A059]" viewBox="0 0 100 100" fill="none">
+                    <path d="M 50 18 C 38 8 20 12 16 26 C 10 44 28 58 50 76 C 72 58 90 44 84 26 C 80 12 62 8 50 18 Z" fill="#C5A059" />
+                    <path d="M 50 30 C 42 22 32 24 29 31 C 24 40 36 49 50 60 C 64 49 76 40 71 31 C 68 24 58 22 50 30 Z" fill="#1a3c2e" />
+                  </svg>
+                  <div className="flex flex-col text-left">
+                    <span className="text-lg font-bold text-[#1a3c2e] leading-none">RH</span>
+                    <span className="text-[10px] font-bold text-[#1a3c2e] tracking-wider uppercase">Gestão Domiciliar</span>
                   </div>
-             </div>
-             <div className="mt-4">
-                <div className="font-bold text-lg text-slate-900">{profData.nome || "Nome do Profissional"}</div>
-                <div className="text-sm text-slate-700 mt-1">{profData.profissao || "Profissão"}</div>
-             </div>
-          </div>
-          
-          {/* Lado Direito (Verso) */}
-          <div className="w-1/2 p-6 flex flex-col justify-between">
-             <div className="w-full">
-               <table className="w-full text-left border-collapse">
-                 <tbody>
-                   <tr className="border-b border-slate-300">
-                     <td className="py-3">
-                        <div className="italic text-slate-500 text-xs">Nome</div>
-                        <div className="text-sm font-semibold text-slate-800">{profData.nome}</div>
-                     </td>
-                   </tr>
-                   <tr className="border-b border-slate-300">
-                     <td className="py-3">
-                        <div className="italic text-slate-500 text-xs">CPF</div>
-                        <div className="text-sm font-semibold text-slate-800">{profData.cpf}</div>
-                     </td>
-                   </tr>
-                 </tbody>
-               </table>
-             </div>
-             
-             <div className="w-full flex flex-col items-center justify-center text-center text-sm text-slate-800 mt-auto">
-               <p className="font-bold mb-1">{config.razaoSocial || "Razão Social"}</p>
-               <p>{config.cnpj || "CNPJ"}</p>
-             </div>
+                </div>
+              )}
+            </div>
+
+            {/* Layout Central: Foto Centralizada com Borda Dourada e Informações Organizadas */}
+            <div className="z-10 flex flex-col items-center mt-3 w-full">
+              {/* Foto do Funcionário com Borda Dourada Fina */}
+              <div className="w-32 h-40 border-2 border-[#C5A059] rounded-sm overflow-hidden bg-slate-50 shadow-sm flex items-center justify-center">
+                {fotoBase64 || profData.foto ? (
+                  <img 
+                    src={fotoBase64 || profData.foto} 
+                    alt="Foto do Profissional" 
+                    className="w-full h-full object-cover" 
+                    crossOrigin="anonymous" 
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-slate-100 text-slate-400 text-xs font-bold">
+                    Sem Foto
+                  </div>
+                )}
+              </div>
+
+              {/* Informações Organizadas do Funcionário (Abaixo da Foto) */}
+              <div className="mt-3.5 text-center space-y-1">
+                <div className="text-sm text-slate-800">
+                  <span className="font-normal text-slate-600">Nome: </span>
+                  <span className="font-bold text-slate-900">{profData.nome || "Ana Paula Pereira Araújo"}</span>
+                </div>
+                <div className="text-sm text-slate-800">
+                  <span className="font-normal text-slate-600">CPF: </span>
+                  <span className="font-semibold text-slate-800">{profData.cpf || "665.343.303-00"}</span>
+                </div>
+                <div className="text-sm text-slate-800">
+                  <span className="font-normal text-slate-600">Cargo: </span>
+                  <span className="font-semibold text-slate-800">{profData.profissao || profData.especialidade || "Cuidadora"}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Integração de Dados Corporativos (Canto Inferior Direito) */}
+            <div className="absolute bottom-4 right-5 z-10 text-right text-xs leading-tight">
+              <div className="font-bold text-slate-900">{config.razaoSocial || "RH Gestão Domiciliar"}</div>
+              <div className="text-[11px] text-slate-700 font-semibold">{config.cnpj ? `CNPJ: ${config.cnpj}` : "CNPJ: 68.152.234/0001-98"}</div>
+            </div>
+
           </div>
         </div>
       </div>
