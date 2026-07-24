@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { updateDoc, doc, getDoc, addDoc, collection, serverTimestamp, getDocs, query, where, deleteDoc, limit, writeBatch } from 'firebase/firestore';
 import { fetchCep, fetchBanks, getHolidays } from '../lib/brasilApi';
@@ -200,6 +200,17 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       return;
     }
 
+    const monthPrefix = targetDateStr.substring(0, 7);
+    const agsTargetMonth = agendamentos.filter(
+      (a) => a.idPaciente === (paciente?.id || clipboardAgendamento.idPaciente) && a.data && a.data.startsWith(monthPrefix)
+    );
+    const isTargetConcluded = agsTargetMonth.length > 0 && agsTargetMonth.filter(a => a.status !== 'Cancelado').some(a => a.status === 'Concluido' || a.escalaCongelada === true);
+
+    if (isTargetConcluded) {
+      toast.error('Esta escala já está concluída. Não é permitida a adição de novos agendamentos.');
+      return;
+    }
+
     try {
       const { id, data, ...rest } = clipboardAgendamento;
 
@@ -260,6 +271,17 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     }
     if (copiedSourceDate === targetDateStr) {
       toast.error('Não é possível colar no mesmo dia de origem.');
+      return;
+    }
+
+    const monthPrefix = targetDateStr.substring(0, 7);
+    const agsTargetMonth = agendamentos.filter(
+      (a) => a.idPaciente === paciente?.id && a.data && a.data.startsWith(monthPrefix)
+    );
+    const isTargetConcluded = agsTargetMonth.length > 0 && agsTargetMonth.filter(a => a.status !== 'Cancelado').some(a => a.status === 'Concluido' || a.escalaCongelada === true);
+
+    if (isTargetConcluded) {
+      toast.error('Esta escala já está concluída. Não é permitida a adição de novos agendamentos.');
       return;
     }
 
@@ -1192,6 +1214,18 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const [calendarView, setCalendarView] = useState<'lista' | 'calendario'>('calendario'); // default to visual calendar view
   const [isFaturaModalOpen, setIsFaturaModalOpen] = useState(false);
 
+  const isCurrentMonthConcluded = useMemo(() => {
+    if (!paciente) return false;
+    const monthPrefix = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}`;
+    const agsMes = agendamentos.filter(
+      (a) => a.idPaciente === paciente.id && a.data && a.data.startsWith(monthPrefix)
+    );
+    if (agsMes.length === 0) return false;
+    const activeInMonth = agsMes.filter((a) => a.status !== 'Cancelado');
+    if (activeInMonth.length === 0) return false;
+    return activeInMonth.some((a) => a.status === 'Concluido' || a.escalaCongelada === true);
+  }, [paciente, calendarYear, calendarMonth, agendamentos]);
+
   // Local Audit Logs on-demand loader to avoid downloading the entire collection in real-time
   const [localAuditLogs, setLocalAuditLogs] = useState<any[]>([]);
   const [loadingAuditLogs, setLoadingAuditLogs] = useState(false);
@@ -1310,19 +1344,35 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const [avulsoPlantaoOptionId, setAvulsoPlantaoOptionId] = useState<string>('principal');
   const [avulsoTipoDia, setAvulsoTipoDia] = useState<'Normal' | 'Feriado 20%' | 'Feriado 50%'>('Normal');
 
+  const getFirstDayCurrentMonth = () => {
+    const today = new Date();
+    const yr = today.getFullYear();
+    const mo = String(today.getMonth() + 1).padStart(2, '0');
+    return `${yr}-${mo}-01`;
+  };
+
+  const getLastDayCurrentMonth = () => {
+    const today = new Date();
+    const yr = today.getFullYear();
+    const lastDay = new Date(yr, today.getMonth() + 1, 0).getDate();
+    const mo = String(today.getMonth() + 1).padStart(2, '0');
+    const dy = String(lastDay).padStart(2, '0');
+    return `${yr}-${mo}-${dy}`;
+  };
+
   // Modal Fields - Concluir (Dar Baixa no Período)
-  const [concluirStartDate, setConcluirStartDate] = useState('2026-06-01');
-  const [concluirEndDate, setConcluirEndDate] = useState('2026-06-30');
+  const [concluirStartDate, setConcluirStartDate] = useState(getFirstDayCurrentMonth);
+  const [concluirEndDate, setConcluirEndDate] = useState(getLastDayCurrentMonth);
   const [concluirConfirmarPor, setConcluirConfirmarPor] = useState('Coordenador');
 
   // Modal Fields - Reabrir (Desfazer Baixa do Período)
-  const [reabrirStartDate, setReabrirStartDate] = useState('2026-06-01');
-  const [reabrirEndDate, setReabrirEndDate] = useState('2026-06-30');
+  const [reabrirStartDate, setReabrirStartDate] = useState(getFirstDayCurrentMonth);
+  const [reabrirEndDate, setReabrirEndDate] = useState(getLastDayCurrentMonth);
   const [reabrirDesconfirmarPor, setReabrirDesconfirmarPor] = useState('Coordenador');
 
   // Modal Fields - Excluir (Remover Período)
-  const [excluirStartDate, setExcluirStartDate] = useState('2026-06-01');
-  const [excluirEndDate, setExcluirEndDate] = useState('2026-06-30');
+  const [excluirStartDate, setExcluirStartDate] = useState(getFirstDayCurrentMonth);
+  const [excluirEndDate, setExcluirEndDate] = useState(getLastDayCurrentMonth);
   const [excluirPorType, setExcluirPorType] = useState<'datas' | 'profissional' | 'periodo'>('periodo');
   const [excluirProfName, setExcluirProfName] = useState('');
   const [showExcluirProfDropdown, setShowExcluirProfDropdown] = useState(false);
@@ -2005,6 +2055,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const handleSalvarAgendamento = async () => {
     setIsSaving(true);
     try {
+      if (isCurrentMonthConcluded) {
+        toast.error('Esta escala já está concluída. Não é permitida a adição de novos agendamentos.');
+        return false;
+      }
       // 1. Validação de Payload (Console.log)
       console.log("Validando Payload do Novo Agendamento:", {
         profissional: avulsoProf,
@@ -4546,7 +4600,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
                     <button
                       type="button"
-                      disabled={isCurrentlyDeactivated}
+                      disabled={isCurrentlyDeactivated || isCurrentMonthConcluded}
+                      title={isCurrentMonthConcluded ? 'Esta escala já está concluída. Não é permitida a adição de novos agendamentos.' : ''}
                       onClick={() => {
                         setSelectedDates([]);
                         setAvulsoProf('');
@@ -4561,6 +4616,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       <Plus size={13.5} />
                       <span>Agendar</span>
                     </button>
+
+                    {isCurrentMonthConcluded && (
+                      <div className="flex items-center gap-1.5 px-3 py-2 bg-amber-100 border border-amber-300 text-amber-900 rounded-lg text-xs font-black shadow-xs font-sans">
+                        <Lock size={13.5} className="text-amber-700" />
+                        <span>Escala Concluída</span>
+                      </div>
+                    )}
 
                     <button
                       type="button"
@@ -5996,6 +6058,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               </button>
             </div>
 
+            {isCurrentMonthConcluded && (
+              <div className="bg-amber-50 border border-amber-200 text-amber-900 p-3 rounded-xl text-xs font-bold flex items-center gap-2 font-sans">
+                <Lock size={16} className="text-amber-700 shrink-0" />
+                <span>Esta escala já está concluída. Não é permitida a adição de novos agendamentos.</span>
+              </div>
+            )}
+
             <div className="space-y-3.5 max-h-[65vh] overflow-y-auto pr-2 pb-4">
               {/* Professional Autocomplete Search Field */}
               <div className="space-y-1 relative">
@@ -6223,7 +6292,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               </button>
               <button
                 type="button"
-                disabled={isSaving}
+                disabled={isSaving || isCurrentMonthConcluded}
+                title={isCurrentMonthConcluded ? 'Esta escala já está concluída. Não é permitida a adição de novos agendamentos.' : ''}
                 onClick={async (e) => {
                   e.preventDefault();
                   const success = await handleSalvarAgendamento();
@@ -6231,7 +6301,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     setAvulsoModalOpen(false);
                   }
                 }}
-                className={`flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 text-white font-medium rounded-lg shadow-lg shadow-blue-500/40 hover:bg-blue-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${isSaving ? 'opacity-55 cursor-not-allowed' : ''}`}
+                className={`flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 text-white font-medium rounded-lg shadow-lg shadow-blue-500/40 hover:bg-blue-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${isSaving || isCurrentMonthConcluded ? 'opacity-55 cursor-not-allowed' : ''}`}
               >
                 {isSaving ? 'Agendando...' : 'Confirmar e Agendar'}
               </button>
@@ -6883,7 +6953,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                     <Calendar size={14} className="text-sky-600" />
-                    <span>Selecione os dias (Junho 2026)</span>
+                    <span>Selecione os dias ({['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][new Date().getMonth()]} {new Date().getFullYear()})</span>
                   </h3>
                   <button
                     type="button"
@@ -6897,17 +6967,22 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   Clique para marcar/desmarcar individualmente os dias avulsos que deseja programar na mesma escala:
                 </p>
 
-                {/* Sub grid de Junho 2026 */}
+                {/* Sub grid dinâmico do Mês Vigente */}
                 <div className="grid grid-cols-7 gap-1 bg-white p-2 border border-slate-200 rounded-xl shadow-xs">
                   {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((dw, i) => (
                     <div key={`cal2-header-${i}`} className="text-center font-extrabold text-[9px] text-slate-400 py-1">{dw}</div>
                   ))}
-                  {/* Padding de Maio - Junho começa numa segunda-feira (1 dia de padding) */}
-                  <div className="text-center text-[10px] text-slate-200 py-2 select-none font-mono">31</div>
+                  {/* Padding do mês anterior */}
+                  {Array.from({ length: new Date(new Date().getFullYear(), new Date().getMonth(), 1).getDay() }).map((_, padIdx) => (
+                    <div key={`pad-${padIdx}`} className="text-center text-[10px] text-slate-200 py-2 select-none font-mono"></div>
+                  ))}
                   
-                  {Array.from({ length: 30 }).map((_, dVal) => {
+                  {Array.from({ length: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() }).map((_, dVal) => {
                     const dayNum = dVal + 1;
-                    const dateStr = `2026-06-${String(dayNum).padStart(2, '0')}`;
+                    const yr = new Date().getFullYear();
+                    const mo = String(new Date().getMonth() + 1).padStart(2, '0');
+                    const dy = String(dayNum).padStart(2, '0');
+                    const dateStr = `${yr}-${mo}-${dy}`;
                     const isSelected = avulsoSelectedDates.includes(dateStr);
                     return (
                       <button

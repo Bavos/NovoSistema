@@ -143,7 +143,7 @@ export const EscalasDashboard: React.FC = () => {
       <div className="hidden print:block border-b-2 border-[#1a3c2e] pb-4 mb-4">
         <h1 className="text-xl font-bold text-[#1a3c2e] uppercase">SISTEMA RH CUIDADO DOMICILIAR</h1>
         <h2 className="text-lg font-black text-slate-800">Relatório de Escala de Plantões Diária</h2>
-        <p className="text-xs text-slate-500 mt-1">Visão integrada das escalas ativas para o dia 12/06/2026</p>
+        <p className="text-xs text-slate-500 mt-1">Visão integrada das escalas ativas para o dia {new Date().toLocaleDateString('pt-BR')}</p>
         <div className="flex gap-4 text-[10px] text-slate-400 mt-2">
           <span><strong>Filtro de Status:</strong> {filtroStatus}</span>
           {busca && <span><strong>Filtro de Pesquisa:</strong> "{busca}"</span>}
@@ -155,10 +155,10 @@ export const EscalasDashboard: React.FC = () => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-sidebar-divider border-slate-100 pb-3 gap-3 print:border-slate-300">
           <div>
             <h2 className="text-sm font-bold text-slate-800">Painel Consolidado de Escalas Diárias</h2>
-            <p className="text-xs text-slate-400">Visão integrada de prestadores escalados para o dia de hoje (12/06/2026).</p>
+            <p className="text-xs text-slate-400">Visão integrada de prestadores escalados para o dia de hoje ({new Date().toLocaleDateString('pt-BR')}).</p>
           </div>
           <div className="flex items-center gap-2 self-end sm:self-auto print:hidden">
-            <span className="text-xs bg-slate-100 px-3 py-1.5 rounded-lg font-bold text-slate-600">12/06/2026</span>
+            <span className="text-xs bg-slate-100 px-3 py-1.5 rounded-lg font-bold text-slate-600">{new Date().toLocaleDateString('pt-BR')}</span>
             <button
               onClick={handlePrint}
               className="text-xs bg-[#1a3c2e] text-[#b8860b] hover:bg-[#122b21] px-4 py-1.5 rounded-lg font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer hover:scale-[1.01]"
@@ -348,8 +348,22 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
     return '';
   };
 
-  const [dataInicial, setDataInicial] = useState('2026-06-01');
-  const [dataFinal, setDataFinal] = useState('2026-06-30');
+  const [dataInicial, setDataInicial] = useState<string>(() => {
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    const yr = firstDay.getFullYear();
+    const mo = String(firstDay.getMonth() + 1).padStart(2, '0');
+    const dy = String(firstDay.getDate()).padStart(2, '0');
+    return `${yr}-${mo}-${dy}`;
+  });
+  const [dataFinal, setDataFinal] = useState<string>(() => {
+    const today = new Date();
+    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    const yr = lastDay.getFullYear();
+    const mo = String(lastDay.getMonth() + 1).padStart(2, '0');
+    const dy = String(lastDay.getDate()).padStart(2, '0');
+    return `${yr}-${mo}-${dy}`;
+  });
   const [pacienteSelecionado, setPacienteSelecionado] = useState('');
   const [profissionalSelecionado, setProfissionalSelecionado] = useState('');
 
@@ -461,8 +475,22 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   const [editingDebitId, setEditingDebitId] = useState<string | null>(null);
   const [newDebitPacienteId, setNewDebitPacienteId] = useState('');
   const [debitFilterType, setDebitFilterType] = useState<'data' | 'paciente' | 'profissional'>('data');
-  const [debitFilterStartDate, setDebitFilterStartDate] = useState('');
-  const [debitFilterEndDate, setDebitFilterEndDate] = useState('');
+  const [debitFilterStartDate, setDebitFilterStartDate] = useState<string>(() => {
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    const yr = firstDay.getFullYear();
+    const mo = String(firstDay.getMonth() + 1).padStart(2, '0');
+    const dy = String(firstDay.getDate()).padStart(2, '0');
+    return `${yr}-${mo}-${dy}`;
+  });
+  const [debitFilterEndDate, setDebitFilterEndDate] = useState<string>(() => {
+    const today = new Date();
+    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    const yr = lastDay.getFullYear();
+    const mo = String(lastDay.getMonth() + 1).padStart(2, '0');
+    const dy = String(lastDay.getDate()).padStart(2, '0');
+    return `${yr}-${mo}-${dy}`;
+  });
   const [debitFilterPatientId, setDebitFilterPatientId] = useState('');
   const [debitFilterProfId, setDebitFilterProfId] = useState('');
 
@@ -2015,10 +2043,11 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                             onChange={(e) => setReferenciaAno(Number(e.target.value))}
                             className="p-2 border border-slate-200 rounded-lg text-sm bg-white min-w-[90px] cursor-pointer"
                           >
-                            <option value="2024">2024</option>
-                            <option value="2025">2025</option>
-                            <option value="2026">2026</option>
-                            <option value="2027">2027</option>
+                            {Array.from({ length: 7 }, (_, i) => new Date().getFullYear() - 3 + i).map((yr) => (
+                              <option key={yr} value={yr}>
+                                {yr}
+                              </option>
+                            ))}
                           </select>
                         </div>
                       </>

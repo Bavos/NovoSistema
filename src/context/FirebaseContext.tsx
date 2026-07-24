@@ -688,6 +688,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       await setDoc(doc(db, 'LogsAuditoria', log.id), log);
     } catch (err) {
       console.error("Erro ao registrar log de auditoria:", err);
+      handleQuotaError(err, 'addAuditLog');
     }
   };
 
@@ -939,7 +940,25 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
+  const isEscalaConcluida = (idPaciente?: string, dateStr?: string): boolean => {
+    if (!idPaciente || !dateStr) return false;
+    const monthPrefix = dateStr.substring(0, 7);
+    const agsMes = agendamentos.filter(
+      (a) => a.idPaciente === idPaciente && a.data && a.data.startsWith(monthPrefix)
+    );
+    if (agsMes.length === 0) return false;
+    const activeInMonth = agsMes.filter((a) => a.status !== 'Cancelado');
+    if (activeInMonth.length === 0) return false;
+    return activeInMonth.some((a) => a.status === 'Concluido' || a.escalaCongelada === true);
+  };
+
   const addAgendamento = async (newAg: Omit<Agendamento, 'id'>) => {
+    if (isEscalaConcluida(newAg.idPaciente, newAg.data)) {
+      const errMsg = 'Esta escala já está concluída. Não é permitida a adição de novos agendamentos.';
+      toast.error(errMsg);
+      throw new Error(errMsg);
+    }
+
     if (isQuotaExceeded) {
       const fullAg: Agendamento = { ...newAg, id: `ag-${Date.now()}`, status: 'Aberta' as const };
       const updatedList = [fullAg, ...agendamentos];
@@ -963,12 +982,28 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setNotification('Agendamento criado com sucesso.');
       return fullAgendamento;
     } catch (err) {
+      if (handleQuotaError(err, 'addAgendamento')) {
+        const fullAg: Agendamento = { ...newAg, id: `ag-${Date.now()}`, status: newAg.status || ('Aberta' as const) };
+        const updatedList = [fullAg, ...agendamentos];
+        setAgendamentos(updatedList);
+        localStorage.setItem('contingency_agendamentos', JSON.stringify(updatedList));
+        setNotification('Agendamento criado com sucesso (Contingência Local).');
+        return fullAg;
+      }
       handleFirestoreError(err, OperationType.CREATE, 'agendamentos');
       throw err;
     }
   };
 
   const addAgendamentosBatch = async (newAgs: Omit<Agendamento, 'id'>[]) => {
+    for (const ag of newAgs) {
+      if (isEscalaConcluida(ag.idPaciente, ag.data)) {
+        const errMsg = 'Esta escala já está concluída. Não é permitida a adição de novos agendamentos.';
+        toast.error(errMsg);
+        throw new Error(errMsg);
+      }
+    }
+
     if (isQuotaExceeded) {
       const fullAgs: Agendamento[] = newAgs.map((newAg, idx) => ({
         ...newAg,
@@ -1008,6 +1043,18 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setNotification(`${createdAgs.length} agendamentos criados com sucesso.`);
       return createdAgs;
     } catch (err) {
+      if (handleQuotaError(err, 'addAgendamentosBatch')) {
+        const fullAgs: Agendamento[] = newAgs.map((newAg, idx) => ({
+          ...newAg,
+          id: `ag-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 5)}`,
+          status: newAg.status || 'Aberta'
+        }));
+        const updatedList = [...fullAgs, ...agendamentos];
+        setAgendamentos(updatedList);
+        localStorage.setItem('contingency_agendamentos', JSON.stringify(updatedList));
+        setNotification(`${fullAgs.length} agendamentos criados com sucesso (Contingência Local).`);
+        return fullAgs;
+      }
       handleFirestoreError(err, OperationType.CREATE, 'agendamentos/batch');
       throw err;
     }
@@ -1033,6 +1080,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setAgendamentos(prev => prev.map((a) => (a.id === ag.id ? ag : a)));
       setNotification('Agendamento atualizado.');
     } catch (err) {
+      if (handleQuotaError(err, 'updateAgendamento')) {
+        const updatedList = agendamentos.map((a) => (a.id === ag.id ? ag : a));
+        setAgendamentos(updatedList);
+        localStorage.setItem('contingency_agendamentos', JSON.stringify(updatedList));
+        setNotification('Agendamento atualizado (Contingência Local).');
+        return;
+      }
       handleFirestoreError(err, OperationType.UPDATE, `agendamentos/${ag.id}`);
       throw err;
     }
@@ -1077,6 +1131,16 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }));
       setNotification(`${agendamentosToUpdate.length} agendamentos atualizados em lote.`);
     } catch (err) {
+      if (handleQuotaError(err, 'updateAgendamentosBatch')) {
+        const updatedList = agendamentos.map(a => {
+          const update = agendamentosToUpdate.find(upd => upd.id === a.id);
+          return update ? { ...a, ...update } as Agendamento : a;
+        });
+        setAgendamentos(updatedList);
+        localStorage.setItem('contingency_agendamentos', JSON.stringify(updatedList));
+        setNotification(`${agendamentosToUpdate.length} agendamentos atualizados (Contingência Local).`);
+        return;
+      }
       handleFirestoreError(err, OperationType.UPDATE, 'agendamentos/batch');
       throw err;
     }
@@ -1103,6 +1167,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setAgendamentos(prev => prev.filter((a) => a.id !== id));
       setNotification('Agendamento excluído.');
     } catch (err) {
+      if (handleQuotaError(err, 'deleteAgendamento')) {
+        const updatedList = agendamentos.filter((a) => a.id !== id);
+        setAgendamentos(updatedList);
+        localStorage.setItem('contingency_agendamentos', JSON.stringify(updatedList));
+        setNotification('Agendamento excluído (Contingência Local).');
+        return;
+      }
       handleFirestoreError(err, OperationType.DELETE, `agendamentos/${id}`);
       throw err;
     }
@@ -1138,6 +1209,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setAgendamentos(prev => prev.filter((a) => !ids.includes(a.id)));
       setNotification(`${ids.length} agendamentos excluídos com sucesso.`);
     } catch (err) {
+      if (handleQuotaError(err, 'deleteAgendamentosBatch')) {
+        const updatedList = agendamentos.filter((a) => !ids.includes(a.id));
+        setAgendamentos(updatedList);
+        localStorage.setItem('contingency_agendamentos', JSON.stringify(updatedList));
+        setNotification(`${ids.length} agendamentos excluídos (Contingência Local).`);
+        return;
+      }
       handleFirestoreError(err, OperationType.DELETE, 'agendamentos/batch');
       throw err;
     }
@@ -1427,6 +1505,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return { ...dataToSave, id: docRef.id } as DebitoProfissional;
     } catch (err) {
       console.error("Erro ao adicionar débito:", err);
+      if (handleQuotaError(err, 'addDebitoProfissional')) {
+        const updatedList = [dataToSave, ...debitosProfissionais];
+        setDebitosProfissionais(updatedList);
+        localStorage.setItem('contingency_debitos', JSON.stringify(updatedList));
+        setNotification(`Débito de R$ ${debito.valor} registrado com sucesso para ${debito.nomeProfissional} (Contingência Local).`);
+        return dataToSave;
+      }
       handleFirestoreError(err, OperationType.CREATE, 'debitos_profissionais');
       throw err;
     }
@@ -1464,6 +1549,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setNotification('Débito removido com sucesso.');
     } catch (err) {
       console.error("Erro ao remover débito:", err);
+      if (handleQuotaError(err, 'deleteDebitoProfissional')) {
+        const updatedList = debitosProfissionais.filter((d) => d.id !== id);
+        setDebitosProfissionais(updatedList);
+        localStorage.setItem('contingency_debitos', JSON.stringify(updatedList));
+        setNotification('Débito removido com sucesso (Contingência Local).');
+        return;
+      }
       handleFirestoreError(err, OperationType.DELETE, `debitos_profissionais/${id}`);
       throw err;
     }
@@ -1484,6 +1576,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setNotification(`Débito de R$ ${debito.valor} atualizado com sucesso.`);
     } catch (err) {
       console.error("Erro ao atualizar débito:", err);
+      if (handleQuotaError(err, 'updateDebitoProfissional')) {
+        const updatedList = debitosProfissionais.map((d) => (d.id === debito.id ? debito : d));
+        setDebitosProfissionais(updatedList);
+        localStorage.setItem('contingency_debitos', JSON.stringify(updatedList));
+        setNotification(`Débito de R$ ${debito.valor} atualizado com sucesso (Contingência Local).`);
+        return;
+      }
       handleFirestoreError(err, OperationType.UPDATE, `debitos_profissionais/${debito.id}`);
       throw err;
     }
@@ -1508,6 +1607,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return { id: docRef.id, ...fatura } as FaturaPaciente;
     } catch (err) {
       console.error("Erro ao salvar fatura:", err);
+      if (handleQuotaError(err, 'addFaturaPaciente')) {
+        const updatedList = [dataToSave, ...faturasPacientes];
+        setFaturasPacientes(updatedList);
+        localStorage.setItem('contingency_faturas', JSON.stringify(updatedList));
+        setNotification('Fatura salva com sucesso (Contingência Local).');
+        return dataToSave;
+      }
       handleFirestoreError(err, OperationType.CREATE, 'faturas_pacientes');
       throw err;
     }
@@ -1528,6 +1634,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setNotification('Fatura removida com sucesso.');
     } catch (err) {
       console.error("Erro ao remover fatura:", err);
+      if (handleQuotaError(err, 'deleteFaturaPaciente')) {
+        const updatedList = faturasPacientes.filter((f) => f.id !== id);
+        setFaturasPacientes(updatedList);
+        localStorage.setItem('contingency_faturas', JSON.stringify(updatedList));
+        setNotification('Fatura removida com sucesso (Contingência Local).');
+        return;
+      }
       handleFirestoreError(err, OperationType.DELETE, `faturas_pacientes/${id}`);
       throw err;
     }
@@ -1548,6 +1661,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setNotification('Folha removida com sucesso.');
     } catch (err) {
       console.error("Erro ao remover folha:", err);
+      if (handleQuotaError(err, 'deleteFolhaPagamento')) {
+        const updatedList = folhasPagamento.filter((f) => f.id !== id);
+        setFolhasPagamento(updatedList);
+        localStorage.setItem('contingency_folhas', JSON.stringify(updatedList));
+        setNotification('Folha removida com sucesso (Contingência Local).');
+        return;
+      }
       handleFirestoreError(err, OperationType.DELETE, `folhas_pagamento/${id}`);
       throw err;
     }
@@ -1669,6 +1789,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return { id: docRef.id, ...folha } as FolhaPagamento;
     } catch (err) {
       console.error("Erro ao fechar folha:", err);
+      if (handleQuotaError(err, 'addFolhaPagamento')) {
+        const updatedList = [dataToSave, ...folhasPagamento];
+        setFolhasPagamento(updatedList);
+        localStorage.setItem('contingency_folhas', JSON.stringify(updatedList));
+        setNotification('Folha fechada com sucesso (Contingência Local).');
+        return dataToSave;
+      }
       handleFirestoreError(err, OperationType.CREATE, 'folhas_pagamento');
       throw err;
     }
