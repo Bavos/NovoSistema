@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import {
   Users,
@@ -13,10 +13,12 @@ import {
   Building2,
   ChevronRight,
   Menu,
-  HeartPulse,
   Activity
 } from 'lucide-react';
 import { useFirebase } from '../context/FirebaseContext';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import logo from '../assets/images/rh_logo_v2_1781470281009.jpg';
 
 interface SidebarProps {
   activeTab: string;
@@ -32,14 +34,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setIsSidebarExpanded,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
-  const { userRole } = useFirebase();
+  const [empresa, setEmpresa] = useState<any>(null);
+  const { userRole, user, isQuotaExceeded, isTestMode } = useFirebase();
+
+  useEffect(() => {
+    if (!user || isQuotaExceeded || isTestMode) {
+      setEmpresa(null);
+      return;
+    }
+    const docRef = doc(db, 'configuracoes_empresa', 'empresa');
+    const unsub = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setEmpresa(docSnap.data());
+      }
+    }, (error) => {
+      console.warn("Sidebar company settings subscription failed:", error);
+    });
+    return unsub;
+  }, [user, isQuotaExceeded]);
 
   const allMenuItems = [
-    { id: 'dashboard', label: 'Início', icon: Activity, desc: 'Visão Executiva 360º' },
-    { id: 'pacientes', label: 'Pacientes', icon: Users, desc: 'Gestão de Planos & Prontuários' },
-    { id: 'profissionais', label: 'Profissionais', icon: Briefcase, desc: 'Cuidadores & Enfermagem' },
-    { id: 'financeiro', label: 'Faturas & Pagamentos', icon: DollarSign, desc: 'Gestão Financeira' },
-    { id: 'empresa', label: 'Empresa', icon: Building2, desc: 'Configurações corporativas' },
+    { id: 'dashboard', label: 'Início', icon: Activity },
+    { id: 'pacientes', label: 'Pacientes', icon: Users },
+    { id: 'profissionais', label: 'Profissionais', icon: Briefcase },
+    { id: 'financeiro', label: 'Faturas & Pagamentos', icon: DollarSign },
+    { id: 'empresa', label: 'Empresa', icon: Building2 },
   ];
 
   // Restrict access for 'colaborador' role to 'financeiro' and 'empresa' tabs
@@ -66,15 +85,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Sidebar Header */}
       <div className="h-16 flex items-center border-b border-[#254A34] px-4 justify-between select-none bg-forest-green">
         <div className="flex items-center space-x-3 overflow-hidden min-w-[150px]">
-          <div className="p-2 bg-hover-green text-mustard-gold rounded-full flex-shrink-0">
-            <HeartPulse size={20} />
+          <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center overflow-hidden flex-shrink-0 border border-[#254A34]/20 shadow-xs">
+            <img 
+              src={empresa?.logoUrl || logo} 
+              alt="Logo" 
+              className="w-full h-full object-contain" 
+            />
           </div>
           <motion.div
             animate={{ opacity: effectiveExpanded ? 1 : 0 }}
             transition={{ duration: 0.2 }}
             className="flex flex-col whitespace-nowrap pl-3"
           >
-            <span className="font-extrabold text-off-white text-sm tracking-wide uppercase">RH CS</span>
+            <span className="font-extrabold text-off-white text-sm tracking-wide uppercase">RH GD</span>
             <span className="text-[10px] text-mustard-gold font-mono tracking-widest font-medium">SISTEMA</span>
           </motion.div>
         </div>
@@ -123,16 +146,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               {/* Text indicator */}
               <motion.div
-                className="overflow-hidden whitespace-nowrap pl-3 flex flex-col justify-center"
+                className="overflow-hidden whitespace-nowrap pl-3 flex items-center"
                 animate={{ opacity: effectiveExpanded ? 1 : 0 }}
                 transition={{ duration: 0.2 }}
               >
                 <span className="text-sm font-medium">{item.label}</span>
-                {effectiveExpanded && (
-                  <span className={`text-[9px] ${isActive ? 'text-mustard-gold/80' : 'text-slate-500'}`}>
-                    {item.desc}
-                  </span>
-                )}
               </motion.div>
 
               {/* Active hover tooltip indicator */}
