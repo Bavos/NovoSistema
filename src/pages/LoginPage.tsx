@@ -53,7 +53,6 @@ export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ o
                         <input 
                             id="login-email"
                             type="email" 
-                            placeholder="E-mail" 
                             value={email} 
                             onChange={e => setEmail(e.target.value)} 
                             className="w-full h-12 px-4 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#1A3626]/20 focus:border-[#1A3626] transition-all text-sm text-slate-800" 
@@ -67,7 +66,6 @@ export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ o
                         <input 
                             id="login-password"
                             type="password" 
-                            placeholder="Senha" 
                             value={password} 
                             onChange={e => setPassword(e.target.value)} 
                             className="w-full h-12 px-4 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#1A3626]/20 focus:border-[#1A3626] transition-all text-sm text-slate-800" 

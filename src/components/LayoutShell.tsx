@@ -29,7 +29,7 @@ export const LayoutShell: React.FC<LayoutShellProps> = ({
   onSelectProfRedirect,
 }) => {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState<boolean>(false);
-  const { notification, setNotification, isQuotaExceeded } = useFirebase();
+  const { notification, setNotification, isQuotaExceeded, isTestMode, toggleTestMode } = useFirebase();
 
   return (
     <div className="min-h-screen bg-off-white text-forest-green font-sans flex overflow-x-hidden relative" id="layout-shell-container">
@@ -92,6 +92,25 @@ export const LayoutShell: React.FC<LayoutShellProps> = ({
 
         {/* 6. Universal Content Container (100% Mobile, side-aligned on Desktop) */}
         <main className="w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 space-y-6 min-w-0 flex-1" id="global-content-container">
+          {/* ⚠️ Modo de Testes / Sandbox Banner */}
+          {isTestMode && (
+            <div
+              className="bg-amber-500/10 border-l-4 border-amber-500 text-amber-950 p-3.5 rounded-xl shadow-xs mb-4 flex items-center justify-between gap-3 print:hidden animate-in fade-in slide-in-from-top-2 border border-amber-200"
+              id="sandbox-mode-active-banner"
+            >
+              <div className="flex items-center space-x-2 text-xs sm:text-sm font-semibold">
+                <span className="text-amber-900 font-bold">⚠️ Modo de Testes Ativo — As alterações não afetarão o banco real</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => toggleTestMode(false)}
+                className="text-xs font-bold text-amber-900 bg-amber-200/80 hover:bg-amber-300 px-3 py-1 rounded-lg transition-colors cursor-pointer shrink-0"
+              >
+                Sair do Modo de Testes
+              </button>
+            </div>
+          )}
+
           {isQuotaExceeded && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 text-red-900 shadow-sm mb-4 print:hidden animate-in fade-in slide-in-from-top-4" id="quota-exceeded-contingency-banner">
               <AlertCircle className="text-red-600 shrink-0 mt-0.5 sm:mt-0" size={20} />

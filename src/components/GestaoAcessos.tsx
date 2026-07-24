@@ -172,7 +172,6 @@ export const GestaoAcessos: React.FC = () => {
                   type="text"
                   required
                   className="w-full h-11 px-3 border border-slate-200 rounded-xl text-xs bg-white focus:ring-2 focus:ring-[#1A3626]/20 focus:outline-none transition-all placeholder:text-slate-400"
-                  placeholder="Ex: João Silva"
                 />
               </div>
               <div className="space-y-1.5">
@@ -184,7 +183,6 @@ export const GestaoAcessos: React.FC = () => {
                   type="email"
                   required
                   className="w-full h-11 px-3 border border-slate-200 rounded-xl text-xs bg-white focus:ring-2 focus:ring-[#1A3626]/20 focus:outline-none transition-all placeholder:text-slate-400"
-                  placeholder="Ex: joao@email.com"
                 />
               </div>
               <div className="space-y-1.5">

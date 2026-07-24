@@ -37,7 +37,6 @@ export const FirstAccessPage: React.FC<FirstAccessPageProps> = ({ onBackToLogin 
             <form onSubmit={handleActivate} className="space-y-4">
                 <input 
                     type="email" 
-                    placeholder="E-mail" 
                     value={email} 
                     onChange={e => setEmail(e.target.value)} 
                     className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#1A3626]/20 focus:border-[#1A3626] transition-all" 
@@ -45,7 +44,6 @@ export const FirstAccessPage: React.FC<FirstAccessPageProps> = ({ onBackToLogin 
                 />
                 <input 
                     type="password" 
-                    placeholder="Nova Senha" 
                     value={password} 
                     onChange={e => setPassword(e.target.value)} 
                     className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#1A3626]/20 focus:border-[#1A3626] transition-all" 
@@ -53,7 +51,6 @@ export const FirstAccessPage: React.FC<FirstAccessPageProps> = ({ onBackToLogin 
                 />
                 <input 
                     type="password" 
-                    placeholder="Confirmar Nova Senha" 
                     value={confirmPassword} 
                     onChange={e => setConfirmPassword(e.target.value)} 
                     className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#1A3626]/20 focus:border-[#1A3626] transition-all" 

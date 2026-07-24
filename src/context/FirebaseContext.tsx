@@ -31,6 +31,8 @@ import {
 } from 'firebase/firestore';
 
 interface FirebaseContextType {
+  isTestMode: boolean;
+  toggleTestMode: (enabled?: boolean) => void;
   pacientes: Paciente[];
   isQuotaExceeded: boolean;
   loadingPacientes: boolean;
@@ -102,6 +104,32 @@ let lastQuotaToastTime = 0;
 
 export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isQuotaExceeded, setIsQuotaExceeded] = useState<boolean>(false);
+  const [isTestMode, setIsTestMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('sandbox_mode_enabled') === 'true';
+    } catch (e) {
+      return false;
+    }
+  });
+
+  const toggleTestMode = (enabled?: boolean) => {
+    const nextVal = enabled !== undefined ? enabled : !isTestMode;
+    try {
+      localStorage.setItem('sandbox_mode_enabled', String(nextVal));
+    } catch (e) {}
+    setIsTestMode(nextVal);
+    if (nextVal) {
+      toast.success("🧪 Modo de Testes / Sandbox ATIVADO! Operando isoladamente com dados simulados.", {
+        id: 'sandbox-toast',
+        duration: 4000
+      });
+    } else {
+      toast.success("🔌 Modo de Testes DESATIVADO. Conectado ao Firebase de produção.", {
+        id: 'sandbox-toast',
+        duration: 4000
+      });
+    }
+  };
 
   const handleQuotaError = (err: any, source: string): boolean => {
     const errStr = String(err).toLowerCase();
@@ -239,11 +267,115 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
+  const loadSandboxData = () => {
+    try {
+      console.warn("[Modo de Testes / Sandbox] Carregando dados simulados na memória do navegador...");
+      const sandboxPacientes = localStorage.getItem('sandbox_pacientes');
+      const sandboxPlantoes = localStorage.getItem('sandbox_plantoes');
+      const sandboxAgendamentos = localStorage.getItem('sandbox_agendamentos');
+      const sandboxProfissionais = localStorage.getItem('sandbox_profissionais');
+      const sandboxDebitos = localStorage.getItem('sandbox_debitos');
+      const sandboxFaturas = localStorage.getItem('sandbox_faturas');
+      const sandboxFolhas = localStorage.getItem('sandbox_folhas');
+      const sandboxLogs = localStorage.getItem('sandbox_logs');
+      const sandboxUsers = localStorage.getItem('sandbox_users');
+
+      if (sandboxPacientes) {
+        setPacientes(JSON.parse(sandboxPacientes));
+      } else {
+        setPacientes(INITIAL_PACIENTES);
+        localStorage.setItem('sandbox_pacientes', JSON.stringify(INITIAL_PACIENTES));
+      }
+
+      if (sandboxPlantoes) {
+        setPlantoes(JSON.parse(sandboxPlantoes));
+      } else {
+        setPlantoes(INITIAL_PLANTOES);
+        localStorage.setItem('sandbox_plantoes', JSON.stringify(INITIAL_PLANTOES));
+      }
+
+      if (sandboxAgendamentos) {
+        setAgendamentos(JSON.parse(sandboxAgendamentos));
+      } else {
+        setAgendamentos([]);
+        localStorage.setItem('sandbox_agendamentos', JSON.stringify([]));
+      }
+
+      if (sandboxProfissionais) {
+        setProfissionais(JSON.parse(sandboxProfissionais));
+      } else {
+        const mapped: Profissional[] = INITIAL_PROFESSIONALS.map((prof) => ({
+          id: prof.id,
+          nome: prof.name,
+          especialidade: prof.role,
+          telefone: prof.tel,
+          status: 'Ativo',
+          createdAt: new Date().toISOString(),
+          ativo: true,
+          profissao: prof.role.includes('Médica') ? 'Médica(o)' : prof.role.includes('Enfermagem') ? 'Téc. Enfermagem' : prof.role.includes('Enfermeira') ? 'Enfermeira(o)' : prof.role.includes('Fisioterapeuta') ? 'Fisioterapeuta' : 'Cuidadora(o)',
+        }));
+        setProfissionais(mapped);
+        localStorage.setItem('sandbox_profissionais', JSON.stringify(mapped));
+      }
+
+      if (sandboxDebitos) {
+        setDebitosProfissionais(JSON.parse(sandboxDebitos));
+      } else {
+        setDebitosProfissionais([]);
+        localStorage.setItem('sandbox_debitos', JSON.stringify([]));
+      }
+
+      if (sandboxFaturas) {
+        setFaturasPacientes(JSON.parse(sandboxFaturas));
+      } else {
+        setFaturasPacientes([]);
+        localStorage.setItem('sandbox_faturas', JSON.stringify([]));
+      }
+
+      if (sandboxFolhas) {
+        setFolhasPagamento(JSON.parse(sandboxFolhas));
+      } else {
+        setFolhasPagamento([]);
+        localStorage.setItem('sandbox_folhas', JSON.stringify([]));
+      }
+
+      if (sandboxLogs) {
+        setLogsAuditoria(JSON.parse(sandboxLogs));
+      } else {
+        setLogsAuditoria([]);
+        localStorage.setItem('sandbox_logs', JSON.stringify([]));
+      }
+
+      if (sandboxUsers) {
+        setUsuariosSistema(JSON.parse(sandboxUsers));
+      } else {
+        const initialUsers: UsuarioSistema[] = [
+          {
+            id: 'user-renato',
+            nome: 'Renato B. Z. (Simulado)',
+            email: 'renatobz@gmail.com',
+            nivelAcesso: 'Administrador',
+            status: 'Ativo'
+          }
+        ];
+        setUsuariosSistema(initialUsers);
+        localStorage.setItem('sandbox_users', JSON.stringify(initialUsers));
+      }
+
+      setLoading(false);
+      setLoadingPacientes(false);
+    } catch (e) {
+      console.error("Erro ao carregar dados do modo de testes / sandbox:", e);
+    }
+  };
+
   useEffect(() => {
-    if (isQuotaExceeded) {
+    if (isTestMode) {
+      loadSandboxData();
+    } else if (isQuotaExceeded) {
       loadLocalData();
     }
-  }, [isQuotaExceeded]);
+  }, [isTestMode, isQuotaExceeded]);
 
   // Pagination and count states for patients
   const [totalPacientes, setTotalPacientes] = useState<{ ativos: number; inativos: number }>({ ativos: 0, inativos: 0 });
@@ -257,7 +389,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const hasPreviousPage = pageHistory.length > 0;
 
   const fetchCounts = async () => {
-    if (isQuotaExceeded) {
+    if (isTestMode || isQuotaExceeded) {
       const active = pacientes.filter(p => p.status === 'Ativo').length;
       const inactive = pacientes.filter(p => p.status === 'Desativado').length;
       setTotalPacientes({ ativos: active, inativos: inactive });
@@ -311,7 +443,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setCurrentSearch(search);
     setCurrentFilterId(filterId);
 
-    if (isQuotaExceeded) {
+    if (isTestMode || isQuotaExceeded) {
       let filtered = [...pacientes];
       if (filterId && filterId !== 'todos') {
         filtered = filtered.filter(p => p.id === filterId);
@@ -541,6 +673,11 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Safe and straightforward onSnapshot real-time sync with limit(50)
   useEffect(() => {
+    if (isTestMode) {
+      loadSandboxData();
+      return;
+    }
+
     if (!user) {
       setPacientes([]);
       setPlantoes([]);
@@ -1802,6 +1939,21 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const seedDatabase = async () => {
+    if (isTestMode) {
+      localStorage.removeItem('sandbox_pacientes');
+      localStorage.removeItem('sandbox_plantoes');
+      localStorage.removeItem('sandbox_agendamentos');
+      localStorage.removeItem('sandbox_profissionais');
+      localStorage.removeItem('sandbox_debitos');
+      localStorage.removeItem('sandbox_faturas');
+      localStorage.removeItem('sandbox_folhas');
+      localStorage.removeItem('sandbox_logs');
+      localStorage.removeItem('sandbox_users');
+      loadSandboxData();
+      setNotification("Dados simulados do Modo de Testes restaurados com sucesso!");
+      return;
+    }
+
     try {
       setNotification("Populando banco de dados com dados de demonstração...");
       
@@ -1859,6 +2011,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   return (
     <FirebaseContext.Provider
       value={{
+        isTestMode,
+        toggleTestMode,
         pacientes,
         isQuotaExceeded,
         loadingPacientes,

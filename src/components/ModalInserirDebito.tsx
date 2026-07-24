@@ -83,7 +83,6 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
         <input
           type="text"
           value={searchTerm}
-          placeholder={placeholder}
           onFocus={(e) => {
             setIsOpen(true);
             e.target.select();
@@ -365,7 +364,6 @@ export const ModalInserirDebito: React.FC<ModalInserirDebitoProps> = ({
               }))}
               value={newDebitProfId}
               onChange={(val) => setNewDebitProfId(val)}
-              placeholder="Digite para buscar profissional..."
             />
           </div>
 
@@ -378,7 +376,6 @@ export const ModalInserirDebito: React.FC<ModalInserirDebitoProps> = ({
               }))}
               value={newDebitPacienteId}
               onChange={(val) => setNewDebitPacienteId(val)}
-              placeholder="Digite para buscar paciente (opcional)..."
               emptyOptionLabel="Nenhum paciente selecionado"
             />
           </div>
@@ -401,7 +398,6 @@ export const ModalInserirDebito: React.FC<ModalInserirDebitoProps> = ({
               <input
                 type="text"
                 inputMode="numeric"
-                placeholder="0,00"
                 value={newDebitValor}
                 onChange={(e) => setNewDebitValor(mascaraFinanceira(e.target.value))}
                 className="w-full pl-9 pr-3 p-2.5 border border-slate-200 rounded-lg text-sm bg-white font-mono font-bold text-slate-800"

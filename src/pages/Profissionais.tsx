@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
 import { sanitizeClonedDocForHtml2Canvas } from '../lib/html2canvasSanitizer';
 import { useFirebase } from '../context/FirebaseContext';
 import { Profissional, Agendamento, DocumentoAnexo, Ocorrencia } from '../types';
@@ -1837,9 +1837,9 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                 </linearGradient>
               </defs>
               {/* Arco Superior Reposicionado (Descido para abraçar a foto e harmonizar o espaço negativo) */}
-              <path d="M 45 110 Q 290 54 535 110 Q 290 68 45 110 Z" fill="url(#badge-gold-arc-grad)" />
+              <path d="M 45 85 Q 290 35 535 85 Q 290 49 45 85 Z" fill="url(#badge-gold-arc-grad)" />
               {/* Arco Inferior Sweeping Low Below Details (Subido 2 pontos) */}
-              <path d="M 45 280 Q 290 336 535 280 Q 290 322 45 280 Z" fill="url(#badge-gold-arc-grad)" />
+              <path d="M 45 310 Q 290 365 535 310 Q 290 351 45 310 Z" fill="url(#badge-gold-arc-grad)" />
             </svg>
 
             {/* Logotipo Principal no Canto Superior Esquerdo (bg-transparent + mix-blend-multiply na img) */}
@@ -1965,7 +1965,6 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
             <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
             <input
               type="text"
-              placeholder="Buscar por nome, CPF ou telefone..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-700 bg-slate-50 focus:outline-none focus:border-emerald-500 focus:bg-white transition-all shadow-inner"
@@ -2239,7 +2238,6 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                             <label className="text-[10px] font-bold text-[#1a3c2e] uppercase block">Descrição do Motivo</label>
                             <textarea
                               rows={3}
-                              placeholder="Descreva detalhadamente o motivo da ocorrência..."
                               value={ocDescricao}
                               onChange={(e) => setOcDescricao(e.target.value)}
                               className="p-2 border border-slate-200 rounded-lg text-sm w-full bg-white focus:ring-1 focus:ring-[#1a3c2e]"
@@ -2329,7 +2327,6 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                         <input
                           type="text"
                           id="input-busca-ocorrencia"
-                          placeholder="Buscar por motivo, paciente ou descrição..."
                           value={termoBusca}
                           onChange={(e) => setTermoBusca(e.target.value)}
                           className="w-full pl-9 pr-3 py-1.5 text-xs text-slate-705 placeholder-slate-400 bg-white border border-slate-200 focus:outline-none focus:ring-1 focus:ring-[#1a3c2e] focus:border-[#1a3c2e] rounded-lg transition"
@@ -2790,7 +2787,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                       
                       <div className="space-y-1">
                         <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Nome Completo</label>
-                        <input type="text" placeholder="Digite o nome completo" value={formData.nome} onChange={e => setFormData({...formData, nome: e.target.value})} className="p-2 border border-gray-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-[#1a3c2e] focus:border-transparent outline-none bg-white text-gray-800" required />
+                        <input type="text" value={formData.nome} onChange={e => setFormData({...formData, nome: e.target.value})} className="p-2 border border-gray-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-[#1a3c2e] focus:border-transparent outline-none bg-white text-gray-800" required />
                       </div>
                       
                       <div className={`space-y-1 ${formData.meiIrregular ? 'opacity-60' : ''}`}>
@@ -2820,7 +2817,6 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider text-emerald-800">CNPJ</label>
                            <input 
                              type="text" 
-                             placeholder="00.000.000/0000-00" 
                              value={formData.cnpj} 
                              onChange={e => setFormData({...formData, cnpj: mascaraCNPJ(e.target.value)})} 
                              maxLength={18} 
@@ -2890,7 +2886,6 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                         <input 
                           type="text" 
                           maxLength={10} 
-                          placeholder="DD/MM/AAAA" 
                           value={formData.dataNascimento} 
                           onChange={handleDateChange} 
                           className="p-2 border border-gray-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-[#1a3c2e] focus:border-transparent outline-none bg-white text-gray-800" 
@@ -2905,7 +2900,6 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                         <div className="relative">
                           <input
                             type="text"
-                            placeholder="000.000.000-00"
                             value={formData.cpf}
                             onChange={e => setFormData({...formData, cpf: mascaraCPF(e.target.value)})}
                             maxLength={14}
@@ -2950,7 +2944,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Profissão (Obrigatório)</label>
-                        <input type="text" placeholder="Digite a profissão" value={formData.profissao} onChange={e => setFormData({...formData, profissao: e.target.value})} className="p-2 border border-gray-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-[#1a3c2e] focus:border-transparent outline-none bg-white text-gray-800 mb-1" required />
+                        <input type="text" value={formData.profissao} onChange={e => setFormData({...formData, profissao: e.target.value})} className="p-2 border border-gray-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-[#1a3c2e] focus:border-transparent outline-none bg-white text-gray-800 mb-1" required />
                         {!showConselhoField && (
                           <div className="pt-0.5 pb-1">
                             <button
@@ -2978,24 +2972,24 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                               <span>Remover</span>
                             </button>
                           </div>
-                          <input type="text" placeholder="Digite o conselho" value={formData.conselho} onChange={e => setFormData({...formData, conselho: e.target.value})} className="p-2 border border-gray-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-[#1a3c2e] focus:border-transparent outline-none bg-white text-gray-800" />
+                          <input type="text" value={formData.conselho} onChange={e => setFormData({...formData, conselho: e.target.value})} className="p-2 border border-gray-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-[#1a3c2e] focus:border-transparent outline-none bg-white text-gray-800" />
                         </div>
                       )}
                       <div className="space-y-1">
                         <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Telefone (Obrigatório)</label>
-                        <input type="tel" placeholder="(00) 00000-0000" value={formData.telefone} onChange={e => setFormData({...formData, telefone: mascaraTelefone(e.target.value)})} maxLength={15} className="p-2 border border-gray-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-[#1a3c2e] focus:border-transparent outline-none bg-white text-gray-800" required />
+                        <input type="tel" value={formData.telefone} onChange={e => setFormData({...formData, telefone: mascaraTelefone(e.target.value)})} maxLength={15} className="p-2 border border-gray-200 rounded-lg text-xs w-full focus:ring-1 focus:ring-[#1a3c2e] focus:border-transparent outline-none bg-white text-gray-800" required />
                       </div>
                     </CardBase>
 
                     {/* Bloco 2: Endereço */}
                     <CardBase className="grid grid-cols-1 md:grid-cols-4 gap-4">
                        <span className="md:col-span-4 font-bold text-xs text-[#1a3c2e] uppercase border-b border-gray-50 pb-2 mb-1">Endereço</span>
-                       <input type="text" placeholder="CEP" value={formData.endereco.cep} onChange={e => handleCepChange(e.target.value)} maxLength={9} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
-                       <input type="text" placeholder="Logradouro" value={formData.endereco.rua} onChange={e => setFormData({...formData, endereco: {...formData.endereco, rua: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs md:col-span-2 text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
-                       <input type="text" placeholder="Nº" value={formData.endereco.numero} onChange={e => setFormData({...formData, endereco: {...formData.endereco, numero: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
-                       <input type="text" placeholder="Bairro" value={formData.endereco.bairro} onChange={e => setFormData({...formData, endereco: {...formData.endereco, bairro: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
-                       <input type="text" placeholder="Cidade" value={formData.endereco.cidade} onChange={e => setFormData({...formData, endereco: {...formData.endereco, cidade: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
-                       <input type="text" placeholder="UF" value={formData.endereco.estado} onChange={e => setFormData({...formData, endereco: {...formData.endereco, estado: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
+                       <input type="text" value={formData.endereco.cep} onChange={e => handleCepChange(e.target.value)} maxLength={9} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
+                       <input type="text" value={formData.endereco.rua} onChange={e => setFormData({...formData, endereco: {...formData.endereco, rua: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs md:col-span-2 text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
+                       <input type="text" value={formData.endereco.numero} onChange={e => setFormData({...formData, endereco: {...formData.endereco, numero: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
+                       <input type="text" value={formData.endereco.bairro} onChange={e => setFormData({...formData, endereco: {...formData.endereco, bairro: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
+                       <input type="text" value={formData.endereco.cidade} onChange={e => setFormData({...formData, endereco: {...formData.endereco, cidade: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
+                       <input type="text" value={formData.endereco.estado} onChange={e => setFormData({...formData, endereco: {...formData.endereco, estado: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
                     </CardBase>
 
                     {/* Bloco 3: Financeiro */}
@@ -3021,7 +3015,6 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                               <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Nome do Titular da Conta</label>
                               <input
                                 type="text"
-                                placeholder="Nome Completo do Titular"
                                 value={formData.nomeTitularConta || ''}
                                 onChange={e => setFormData({ ...formData, nomeTitularConta: e.target.value })}
                                 className="p-2 border border-gray-200 rounded-lg text-xs bg-white text-gray-800"
@@ -3032,7 +3025,6 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                               <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">CPF do Titular</label>
                               <input
                                 type="text"
-                                placeholder="CPF do Titular"
                                 value={formData.cpfTitularConta || ''}
                                 onChange={e => setFormData({ ...formData, cpfTitularConta: mascaraCPF(e.target.value) })}
                                 maxLength={14}
@@ -3085,7 +3077,6 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                           <div className="relative">
                             <input
                               type="text"
-                              placeholder="Pesquise por nome ou número do banco..."
                               value={isBankDropdownOpen ? bankSearch : (formData.dadosBancarios.banco || '')}
                               onFocus={() => {
                                 setBankSearch('');
@@ -3189,12 +3180,11 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                             <option key={b.code} value={`[${b.code}] - ${b.name}`}>[{b.code}] - {b.name}</option>
                           ))}
                         </select>}
-                        <input type="text" placeholder="Agência" value={formData.dadosBancarios.agencia} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, agencia: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]" />
-                        <input type="text" placeholder="Conta" value={formData.dadosBancarios.conta} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, conta: maskBankAccount(e.target.value)}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]" />
+                        <input type="text" value={formData.dadosBancarios.agencia} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, agencia: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]" />
+                        <input type="text" value={formData.dadosBancarios.conta} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, conta: maskBankAccount(e.target.value)}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]" />
                        <div className="relative">
                          <input
                            type="text"
-                           placeholder="PIX"
                            value={formData.dadosBancarios.pix}
                            onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, pix: e.target.value}})}
                            className="p-2 pr-8 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e] w-full"

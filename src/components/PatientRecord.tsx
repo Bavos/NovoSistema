@@ -3070,7 +3070,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         throw new Error('Elemento de faturamento para PNG não renderizado no DOM.');
       }
 
-      const html2canvas = (await import('html2canvas')).default;
+      const html2canvas = (await import('html2canvas-pro')).default;
       const canvas = await html2canvas(printElement, {
         backgroundColor: '#fcf8f2',
         scale: 2,
@@ -3114,7 +3114,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         throw new Error('Elemento do prontuário para impressão não encontrado.');
       }
 
-      const html2canvas = (await import('html2canvas')).default;
+      const html2canvas = (await import('html2canvas-pro')).default;
       const { jsPDF } = await import('jspdf');
 
       const canvas = await html2canvas(element, {
@@ -3647,7 +3647,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         value={nome}
                         onChange={(e) => setNome(e.target.value)}
                         className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
-                        placeholder="Nome do paciente"
                       />
                     </div>
 
@@ -3667,7 +3666,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                             ? 'border-emerald-500 text-emerald-950 focus:ring-emerald-500 focus:border-emerald-500 bg-emerald-50/10'
                             : 'border-slate-300 text-gray-900 focus:ring-[#113224] focus:border-[#113224]'
                         }`}
-                        placeholder="Ex: 000.000.000-00"
                       />
                       {isCpfInvalid && (
                         <p className="text-[11px] text-red-600 font-semibold flex items-center space-x-1 mt-1 animate-in fade-in duration-200">
@@ -3748,7 +3746,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           onChange={(e) => setTelefonePaciente(mascaraTelefone(e.target.value))}
                           maxLength={15}
                           className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
-                          placeholder="Ex: (21) 98167-0274"
                         />
                       </div>
                     )}
@@ -3761,7 +3758,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         value={altura}
                         onChange={(e) => setAltura(mascaraAltura(e.target.value))}
                         className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
-                        placeholder="Ex: 1,70 m"
                       />
                     </div>
 
@@ -3773,7 +3769,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         value={peso}
                         onChange={(e) => setPeso(mascaraPeso(e.target.value))}
                         className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
-                        placeholder="Ex: 70 kg"
                       />
                     </div>
                   </div>
@@ -3797,7 +3792,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         value={nomeResponsavel}
                         onChange={(e) => setNomeResponsavel(e.target.value)}
                         className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
-                        placeholder="Nome do parente / responsável formal"
                       />
                     </div>
 
@@ -3822,7 +3816,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         onChange={(e) => setTelefoneResponsavel(mascaraTelefone(e.target.value))}
                         maxLength={15}
                         className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#C09A6D] focus:border-[#C09A6D] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
-                        placeholder="Ex: (21) 90000-0000"
                       />
                     </div>
 
@@ -3848,7 +3841,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           onChange={(e) => setTelefoneResponsavel2(mascaraTelefone(e.target.value))}
                           maxLength={15}
                           className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#C09A6D] focus:border-[#C09A6D] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
-                          placeholder="Ex: (21) 90000-0000"
                         />
                       </div>
                     )}
@@ -3861,7 +3853,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         value={parentescoResponsavel}
                         onChange={(e) => setParentescoResponsavel(e.target.value)}
                         className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#C09A6D] focus:border-[#C09A6D] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
-                        placeholder="Ex: Filho, Cônjuge, Neto"
                       />
                     </div>
                   </div>
@@ -3912,7 +3903,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                             value={nomePagador}
                             onChange={(e) => setNomePagador(e.target.value)}
                             className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
-                            placeholder="Nome do portador da conta"
                           />
                         </div>
                         <div className="space-y-1 col-span-1">
@@ -3931,7 +3921,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                 ? 'border-emerald-500 text-emerald-950 focus:ring-emerald-500 focus:border-emerald-500 bg-emerald-50/10'
                                 : 'border-slate-300 text-gray-900 focus:ring-[#113224] focus:border-[#113224]'
                             }`}
-                            placeholder="Ex: 000.000.000-00"
                           />
                           {isCpfPagadorInvalid && (
                             <p className="text-[11px] text-red-600 font-semibold flex items-center space-x-1 mt-1 animate-in fade-in duration-200">
@@ -3969,7 +3958,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           value={whatsappFaturamento}
                           onChange={(e) => setWhatsappFaturamento(mascaraTelefone(e.target.value))}
                           className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#C09A6D] focus:border-[#C09A6D] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
-                          placeholder="Ex: (21) 90000-0000"
                         />
                       </div>
                     )}
@@ -3984,7 +3972,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#C09A6D] focus:border-[#C09A6D] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
-                          placeholder="destinatario@exemplo.com"
                         />
                       </div>
                     )}
@@ -3998,7 +3985,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         onChange={(e) => setDataReajuste(mascaraMesAno(e.target.value))}
                         maxLength={5}
                         className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
-                        placeholder="Ex: 12/26"
                       />
                     </div>
                   </div>
@@ -4020,7 +4006,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       onBlur={(e) => handleCepBlur(e.target.value)}
                       maxLength={9}
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-550 focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed"
-                      placeholder="Ex: 22000-000"
                     />
                   </div>
 
@@ -4032,7 +4017,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       value={rua}
                       onChange={(e) => setRua(e.target.value)}
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed"
-                      placeholder="Ex: Rua Visconde de Pirajá"
                     />
                   </div>
 
@@ -4044,7 +4028,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       value={numero}
                       onChange={(e) => setNumero(e.target.value)}
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed"
-                      placeholder="Ex: 120"
                     />
                   </div>
 
@@ -4056,7 +4039,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       value={bairro}
                       onChange={(e) => setBairro(e.target.value)}
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed"
-                      placeholder="Ex: Copacabana"
                     />
                   </div>
 
@@ -4069,7 +4051,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         value={cidade}
                         onChange={(e) => setCidade(e.target.value)}
                         className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed"
-                        placeholder="Cidade"
                       />
                       <input
                         type="text"
@@ -4078,7 +4059,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         maxLength={2}
                         onChange={(e) => setEstado(e.target.value)}
                         className="w-16 text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 text-center disabled:bg-slate-100/80 disabled:cursor-not-allowed"
-                        placeholder="UF"
                       />
                     </div>
                   </div>
@@ -4095,7 +4075,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     onChange={(e) => setLogisticaChegada(e.target.value)}
                     rows={4}
                     className="w-full text-xs p-3 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed font-sans leading-relaxed"
-                    placeholder="Instruções completas para que os profissionais encontrem e acessem a residência sem percalços..."
                   />
                 </div>
               </div>
@@ -4122,7 +4101,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           value={diagnosticoPrincipal}
                           onChange={(e) => setDiagnosticoPrincipal(e.target.value)}
                           className="w-full text-sm p-2.5 bg-white border border-slate-300 rounded-lg text-gray-900 font-normal focus:outline-none focus:border-blue-550 focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
-                          placeholder="Ex: Alzheimer Estágio Moderado"
                         />
                       </div>
                       <div className="space-y-1.5">
@@ -4133,7 +4111,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           value={comorbidades}
                           onChange={(e) => setComorbidades(e.target.value)}
                           className="w-full text-sm p-2.5 bg-white border border-slate-300 rounded-lg text-gray-900 font-normal focus:outline-none focus:border-blue-550 focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
-                          placeholder="Ex: Hipertensão, Diabetes Tipo 2"
                         />
                       </div>
                     </div>
@@ -4153,7 +4130,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           value={alergias}
                           onChange={(e) => setAlergias(e.target.value)}
                           className="w-full text-sm p-2.5 bg-white border border-slate-300 rounded-lg text-gray-900 font-normal focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
-                          placeholder="Ex: Penicilina, Corantes Amarelos"
                         />
                       </div>
                       <div className="space-y-1">
@@ -4182,7 +4158,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     onChange={(e) => setObservacoesClinicas(e.target.value)}
                     rows={3}
                     className="w-full text-sm p-2.5 bg-white border border-slate-300 rounded-lg text-gray-900 font-normal focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
-                    placeholder="Outros apontamentos cruciais sobre alimentação por sonda, mobilidade, uso de andadores, cadeira de rodas..."
                   />
                 </div>
               </div>
@@ -4229,7 +4204,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       value={valorSugeridoPlantao}
                       onChange={(e) => setValorSugeridoPlantao(mascaraFinanceira(e.target.value))}
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal text-slate-900"
-                      placeholder="Valor plantão"
                     />
                   </div>
 
@@ -4248,7 +4222,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         setAjudaCusto(formatarMoeda(valNum + alimNum));
                       }}
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed text-slate-600"
-                      placeholder="Valor transporte"
                     />
                   </div>
 
@@ -4267,7 +4240,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         setAjudaCusto(formatarMoeda(transNum + valNum));
                       }}
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed text-slate-600"
-                      placeholder="Valor alimentação (0 se a casa fornece)"
                     />
                   </div>
 
@@ -4280,7 +4252,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       value={taxaAdm}
                       onChange={(e) => setTaxaAdm(mascaraFinanceira(e.target.value))}
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed text-slate-600"
-                      placeholder="Taxa adm"
                     />
                   </div>
                 </div>
@@ -4822,6 +4793,19 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                             return (
                               <div
                                 key={cell.dateStr}
+                                onClick={() => {
+                                  if (isCurrentMonthConcluded || isCurrentlyDeactivated) return;
+                                  const [yr, mo, da] = cell.dateStr.split('-').map(Number);
+                                  setAgnCalendarYear(yr);
+                                  setAgnCalendarMonth(mo - 1);
+                                  setSelectedDates([{ date: cell.dateStr, cycle: 1 }]);
+                                  setAvulsoProf('');
+                                  setAvulsoPlantaoOptionId('principal');
+                                  setAvulsoTipoDia('Normal');
+                                  setAvulsoObs('');
+                                  setAvulsoCuringa(false);
+                                  setAvulsoModalOpen(true);
+                                }}
                                 onContextMenu={(e) => {
                                   e.preventDefault();
                                   setContextMenu({
@@ -4831,7 +4815,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                     targetDate: cell.dateStr
                                   });
                                 }}
-                                className={`bg-white min-h-[140px] p-2 flex flex-col hover:bg-gray-50 transition-colors ${!cell.isCurrentMonth ? 'opacity-40' : ''}`}
+                                className={`bg-white min-h-[140px] p-2 flex flex-col hover:bg-gray-50 transition-colors cursor-pointer ${!cell.isCurrentMonth ? 'opacity-40' : ''}`}
                               >
                                 {/* Número do Dia isolado no topo à direita com holiday se houver */}
                                 <div className="flex items-center justify-between">
@@ -5043,7 +5027,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           onFocus={() => setShowProfDropdown(true)}
                           onBlur={() => setShowProfDropdown(false)}
                           onChange={(e) => setNewShiftProf(e.target.value)}
-                          placeholder="Clique para selecionar da aba de Profissionais cadastrados..."
                           className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-blue-500"
                         />
                         {showProfDropdown && (
@@ -5634,7 +5617,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         disabled={isColaborador}
                         value={ocDescricao}
                         onChange={(e) => setOcDescricao(e.target.value)}
-                        placeholder="Relate detalhadamente os fatos ocorridos..."
                         className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed font-sans"
                       />
                     </div>
@@ -5798,7 +5780,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 value={deactivateReasonInput}
                 onChange={(e) => setDeactivateReasonInput(e.target.value)}
                 rows={3}
-                placeholder="Exemplo: Internação hospitalar de emergência / Encerramento do contrato de cuidadores domiciliares solicitado pela família..."
                 className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50 focus:outline-none focus:border-red-500"
               />
             </div>
@@ -5812,7 +5793,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 type="text"
                 value={deactivateConfirmInput}
                 onChange={(e) => setDeactivateConfirmInput(e.target.value)}
-                placeholder="Digite CONFIRMAR"
                 className="w-full text-xs font-mono font-bold tracking-widest px-3 py-2 border border-slate-200 rounded-lg text-slate-800 bg-white uppercase focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-red-500"
               />
             </div>
@@ -5911,7 +5891,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   onFocus={() => setShowEditProfDropdown(true)}
                   onBlur={() => setShowEditProfDropdown(false)}
                   onChange={(e) => setEditShiftProfName(e.target.value)}
-                  placeholder="Selecione das credenciais existentes..."
                   className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-blue-500"
                 />
                 {showEditProfDropdown && (
@@ -6075,7 +6054,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   onFocus={() => setShowAvulsoProfDropdown(true)}
                   onBlur={() => setTimeout(() => setShowAvulsoProfDropdown(false), 200)}
                   onChange={(e) => setAvulsoProf(e.target.value)}
-                  placeholder="Pesquise o nome do profissional..."
                   className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/50 focus:outline-none focus:border-blue-500 font-sans"
                 />
                 {showAvulsoProfDropdown && (
@@ -6103,85 +6081,58 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 )}
               </div>
 
-              {/* Custom Multi-Select Calendar */}
-              <div className="space-y-2.5">
+              {/* Data do(s) Plantão(ões) - Tags / Chips & Compact Date Input */}
+              <div className="space-y-2">
                 <label className="block text-xs font-bold text-slate-700">Data do(s) Plantão(ões) (Múltiplas Escolhas)</label>
                 
-                <div className="bg-[#fcfbf9] border border-gray-200 rounded-xl p-3 shadow-sm font-sans w-full">
-                  {/* Calendar Header with Navigation */}
-                  <div className="flex items-center justify-between mb-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (agnCalendarMonth === 0) {
-                          setAgnCalendarMonth(11);
-                          setAgnCalendarYear(agnCalendarYear - 1);
-                        } else {
-                          setAgnCalendarMonth(agnCalendarMonth - 1);
+                <div className="flex flex-wrap items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                  {/* Compact Native Date Input for adding more days */}
+                  <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 shadow-xs">
+                    <Calendar size={14} className="text-slate-400" />
+                    <input
+                      type="date"
+                      value={tempDate}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val) {
+                          if (!selectedDates.some(d => d.date === val)) {
+                            setSelectedDates(prev => [...prev, { date: val, cycle: 1 }]);
+                          }
+                          setTempDate('');
                         }
                       }}
-                      className="p-1 px-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                    >
-                      <ChevronLeft size={16} />
-                    </button>
-                    <span className="font-semibold text-xs uppercase tracking-wider text-[#1a3c2e]">
-                      {["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"][agnCalendarMonth]} {agnCalendarYear}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (agnCalendarMonth === 11) {
-                          setAgnCalendarMonth(0);
-                          setAgnCalendarYear(agnCalendarYear + 1);
-                        } else {
-                          setAgnCalendarMonth(agnCalendarMonth + 1);
-                        }
-                      }}
-                      className="p-1 px-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                    >
-                      <ChevronRight size={16} />
-                    </button>
+                      className="text-xs text-slate-700 bg-transparent outline-none cursor-pointer"
+                    />
+                    <span className="text-[10px] text-slate-400 font-medium pl-1 border-l border-slate-200">Adicionar</span>
                   </div>
 
-                  {/* Day Names Grid */}
-                  <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-gray-400 mb-1.5">
-                    {["D", "S", "T", "Q", "Q", "S", "S"].map((d, index) => (
-                      <div key={`cal-header-${index}`} className="py-1">{d}</div>
-                    ))}
-                  </div>
-
-                  {/* Days Grid */}
-                  <div className="grid grid-cols-7 w-full gap-0 border border-gray-200 rounded-lg overflow-hidden">
-                    {Array.from({ length: new Date(agnCalendarYear, agnCalendarMonth, 1).getDay() }).map((_, i) => (
-                      <div key={`empty-${agnCalendarMonth}-${agnCalendarYear}-${i}`} className="border border-gray-200 min-h-[80px] w-full bg-gray-50/50" />
-                    ))}
-                    {Array.from({ length: new Date(agnCalendarYear, agnCalendarMonth + 1, 0).getDate() }, (_, i) => i + 1).map((dayNum) => {
-                      const formattedDate = `${agnCalendarYear}-${String(agnCalendarMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
-                      const isSelected = selectedDates.some(d => d.date === formattedDate);
-                      const isToday = new Date().toDateString() === new Date(agnCalendarYear, agnCalendarMonth, dayNum).toDateString();
-                      const isHoliday = feriados.some(f => f.date === formattedDate);
-                      
-                      const baseClass = "border border-gray-200 min-h-[80px] w-full flex flex-col justify-start items-center p-1 transition-all cursor-pointer select-none";
-                      const stateClass = isSelected 
-                        ? 'bg-green-700 text-white font-extrabold hover:bg-green-800 shadow-xs' 
-                        : isHoliday
-                          ? 'bg-rose-100 text-rose-950 hover:bg-rose-200'
-                          : isToday
-                            ? 'bg-amber-100 text-amber-950 hover:bg-amber-200 border-2 border-amber-400'
-                            : 'bg-white hover:bg-gray-100 text-gray-700';
-
+                  {/* Selected Date Tags / Chips */}
+                  {selectedDates.length === 0 ? (
+                    <span className="text-xs text-slate-400 italic">Nenhuma data selecionada. Adicione acima ou clique no calendário principal.</span>
+                  ) : (
+                    selectedDates.map((item) => {
+                      const [y, m, day] = item.date.split('-');
+                      const displayDate = `${day}/${m}/${y}`;
                       return (
-                        <button
-                          key={`${agnCalendarMonth}-${agnCalendarYear}-${dayNum}`}
-                          type="button"
-                          onClick={() => handleDateClick(formattedDate)}
-                          className={`${baseClass} ${stateClass}`}
+                        <span
+                          key={item.date}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-semibold shadow-xs"
                         >
-                          <span className="text-xs font-extrabold self-start pl-1 pt-0.5">{dayNum}</span>
-                        </button>
+                          <span>{displayDate}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedDates(prev => prev.filter(d => d.date !== item.date));
+                            }}
+                            className="text-emerald-600 hover:text-emerald-900 transition-colors p-0.5 rounded-full hover:bg-emerald-100"
+                            title="Remover data"
+                          >
+                            <X size={12} />
+                          </button>
+                        </span>
                       );
-                    })}
-                  </div>
+                    })
+                  )}
                 </div>
               </div>
 
@@ -6276,7 +6227,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   type="text"
                   value={avulsoObs}
                   onChange={(e) => setAvulsoObs(e.target.value)}
-                  placeholder="Ex: Conduta específica ou substituição..."
                   className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/50 focus:outline-none focus:border-blue-500 font-sans"
                 />
               </div>
@@ -6633,7 +6583,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       onFocus={() => setShowDetailsProfDropdown(true)}
                       onBlur={() => setTimeout(() => setShowDetailsProfDropdown(false), 200)}
                       onChange={(e) => setDetailsProfName(e.target.value)}
-                      placeholder="Pesquise o nome do profissional..."
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-705 text-slate-700 bg-slate-50 focus:outline-none focus:border-blue-500 font-sans font-medium"
                     />
                     {showDetailsProfDropdown && (
@@ -7050,7 +6999,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       onFocus={() => setShowAvulsoProfDropdown(true)}
                       onBlur={() => setTimeout(() => setShowAvulsoProfDropdown(false), 200)}
                       onChange={(e) => setAvulsoProf(e.target.value)}
-                      placeholder="Pesquisar..."
                       className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 bg-slate-50 focus:outline-none focus:border-blue-500 font-medium font-sans"
                     />
                     {showAvulsoProfDropdown && (
@@ -7169,7 +7117,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     onChange={(e) => setAvulsoObs(e.target.value)}
                     rows={2}
                     className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-slate-50 font-sans focus:outline-none focus:border-sky-500"
-                    placeholder="Quaisquer observações específicas sobre o plantão ou alocação do profissional..."
                   />
                 </div>
               </div>
@@ -7449,7 +7396,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   onFocus={() => setShowExcluirProfDropdown(true)}
                   onBlur={() => setTimeout(() => setShowExcluirProfDropdown(false), 200)}
                   onChange={(e) => setExcluirProfName(e.target.value)}
-                  placeholder="Pesquisar por profissional..."
                   className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-800 font-bold"
                 />
                 {showExcluirProfDropdown && (
@@ -8341,7 +8287,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 type="text"
                 value={deleteRecordConfirmInput}
                 onChange={(e) => setDeleteRecordConfirmInput(e.target.value.toUpperCase())}
-                placeholder="Digite CONFIRMAR"
                 className="w-full text-xs font-mono font-bold tracking-widest px-3 py-2 border border-slate-200 rounded-lg text-slate-800 bg-slate-50 uppercase focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-red-500"
               />
             </div>

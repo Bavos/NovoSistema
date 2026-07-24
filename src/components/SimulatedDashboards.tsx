@@ -174,7 +174,6 @@ export const EscalasDashboard: React.FC = () => {
             <Search className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
             <input
               type="text"
-              placeholder="Pesquisar por cuidador ou paciente..."
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               className="w-full text-xs pl-9 pr-3 py-2 border border-slate-200 rounded-lg bg-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#1a3c2e]"
@@ -2411,7 +2410,6 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                             min="0"
                             value={tempValorMei}
                             onChange={(e) => setTempValorMei(e.target.value)}
-                            placeholder="0,00"
                             className="w-full pl-9 pr-4 py-2.5 text-sm border border-slate-300 rounded-xl text-slate-800 focus:outline-none focus:border-amber-500"
                           />
                         </div>
@@ -3109,7 +3107,6 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                       value={debitFilterStartDate}
                       onChange={(e) => setDebitFilterStartDate(e.target.value)}
                       className="px-2 py-1 border border-slate-200 rounded-lg text-xs bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#1a3c2e] focus:border-[#1a3c2e]"
-                      placeholder="Início"
                     />
                     <span className="text-slate-400 text-[10px] font-bold">até</span>
                     <input
@@ -3117,7 +3114,6 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                       value={debitFilterEndDate}
                       onChange={(e) => setDebitFilterEndDate(e.target.value)}
                       className="px-2 py-1 border border-slate-200 rounded-lg text-xs bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#1a3c2e] focus:border-[#1a3c2e]"
-                      placeholder="Fim"
                     />
                     {(debitFilterStartDate || debitFilterEndDate) && (
                       <button
@@ -3478,7 +3474,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
         const printElement = document.getElementById('print-area') || faturaRef.current;
         if (printElement) {
             try {
-                const html2canvas = (await import('html2canvas')).default;
+                const html2canvas = (await import('html2canvas-pro')).default;
                 const canvas = await html2canvas(printElement, {
                     backgroundColor: '#fcf8f2',
                     scale: 2,
@@ -4509,8 +4505,7 @@ export const EmpresaDashboard: React.FC = () => {
                     <input 
                       value={tempDominios} 
                       onChange={e => setTempDominios(e.target.value)} 
-                      type="text" 
-                      placeholder="@vallidare.com.br, @cuidarhome.com.br, @rhcuidado.com.br"
+                      type="text"
                       className="w-full p-1.5 border border-slate-200 rounded-lg text-xs" 
                     />
                     <p className="text-[10px] text-slate-400">Separe os domínios por vírgula. Ex: @vallidare.com.br, @rhcuidado.com.br</p>
@@ -4634,7 +4629,6 @@ export const EmpresaDashboard: React.FC = () => {
               type="text" 
               value={resetConfirmText}
               onChange={(e) => setResetConfirmText(e.target.value)}
-              placeholder="Digite ZERAR para confirmar"
               className="w-full px-3 py-2 border border-slate-300 rounded-xl text-center text-xs font-bold uppercase tracking-wider text-slate-700 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-red-500 focus:outline-none transition-all"
             />
             

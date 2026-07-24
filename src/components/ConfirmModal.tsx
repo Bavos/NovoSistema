@@ -124,7 +124,6 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
               type="text"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
-              placeholder={`Digite ${expectedWord}`}
               disabled={loading}
               className="w-full text-xs font-mono font-bold tracking-widest px-3 py-2.5 border border-slate-200 rounded-lg text-slate-800 bg-white placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:opacity-50 transition-all uppercase"
             />

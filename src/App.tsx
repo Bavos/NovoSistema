@@ -56,6 +56,20 @@ function DashboardContent() {
   const [showFirstAccess, setShowFirstAccess] = useState(false);
   const [initialSelectedPatient, setInitialSelectedPatient] = useState<any>(null);
   const [initialSelectedProfId, setInitialSelectedProfId] = useState<string>('');
+  const [resetKey, setResetKey] = useState<number>(0);
+
+  const handlePacientesViewChange = React.useCallback((isForm: boolean, title: string) => {
+    setIsBrowsingForm(isForm);
+    setPacientesTitleOverride(title);
+  }, []);
+
+  const handleClearInitialSelectedPatient = React.useCallback(() => {
+    setInitialSelectedPatient(null);
+  }, []);
+
+  const handleClearInitialSelectedProfId = React.useCallback(() => {
+    setInitialSelectedProfId('');
+  }, []);
 
   const { pacientes, profissionais, loading, userRole, user, usuariosSistema, isQuotaExceeded, seedDatabase } = useFirebase();
 
@@ -123,10 +137,13 @@ function DashboardContent() {
     <LayoutShell
       activeTab={activeSidebarTab}
       setActiveTab={(tab) => {
+        setResetKey(prev => prev + 1);
         setActiveSidebarTab(tab);
         setFinanceiroSubTab('folhas');
         // Auto-reset state overrides
         setIsBrowsingForm(false);
+        setInitialSelectedPatient(null);
+        setInitialSelectedProfId('');
         setPacientesTitleOverride('Gestão Pacientes');
 
         // Update tab search parameters when switching tabs
@@ -205,7 +222,7 @@ function DashboardContent() {
       )}
       <AnimatePresence mode="wait">
         <motion.div
-          key={activeSidebarTab}
+          key={`${activeSidebarTab}-${resetKey}`}
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -15 }}
@@ -215,6 +232,7 @@ function DashboardContent() {
           {activeSidebarTab === 'dashboard' ? (
             <Dashboard 
               setActiveTab={(tab, extra) => {
+                setResetKey(prev => prev + 1);
                 setActiveSidebarTab(tab);
                 if (extra?.financeiroSubTab) {
                   setFinanceiroSubTab(extra.financeiroSubTab);
@@ -244,16 +262,13 @@ function DashboardContent() {
           ) : activeSidebarTab === 'pacientes' ? (
             <Pacientes
               initialSelectedPatient={initialSelectedPatient}
-              clearInitialSelectedPatient={() => setInitialSelectedPatient(null)}
-              onViewChange={(isForm, title) => {
-                setIsBrowsingForm(isForm);
-                setPacientesTitleOverride(title);
-              }}
+              clearInitialSelectedPatient={handleClearInitialSelectedPatient}
+              onViewChange={handlePacientesViewChange}
             />
           ) : activeSidebarTab === 'profissionais' ? (
             <Profissionais
               initialSelectedProfId={initialSelectedProfId}
-              clearInitialSelectedProfId={() => setInitialSelectedProfId('')}
+              clearInitialSelectedProfId={handleClearInitialSelectedProfId}
             />
           ) : activeSidebarTab === 'financeiro' ? (
             userRole?.toLowerCase() === 'colaborador' ? (

@@ -10,7 +10,7 @@ export const Dashboard: React.FC<{
   setActiveTab: (tab: string, extraOptions?: { financeiroSubTab?: 'folhas' | 'debitos' }) => void;
   onSelectPatientRedirect?: (paciente: any) => void;
 }> = ({ setActiveTab, onSelectPatientRedirect }) => {
-  const { pacientes, profissionais, updatePaciente, debitosProfissionais, isQuotaExceeded } = useFirebase();
+  const { pacientes, profissionais, updatePaciente, debitosProfissionais, isQuotaExceeded, isTestMode } = useFirebase();
   const [debitosDoDia, setDebitosDoDia] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -162,7 +162,7 @@ export const Dashboard: React.FC<{
   };
 
   useEffect(() => {
-    if (isQuotaExceeded) {
+    if (isTestMode || isQuotaExceeded) {
       const list: any[] = [];
       const today = new Date();
       (debitosProfissionais || []).forEach((d) => {
@@ -228,7 +228,7 @@ export const Dashboard: React.FC<{
     });
 
     return unsub;
-  }, [isQuotaExceeded, debitosProfissionais]);
+  }, [isTestMode, isQuotaExceeded, debitosProfissionais]);
 
   const getTargetReadjustmentMonthYear = (): string => {
     const today = new Date();

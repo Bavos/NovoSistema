@@ -24,10 +24,10 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   const [showNotifications, setShowNotifications] = useState(false);
   const [empresa, setEmpresa] = useState<any>(null);
 
-  const { user, userRole, usuariosSistema, logout, isQuotaExceeded } = useFirebase();
+  const { user, userRole, usuariosSistema, logout, isQuotaExceeded, isTestMode, toggleTestMode } = useFirebase();
 
   useEffect(() => {
-    if (!user || isQuotaExceeded) {
+    if (!user || isQuotaExceeded || isTestMode) {
       setEmpresa(null);
       return;
     }
@@ -85,7 +85,45 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
       </div>
 
       {/* Control Actions */}
-      <div className="flex items-center space-x-4 shrink-0">
+      <div className="flex items-center space-x-3 sm:space-x-4 shrink-0">
+        {/* Modo de Testes / Sandbox Toggle Switch */}
+        <div
+          id="sandbox-mode-toggle-container"
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all duration-200 select-none ${
+            isTestMode
+              ? 'bg-amber-100/90 border-amber-400 text-amber-950 shadow-xs ring-2 ring-amber-400/30'
+              : 'bg-[#e8e4db]/60 border-forest-green/15 text-forest-green/80 hover:border-forest-green/30'
+          }`}
+        >
+          <span className="text-[11px] font-extrabold tracking-tight hidden sm:inline-block">
+            Modo de Testes / Sandbox
+          </span>
+          <span className="text-[10px] font-extrabold tracking-tight sm:hidden">
+            Sandbox
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={isTestMode}
+            onClick={() => toggleTestMode()}
+            id="toggle-sandbox-switch"
+            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
+              isTestMode ? 'bg-amber-600' : 'bg-slate-300'
+            }`}
+            title={
+              isTestMode
+                ? 'Modo de Testes ATIVADO — Clique para alternar para o banco real'
+                : 'Modo de Testes DESATIVADO — Clique para ativar o modo de testes local'
+            }
+          >
+            <span
+              className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                isTestMode ? 'translate-x-4' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+
         {/* Notification Center */}
         <div className="relative">
           <button

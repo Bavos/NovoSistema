@@ -211,7 +211,6 @@ export const PatientList: React.FC<PatientListProps> = ({
             <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
             <input
               type="text"
-              placeholder="Buscar por nome, CPF ou telefone..."
               value={localSearch}
               onChange={(e) => setLocalSearch(e.target.value)}
               className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-700 bg-slate-50 focus:outline-none focus:border-blue-500 focus:bg-white transition-all shadow-inner"
@@ -468,7 +467,6 @@ export const PatientList: React.FC<PatientListProps> = ({
                 onChange={(e) => setBulkDeactivateReason(e.target.value)}
                 rows={3}
                 className="w-full text-xs p-2 border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500"
-                placeholder="Exemplo: Fim do contrato de acompanhamento domiciliar..."
               />
             </div>
 
@@ -481,7 +479,6 @@ export const PatientList: React.FC<PatientListProps> = ({
                 type="text"
                 value={deactivateConfirmText}
                 onChange={(e) => setDeactivateConfirmText(e.target.value)}
-                placeholder="Digite CONFIRMAR"
                 className="w-full text-xs font-mono font-bold tracking-widest px-3 py-2 border border-slate-200 rounded-lg text-slate-800 bg-white uppercase focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-red-500"
               />
             </div>
@@ -534,7 +531,6 @@ export const PatientList: React.FC<PatientListProps> = ({
                 type="text"
                 value={deleteConfirmText}
                 onChange={(e) => setDeleteConfirmText(e.target.value)}
-                placeholder="Digite CONFIRMAR"
                 className="w-full text-xs font-mono font-bold tracking-widest px-3 py-2 border border-slate-200 rounded-lg text-slate-800 bg-white uppercase focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-red-500"
               />
             </div>
