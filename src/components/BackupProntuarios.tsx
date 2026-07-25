@@ -47,7 +47,7 @@ interface BackupRecord {
 }
 
 export const BackupProntuarios: React.FC = () => {
-  const { user, userRole, setNotification } = useFirebase();
+  const { user, userRole, setNotification, isTestMode, isQuotaExceeded, pacientes } = useFirebase();
   const isAdmin = userRole?.toLowerCase() === 'administrador';
 
   const hasCheckedAutoBackup = React.useRef(false);
@@ -220,6 +220,25 @@ export const BackupProntuarios: React.FC = () => {
 
   const fetchBackupsAndSettings = async () => {
     setLoadingBackups(true);
+    if (isTestMode || isQuotaExceeded) {
+      try {
+        const storedBackups = localStorage.getItem('sandbox_backups');
+        if (storedBackups) {
+          setBackups(JSON.parse(storedBackups));
+        } else {
+          setBackups([]);
+        }
+        const storedInterval = localStorage.getItem('sandbox_backup_intervalo') as any;
+        if (storedInterval) {
+          setIntervalo(storedInterval);
+        }
+      } catch (e) {
+        console.error("Error loading sandbox backups:", e);
+      } finally {
+        setLoadingBackups(false);
+      }
+      return;
+    }
     try {
       // 1. Fetch settings
       const settingsRef = doc(db, 'configs', 'backup_settings');
@@ -300,6 +319,29 @@ export const BackupProntuarios: React.FC = () => {
   const triggerBackup = async (isAutomatic: boolean = false) => {
     if (isCreatingBackup) return;
     setIsCreatingBackup(true);
+
+    if (isTestMode || isQuotaExceeded) {
+      try {
+        const patientsArray = pacientes || [];
+        const backupObj: BackupRecord = {
+          id: `bkp-${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          tipo: isAutomatic ? 'Automático' : 'Manual',
+          itemsCount: patientsArray.length,
+          dadosPacientes: JSON.stringify(patientsArray),
+          usuarioExecutou: isAutomatic ? 'Sistema' : (user?.email || 'Administrador (Simulado)'),
+        };
+        const updated = [backupObj, ...backups];
+        setBackups(updated);
+        localStorage.setItem('sandbox_backups', JSON.stringify(updated));
+        toast.success(`Backup em nuvem (Simulado) criado com sucesso com ${patientsArray.length} prontuários!`);
+      } catch (e: any) {
+        toast.error('Erro ao gerar backup simulado: ' + e.message);
+      } finally {
+        setIsCreatingBackup(false);
+      }
+      return;
+    }
 
     try {
       // Fetch latest list of patients directly from the collection to get real fresh values
@@ -384,6 +426,17 @@ export const BackupProntuarios: React.FC = () => {
   // Save backup frequency settings
   const handleSaveSettings = async (selectedInterval: typeof intervalo) => {
     setIsSavingSettings(true);
+    if (isTestMode || isQuotaExceeded) {
+      setIntervalo(selectedInterval);
+      localStorage.setItem('sandbox_backup_intervalo', selectedInterval);
+      toast.success(`Configuração de backup alterada para: ${
+        selectedInterval === 'diario' ? 'Diário' :
+        selectedInterval === 'semanal' ? 'Semanal' :
+        selectedInterval === 'mensal' ? 'Mensal' : 'Desativado'
+      } (Modo de Testes)`);
+      setIsSavingSettings(false);
+      return;
+    }
     try {
       const settingsRef = doc(db, 'configs', 'backup_settings');
       await setDoc(settingsRef, { 
@@ -418,6 +471,13 @@ export const BackupProntuarios: React.FC = () => {
 
   // Delete older backup
   const handleDeleteBackup = async (id: string) => {
+    if (isTestMode || isQuotaExceeded) {
+      const updated = backups.filter(b => b.id !== id);
+      setBackups(updated);
+      localStorage.setItem('sandbox_backups', JSON.stringify(updated));
+      toast.success('Registro de backup removido com sucesso (Modo de Testes).');
+      return;
+    }
     try {
       await deleteDoc(doc(db, 'backups_prontuarios', id));
       setBackups(prev => prev.filter(b => b.id !== id));

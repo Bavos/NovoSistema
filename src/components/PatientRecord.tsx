@@ -170,7 +170,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     faturasPacientes,
     addAuditLog,
     addFaturaPaciente,
-    isQuotaExceeded
+    isQuotaExceeded,
+    isTestMode
   } = useFirebase();
 
   const handleCopyToClipboard = async (text: string) => {
@@ -464,6 +465,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     }
   };
   const [tempDate, setTempDate] = useState("");
+  const [openedFrom, setOpenedFrom] = useState<'button' | 'calendar_cell'>('button');
   const [agnCalendarYear, setAgnCalendarYear] = useState(new Date().getFullYear());
   const [agnCalendarMonth, setAgnCalendarMonth] = useState(new Date().getMonth());
 
@@ -1234,7 +1236,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     let isMounted = true;
     if (activeTab === 'auditoria' && paciente?.id) {
       setLoadingAuditLogs(true);
-      if (isQuotaExceeded) {
+      if (isQuotaExceeded || isTestMode) {
         const list = logsAuditoria.filter(log => log.documentId === paciente.id);
         const sorted = [...list].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
         setLocalAuditLogs(sorted);
@@ -1321,7 +1323,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const [excluirModalOpen, setExcluirModalOpen] = useState(false);
   const [imprimirModalOpen, setImprimirModalOpen] = useState(false);
   const [imprimirProntuarioModalOpen, setImprimirProntuarioModalOpen] = useState(false);
-  const [isGeneratingProntuarioPDF, setIsGeneratingProntuarioPDF] = useState(false);
+  const [isGeneratingProntuarioPNG, setIsGeneratingProntuarioPNG] = useState(false);
 
   // Modal Fields - Avulso
   const [avulsoAtendimento, setAvulsoAtendimento] = useState('Plantão');
@@ -1584,23 +1586,23 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     const cpfOptions = [cleanCpfVal, formattedCpfVal].filter(Boolean);
 
     try {
-      if (isQuotaExceeded) {
-        const duplicatePac = pacientes.find(p => p.cpf && cpfOptions.includes(p.cpf) && (isNew || p.id !== paciente?.id));
-        if (duplicatePac) {
-          toast.error('Falha no cadastro: Este CPF já se encontra registrado em nosso sistema.');
-          return;
-        }
+      const duplicatePac = pacientes.find(p => p.cpf && cpfOptions.includes(p.cpf) && (isNew || p.id !== paciente?.id));
+      if (duplicatePac) {
+        toast.error('Falha no cadastro: Este CPF já se encontra registrado em nosso sistema.');
+        return;
+      }
 
-        const duplicateProf = profissionais.find(p => p.cpf && cpfOptions.includes(p.cpf));
-        if (duplicateProf) {
-          toast.error('Falha no cadastro: Este CPF já se encontra registrado em nosso sistema.');
-          return;
-        }
-      } else {
+      const duplicateProf = profissionais.find(p => p.cpf && cpfOptions.includes(p.cpf));
+      if (duplicateProf) {
+        toast.error('Falha no cadastro: Este CPF já se encontra registrado em nosso sistema.');
+        return;
+      }
+
+      if (!isQuotaExceeded) {
         const pacQuery = query(collection(db, 'pacientes'), where('cpf', 'in', cpfOptions));
         const pacSnap = await getDocs(pacQuery);
-        const duplicatePac = pacSnap.docs.find(doc => isNew || doc.id !== paciente?.id);
-        if (duplicatePac) {
+        const duplicatePacDoc = pacSnap.docs.find(doc => isNew || doc.id !== paciente?.id);
+        if (duplicatePacDoc) {
           toast.error('Falha no cadastro: Este CPF já se encontra registrado em nosso sistema.');
           return;
         }
@@ -1612,8 +1614,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
           return;
         }
       }
-    } catch (dbErr) {
-      console.error("Erro ao verificar duplicidade de CPF:", dbErr);
+    } catch (dbErr: any) {
+      if (dbErr?.code === 'resource-exhausted' || (dbErr?.message && dbErr.message.includes('Quota'))) {
+        console.warn("Quota excedida na verificação de CPF. Ignorando verificação online.");
+      } else {
+        console.error("Erro ao verificar duplicidade de CPF:", dbErr);
+      }
     }
 
     // Validation for Billing Details
@@ -1799,7 +1805,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       cancelText: 'Voltar',
       onConfirm: async () => {
         try {
-          await deleteDoc(doc(db, 'agendamentos', id));
+          await deleteAgendamento(id);
           toast.success('Agendamento excluído com sucesso!', {
             icon: '✅',
           });
@@ -2303,39 +2309,36 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       return;
     }
 
-    // 1. Trava de Segurança (Validação de Escala)
-    const temAtivosNaoConcluidos = agendamentosPacienteMes.some(
-      (a) => a.status !== 'Concluido' && a.status !== 'Cancelado'
-    );
-
-    if (temAtivosNaoConcluidos) {
-      toast.error('Atenção: É necessário fechar/concluir a escala deste mês antes de gerar a fatura.');
-      return;
-    }
+    // 1. Trava de Segurança desativada para permitir geração direta de fatura
+    const temAtivosNaoConcluidos = false;
 
     const mesDaEscalaAtual = monthPrefix;
 
     try {
-      // 2. Correção da Query (A Trava Real de Duplicidade)
-      if (isQuotaExceeded) {
-        const faturaExistente = faturasPacientes.some(
-          (f) => f.idPaciente === paciente.id && (f as any).mesReferencia === mesDaEscalaAtual
-        );
-        if (faturaExistente) {
-          toast.error('Emissão bloqueada: A fatura de ' + mesDaEscalaAtual + ' para este paciente já foi emitida.');
-          return;
-        }
-      } else {
-        const faturasColl = collection(db, 'faturas_pacientes');
-        const qDuplicidade = query(
-          faturasColl,
-          where('pacienteId', '==', paciente.id),
-          where('mesReferencia', '==', mesDaEscalaAtual)
-        );
-        const querySnapshot = await getDocs(qDuplicidade);
-        if (!querySnapshot.empty) {
-          toast.error('Emissão bloqueada: A fatura de ' + mesDaEscalaAtual + ' para este paciente já foi emitida.');
-          return;
+      // 2. Verificação Real de Duplicidade (Estado + Firestore)
+      const faturaExistenteLocal = faturasPacientes.some(
+        (f) => (f.pacienteId === paciente.id || (f as any).idPaciente === paciente.id) && f.mesReferencia === mesDaEscalaAtual
+      );
+
+      if (faturaExistenteLocal) {
+        toast.error('Emissão bloqueada: A fatura de ' + mesDaEscalaAtual + ' para este paciente já foi emitida.');
+        return;
+      }
+
+      if (!isQuotaExceeded && !isTestMode) {
+        try {
+          const faturasColl = collection(db, 'faturas_pacientes');
+          const qDuplicidade1 = query(faturasColl, where('pacienteId', '==', paciente.id), where('mesReferencia', '==', mesDaEscalaAtual));
+          const qDuplicidade2 = query(faturasColl, where('idPaciente', '==', paciente.id), where('mesReferencia', '==', mesDaEscalaAtual));
+          const [snap1, snap2] = await Promise.all([getDocs(qDuplicidade1), getDocs(qDuplicidade2)]);
+          if (!snap1.empty || !snap2.empty) {
+            toast.error('Emissão bloqueada: A fatura de ' + mesDaEscalaAtual + ' para este paciente já foi emitida.');
+            return;
+          }
+        } catch (e: any) {
+          if (e?.code === 'resource-exhausted' || (e?.message && e.message.includes('Quota'))) {
+            console.warn("Quota excedida na verificação de duplicidade de fatura. Prosseguindo com checagem local.");
+          }
         }
       }
 
@@ -2375,8 +2378,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         mesReferencia: mesDaEscalaAtual,
         valorTotalFatura: valorTotalFatura,
         valorTotal: valorTotalFatura,
-        dataEmissao: new Date().toISOString(), // Compatible with other new Date(f.dataEmissao) parses
-        dataEmissaoTimestamp: isQuotaExceeded ? new Date().toISOString() : serverTimestamp(), // Match server timestamp required by the prompt, safe fallback
+        dataEmissao: new Date().toISOString(),
+        dataEmissaoTimestamp: isQuotaExceeded ? new Date().toISOString() : serverTimestamp(),
         statusPagamento: 'Pendente',
         status: 'Aberta',
         periodoApurado: { 
@@ -2398,13 +2401,22 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         }))
       } as any);
 
-      // 3. Feedback Real para o Usuário
-      toast.success('Fatura gerada e enviada para o Histórico Financeiro!');
+      // Atualizar status dos agendamentos para 'Faturada'
+      await updateAgendamentosBatch(
+        agendamentosPacienteMes.map(a => ({
+          id: a.id,
+          status: 'Faturada'
+        }))
+      );
+
+      // 4. Feedback Real para o Usuário
+      toast.success('Fatura gerada com sucesso e integrada ao Histórico Financeiro!');
       setIsFaturaModalOpen(false);
     } catch (error: any) {
       console.error('Erro ao gerar fatura:', error);
       if (error?.message?.includes('Quota') || error?.code === 'resource-exhausted') {
         toast.error('Limite de cota excedido. A fatura foi salva localmente no modo de contingência.');
+        setIsFaturaModalOpen(false);
       } else {
         toast.error('Erro ao gerar a fatura. Tente novamente.');
       }
@@ -3105,9 +3117,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     await handleBaixarFaturaExcel();
   };
 
-  const handleGenerateProntuarioPDF = async () => {
-    setIsGeneratingProntuarioPDF(true);
-    const toastId = toast.loading('Gerando arquivo PDF do Prontuário Clínico...');
+  const handleGenerateProntuarioPNG = async () => {
+    setIsGeneratingProntuarioPNG(true);
+    const toastId = toast.loading('Gerando imagem (PNG) do Prontuário Clínico...');
     try {
       const element = document.getElementById('print-prontuario-area');
       if (!element) {
@@ -3115,7 +3127,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       }
 
       const html2canvas = (await import('html2canvas-pro')).default;
-      const { jsPDF } = await import('jspdf');
 
       const canvas = await html2canvas(element, {
         scale: 2,
@@ -3141,43 +3152,23 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         }
       });
 
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
-
-      const pdfWidth = pdf.internal.pageSize.getWidth();   // 210mm
-      const pdfHeight = pdf.internal.pageSize.getHeight(); // 297mm
-
-      // Ajuste proporcional exato para caber estritamente em 1 página A4
-      let renderWidth = pdfWidth;
-      let renderHeight = (canvas.height * pdfWidth) / canvas.width;
-
-      if (renderHeight > pdfHeight) {
-        renderHeight = pdfHeight;
-        renderWidth = (canvas.width * pdfHeight) / canvas.height;
-      }
-
-      // Centraliza a imagem no papel A4 caso haja margem
-      const xOffset = (pdfWidth - renderWidth) / 2;
-      const yOffset = 0;
-
-      pdf.addImage(imgData, 'JPEG', xOffset, yOffset, renderWidth, renderHeight);
-
+      const imgData = canvas.toDataURL('image/png');
       const safeName = (paciente?.nome || 'Paciente').replace(/[^a-zA-Z0-9_\-]/g, '_');
-      const fileName = `Prontuario_Clinico_${safeName}.pdf`;
+      const fileName = `Prontuario_Clinico_${safeName}.png`;
 
-      // Download direto em página única
-      pdf.save(fileName);
+      const link = document.createElement('a');
+      link.href = imgData;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
 
-      toast.success('Prontuário baixado em PDF com sucesso!', { id: toastId });
+      toast.success('Prontuário baixado em PNG com sucesso!', { id: toastId });
     } catch (err: any) {
-      console.error('Erro ao gerar PDF do Prontuário:', err);
-      toast.error('Erro ao gerar PDF: ' + (err?.message || 'Falha na geração'), { id: toastId });
+      console.error('Erro ao gerar PNG do Prontuário:', err);
+      toast.error('Erro ao gerar imagem: ' + (err?.message || 'Falha na geração'), { id: toastId });
     } finally {
-      setIsGeneratingProntuarioPDF(false);
+      setIsGeneratingProntuarioPNG(false);
     }
   };
 
@@ -4574,6 +4565,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       disabled={isCurrentlyDeactivated || isCurrentMonthConcluded}
                       title={isCurrentMonthConcluded ? 'Esta escala já está concluída. Não é permitida a adição de novos agendamentos.' : ''}
                       onClick={() => {
+                        setOpenedFrom('button');
                         setSelectedDates([]);
                         setAvulsoProf('');
                         setAvulsoPlantaoOptionId('principal');
@@ -4796,6 +4788,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                 onClick={() => {
                                   if (isCurrentMonthConcluded || isCurrentlyDeactivated) return;
                                   const [yr, mo, da] = cell.dateStr.split('-').map(Number);
+                                  setOpenedFrom('calendar_cell');
                                   setAgnCalendarYear(yr);
                                   setAgnCalendarMonth(mo - 1);
                                   setSelectedDates([{ date: cell.dateStr, cycle: 1 }]);
@@ -6081,60 +6074,166 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 )}
               </div>
 
-              {/* Data do(s) Plantão(ões) - Tags / Chips & Compact Date Input */}
-              <div className="space-y-2">
-                <label className="block text-xs font-bold text-slate-700">Data do(s) Plantão(ões) (Múltiplas Escolhas)</label>
-                
-                <div className="flex flex-wrap items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                  {/* Compact Native Date Input for adding more days */}
-                  <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 shadow-xs">
-                    <Calendar size={14} className="text-slate-400" />
-                    <input
-                      type="date"
-                      value={tempDate}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val) {
-                          if (!selectedDates.some(d => d.date === val)) {
-                            setSelectedDates(prev => [...prev, { date: val, cycle: 1 }]);
+              {/* Data do(s) Plantão(ões) - Conditional Rendering based on openedFrom */}
+              {openedFrom === 'button' ? (
+                <div className="space-y-2.5">
+                  <label className="block text-xs font-bold text-slate-700">Data do(s) Plantão(ões) (Múltiplas Escolhas - Clique nos dias)</label>
+                  
+                  <div className="bg-[#fcfbf9] border border-gray-200 rounded-xl p-3 shadow-sm font-sans w-full">
+                    {/* Calendar Header with Navigation */}
+                    <div className="flex items-center justify-between mb-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (agnCalendarMonth === 0) {
+                            setAgnCalendarMonth(11);
+                            setAgnCalendarYear(agnCalendarYear - 1);
+                          } else {
+                            setAgnCalendarMonth(agnCalendarMonth - 1);
                           }
-                          setTempDate('');
-                        }
-                      }}
-                      className="text-xs text-slate-700 bg-transparent outline-none cursor-pointer"
-                    />
-                    <span className="text-[10px] text-slate-400 font-medium pl-1 border-l border-slate-200">Adicionar</span>
-                  </div>
+                        }}
+                        className="p-1 px-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                      >
+                        <ChevronLeft size={16} />
+                      </button>
+                      <span className="font-semibold text-xs uppercase tracking-wider text-[#1a3c2e]">
+                        {["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"][agnCalendarMonth]} {agnCalendarYear}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (agnCalendarMonth === 11) {
+                            setAgnCalendarMonth(0);
+                            setAgnCalendarYear(agnCalendarYear + 1);
+                          } else {
+                            setAgnCalendarMonth(agnCalendarMonth + 1);
+                          }
+                        }}
+                        className="p-1 px-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                      >
+                        <ChevronRight size={16} />
+                      </button>
+                    </div>
 
-                  {/* Selected Date Tags / Chips */}
-                  {selectedDates.length === 0 ? (
-                    <span className="text-xs text-slate-400 italic">Nenhuma data selecionada. Adicione acima ou clique no calendário principal.</span>
-                  ) : (
-                    selectedDates.map((item) => {
-                      const [y, m, day] = item.date.split('-');
-                      const displayDate = `${day}/${m}/${y}`;
-                      return (
-                        <span
-                          key={item.date}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-semibold shadow-xs"
-                        >
-                          <span>{displayDate}</span>
+                    {/* Day Names Grid */}
+                    <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-gray-400 mb-1.5">
+                      {["D", "S", "T", "Q", "Q", "S", "S"].map((d, index) => (
+                        <div key={`cal-header-${index}`} className="py-1">{d}</div>
+                      ))}
+                    </div>
+
+                    {/* Days Grid */}
+                    <div className="grid grid-cols-7 w-full gap-0 border border-gray-200 rounded-lg overflow-hidden">
+                      {Array.from({ length: new Date(agnCalendarYear, agnCalendarMonth, 1).getDay() }).map((_, i) => (
+                        <div key={`empty-${agnCalendarMonth}-${agnCalendarYear}-${i}`} className="border border-gray-200 min-h-[60px] w-full bg-gray-50/50" />
+                      ))}
+                      {Array.from({ length: new Date(agnCalendarYear, agnCalendarMonth + 1, 0).getDate() }, (_, i) => i + 1).map((dayNum) => {
+                        const formattedDate = `${agnCalendarYear}-${String(agnCalendarMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+                        const isSelected = selectedDates.some(d => d.date === formattedDate);
+                        const isToday = new Date().toDateString() === new Date(agnCalendarYear, agnCalendarMonth, dayNum).toDateString();
+                        const isHoliday = feriados.some(f => f.date === formattedDate);
+                        
+                        const baseClass = "border border-gray-200 min-h-[60px] w-full flex flex-col justify-start items-center p-1 transition-all cursor-pointer select-none";
+                        const stateClass = isSelected 
+                          ? 'bg-green-700 text-white font-extrabold hover:bg-green-800 shadow-xs' 
+                          : isHoliday
+                            ? 'bg-rose-100 text-rose-950 hover:bg-rose-200'
+                            : isToday
+                              ? 'bg-amber-100 text-amber-950 hover:bg-amber-200 border-2 border-amber-400'
+                              : 'bg-white hover:bg-gray-100 text-gray-700';
+
+                        return (
                           <button
+                            key={`${agnCalendarMonth}-${agnCalendarYear}-${dayNum}`}
                             type="button"
-                            onClick={() => {
-                              setSelectedDates(prev => prev.filter(d => d.date !== item.date));
-                            }}
-                            className="text-emerald-600 hover:text-emerald-900 transition-colors p-0.5 rounded-full hover:bg-emerald-100"
-                            title="Remover data"
+                            onClick={() => handleDateClick(formattedDate)}
+                            className={`${baseClass} ${stateClass}`}
                           >
-                            <X size={12} />
+                            <span className="text-xs font-extrabold self-start pl-1 pt-0.5">{dayNum}</span>
+                            {isSelected && <span className="text-[9px] text-white/90">✓</span>}
                           </button>
-                        </span>
-                      );
-                    })
+                        );
+                      })}
+                    </div>
+                  </div>
+                  
+                  {/* Selected summary chips */}
+                  {selectedDates.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                      <span className="text-[11px] font-semibold text-slate-500">Selecionados ({selectedDates.length}):</span>
+                      {selectedDates.map((item) => {
+                        const [y, m, day] = item.date.split('-');
+                        return (
+                          <span key={item.date} className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded text-xs font-semibold">
+                            <span>{day}/{m}/{y}</span>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedDates(prev => prev.filter(d => d.date !== item.date))}
+                              className="text-emerald-600 hover:text-emerald-900"
+                            >
+                              <X size={11} />
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-slate-700">Data do(s) Plantão(ões) (Múltiplas Escolhas)</label>
+                  
+                  <div className="flex flex-wrap items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                    {/* Compact Native Date Input for adding more days */}
+                    <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 shadow-xs">
+                      <Calendar size={14} className="text-slate-400" />
+                      <input
+                        type="date"
+                        value={tempDate}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val) {
+                            if (!selectedDates.some(d => d.date === val)) {
+                              setSelectedDates(prev => [...prev, { date: val, cycle: 1 }]);
+                            }
+                            setTempDate('');
+                          }
+                        }}
+                        className="text-xs text-slate-700 bg-transparent outline-none cursor-pointer"
+                      />
+                      <span className="text-[10px] text-slate-400 font-medium pl-1 border-l border-slate-200">Adicionar</span>
+                    </div>
+
+                    {/* Selected Date Tags / Chips */}
+                    {selectedDates.length === 0 ? (
+                      <span className="text-xs text-slate-400 italic">Nenhuma data selecionada. Adicione acima.</span>
+                    ) : (
+                      selectedDates.map((item) => {
+                        const [y, m, day] = item.date.split('-');
+                        const displayDate = `${day}/${m}/${y}`;
+                        return (
+                          <span
+                            key={item.date}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-semibold shadow-xs"
+                          >
+                            <span>{displayDate}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedDates(prev => prev.filter(d => d.date !== item.date));
+                              }}
+                              className="text-emerald-600 hover:text-emerald-900 transition-colors p-0.5 rounded-full hover:bg-emerald-100"
+                              title="Remover data"
+                            >
+                              <X size={12} />
+                            </button>
+                          </span>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Horário / Plantão Option Select Dropdown */}
               <div className="space-y-1 col-span-12">
@@ -6844,7 +6943,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
                           const hadAbsence = !!selectedShiftForDetails.considerarFalta;
                           const hasNoAbsence = !considerarFalta;
-                          if (hadAbsence && hasNoAbsence && selectedShiftForDetails.idProfissional && selectedShiftForDetails.idProfissional !== 'n/a') {
+                          if (!isQuotaExceeded && !isTestMode && hadAbsence && hasNoAbsence && selectedShiftForDetails.idProfissional && selectedShiftForDetails.idProfissional !== 'n/a') {
                             const oclRef = collection(db, 'profissionais', selectedShiftForDetails.idProfissional, 'ocorrencias');
                             const q = query(oclRef, where('data', '==', selectedShiftForDetails.data), where('tipo', '==', 'automatica'));
                             getDocs(q).then((qSnap) => {
@@ -6854,7 +6953,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                             }).catch(e => console.error("Erro ao remover ocorrência automática:", e));
                           }
 
-                          if (considerarFalta && updatedAg.idProfissional && updatedAg.idProfissional !== 'n/a') {
+                          if (!isQuotaExceeded && !isTestMode && considerarFalta && updatedAg.idProfissional && updatedAg.idProfissional !== 'n/a') {
                             try {
                               await addDoc(collection(db, 'profissionais', updatedAg.idProfissional, 'ocorrencias'), {
                                 data: updatedAg.data,
@@ -7724,7 +7823,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         </div>
       )}
 
-      {/* MODAL: EXPORTAR/IMPRIMIR PRONTUÁRIO CLÍNICO (PDF) */}
+      {/* MODAL: EXPORTAR/IMPRIMIR PRONTUÁRIO CLÍNICO (PNG) */}
       {imprimirProntuarioModalOpen && (
         <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in-30 p-4 overflow-y-auto print:absolute print:inset-0 print:p-0 print:h-auto print:overflow-visible print:bg-white print:z-[999999]">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-4xl w-full flex flex-col overflow-hidden max-h-[92vh] print:p-0 print:max-h-none print:max-w-none print:w-full print:bg-white print:static print:shadow-none print:rounded-none print:overflow-visible">
@@ -7740,13 +7839,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               <div className="flex items-center space-x-2">
                 <button
                   type="button"
-                  disabled={isGeneratingProntuarioPDF}
-                  onClick={handleGenerateProntuarioPDF}
+                  disabled={isGeneratingProntuarioPNG}
+                  onClick={handleGenerateProntuarioPNG}
                   className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-extrabold rounded-lg shadow-sm flex items-center space-x-1 transition-all cursor-pointer disabled:opacity-50"
-                  title="Baixar arquivo PDF do Prontuário Clínico"
+                  title="Baixar imagem PNG do Prontuário Clínico"
                 >
                   <Printer size={13} className="mr-1" />
-                  <span>{isGeneratingProntuarioPDF ? 'Gerando PDF...' : 'Baixar Prontuário (PDF)'}</span>
+                  <span>{isGeneratingProntuarioPNG ? 'Gerando Imagem...' : 'Baixar Prontuário (PNG)'}</span>
                 </button>
                 <button
                   type="button"
@@ -8247,10 +8346,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 </button>
                 <button
                   type="button"
-                  disabled={isEscalaAberta}
+                  disabled={totalPlantõesValidos === 0}
                   onClick={handleGerarFatura}
                   className={`px-4 py-2 text-white text-xs font-black rounded-lg transition-all shadow-md cursor-pointer font-sans ${
-                    isEscalaAberta 
+                    totalPlantõesValidos === 0 
                       ? 'bg-slate-300 text-slate-400 border border-slate-200 cursor-not-allowed shadow-none' 
                       : 'bg-emerald-600 hover:bg-emerald-700 border border-emerald-500/20'
                   }`}

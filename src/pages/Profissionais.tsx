@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import html2canvas from 'html2canvas-pro';
 import { sanitizeClonedDocForHtml2Canvas } from '../lib/html2canvasSanitizer';
 import { useFirebase } from '../context/FirebaseContext';
 import { Profissional, Agendamento, DocumentoAnexo, Ocorrencia } from '../types';
@@ -27,7 +26,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
   initialSelectedProfId,
   clearInitialSelectedProfId
 }) => {
-  const { profissionais, pacientes, addProfissional, updateProfissional, deleteProfissional, uploadLogo, uploadProfissionalFoto, uploadPdf, userRole, loading: firebaseLoading, agendamentos, isQuotaExceeded } = useFirebase();
+  const { profissionais, pacientes, addProfissional, updateProfissional, deleteProfissional, uploadLogo, uploadProfissionalFoto, uploadPdf, userRole, loading: firebaseLoading, agendamentos, isQuotaExceeded, isTestMode } = useFirebase();
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -268,6 +267,19 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
         return;
       }
 
+      if (isQuotaExceeded || isTestMode) {
+        const agList = (agendamentos || []).filter(a => a.idProfissional === editingProf.id);
+        agList.sort((a, b) => {
+          const dateA = a.data || '';
+          const dateB = b.data || '';
+          if (dateA !== dateB) return dateB.localeCompare(dateA);
+          return (b.horario || '').localeCompare(a.horario || '');
+        });
+        setAgendamentosProf(agList);
+        setLoadingAgenda(false);
+        return;
+      }
+
       const q = query(
         collection(db, 'agendamentos'),
         where('idProfissional', '==', editingProf.id),
@@ -321,11 +333,11 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
       setAgendamentosProf([]);
       setLoadingAgenda(false);
     }
-  }, [editingProf, activeTab, isQuotaExceeded, agendamentos]);
+  }, [editingProf, activeTab, isQuotaExceeded, isTestMode, agendamentos]);
 
   useEffect(() => {
     if (editingProf && activeTab === 'ocorrencias') {
-      if (isQuotaExceeded) {
+      if (isQuotaExceeded || isTestMode) {
         setOcorrencias([]);
         return;
       }
@@ -600,6 +612,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
 
   // Funções de Gestão de Ocorrências e Sincronização de Bloqueios de Escala
   const updateBlockedPatients = async (profId: string) => {
+    if (isTestMode || isQuotaExceeded) return;
     try {
       const occSnap = await getDocs(collection(db, 'profissionais', profId, 'ocorrencias'));
       const blockedSet = new Set<string>();
@@ -638,6 +651,28 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
         createdAt: new Date().toISOString(),
         tipo: 'manual'
       };
+
+      if (isTestMode || isQuotaExceeded) {
+        const newOc: Ocorrencia = {
+          id: editingOcorrenciaId || `oc-${Date.now()}`,
+          ...payload
+        };
+        if (editingOcorrenciaId) {
+          setOcorrencias(prev => prev.map(o => o.id === editingOcorrenciaId ? newOc : o));
+          setSuccessMessage('Ocorrência atualizada com sucesso (Modo de Testes).');
+        } else {
+          setOcorrencias(prev => [newOc, ...prev]);
+          setSuccessMessage('Ocorrência registrada com sucesso (Modo de Testes).');
+        }
+        setOcData(new Date().toISOString().split('T')[0]);
+        setOcPacienteId('');
+        setOcDescricao('');
+        setOcBloquear(false);
+        setEditingOcorrenciaId(null);
+        setExibindoFormOcorrencia(false);
+        setSavingOcorrencia(false);
+        return;
+      }
 
       if (editingOcorrenciaId) {
         const docRef = doc(db, 'profissionais', editingProf.id, 'ocorrencias', editingOcorrenciaId);
@@ -688,6 +723,13 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
 
   const handleConfirmDeleteOcorrencia = async () => {
     if (!editingProf || !deleteConfirmOc || !deleteConfirmOc.id) return;
+
+    if (isTestMode || isQuotaExceeded) {
+      setOcorrencias(prev => prev.filter(o => o.id !== deleteConfirmOc.id));
+      setSuccessMessage('Ocorrência excluída com sucesso (Modo de Testes).');
+      setDeleteConfirmOc(null);
+      return;
+    }
 
     try {
       const docRef = doc(db, 'profissionais', editingProf.id, 'ocorrencias', deleteConfirmOc.id);
@@ -1710,6 +1752,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
       if (badgeRef.current) {
         try {
           console.log("[BadgeGerador] Starting html2canvas capture for PNG with onclone...");
+          const html2canvas = (await import('html2canvas-pro')).default;
           const canvas = await html2canvas(badgeRef.current, {
             scale: 2,
             useCORS: true,
@@ -1743,6 +1786,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
       if (badgeRef.current) {
         try {
           console.log("[BadgeGerador] Starting html2canvas capture with onclone...");
+          const html2canvas = (await import('html2canvas-pro')).default;
           const canvas = await html2canvas(badgeRef.current, {
             scale: 2,
             useCORS: true,

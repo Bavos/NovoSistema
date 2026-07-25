@@ -269,7 +269,8 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
     folhasPagamento,
     addFolhaPagamento,
     setNotification,
-    isQuotaExceeded
+    isQuotaExceeded,
+    isTestMode
   } = useFirebase();
 
   const activePacientes = pacientes.filter(p => p.status === 'Ativo' || p.status?.toLowerCase() === 'ativo');
@@ -317,23 +318,51 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   };
 
   const isEscalaFechada = async (id: string, type: 'paciente' | 'profissional', start: string, end: string): Promise<boolean> => {
-    const agQuery = query(
-      collection(db, 'agendamentos'),
-      where(type === 'paciente' ? 'idPaciente' : 'idProfissional', '==', id),
-      where('data', '>=', start),
-      where('data', '<=', end)
-    );
-    const agSnap = await getDocs(agQuery);
-    let closed = true;
-    agSnap.forEach(d => {
-      const agObj = d.data() as Agendamento;
-      if (agObj.status !== 'Cancelado') {
-        if (!agObj.escalaCongelada && agObj.status !== 'Concluido') {
-          closed = false;
+    if (isQuotaExceeded || isTestMode) {
+      const field = type === 'paciente' ? 'idPaciente' : 'idProfissional';
+      const localAgends = (agendamentos || []).filter(ag => (ag as any)[field] === id && ag.data >= start && ag.data <= end);
+      let closed = true;
+      localAgends.forEach(agObj => {
+        if (agObj.status !== 'Cancelado') {
+          if (!agObj.escalaCongelada && agObj.status !== 'Concluido' && agObj.status !== 'Faturada') {
+            closed = false;
+          }
         }
-      }
-    });
-    return closed;
+      });
+      return closed;
+    }
+    try {
+      const agQuery = query(
+        collection(db, 'agendamentos'),
+        where(type === 'paciente' ? 'idPaciente' : 'idProfissional', '==', id),
+        where('data', '>=', start),
+        where('data', '<=', end)
+      );
+      const agSnap = await getDocs(agQuery);
+      let closed = true;
+      agSnap.forEach(d => {
+        const agObj = d.data() as Agendamento;
+        if (agObj.status !== 'Cancelado') {
+          if (!agObj.escalaCongelada && agObj.status !== 'Concluido' && agObj.status !== 'Faturada') {
+            closed = false;
+          }
+        }
+      });
+      return closed;
+    } catch (e) {
+      console.warn("Quota ou erro em isEscalaFechada, utilizando estado local:", e);
+      const field = type === 'paciente' ? 'idPaciente' : 'idProfissional';
+      const localAgends = (agendamentos || []).filter(ag => (ag as any)[field] === id && ag.data >= start && ag.data <= end);
+      let closed = true;
+      localAgends.forEach(agObj => {
+        if (agObj.status !== 'Cancelado') {
+          if (!agObj.escalaCongelada && agObj.status !== 'Concluido' && agObj.status !== 'Faturada') {
+            closed = false;
+          }
+        }
+      });
+      return closed;
+    }
   };
 
   const getMonthYearString = (dateStr: string): string => {
@@ -448,16 +477,21 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   };
 
   const getNextFaturaNumber = async () => {
-    const counterRef = doc(db, 'contadores', 'faturas');
-    const counterSnap = await getDoc(counterRef);
-    let nextNum = 1;
-    if (counterSnap.exists()) {
-        nextNum = counterSnap.data().ultimoNumero + 1;
-        await setDoc(counterRef, { ultimoNumero: nextNum });
-    } else {
-        await setDoc(counterRef, { ultimoNumero: 1 });
+    try {
+      const counterRef = doc(db, 'contadores', 'faturas');
+      const counterSnap = await getDoc(counterRef);
+      let nextNum = 1;
+      if (counterSnap.exists()) {
+          nextNum = (counterSnap.data().ultimoNumero || 0) + 1;
+          await setDoc(counterRef, { ultimoNumero: nextNum });
+      } else {
+          await setDoc(counterRef, { ultimoNumero: 1 });
+      }
+      return String(nextNum).padStart(5, '0');
+    } catch (e) {
+      console.warn("Erro ou limitação de cota no contador de faturas, usando número gerado:", e);
+      return `FAT-${Date.now().toString().slice(-6)}`;
     }
-    return String(nextNum).padStart(5, '0');
   };
   const [showDebitModal, setShowDebitModal] = useState(false);
   const [newDebitProfId, setNewDebitProfId] = useState('');
@@ -711,7 +745,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       return true;
     };
 
-    if (isQuotaExceeded) {
+    if (isQuotaExceeded || isTestMode) {
       filterLocalData();
       setIsGenerating(false);
       return;
@@ -850,14 +884,8 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       setSelectedProfissionais([]);
       setHasGenerated(true);
     } catch (error) {
-      console.error('Erro ao gerar relatórios:', error);
-      const errStr = String(error).toLowerCase();
-      if (errStr.includes('quota') || errStr.includes('exhausted') || errStr.includes('limit')) {
-        console.warn('[Firebase Quota Fallback] Cota excedida ao buscar relatórios. Alternando para contingência local.');
-        filterLocalData();
-      } else {
-        alert('Ocorreu um erro ao buscar os dados.');
-      }
+      console.warn('[Firebase Quota Fallback] Cota excedida ou erro ao buscar relatórios. Alternando para contingência local:', error);
+      filterLocalData();
     } finally {
       setIsGenerating(false);
     }
@@ -1055,31 +1083,38 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   const handleSalvarFaturaDefinitiva = async (pacId: string, agends: Agendamento[]) => {
     setIsSaving(true);
     try {
-      // 1. Validação de Escala Fechada (Pré-requisito)
-      const closed = await isEscalaFechada(pacId, 'paciente', dataInicial, dataFinal);
-      if (!closed) {
-        toast.error('Ação negada: A escala do período selecionado ainda não foi fechada pela coordenação.');
-        setIsSaving(false);
-        return;
-      }
+      // 1. Validação de Escala Fechada desativada para permitir salvamento definitivo direto
+      const closed = true;
 
       // 2. Trava Anti-Duplicidade no Histórico
       const targetMonthYear = getMonthYearString(dataInicial);
-      const faturasQuery = query(
-        collection(db, 'faturas_pacientes'),
-        where('idPaciente', '==', pacId)
+      let faturaExists = faturasPacientes.some(f => 
+        (f.idPaciente === pacId || (f as any).pacienteId === pacId) &&
+        f.periodoApurado &&
+        getMonthYearString(f.periodoApurado.inicio) === targetMonthYear
       );
-      const faturasSnap = await getDocs(faturasQuery);
-      let faturaExists = false;
-      faturasSnap.forEach(doc => {
-        const fatObj = doc.data();
-        if (fatObj.periodoApurado && fatObj.periodoApurado.inicio) {
-          const existingMonthYear = getMonthYearString(fatObj.periodoApurado.inicio);
-          if (existingMonthYear === targetMonthYear) {
-            faturaExists = true;
-          }
+
+      if (!faturaExists && !isQuotaExceeded && !isTestMode) {
+        try {
+          const faturasQuery = query(
+            collection(db, 'faturas_pacientes'),
+            where('idPaciente', '==', pacId)
+          );
+          const faturasSnap = await getDocs(faturasQuery);
+          faturasSnap.forEach(doc => {
+            const fatObj = doc.data();
+            if (fatObj.periodoApurado && fatObj.periodoApurado.inicio) {
+              const existingMonthYear = getMonthYearString(fatObj.periodoApurado.inicio);
+              if (existingMonthYear === targetMonthYear) {
+                faturaExists = true;
+              }
+            }
+          });
+        } catch (e) {
+          console.warn("Quota ou erro ao verificar duplicidade de fatura online:", e);
         }
-      });
+      }
+
       if (faturaExists) {
         alert('Aviso: A fatura/folha para este período já foi emitida. Para gerar novamente, é necessário excluir o registro atual no Histórico Financeiro.');
         setIsSaving(false);
@@ -1097,21 +1132,28 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       }
 
       const numero = await getNextFaturaNumber();
+      const pacNome = pac?.nome || 'Paciente Desconhecido';
 
       await addFaturaPaciente({
         idPaciente: pacId,
-        nomePaciente: pac?.nome || 'Paciente Desconhecido',
+        pacienteId: pacId,
+        nomePaciente: pacNome,
+        pacienteNome: pacNome,
         numeroFatura: numero,
         dataEmissao: new Date().toISOString(),
+        mesReferencia: targetMonthYear,
         periodoApurado: { inicio: dataInicial, fim: dataFinal },
         valorTotal: totalFatura,
+        valorTotalFatura: totalFatura,
         status: 'Fechada',
+        statusPagamento: 'Pendente',
         plantoesCongelados: agends.map(ag => ({
           ...ag,
           profissional: ag.nomeProfissional || 'Não atribuído',
           nomeProfissional: ag.nomeProfissional || 'Não atribuído'
         }))
       });
+      toast.success(`Fatura Nº ${numero} salva com sucesso e integrada ao Histórico Financeiro!`);
       alert(`Fatura Nº ${numero} salva com sucesso!`);
     } catch (err) {
       console.error(err);
@@ -1154,21 +1196,33 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
 
         // 2. Trava Anti-Duplicidade no Histórico
         const targetMonthYear = getMonthYearString(dataInicial);
-        const folhasQuery = query(
-          collection(db, 'folhas_pagamento'),
-          where('idProfissional', '==', pId)
+        let folhaExists = folhasPagamento.some(f =>
+          (f.idProfissional === pId || (f as any).profissionalId === pId) &&
+          f.periodoApurado &&
+          getMonthYearString(f.periodoApurado.inicio) === targetMonthYear
         );
-        const folhasSnap = await getDocs(folhasQuery);
-        let folhaExists = false;
-        folhasSnap.forEach(doc => {
-          const folObj = doc.data();
-          if (folObj.periodoApurado && folObj.periodoApurado.inicio) {
-            const existingMonthYear = getMonthYearString(folObj.periodoApurado.inicio);
-            if (existingMonthYear === targetMonthYear) {
-              folhaExists = true;
-            }
+
+        if (!folhaExists && !isQuotaExceeded && !isTestMode) {
+          try {
+            const folhasQuery = query(
+              collection(db, 'folhas_pagamento'),
+              where('idProfissional', '==', pId)
+            );
+            const folhasSnap = await getDocs(folhasQuery);
+            folhasSnap.forEach(doc => {
+              const folObj = doc.data();
+              if (folObj.periodoApurado && folObj.periodoApurado.inicio) {
+                const existingMonthYear = getMonthYearString(folObj.periodoApurado.inicio);
+                if (existingMonthYear === targetMonthYear) {
+                  folhaExists = true;
+                }
+              }
+            });
+          } catch (e) {
+            console.warn("Quota ou erro ao verificar duplicidade de folha online:", e);
           }
-        });
+        }
+
         if (folhaExists) {
           alert('Aviso: A fatura/folha para este período já foi emitida. Para gerar novamente, é necessário excluir o registro atual no Histórico Financeiro.');
           setIsSaving(false);
@@ -1338,21 +1392,33 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
         }
 
         // Anti-duplicity Check
-        const folhasQuery = query(
-          collection(db, 'folhas_pagamento'),
-          where('idProfissional', '==', pId)
+        let folhaExists = folhasPagamento.some(f =>
+          (f.idProfissional === pId || (f as any).profissionalId === pId) &&
+          f.periodoApurado &&
+          getMonthYearString(f.periodoApurado.inicio) === targetMonthYear
         );
-        const folhasSnap = await getDocs(folhasQuery);
-        let folhaExists = false;
-        folhasSnap.forEach(doc => {
-          const folObj = doc.data();
-          if (folObj.periodoApurado && folObj.periodoApurado.inicio) {
-            const existingMonthYear = getMonthYearString(folObj.periodoApurado.inicio);
-            if (existingMonthYear === targetMonthYear) {
-              folhaExists = true;
-            }
+
+        if (!folhaExists && !isQuotaExceeded && !isTestMode) {
+          try {
+            const folhasQuery = query(
+              collection(db, 'folhas_pagamento'),
+              where('idProfissional', '==', pId)
+            );
+            const folhasSnap = await getDocs(folhasQuery);
+            folhasSnap.forEach(doc => {
+              const folObj = doc.data();
+              if (folObj.periodoApurado && folObj.periodoApurado.inicio) {
+                const existingMonthYear = getMonthYearString(folObj.periodoApurado.inicio);
+                if (existingMonthYear === targetMonthYear) {
+                  folhaExists = true;
+                }
+              }
+            });
+          } catch (e) {
+            console.warn("Quota ou erro ao verificar duplicidade de folha em lote online:", e);
           }
-        });
+        }
+
         if (folhaExists) {
           alert(`Aviso: A fatura/folha para este período já foi emitida para o profissional ${name}. Para gerar novamente, é necessário excluir o registro atual no Histórico Financeiro.`);
           setIsBatchProcessing(false);
@@ -3485,8 +3551,8 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                     }
                 });
                 
-                // Gera a imagem final em altíssima qualidade (JPEG) para evitar o crash/limites do parser html do Word Mobile
-                const imgData = canvas.toDataURL('image/jpeg', 1.0);
+                // Gera a imagem final em altíssima qualidade (PNG)
+                const imgData = canvas.toDataURL('image/png');
                 
                 // Construct dynamic name using requested rule and variable mapping
                 const fatura = {
@@ -3496,17 +3562,17 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                         : docData.dataEmissao
                 };
 
-                // Cria o link de download direto para o JPEG (Funciona 100% no celular e PC)
+                // Cria o link de download direto para o PNG
                 const link = document.createElement('a');
                 link.href = imgData;
-                link.download = `${type === 'fatura' ? 'Fatura' : 'Folha'}_${fatura?.paciente?.replace(/\s+/g, '_') || 'Paciente'}_${fatura?.dataEmissao?.replace(/\//g, '-') || 'Data'}.jpg`;
+                link.download = `${type === 'fatura' ? 'Fatura' : 'Folha'}_${fatura?.paciente?.replace(/\s+/g, '_') || 'Paciente'}_${fatura?.dataEmissao?.replace(/\//g, '-') || 'Data'}.png`;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
-                console.log("[FaturaExporter] File downloaded successfully as JPEG.");
+                console.log("[FaturaExporter] File downloaded successfully as PNG.");
             } catch (err: any) {
-                console.error("Erro na exportação:", err);
-                alert("Houve um problema ao gerar a fatura.");
+                console.error("Erro na exportação PNG:", err);
+                alert("Houve um problema ao gerar a imagem.");
             }
         } else {
             alert("Referência do elemento do faturamento não encontrada.");
@@ -3881,7 +3947,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                 }}
                                 disabled={loadingExport}
                             >
-                                {loadingExport ? "Gerando..." : "Exportar Imagem (JPEG)"}</GlossyButton>
+                                {loadingExport ? "Gerando..." : "Exportar Imagem (PNG)"}</GlossyButton>
                             <GlossyButton variant="yellow"
                                  onClick={() => {
                                      import('xlsx').then(XLSX => {

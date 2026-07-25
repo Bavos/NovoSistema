@@ -214,7 +214,7 @@ export interface Agendamento {
   valorRepasse: number;
   ajudaCusto: number;
   taxaAdm: number;
-  status: 'Aberta' | 'Concluido' | 'Cancelado' | 'Confirmado';
+  status: 'Aberta' | 'Concluido' | 'Cancelado' | 'Confirmado' | 'Faturada';
   observacao?: string;
   escalaCongelada?: boolean;
   tipoDia?: 'Normal' | 'Feriado 20%' | 'Feriado 50%';
@@ -253,9 +253,11 @@ export interface DebitoProfissional {
 export interface FaturaPaciente {
   id: string;
   idPaciente: string;
+  pacienteId?: string;
   nomePaciente: string;
   numeroFatura: string;
   dataEmissao: string;
+  mesReferencia?: string;
   periodoApurado: { inicio: string; fim: string };
   valorTotal: number;
   status: 'Aberta' | 'Fechada';

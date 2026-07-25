@@ -32,6 +32,7 @@ import {
 
 interface FirebaseContextType {
   isTestMode: boolean;
+  isSandbox: boolean;
   toggleTestMode: (enabled?: boolean) => void;
   pacientes: Paciente[];
   isQuotaExceeded: boolean;
@@ -137,14 +138,15 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (isQuota) {
       if (!isQuotaExceeded) {
         setIsQuotaExceeded(true);
+        loadLocalData();
       }
       
       const now = Date.now();
       if (now - lastQuotaToastTime > 10000) {
         lastQuotaToastTime = now;
         console.warn(`[Firebase Quota Fallback] Cota excedida detectada em: ${source}. Ativando modo de contingência local.`);
-        toast.error("⚠️ Limite de Cota do Firebase Excedido: Operando temporariamente em Modo de Contingência Local.", {
-          duration: 8000,
+        toast.error("⚠️ Limite de Cota do Firebase Excedido: Operando em Modo de Contingência Local.", {
+          duration: 5000,
           position: 'top-center',
           id: 'quota-error'
         });
@@ -692,6 +694,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     if (isQuotaExceeded) {
+      loadLocalData();
       return;
     }
 
@@ -777,14 +780,44 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     );
 
+    const unsubscribeFaturas = onSnapshot(
+      query(collection(db, 'faturas_pacientes'), limit(2000)),
+      (snap) => {
+        const list: FaturaPaciente[] = [];
+        snap.forEach((d) => list.push({ ...d.data(), id: d.id } as FaturaPaciente));
+        setFaturasPacientes(list);
+      },
+      (error) => {
+        if (!handleQuotaError(error, 'faturas_pacientes')) {
+          console.error("Error subscribing to faturas_pacientes:", error);
+        }
+      }
+    );
+
+    const unsubscribeFolhas = onSnapshot(
+      query(collection(db, 'folhas_pagamento'), limit(2000)),
+      (snap) => {
+        const list: FolhaPagamento[] = [];
+        snap.forEach((d) => list.push({ ...d.data(), id: d.id } as FolhaPagamento));
+        setFolhasPagamento(list);
+      },
+      (error) => {
+        if (!handleQuotaError(error, 'folhas_pagamento')) {
+          console.error("Error subscribing to folhas_pagamento:", error);
+        }
+      }
+    );
+
     return () => {
       unsubscribePlantoes();
       unsubscribeAgendamentos();
       unsubscribeProfissionais();
       unsubscribeUsuariosSistema();
       unsubscribeDebitos();
+      unsubscribeFaturas();
+      unsubscribeFolhas();
     };
-  }, [user, isQuotaExceeded]);
+  }, [user, isQuotaExceeded, isTestMode]);
 
   const addAuditLog = async (
     action: AuditLog['action'],
@@ -1725,9 +1758,25 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
+  const removeUndefinedDeep = (obj: any): any => {
+    if (obj === null || obj === undefined) return null;
+    if (typeof obj !== 'object') return obj;
+    if (obj instanceof Date) return obj;
+    if (Array.isArray(obj)) return obj.map(removeUndefinedDeep);
+    const clean: any = {};
+    for (const key of Object.keys(obj)) {
+      const val = obj[key];
+      if (val !== undefined) {
+        clean[key] = removeUndefinedDeep(val);
+      }
+    }
+    return clean;
+  };
+
   const addFaturaPaciente = async (fatura: Omit<FaturaPaciente, 'id'>) => {
     const id = `fat-${Date.now()}`;
-    const dataToSave: FaturaPaciente = { ...fatura, id };
+    const cleanedFatura = removeUndefinedDeep(fatura);
+    const dataToSave: FaturaPaciente = { ...cleanedFatura, id };
 
     if (isQuotaExceeded) {
       const updatedList = [dataToSave, ...faturasPacientes];
@@ -1738,10 +1787,12 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     try {
-      const docRef = await addDoc(collection(db, 'faturas_pacientes'), fatura);
-      await addAuditLog('CREATE', 'faturas_pacientes', docRef.id, `Fatura criada para paciente ${fatura.nomePaciente}: ${fatura.numeroFatura}`);
+      const docRef = await addDoc(collection(db, 'faturas_pacientes'), cleanedFatura);
+      await addAuditLog('CREATE', 'faturas_pacientes', docRef.id, `Fatura criada para paciente ${cleanedFatura.nomePaciente || cleanedFatura.pacienteNome || ''}: ${cleanedFatura.numeroFatura || id}`);
       setNotification('Fatura salva com sucesso.');
-      return { id: docRef.id, ...fatura } as FaturaPaciente;
+      const newFatura = { id: docRef.id, ...cleanedFatura } as FaturaPaciente;
+      setFaturasPacientes(prev => [newFatura, ...prev.filter(f => f.id !== docRef.id)]);
+      return newFatura;
     } catch (err) {
       console.error("Erro ao salvar fatura:", err);
       if (handleQuotaError(err, 'addFaturaPaciente')) {
@@ -1837,6 +1888,15 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const uploadLogo = async (file: File): Promise<string> => {
+    if (isTestMode) {
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = (e) => reject(e);
+      });
+    }
+
     let compressedBlob: Blob;
     try {
       compressedBlob = await compressImage(file, 180);
@@ -1863,6 +1923,15 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const uploadProfissionalFoto = async (file: File): Promise<string> => {
+    if (isTestMode) {
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = (e) => reject(e);
+      });
+    }
+
     let compressedBlob: Blob;
     try {
       compressedBlob = await compressImage(file, 250);
@@ -1889,6 +1958,15 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const uploadPdf = async (file: File, path: string): Promise<string> => {
+    if (isTestMode) {
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = (e) => reject(e);
+      });
+    }
+
     try {
       const storageRef = ref(storage, path);
       const uploadPromise = uploadBytes(storageRef, file).then(res => getDownloadURL(res.ref));
@@ -1909,7 +1987,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const addFolhaPagamento = async (folha: Omit<FolhaPagamento, 'id'>) => {
     const id = `fol-${Date.now()}`;
-    const dataToSave: FolhaPagamento = { ...folha, id };
+    const cleanedFolha = removeUndefinedDeep(folha);
+    const dataToSave: FolhaPagamento = { ...cleanedFolha, id };
 
     if (isQuotaExceeded) {
       const updatedList = [dataToSave, ...folhasPagamento];
@@ -1920,10 +1999,12 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     try {
-      const docRef = await addDoc(collection(db, 'folhas_pagamento'), folha);
-      await addAuditLog('CREATE', 'folhas_pagamento', docRef.id, `Folha fechada para profissional ${folha.nomeProfissional}`);
+      const docRef = await addDoc(collection(db, 'folhas_pagamento'), cleanedFolha);
+      await addAuditLog('CREATE', 'folhas_pagamento', docRef.id, `Folha fechada para profissional ${cleanedFolha.nomeProfissional}`);
       setNotification('Folha fechada com sucesso.');
-      return { id: docRef.id, ...folha } as FolhaPagamento;
+      const newFolha = { id: docRef.id, ...cleanedFolha } as FolhaPagamento;
+      setFolhasPagamento(prev => [newFolha, ...prev.filter(f => f.id !== docRef.id)]);
+      return newFolha;
     } catch (err) {
       console.error("Erro ao fechar folha:", err);
       if (handleQuotaError(err, 'addFolhaPagamento')) {
@@ -2012,6 +2093,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     <FirebaseContext.Provider
       value={{
         isTestMode,
+        isSandbox: isTestMode,
         toggleTestMode,
         pacientes,
         isQuotaExceeded,
