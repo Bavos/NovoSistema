@@ -417,7 +417,10 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const inactive = pacientes.filter(p => p.status === 'Desativado').length;
         setTotalPacientes({ ativos: active, inativos: inactive });
       } else {
-        console.error("Erro ao obter contagem de pacientes:", err);
+        console.warn("Erro ao obter contagem de pacientes do servidor, usando contagem local:", err);
+        const active = pacientes.filter(p => p.status === 'Ativo').length;
+        const inactive = pacientes.filter(p => p.status === 'Desativado').length;
+        setTotalPacientes({ ativos: active, inativos: inactive });
       }
     }
   };

@@ -5028,8 +5028,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                               Profissionais Cadastrados (Aba de Profissionais):
                             </div>
                             {profissionais.filter(p =>
-                              ((p.nome || '').toLowerCase().includes((newShiftProf || '').toLowerCase()) ||
-                              (p.especialidade || '').toLowerCase().includes((newShiftProf || '').toLowerCase())) &&
+                              (removerAcentos(p.nome || '').includes(removerAcentos(newShiftProf || '')) ||
+                              removerAcentos(p.especialidade || '').includes(removerAcentos(newShiftProf || ''))) &&
                               p.status === 'Ativo' &&
                               !isBlockedBidirectional(p)
                             ).map((prof) => (
@@ -5061,8 +5061,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                               </button>
                             ))}
                             {profissionais.filter(p => 
-                              ((p.nome || '').toLowerCase().includes((newShiftProf || '').toLowerCase()) ||
-                              (p.especialidade || '').toLowerCase().includes((newShiftProf || '').toLowerCase())) &&
+                              (removerAcentos(p.nome || '').includes(removerAcentos(newShiftProf || '')) ||
+                              removerAcentos(p.especialidade || '').includes(removerAcentos(newShiftProf || ''))) &&
                               p.status === 'Ativo' &&
                               !isBlockedBidirectional(p)
                             ).length === 0 && (
@@ -5892,8 +5892,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       Profissionais Cadastrados (Aba de Profissionais):
                     </div>
                     {profissionais.filter(p =>
-                      ((p.nome || '').toLowerCase().includes((editShiftProfName || '').toLowerCase()) ||
-                      (p.especialidade || '').toLowerCase().includes((editShiftProfName || '').toLowerCase())) &&
+                      (removerAcentos(p.nome || '').includes(removerAcentos(editShiftProfName || '')) ||
+                      removerAcentos(p.especialidade || '').includes(removerAcentos(editShiftProfName || ''))) &&
                       p.status === 'Ativo' &&
                       !isBlockedBidirectional(p)
                     ).map((prof) => (
@@ -5925,8 +5925,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       </button>
                     ))}
                     {profissionais.filter(p =>
-                      ((p.nome || '').toLowerCase().includes((editShiftProfName || '').toLowerCase()) ||
-                      (p.especialidade || '').toLowerCase().includes((editShiftProfName || '').toLowerCase())) &&
+                      (removerAcentos(p.nome || '').includes(removerAcentos(editShiftProfName || '')) ||
+                      removerAcentos(p.especialidade || '').includes(removerAcentos(editShiftProfName || ''))) &&
                       p.status === 'Ativo' &&
                       !isBlockedBidirectional(p)
                     ).length === 0 && (
@@ -6688,7 +6688,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       <div className="absolute left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl z-25 divide-y divide-slate-100">
                         {profissionais
                           .filter(p =>
-                            (p.nome || '').toLowerCase().includes((detailsProfName || '').toLowerCase()) &&
+                            removerAcentos(p.nome || '').includes(removerAcentos(detailsProfName || '')) &&
                             p.status === 'Ativo' &&
                             !isBlockedBidirectional(p)
                           )
@@ -7500,7 +7500,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 {showExcluirProfDropdown && (
                   <div className="absolute left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-white border border-slate-205 border-slate-200 rounded-lg shadow-xl z-25 divide-y divide-slate-100 font-sans">
                     {profissionais.filter(p =>
-                      (p.nome || '').toLowerCase().includes((excluirProfName || '').toLowerCase()) &&
+                      removerAcentos(p.nome || '').includes(removerAcentos(excluirProfName || '')) &&
                       p.status === 'Ativo'
                     ).map((prof) => (
                       <button

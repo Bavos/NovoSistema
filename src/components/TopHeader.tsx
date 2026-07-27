@@ -63,7 +63,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   };
 
   return (
-    <header className="h-16 bg-off-white border-b border-[#254A34]/20 flex items-center justify-between px-6 sticky top-0 z-40" id="top-header">
+    <header className="h-16 bg-off-white/95 backdrop-blur-md border-b border-[#254A34]/20 flex items-center justify-between px-6 w-full sticky top-0 z-50 shadow-xs" id="top-header">
       {/* Brand & Menu section */}
       <div className="flex items-center space-x-4 shrink-0">
         <button

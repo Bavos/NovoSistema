@@ -70,11 +70,17 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [selectedOption]);
 
+  const normalizeStr = (str: string) =>
+    (str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
   const filteredOptions = options.filter(o => {
     if (!searchTerm || (selectedOption && searchTerm === selectedOption.label)) {
       return true;
     }
-    return o.label.toLowerCase().includes(searchTerm.toLowerCase());
+    const normSearch = normalizeStr(searchTerm);
+    const normLabel = normalizeStr(o.label);
+    const normSublabel = normalizeStr(o.sublabel || '');
+    return normLabel.includes(normSearch) || normSublabel.includes(normSearch);
   });
 
   return (
@@ -93,8 +99,9 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
             if (e.target.value.trim() === '') {
               onChange('');
             } else {
+              const inputNorm = normalizeStr(e.target.value.trim());
               const exactMatch = options.find(
-                o => o.label.toLowerCase() === e.target.value.trim().toLowerCase()
+                o => normalizeStr(o.label) === inputNorm
               );
               if (exactMatch) {
                 onChange(exactMatch.id);
@@ -232,8 +239,9 @@ export const ModalInserirDebito: React.FC<ModalInserirDebitoProps> = ({
       // Procurar profissional pelo ID ou nome caso o ID não venha preenchido diretamente
       let pId = dadosAtalhoCuringa.profissionalId || '';
       if (!pId && dadosAtalhoCuringa.profissional) {
+        const normSearchProf = dadosAtalhoCuringa.profissional.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         const found = activeProfissionais.find(
-          p => p.nome.toLowerCase() === dadosAtalhoCuringa.profissional?.toLowerCase()
+          p => p.nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') === normSearchProf
         );
         if (found) pId = found.id;
       }
@@ -242,8 +250,9 @@ export const ModalInserirDebito: React.FC<ModalInserirDebitoProps> = ({
       // Procurar paciente pelo ID ou nome
       let pacId = dadosAtalhoCuringa.pacienteId || '';
       if (!pacId && dadosAtalhoCuringa.paciente) {
+        const normSearchPac = dadosAtalhoCuringa.paciente.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         const found = activePacientes.find(
-          p => p.nome.toLowerCase() === dadosAtalhoCuringa.paciente?.toLowerCase()
+          p => p.nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') === normSearchPac
         );
         if (found) pacId = found.id;
       }

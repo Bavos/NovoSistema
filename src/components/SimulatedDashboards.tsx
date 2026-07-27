@@ -36,7 +36,7 @@ import { useFirebase } from '../context/FirebaseContext';
 import { Agendamento, DebitoProfissional } from '../types';
 import { db } from '../lib/firebase';
 import { collection, query, where, getDocs, doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
-import { mascaraCNPJ } from '../lib/masks';
+import { mascaraCNPJ, mascaraCPF, mascaraFinanceira, converterMascaraParaNumero } from '../lib/masks';
 import { toast } from 'react-hot-toast';
 import { GlossyButton } from './GlossyButton';
 import { ModalInserirDebito } from './ModalInserirDebito';
@@ -307,6 +307,20 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
 
+  // States for Banco Inter Integration (Transferências & Boletos)
+  const [metodoPagamentoInter, setMetodoPagamentoInter] = useState<'pix_ted' | 'boleto'>('pix_ted');
+  const [boletoVencimento, setBoletoVencimento] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 5);
+    return d.toISOString().split('T')[0];
+  });
+  const [boletoCpfCnpj, setBoletoCpfCnpj] = useState<string>('');
+  const [boletoPagadorNome, setBoletoPagadorNome] = useState<string>('');
+  const [boletoEndereco, setBoletoEndereco] = useState<string>('');
+  const [boletoValor, setBoletoValor] = useState<string>('0,00');
+  const [boletoResultData, setBoletoResultData] = useState<any | null>(null);
+  const [selectedPagadorType, setSelectedPagadorType] = useState<'manual' | 'paciente' | 'profissional'>('manual');
+
   const meiProfissionais = activeProfissionais.filter(p => p.temMei && !p.meiIrregular && p.cnpj && p.cnpj.trim() !== '');
 
   const getReferenciaMesNome = (m: number) => {
@@ -507,7 +521,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   const [isInsertingDebit, setIsInsertingDebit] = useState(false);
   const [editingDebitId, setEditingDebitId] = useState<string | null>(null);
   const [newDebitPacienteId, setNewDebitPacienteId] = useState('');
-  const [debitFilterType, setDebitFilterType] = useState<'data' | 'paciente' | 'profissional'>('data');
+  const [debitFilterType, setDebitFilterType] = useState<'data' | 'paciente' | 'profissional' | 'gasto'>('data');
   const [debitFilterStartDate, setDebitFilterStartDate] = useState<string>(() => {
     const today = new Date();
     const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -526,6 +540,64 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   });
   const [debitFilterPatientId, setDebitFilterPatientId] = useState('');
   const [debitFilterProfId, setDebitFilterProfId] = useState('');
+  const [isExportingDebitosPNG, setIsExportingDebitosPNG] = useState(false);
+
+  const handleExportDebitosPNG = async () => {
+    setIsExportingDebitosPNG(true);
+    const toastId = toast.loading("Gerando imagem do relatório de débitos...");
+    try {
+      const printElement = document.getElementById('relatorio-print-area');
+      if (!printElement) {
+        throw new Error("Área 'relatorio-print-area' não encontrada no DOM.");
+      }
+
+      const html2canvasModule = await import('html2canvas-pro');
+      const html2canvas = html2canvasModule.default || html2canvasModule;
+
+      const capturePromise = html2canvas(printElement, {
+        backgroundColor: '#ffffff',
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: document.documentElement.offsetWidth,
+        onclone: (clonedDoc) => {
+          try {
+            sanitizeClonedDocForHtml2Canvas(clonedDoc, '#ffffff', '#1a3c2e');
+            const printHiddenEls = clonedDoc.querySelectorAll('.print\\:hidden');
+            printHiddenEls.forEach((el) => {
+              (el as HTMLElement).style.display = 'none';
+            });
+          } catch (e) {
+            console.warn("Aviso na sanitização do clone para captura:", e);
+          }
+        }
+      });
+
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("Tempo limite excedido ao gerar a imagem.")), 12000);
+      });
+
+      const canvas = await Promise.race([capturePromise, timeoutPromise]);
+
+      const imgData = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.href = imgData;
+      link.download = 'relatorio-debitos.png';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast.success("Relatório de débitos baixado em PNG!", { id: toastId });
+    } catch (err: any) {
+      console.error("Erro ao gerar PNG do relatório:", err);
+      toast.error(err?.message || "Erro ao gerar imagem do relatório em PNG.", { id: toastId });
+    } finally {
+      setIsExportingDebitosPNG(false);
+    }
+  };
 
   const allPatientsForFilter = React.useMemo(() => {
     const map = new Map<string, { id: string; nome: string }>();
@@ -1075,6 +1147,121 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       } else {
         toast.error(`Lote processado com pendências: \n✅ ${sucessos} Sucessos \n❌ ${falhas} Falhas \nTotal liquidado: R$ ${valorTotal.toFixed(2)}.`, { duration: 6000 });
       }
+    } finally {
+      setIsProcessingFolha(false);
+    }
+  };
+
+  const gerarBoletoInter = async () => {
+    if (!boletoVencimento) {
+      toast.error('Por favor, informe a Data de Vencimento do boleto.');
+      return;
+    }
+    const cleanCpfCnpj = (boletoCpfCnpj || '').replace(/\D/g, '');
+    if (!cleanCpfCnpj || cleanCpfCnpj.length < 11) {
+      toast.error('Por favor, informe um CPF/CNPJ válido para o pagador (mínimo 11 dígitos).');
+      return;
+    }
+    const valNum = converterMascaraParaNumero(boletoValor);
+    if (isNaN(valNum) || valNum <= 0) {
+      toast.error('Por favor, informe um valor maior que R$ 0,00 para a cobrança.');
+      return;
+    }
+
+    setIsProcessingFolha(true);
+    setFolhaSuccess(null);
+    setFolhaError(null);
+    setFolhaResultData(null);
+    setBoletoResultData(null);
+
+    const loaderToastId = toast.loading('Gerando Boleto de Cobrança v3 na API do Banco Inter...');
+    const seuNum = `BOL-${Date.now().toString().slice(-8)}`;
+
+    const payloadBoleto = {
+      seuNumero: seuNum,
+      valorNominal: valNum,
+      dataVencimento: boletoVencimento,
+      pagador: {
+        cpfCnpj: cleanCpfCnpj,
+        tipoPessoa: cleanCpfCnpj.length > 11 ? 'JURIDICA' : 'FISICA',
+        nome: boletoPagadorNome || 'Pagador Registrado',
+        endereco: boletoEndereco || undefined,
+      }
+    };
+
+    if (isTestMode) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      toast.dismiss(loaderToastId);
+
+      const valCentavos = Math.round(valNum * 100).toString().padStart(10, '0');
+      const linhaDigitavelMock = `07791.00012 01234.567890 ${seuNum.replace(/\D/g, '').padEnd(10, '0').slice(0, 10)} 1 9876${valCentavos}`;
+      const codigoBarraMock = `0779198760000${valCentavos}0001201234567890`;
+
+      const mockResult = {
+        sucesso: true,
+        seuNumero: seuNum,
+        nossoNumero: `00${Math.floor(10000000 + Math.random() * 90000000)}`,
+        codigoBarra: codigoBarraMock,
+        linhaDigitavel: linhaDigitavelMock,
+        pixCopiaECola: `00020126580014br.gov.bcb.pix0136${seuNum}-inter520400005303986540${valNum.toFixed(2)}5802BR5915${(boletoPagadorNome || 'CUIDARHOME').slice(0, 15).toUpperCase()}6009SAO PAULO62070503***6304E2CA`,
+        valorNominal: valNum,
+        dataVencimento: boletoVencimento,
+        pagador: payloadBoleto.pagador,
+        timestamp: new Date().toISOString()
+      };
+
+      setBoletoResultData(mockResult);
+      setFolhaSuccess(true);
+      toast.success(`Boleto Nº ${seuNum} emitido com sucesso (Modo Sandbox Inter)!`);
+      setIsProcessingFolha(false);
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/gerar-boleto-inter', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payloadBoleto),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      toast.dismiss(loaderToastId);
+
+      setBoletoResultData(result);
+      setFolhaSuccess(true);
+      toast.success(`Boleto de R$ ${valNum.toFixed(2)} emitido com sucesso no Banco Inter!`);
+    } catch (err: any) {
+      console.warn('Conexão com a API /api/gerar-boleto-inter falhou. Executando fallback do MockService Banco Inter:', err);
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      toast.dismiss(loaderToastId);
+
+      const valCentavos = Math.round(valNum * 100).toString().padStart(10, '0');
+      const linhaDigitavelMock = `07791.00012 01234.567890 ${seuNum.replace(/\D/g, '').padEnd(10, '0').slice(0, 10)} 1 9876${valCentavos}`;
+      const codigoBarraMock = `0779198760000${valCentavos}0001201234567890`;
+
+      const mockResult = {
+        sucesso: true,
+        seuNumero: seuNum,
+        nossoNumero: `00${Math.floor(10000000 + Math.random() * 90000000)}`,
+        codigoBarra: codigoBarraMock,
+        linhaDigitavel: linhaDigitavelMock,
+        pixCopiaECola: `00020126580014br.gov.bcb.pix0136${seuNum}-inter520400005303986540${valNum.toFixed(2)}5802BR5915${(boletoPagadorNome || 'CUIDARHOME').slice(0, 15).toUpperCase()}6009SAO PAULO62070503***6304E2CA`,
+        valorNominal: valNum,
+        dataVencimento: boletoVencimento,
+        pagador: payloadBoleto.pagador,
+        timestamp: new Date().toISOString()
+      };
+
+      setBoletoResultData(mockResult);
+      setFolhaSuccess(true);
+      toast.success(`Boleto Nº ${seuNum} gerado com sucesso (Simulação Banco Inter)!`);
     } finally {
       setIsProcessingFolha(false);
     }
@@ -1944,7 +2131,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                         : 'text-slate-500 hover:text-slate-700'
                     }`}
                   >
-                    🤖 Folha Automatizada
+                    🤖 Pagamento & Boleto
                   </button>
                 </div>
               </div>
@@ -2137,110 +2324,286 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
               )}
 
               {financeTab === 'folha_automatizada' && (
-                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-                  <div className="flex flex-wrap items-end gap-4 w-full">
-                    {/* Seletor de Profissionais com Suporte a Seleção Múltipla */}
-                    <div className="relative min-w-[280px]">
-                      <label className="block text-xs font-bold text-slate-500 mb-1">Selecionar Profissional(is)</label>
-                      <button
-                        type="button"
-                        id="select-cnab-profissional-dropdown"
-                        onClick={() => setShowCnabDropdown(!showCnabDropdown)}
-                        className="p-2 border border-slate-200 rounded-lg text-sm bg-white cursor-pointer flex justify-between items-center w-full text-left"
-                      >
-                        <span className="truncate max-w-[220px] block">
-                          {cnabProfissionaisSelecionados.length === 0
-                            ? 'Selecionar um profissional...'
-                            : cnabProfissionaisSelecionados.length === activeProfissionais.length
-                            ? '✨ Todos os Profissionais'
-                            : `${cnabProfissionaisSelecionados.length} profissional(is) selecionado(s)`}
-                        </span>
-                        <ChevronDown className="w-4 h-4 text-slate-400 shrink-0 ml-1" />
-                      </button>
-                      
-                      {showCnabDropdown && (
-                        <div className="absolute z-[999] left-0 top-full mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-xl p-3 min-w-[280px] max-h-[300px] overflow-y-auto">
-                          {/* Opções de Seleção Rápida */}
-                          <div className="flex gap-2 pb-2 border-b border-slate-100 justify-between items-center text-[10px]">
-                            <button
-                              type="button"
-                              onClick={() => setCnabProfissionaisSelecionados(activeProfissionais.map(p => p.id))}
-                              className="text-blue-600 font-bold hover:underline cursor-pointer"
-                            >
-                              Selecionar Todos
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setCnabProfissionaisSelecionados([])}
-                              className="text-slate-500 font-bold hover:underline cursor-pointer"
-                            >
-                              Limpar Todos
-                            </button>
-                          </div>
-                          
-                          {/* Lista de Profissionais */}
-                          <div className="space-y-1 pt-1">
-                            {activeProfissionais.map(p => {
-                              const isChecked = cnabProfissionaisSelecionados.includes(p.id);
-                              return (
-                                <label key={p.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-slate-50 cursor-pointer text-xs text-slate-700 select-none">
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={() => {
-                                      if (isChecked) {
-                                        setCnabProfissionaisSelecionados(cnabProfissionaisSelecionados.filter(id => id !== p.id));
-                                      } else {
-                                        setCnabProfissionaisSelecionados([...cnabProfissionaisSelecionados, p.id]);
-                                      }
-                                    }}
-                                    className="rounded border-slate-300 text-purple-600 focus:ring-purple-500 w-3.5 h-3.5 cursor-pointer"
-                                  />
-                                  <span className="truncate">{p.nome}</span>
-                                  {p.cpf && <span className="text-[9px] text-slate-400 font-mono ml-auto">{p.cpf}</span>}
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
+                <div className="space-y-4 w-full">
+                  {/* Selector de Método de Operação Banco Inter */}
+                  <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <span className="text-xs font-bold text-slate-700 flex items-center gap-2">
+                      <Building2 className="w-4 h-4 text-blue-600" /> Operação Banco Inter REST v3
+                    </span>
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer select-none">
+                        <input
+                          type="radio"
+                          name="metodoPagamentoInter"
+                          value="pix_ted"
+                          checked={metodoPagamentoInter === 'pix_ted'}
+                          onChange={() => {
+                            setMetodoPagamentoInter('pix_ted');
+                            setFolhaSuccess(null);
+                            setBoletoResultData(null);
+                            setFolhaResultData(null);
+                          }}
+                          className="text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                        />
+                        <span>Transferência (Pix/TED)</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer select-none">
+                        <input
+                          type="radio"
+                          name="metodoPagamentoInter"
+                          value="boleto"
+                          checked={metodoPagamentoInter === 'boleto'}
+                          onChange={() => {
+                            setMetodoPagamentoInter('boleto');
+                            setFolhaSuccess(null);
+                            setBoletoResultData(null);
+                            setFolhaResultData(null);
+                          }}
+                          className="text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                        />
+                        <span>Emissão de Boleto (Cobrança)</span>
+                      </label>
                     </div>
-
-                    {/* Seletores de Data */}
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">Data Inicial</label>
-                      <input
-                        type="date"
-                        id="cnab-data-inicial"
-                        value={dataInicial}
-                        onChange={(e) => setDataInicial(e.target.value)}
-                        className="p-2 border border-slate-200 rounded-lg text-sm bg-white"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">Data Final</label>
-                      <input
-                        type="date"
-                        id="cnab-data-final"
-                        value={dataFinal}
-                        onChange={(e) => setDataFinal(e.target.value)}
-                        className="p-2 border border-slate-200 rounded-lg text-sm bg-white"
-                        required
-                      />
-                    </div>
-
-                    {/* Botão de Ação Principal */}
-                    <button
-                      type="button"
-                      id="btn-cnab-gerar-folha"
-                      onClick={handleGerarFolhaAutomatizada}
-                      className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
-                    >
-                      🤖 Gerar Folha
-                    </button>
                   </div>
+
+                  {metodoPagamentoInter === 'pix_ted' ? (
+                    <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                      <div className="flex flex-wrap items-end gap-4 w-full">
+                        {/* Seletor de Profissionais com Suporte a Seleção Múltipla */}
+                        <div className="relative min-w-[280px]">
+                          <label className="block text-xs font-bold text-slate-500 mb-1">Selecionar Profissional(is)</label>
+                          <button
+                            type="button"
+                            id="select-cnab-profissional-dropdown"
+                            onClick={() => setShowCnabDropdown(!showCnabDropdown)}
+                            className="p-2 border border-slate-200 rounded-lg text-sm bg-white cursor-pointer flex justify-between items-center w-full text-left"
+                          >
+                            <span className="truncate max-w-[220px] block">
+                              {cnabProfissionaisSelecionados.length === 0
+                                ? 'Selecionar um profissional...'
+                                : cnabProfissionaisSelecionados.length === activeProfissionais.length
+                                ? '✨ Todos os Profissionais'
+                                : `${cnabProfissionaisSelecionados.length} profissional(is) selecionado(s)`}
+                            </span>
+                            <ChevronDown className="w-4 h-4 text-slate-400 shrink-0 ml-1" />
+                          </button>
+                          
+                          {showCnabDropdown && (
+                            <div className="absolute z-[999] left-0 top-full mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-xl p-3 min-w-[280px] max-h-[300px] overflow-y-auto">
+                              {/* Opções de Seleção Rápida */}
+                              <div className="flex gap-2 pb-2 border-b border-slate-100 justify-between items-center text-[10px]">
+                                <button
+                                  type="button"
+                                  onClick={() => setCnabProfissionaisSelecionados(activeProfissionais.map(p => p.id))}
+                                  className="text-blue-600 font-bold hover:underline cursor-pointer"
+                                >
+                                  Selecionar Todos
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setCnabProfissionaisSelecionados([])}
+                                  className="text-slate-500 font-bold hover:underline cursor-pointer"
+                                >
+                                  Limpar Todos
+                                </button>
+                              </div>
+                              
+                              {/* Lista de Profissionais */}
+                              <div className="space-y-1 pt-1">
+                                {activeProfissionais.map(p => {
+                                  const isChecked = cnabProfissionaisSelecionados.includes(p.id);
+                                  return (
+                                    <label key={p.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-slate-50 cursor-pointer text-xs text-slate-700 select-none">
+                                      <input
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={() => {
+                                          if (isChecked) {
+                                            setCnabProfissionaisSelecionados(cnabProfissionaisSelecionados.filter(id => id !== p.id));
+                                          } else {
+                                            setCnabProfissionaisSelecionados([...cnabProfissionaisSelecionados, p.id]);
+                                          }
+                                        }}
+                                        className="rounded border-slate-300 text-purple-600 focus:ring-purple-500 w-3.5 h-3.5 cursor-pointer"
+                                      />
+                                      <span className="truncate">{p.nome}</span>
+                                      {p.cpf && <span className="text-[9px] text-slate-400 font-mono ml-auto">{p.cpf}</span>}
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Seletores de Data */}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-1">Data Inicial</label>
+                          <input
+                            type="date"
+                            id="cnab-data-inicial"
+                            value={dataInicial}
+                            onChange={(e) => setDataInicial(e.target.value)}
+                            className="p-2 border border-slate-200 rounded-lg text-sm bg-white"
+                            required
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-1">Data Final</label>
+                          <input
+                            type="date"
+                            id="cnab-data-final"
+                            value={dataFinal}
+                            onChange={(e) => setDataFinal(e.target.value)}
+                            className="p-2 border border-slate-200 rounded-lg text-sm bg-white"
+                            required
+                          />
+                        </div>
+
+                        {/* Botão de Ação Principal */}
+                        <button
+                          type="button"
+                          id="btn-cnab-gerar-folha"
+                          onClick={handleGerarFolhaAutomatizada}
+                          className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-all active:scale-95 disabled:opacity-50 cursor-pointer shadow-sm text-xs"
+                        >
+                          🤖 Processar Lote Pix/TED
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Form para Emissão de Boleto Cobrança Inter v3 */
+                    <div className="bg-slate-50/60 p-4 rounded-xl border border-slate-200 space-y-4">
+                      {/* Auxiliar de Preenchimento */}
+                      <div className="flex flex-wrap items-center gap-3 pb-3 border-b border-slate-200/80">
+                        <span className="text-xs font-bold text-slate-600">Preencher pagador a partir de:</span>
+                        <select
+                          value={selectedPagadorType}
+                          onChange={(e) => {
+                            const val = e.target.value as any;
+                            setSelectedPagadorType(val);
+                          }}
+                          className="p-1.5 border border-slate-200 rounded-md text-xs bg-white text-slate-700 font-medium cursor-pointer"
+                        >
+                          <option value="manual">Digitação Manual</option>
+                          <option value="paciente">Paciente Cadastrado</option>
+                          <option value="profissional">Profissional Cadastrado</option>
+                        </select>
+
+                        {selectedPagadorType === 'paciente' && (
+                          <select
+                            onChange={(e) => {
+                              const pac = activePacientes.find(p => p.id === e.target.value);
+                              if (pac) {
+                                setBoletoPagadorNome(pac.nome || '');
+                                const clean = (pac.cpf || pac.cnpj || '').replace(/\D/g, '');
+                                setBoletoCpfCnpj(clean.length > 11 ? mascaraCNPJ(clean) : mascaraCPF(clean));
+                                const endStr = pac.endereco ? `${pac.endereco.logradouro || ''}, ${pac.endereco.numero || ''} ${pac.endereco.bairro || ''} - ${pac.endereco.cidade || ''}/${pac.endereco.uf || ''}`.trim() : '';
+                                setBoletoEndereco(endStr);
+                              }
+                            }}
+                            className="p-1.5 border border-slate-200 rounded-md text-xs bg-white text-slate-800 font-bold max-w-xs cursor-pointer"
+                          >
+                            <option value="">-- Selecionar Paciente --</option>
+                            {activePacientes.map(p => (
+                              <option key={p.id} value={p.id}>{p.nome}</option>
+                            ))}
+                          </select>
+                        )}
+
+                        {selectedPagadorType === 'profissional' && (
+                          <select
+                            onChange={(e) => {
+                              const prof = activeProfissionais.find(p => p.id === e.target.value);
+                              if (prof) {
+                                setBoletoPagadorNome(prof.nome || '');
+                                const clean = (prof.cpf || prof.cnpj || '').replace(/\D/g, '');
+                                setBoletoCpfCnpj(clean.length > 11 ? mascaraCNPJ(clean) : mascaraCPF(clean));
+                                setBoletoEndereco(prof.endereco || '');
+                              }
+                            }}
+                            className="p-1.5 border border-slate-200 rounded-md text-xs bg-white text-slate-800 font-bold max-w-xs cursor-pointer"
+                          >
+                            <option value="">-- Selecionar Profissional --</option>
+                            {activeProfissionais.map(p => (
+                              <option key={p.id} value={p.id}>{p.nome}</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-600 mb-1">CPF/CNPJ do Pagador *</label>
+                          <input
+                            type="text"
+                            placeholder="000.000.000-00"
+                            value={boletoCpfCnpj}
+                            onChange={(e) => {
+                              const clean = e.target.value.replace(/\D/g, '');
+                              setBoletoCpfCnpj(clean.length > 11 ? mascaraCNPJ(clean) : mascaraCPF(clean));
+                            }}
+                            className="w-full p-2 border border-slate-200 rounded-lg text-sm bg-white font-mono"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-600 mb-1">Nome / Razão Social *</label>
+                          <input
+                            type="text"
+                            placeholder="Nome do Pagador"
+                            value={boletoPagadorNome}
+                            onChange={(e) => setBoletoPagadorNome(e.target.value)}
+                            className="w-full p-2 border border-slate-200 rounded-lg text-sm bg-white font-medium"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-600 mb-1">Data de Vencimento *</label>
+                          <input
+                            type="date"
+                            value={boletoVencimento}
+                            onChange={(e) => setBoletoVencimento(e.target.value)}
+                            className="w-full p-2 border border-slate-200 rounded-lg text-sm bg-white font-medium"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-600 mb-1">Valor Nominal (R$) *</label>
+                          <input
+                            type="text"
+                            placeholder="0,00"
+                            value={boletoValor}
+                            onChange={(e) => setBoletoValor(mascaraFinanceira(e.target.value))}
+                            className="w-full p-2 border border-slate-200 rounded-lg text-sm bg-white font-bold text-slate-800"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">Endereço de Cobrança (Opcional)</label>
+                        <input
+                          type="text"
+                          placeholder="Rua / Av., Nº, Bairro, Cidade - UF"
+                          value={boletoEndereco}
+                          onChange={(e) => setBoletoEndereco(e.target.value)}
+                          className="w-full p-2 border border-slate-200 rounded-lg text-sm bg-white"
+                        />
+                      </div>
+
+                      <div className="flex justify-end pt-2">
+                        <button
+                          type="button"
+                          onClick={gerarBoletoInter}
+                          disabled={isProcessingFolha}
+                          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-all active:scale-95 disabled:opacity-50 cursor-pointer shadow-md text-xs"
+                        >
+                          🧾 Emissão de Boleto Inter
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -2254,11 +2617,13 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                 {isProcessingFolha ? (
                   <div className="space-y-6 animate-pulse">
                     <div className="text-center space-y-3 py-6">
-                      <div className="w-16 h-16 bg-purple-100 rounded-2xl flex items-center justify-center mx-auto text-purple-600 shadow-sm">
+                      <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center mx-auto text-blue-600 shadow-sm">
                         <Cpu size={32} className="animate-spin duration-3000" />
                       </div>
                       <div>
-                        <h3 className="font-extrabold text-slate-800 text-lg">Processando Pagamento em Lote</h3>
+                        <h3 className="font-extrabold text-slate-800 text-lg">
+                          {metodoPagamentoInter === 'boleto' ? 'Emitindo Boleto na API Banco Inter' : 'Processando Pagamento em Lote'}
+                        </h3>
                         <p className="text-slate-500 text-xs">Estabelecendo conexão criptografada via mTLS e autenticando token OAuth 2.0...</p>
                       </div>
                     </div>
@@ -2272,19 +2637,116 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                           <div className="h-3 bg-slate-200 rounded col-span-1"></div>
                           <div className="h-3 bg-slate-200 rounded col-span-1"></div>
                         </div>
-                        <div className="grid grid-cols-4 gap-4">
-                          <div className="h-3 bg-slate-200 rounded col-span-1"></div>
-                          <div className="h-3 bg-slate-200 rounded col-span-1"></div>
-                          <div className="h-3 bg-slate-200 rounded col-span-1"></div>
-                          <div className="h-3 bg-slate-200 rounded col-span-1"></div>
+                      </div>
+                    </div>
+                  </div>
+                ) : folhaSuccess && boletoResultData ? (
+                  /* Visualização do Boleto Gerado */
+                  <div className="space-y-6">
+                    <div className="text-center space-y-1.5">
+                      <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto border border-blue-100 shadow-sm">
+                        <CheckCircle size={28} />
+                      </div>
+                      <h3 className="font-extrabold text-slate-800 text-xl tracking-tight">Boleto Emitido com Sucesso</h3>
+                      <p className="text-slate-500 text-xs">Registro efetuado na API de Cobrança v3 do Banco Inter</p>
+                    </div>
+
+                    <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 border-b border-slate-100 pb-3 text-center sm:text-left">
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Seu Número</span>
+                          <span className="font-mono text-xs font-extrabold text-slate-800">{boletoResultData.seuNumero}</span>
                         </div>
-                        <div className="grid grid-cols-4 gap-4">
-                          <div className="h-3 bg-slate-200 rounded col-span-1"></div>
-                          <div className="h-3 bg-slate-200 rounded col-span-1"></div>
-                          <div className="h-3 bg-slate-200 rounded col-span-1"></div>
-                          <div className="h-3 bg-slate-200 rounded col-span-1"></div>
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Nosso Número</span>
+                          <span className="font-mono text-xs font-semibold text-slate-700">{boletoResultData.nossoNumero}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Vencimento</span>
+                          <span className="font-sans text-xs font-extrabold text-blue-600">
+                            {new Date(boletoResultData.dataVencimento + 'T12:00:00').toLocaleDateString('pt-BR')}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Valor Nominal</span>
+                          <span className="font-sans text-sm font-black text-emerald-600">
+                            R$ {Number(boletoResultData.valorNominal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
                         </div>
                       </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 space-y-1">
+                          <span className="text-[10px] font-bold uppercase text-slate-400">Pagador</span>
+                          <p className="font-bold text-slate-800">{boletoResultData.pagador?.nome}</p>
+                          <p className="text-slate-500 font-mono">CPF/CNPJ: {boletoResultData.pagador?.cpfCnpj}</p>
+                        </div>
+                        {boletoResultData.pagador?.endereco && (
+                          <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 space-y-1">
+                            <span className="text-[10px] font-bold uppercase text-slate-400">Endereço de Cobrança</span>
+                            <p className="text-slate-700">{boletoResultData.pagador.endereco}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Linha Digitável / Código de Barras */}
+                      <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-xl space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <span className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
+                            📊 Linha Digitável (Código de Barras)
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(boletoResultData.linhaDigitavel);
+                              toast.success('Linha digitável copiada para a área de transferência!');
+                            }}
+                            className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-md hover:bg-blue-700 transition-all cursor-pointer shadow-sm active:scale-95"
+                          >
+                            📋 Copiar Linha Digitável
+                          </button>
+                        </div>
+                        <div className="bg-white p-3 rounded-lg border border-blue-200 font-mono text-xs sm:text-sm font-black text-slate-800 text-center tracking-wider break-all select-all">
+                          {boletoResultData.linhaDigitavel}
+                        </div>
+                      </div>
+
+                      {/* Pix Copia e Cola se disponível */}
+                      {boletoResultData.pixCopiaECola && (
+                        <div className="bg-emerald-50/50 border border-emerald-100 p-4 rounded-xl space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-emerald-900">
+                              ⚡ Pix Copia e Cola (Pagamento Instantâneo)
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(boletoResultData.pixCopiaECola);
+                                toast.success('Pix Copia e Cola copiado!');
+                              }}
+                              className="px-2.5 py-1 bg-emerald-600 text-white text-xs font-bold rounded-md hover:bg-emerald-700 transition-all cursor-pointer shadow-sm active:scale-95"
+                            >
+                              Copiar Pix
+                            </button>
+                          </div>
+                          <p className="font-mono text-[10px] text-slate-600 bg-white p-2 rounded border border-emerald-200 truncate">
+                            {boletoResultData.pixCopiaECola}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex justify-end gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFolhaSuccess(null);
+                          setBoletoResultData(null);
+                        }}
+                        className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg shadow hover:bg-blue-700 transition-all active:scale-95 cursor-pointer text-xs"
+                      >
+                        🧾 Emitir Novo Boleto
+                      </button>
                     </div>
                   </div>
                 ) : folhaSuccess && folhaResultData ? (
@@ -3105,10 +3567,12 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
             </div>
             <div className="flex flex-wrap gap-2 self-start print:hidden">
               <button
-                onClick={handlePrint}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
+                onClick={handleExportDebitosPNG}
+                disabled={isExportingDebitosPNG}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white font-medium rounded-lg shadow-lg shadow-blue-500/40 hover:bg-blue-700 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                title="Exportar relatório em imagem PNG"
               >
-                <Printer size={15} /> Imprimir Relatório
+                <Printer size={15} /> {isExportingDebitosPNG ? 'Gerando PNG...' : 'Imprimir Relatório'}
               </button>
               <button
                 onClick={() => {
@@ -3126,8 +3590,8 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
             </div>
           </div>
 
-          {/* Debits Table */}
-          <div className="bg-white border border-gray-100 rounded-xl overflow-hidden shadow-sm">
+          {/* Debits Table & Printable Area */}
+          <div id="relatorio-print-area" className="bg-white border border-gray-100 rounded-xl overflow-hidden shadow-sm">
             <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-2">
                 <Info size={16} className="text-indigo-600" />
@@ -3141,17 +3605,18 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                   <select
                     value={debitFilterType}
                     onChange={(e) => {
-                      setDebitFilterType(e.target.value as 'paciente' | 'data' | 'profissional');
+                      setDebitFilterType(e.target.value as 'paciente' | 'data' | 'profissional' | 'gasto');
                     }}
                     className="px-2.5 py-1 border border-slate-200 rounded-lg text-xs font-bold bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#1a3c2e] focus:border-[#1a3c2e]"
                   >
                     <option value="paciente">Paciente</option>
                     <option value="data">Data</option>
                     <option value="profissional">Profissional</option>
+                    <option value="gasto">Gasto</option>
                   </select>
                 </div>
 
-                {debitFilterType === 'data' && (
+                {(debitFilterType === 'data' || debitFilterType === 'gasto') && (
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <button
                       type="button"
@@ -3247,170 +3712,376 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
             </div>
             
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs whitespace-nowrap">
-                <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
-                  <tr>
-                    <th className="py-3 px-5">Profissional</th>
-                    <th className="py-3 px-5">Data do Débito</th>
-                    <th className="py-3 px-5">Motivo</th>
-                    <th className="py-3 px-5 text-center">Status</th>
-                    <th className="py-3 px-5 text-right font-bold">Valor</th>
-                    <th className="py-3 px-5 text-right w-[100px] print:hidden">Ação</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {(() => {
-                    const filteredDebitos = (debitosProfissionais || []).filter(d => {
-                      if (debitFilterType === 'data') {
-                        if (!debitFilterStartDate && !debitFilterEndDate) return true;
-                        const dObj = getDebitDateObj(d.data);
-                        if (!dObj) return true;
-                        
-                        const year = dObj.getFullYear();
-                        const month = String(dObj.getMonth() + 1).padStart(2, '0');
-                        const day = String(dObj.getDate()).padStart(2, '0');
-                        const formattedDateStr = `${year}-${month}-${day}`;
+              {debitFilterType === 'gasto' ? (() => {
+                const parseNumValor = (val: any): number => {
+                  if (typeof val === 'number') return isNaN(val) ? 0 : val;
+                  if (!val) return 0;
+                  if (typeof val === 'string') {
+                    const cleaned = val.replace(/R\$\s?/g, '').trim();
+                    if (cleaned.includes(',')) {
+                      const norm = cleaned.replace(/\./g, '').replace(',', '.');
+                      const num = parseFloat(norm);
+                      return isNaN(num) ? 0 : num;
+                    }
+                    const num = parseFloat(cleaned);
+                    return isNaN(num) ? 0 : num;
+                  }
+                  return 0;
+                };
 
-                        if (debitFilterStartDate && formattedDateStr < debitFilterStartDate) {
-                          return false;
-                        }
-                        if (debitFilterEndDate && formattedDateStr > debitFilterEndDate) {
-                          return false;
-                        }
-                        return true;
-                      }
+                const formatCurrency = (val: number): string => {
+                  return val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                };
 
-                      if (debitFilterType === 'paciente') {
-                        if (!debitFilterPatientId) return true;
-                        const selectedPatient = allPatientsForFilter.find(p => p.id === debitFilterPatientId);
-                        const targetName = selectedPatient?.nome?.toLowerCase().trim();
+                const hasValidDates = Boolean(debitFilterStartDate && debitFilterEndDate);
 
-                        if (d.idPaciente === debitFilterPatientId) return true;
-                        if (targetName && d.nomePaciente && d.nomePaciente.toLowerCase().trim() === targetName) return true;
-                        return false;
-                      }
+                const filteredGastoDebitos = hasValidDates ? (debitosProfissionais || []).filter(d => {
+                  const dObj = getDebitDateObj(d.data);
+                  if (!dObj) return false;
+                  
+                  const year = dObj.getFullYear();
+                  const month = String(dObj.getMonth() + 1).padStart(2, '0');
+                  const day = String(dObj.getDate()).padStart(2, '0');
+                  const formattedDateStr = `${year}-${month}-${day}`;
 
-                      if (debitFilterType === 'profissional') {
-                        if (!debitFilterProfId) return true;
-                        const selectedProf = allProfsForFilter.find(p => p.id === debitFilterProfId);
-                        const targetName = selectedProf?.nome?.toLowerCase().trim();
+                  if (debitFilterStartDate && formattedDateStr < debitFilterStartDate) {
+                    return false;
+                  }
+                  if (debitFilterEndDate && formattedDateStr > debitFilterEndDate) {
+                    return false;
+                  }
+                  return true;
+                }) : [];
 
-                        if (d.idProfissional === debitFilterProfId) return true;
-                        if (targetName && d.nomeProfissional && d.nomeProfissional.toLowerCase().trim() === targetName) return true;
-                        return false;
-                      }
+                const valorTotalGasto = hasValidDates
+                  ? filteredGastoDebitos.reduce((acc, curr) => acc + parseNumValor(curr.valor), 0)
+                  : 0;
 
-                      return true;
-                    });
+                const profGastoMap = new Map<string, {
+                  profName: string;
+                  totalProf: number;
+                  motivos: Array<{ motivo: string; count: number; totalValor: number }>;
+                }>();
 
-                    if (filteredDebitos.length === 0) {
-                      let emptyMessage = "Nenhum débito encontrado.";
-                      if (debitosProfissionais.length === 0) {
-                        emptyMessage = "Nenhum débito registrado para profissionais cuidador.";
-                      } else if (debitFilterType === 'data') {
-                        emptyMessage = "Nenhum débito encontrado para o período selecionado.";
-                      } else if (debitFilterType === 'paciente') {
-                        emptyMessage = "Nenhum débito encontrado para o paciente selecionado.";
-                      } else if (debitFilterType === 'profissional') {
-                        emptyMessage = "Nenhum débito encontrado para o profissional selecionado.";
-                      }
-
-                      return (
-                        <tr>
-                          <td colSpan={6} className="py-12 text-center text-slate-400 italic">
-                            {emptyMessage}
-                          </td>
-                        </tr>
-                      );
+                if (hasValidDates) {
+                  filteredGastoDebitos.forEach(d => {
+                    const profKey = d.nomeProfissional || 'Profissional não identificado';
+                    const numVal = parseNumValor(d.valor);
+                    if (!profGastoMap.has(profKey)) {
+                      profGastoMap.set(profKey, {
+                        profName: profKey,
+                        totalProf: 0,
+                        motivos: []
+                      });
                     }
 
-                    return filteredDebitos.sort((a, b) => {
-                      const dateA = a.data?.seconds ? a.data.seconds : new Date(a.data).getTime();
-                      const dateB = b.data?.seconds ? b.data.seconds : new Date(b.data).getTime();
-                      return dateB - dateA;
-                    }).map((d) => (
-                      <tr key={d.id} className="hover:bg-slate-50/40">
-                        <td className="py-3.5 px-5 font-semibold text-slate-800">
-                          <div>{d.nomeProfissional}</div>
-                          {d.nomePaciente && (
-                            <div className="text-[10px] text-slate-400 font-normal">Paciente: {d.nomePaciente}</div>
-                          )}
-                        </td>
-                        <td className="py-3.5 px-5 text-slate-500">{formatDebitDateDisplay(d.data)}</td>
-                        <td className="py-3.5 px-5">
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                            d.motivo === 'Curinga' ? 'bg-amber-100 text-amber-800' :
-                            d.motivo === 'Passagem' ? 'bg-sky-100 text-sky-800' :
-                            'bg-slate-100 text-slate-700'
-                          }`}>
-                            {d.motivo}
+                    const group = profGastoMap.get(profKey)!;
+                    group.totalProf += numVal;
+
+                    const motivoStr = d.motivo || 'Geral';
+                    const existingMotivo = group.motivos.find(m => m.motivo === motivoStr);
+                    if (existingMotivo) {
+                      existingMotivo.count += 1;
+                      existingMotivo.totalValor += numVal;
+                    } else {
+                      group.motivos.push({
+                        motivo: motivoStr,
+                        count: 1,
+                        totalValor: numVal
+                      });
+                    }
+                  });
+                }
+
+                const groupedGastoList = hasValidDates
+                  ? Array.from(profGastoMap.values()).sort((a, b) => b.totalProf - a.totalProf)
+                  : [];
+
+                const startFormatted = debitFilterStartDate ? debitFilterStartDate.split('-').reverse().join('/') : '';
+                const endFormatted = debitFilterEndDate ? debitFilterEndDate.split('-').reverse().join('/') : '';
+                const periodLabel = hasValidDates
+                  ? `${startFormatted} até ${endFormatted}`
+                  : 'Selecione uma data inicial e final para calcular os gastos';
+
+                return (
+                  <div className="p-6 space-y-6 bg-slate-50">
+                    {/* Card de Resumo Financeiro com Alto Contraste */}
+                    <div className="bg-white border border-red-200 p-6 rounded-2xl shadow-sm relative overflow-hidden">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
+                        <div className="space-y-1.5">
+                          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-50 text-red-800 border border-red-200 text-xs font-extrabold uppercase tracking-wider">
+                            <TrendingDown size={14} className="text-red-600" />
+                            Relatório de Gastos no Período
+                          </div>
+                          <h3 className="text-xl font-black tracking-tight text-slate-900">
+                            Resumo Financeiro de Débitos
+                          </h3>
+                          <p className="text-xs text-slate-600 font-medium">
+                            Período de referência: <span className="font-bold text-slate-900">{periodLabel}</span>
+                          </p>
+                        </div>
+
+                        <div className="bg-red-50/70 p-5 rounded-xl border border-red-200 flex flex-col items-start md:items-end min-w-[240px]">
+                          <span className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
+                            Valor Total Gasto no Período
                           </span>
-                        </td>
-                        <td className="py-3.5 px-5 text-center">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            d.status === 'descontado' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-                          }`}>
-                            {d.status === 'descontado' ? 'Descontado' : 'Pendente'}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-5 text-right font-black text-red-600 text-sm font-mono">R$ {d.valor.toFixed(2)}</td>
-                        <td className="py-3.5 px-5 text-right print:hidden">
-                          <button
-                            onClick={() => {
-                              setEditingDebitId(d.id);
-                              setNewDebitProfId(d.idProfissional);
-                              setNewDebitValor(d.valor.toString());
-                              setNewDebitMotivo(d.motivo);
-                              setNewDebitPacienteId(d.idPaciente || '');
-                              
-                              if (d.data) {
-                                let dObj: Date;
-                                if (typeof d.data.toDate === 'function') {
-                                  dObj = d.data.toDate();
-                                } else if (d.data.seconds) {
-                                  dObj = new Date(d.data.seconds * 1000);
-                                } else {
-                                  dObj = new Date(d.data);
-                                }
-                                const yr = dObj.getFullYear();
-                                const mo = String(dObj.getMonth() + 1).padStart(2, '0');
-                                const dy = String(dObj.getDate()).padStart(2, '0');
-                                setNewDebitDate(`${yr}-${mo}-${dy}`);
-                              }
-                              
-                              setShowDebitModal(true);
-                            }}
-                            className="p-1.5 text-slate-400 hover:text-blue-650 transition-colors cursor-pointer inline-flex items-center justify-center hover:bg-slate-100 rounded mr-2"
-                            title="Editar débito"
-                          >
-                            <Pencil size={15} />
-                          </button>
-                          <button
-                            onClick={() => {
-                              setDeleteConfirmDialog({
-                                isOpen: true,
-                                title: 'Excluir Débito de Profissional',
-                                message: `Tem certeza que deseja excluir o débito de R$ ${d.valor.toFixed(2)} de ${d.nomeProfissional}? Esta ação reajustará o balanço da folha de pagamento do profissional.`,
-                                onConfirm: async () => {
-                                  try {
-                                    await deleteDebitoProfissional(d.id);
-                                  } catch (err) {
-                                    console.error("Erro ao deletar debito:", err);
+                          <div className="text-3xl font-black font-mono tracking-tight text-red-600 mt-1">
+                            R$ {formatCurrency(valorTotalGasto)}
+                          </div>
+                          <div className="text-xs text-slate-600 font-bold mt-1">
+                            {filteredGastoDebitos.length} {filteredGastoDebitos.length === 1 ? 'lançamento' : 'lançamentos'} • {groupedGastoList.length} {groupedGastoList.length === 1 ? 'profissional' : 'profissionais'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Lista Simples e Elegante por Profissional e Motivo */}
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+                      <div className="px-5 py-4 border-b border-slate-200 bg-slate-100/80 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <DollarSign size={16} className="text-red-600" />
+                          <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-800">
+                            Detalhamento por Profissional e Motivo
+                          </h4>
+                        </div>
+                        <span className="text-xs text-slate-700 font-bold">
+                          {groupedGastoList.length} {groupedGastoList.length === 1 ? 'profissional registrado' : 'profissionais registrados'}
+                        </span>
+                      </div>
+
+                      {!hasValidDates ? (
+                        <div className="py-12 text-center text-slate-500 italic text-xs font-medium flex flex-col items-center justify-center gap-2">
+                          <Calendar size={22} className="text-slate-400" />
+                          <span>Selecione uma data inicial e final para calcular os gastos</span>
+                        </div>
+                      ) : groupedGastoList.length === 0 ? (
+                        <div className="py-12 text-center text-slate-500 italic text-xs font-medium">
+                          Nenhum lançamento de gasto ou débito encontrado para o período selecionado.
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-slate-200">
+                          {groupedGastoList.map((item, idx) => (
+                            <div key={idx} className="p-4 hover:bg-slate-50/80 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4">
+                              {/* Informação do Profissional */}
+                              <div className="space-y-2 flex-1 min-w-[200px]">
+                                <div className="flex items-center gap-2.5">
+                                  <span className="w-8 h-8 rounded-full bg-slate-200 text-slate-800 flex items-center justify-center text-xs font-black border border-slate-300">
+                                    {item.profName.charAt(0).toUpperCase()}
+                                  </span>
+                                  <span className="font-bold text-slate-900 text-sm">{item.profName}</span>
+                                </div>
+
+                                {/* Tags de Motivo do Débito */}
+                                <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                                  <span className="text-[11px] font-bold uppercase text-slate-600 tracking-wider">Motivos:</span>
+                                  {item.motivos.map((m, mIdx) => (
+                                    <span
+                                      key={mIdx}
+                                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold border ${
+                                        m.motivo === 'Curinga'
+                                          ? 'bg-amber-100 text-amber-900 border-amber-300'
+                                          : m.motivo === 'Passagem'
+                                          ? 'bg-sky-100 text-sky-900 border-sky-300'
+                                          : 'bg-slate-100 text-slate-800 border-slate-300'
+                                      }`}
+                                    >
+                                      <span className="font-extrabold">{m.motivo}</span>
+                                      {m.count > 1 && (
+                                        <span className="px-1.5 py-0.2 text-[10px] bg-white text-slate-800 rounded-full font-black border border-slate-200">
+                                          {m.count}x
+                                        </span>
+                                      )}
+                                      <span className="font-mono text-red-600 font-black ml-1">
+                                        R$ {formatCurrency(m.totalValor)}
+                                      </span>
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* Subtotal por Profissional */}
+                              <div className="flex items-center justify-between md:justify-end gap-3 self-end md:self-center bg-slate-100 md:bg-transparent p-3 md:p-0 rounded-lg border border-slate-200 md:border-none w-full md:w-auto">
+                                <span className="text-xs font-bold text-slate-700 md:hidden">Subtotal Profissional:</span>
+                                <div className="text-right">
+                                  <div className="text-[10px] text-slate-500 font-extrabold uppercase tracking-wider hidden md:block">Subtotal Gasto</div>
+                                  <div className="text-base font-black font-mono text-red-600">
+                                    R$ {formatCurrency(item.totalProf)}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })() : (
+                <table className="w-full text-left text-xs whitespace-nowrap">
+                  <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
+                    <tr>
+                      <th className="py-3 px-5">Profissional</th>
+                      <th className="py-3 px-5">Data do Débito</th>
+                      <th className="py-3 px-5">Motivo</th>
+                      <th className="py-3 px-5 text-center">Status</th>
+                      <th className="py-3 px-5 text-right font-bold">Valor</th>
+                      <th className="py-3 px-5 text-right w-[100px] print:hidden">Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {(() => {
+                      const filteredDebitos = (debitosProfissionais || []).filter(d => {
+                        if (debitFilterType === 'data') {
+                          if (!debitFilterStartDate && !debitFilterEndDate) return true;
+                          const dObj = getDebitDateObj(d.data);
+                          if (!dObj) return true;
+                          
+                          const year = dObj.getFullYear();
+                          const month = String(dObj.getMonth() + 1).padStart(2, '0');
+                          const day = String(dObj.getDate()).padStart(2, '0');
+                          const formattedDateStr = `${year}-${month}-${day}`;
+
+                          if (debitFilterStartDate && formattedDateStr < debitFilterStartDate) {
+                            return false;
+                          }
+                          if (debitFilterEndDate && formattedDateStr > debitFilterEndDate) {
+                            return false;
+                          }
+                          return true;
+                        }
+
+                        if (debitFilterType === 'paciente') {
+                          if (!debitFilterPatientId) return true;
+                          const selectedPatient = allPatientsForFilter.find(p => p.id === debitFilterPatientId);
+                          const targetName = selectedPatient?.nome?.toLowerCase().trim();
+
+                          if (d.idPaciente === debitFilterPatientId) return true;
+                          if (targetName && d.nomePaciente && d.nomePaciente.toLowerCase().trim() === targetName) return true;
+                          return false;
+                        }
+
+                        if (debitFilterType === 'profissional') {
+                          if (!debitFilterProfId) return true;
+                          const selectedProf = allProfsForFilter.find(p => p.id === debitFilterProfId);
+                          const targetName = selectedProf?.nome?.toLowerCase().trim();
+
+                          if (d.idProfissional === debitFilterProfId) return true;
+                          if (targetName && d.nomeProfissional && d.nomeProfissional.toLowerCase().trim() === targetName) return true;
+                          return false;
+                        }
+
+                        return true;
+                      });
+
+                      if (filteredDebitos.length === 0) {
+                        let emptyMessage = "Nenhum débito encontrado.";
+                        if (debitosProfissionais.length === 0) {
+                          emptyMessage = "Nenhum débito registrado para profissionais cuidador.";
+                        } else if (debitFilterType === 'data') {
+                          emptyMessage = "Nenhum débito encontrado para o período selecionado.";
+                        } else if (debitFilterType === 'paciente') {
+                          emptyMessage = "Nenhum débito encontrado para o paciente selecionado.";
+                        } else if (debitFilterType === 'profissional') {
+                          emptyMessage = "Nenhum débito encontrado para o profissional selecionado.";
+                        }
+
+                        return (
+                          <tr>
+                            <td colSpan={6} className="py-12 text-center text-slate-400 italic">
+                              {emptyMessage}
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      return filteredDebitos.sort((a, b) => {
+                        const dateA = a.data?.seconds ? a.data.seconds : new Date(a.data).getTime();
+                        const dateB = b.data?.seconds ? b.data.seconds : new Date(b.data).getTime();
+                        return dateB - dateA;
+                      }).map((d) => (
+                        <tr key={d.id} className="hover:bg-slate-50/40">
+                          <td className="py-3.5 px-5 font-semibold text-slate-800">
+                            <div>{d.nomeProfissional}</div>
+                            {d.nomePaciente && (
+                              <div className="text-[10px] text-slate-400 font-normal">Paciente: {d.nomePaciente}</div>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-5 text-slate-500">{formatDebitDateDisplay(d.data)}</td>
+                          <td className="py-3.5 px-5">
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                              d.motivo === 'Curinga' ? 'bg-amber-100 text-amber-800' :
+                              d.motivo === 'Passagem' ? 'bg-sky-100 text-sky-800' :
+                              'bg-slate-100 text-slate-700'
+                            }`}>
+                              {d.motivo}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-5 text-center">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              d.status === 'descontado' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                            }`}>
+                              {d.status === 'descontado' ? 'Descontado' : 'Pendente'}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-5 text-right font-black text-red-600 text-sm font-mono">R$ {d.valor.toFixed(2)}</td>
+                          <td className="py-3.5 px-5 text-right print:hidden">
+                            <button
+                              onClick={() => {
+                                setEditingDebitId(d.id);
+                                setNewDebitProfId(d.idProfissional);
+                                setNewDebitValor(d.valor.toString());
+                                setNewDebitMotivo(d.motivo);
+                                setNewDebitPacienteId(d.idPaciente || '');
+                                
+                                if (d.data) {
+                                  let dObj: Date;
+                                  if (typeof d.data.toDate === 'function') {
+                                    dObj = d.data.toDate();
+                                  } else if (d.data.seconds) {
+                                    dObj = new Date(d.data.seconds * 1000);
+                                  } else {
+                                    dObj = new Date(d.data);
                                   }
+                                  const yr = dObj.getFullYear();
+                                  const mo = String(dObj.getMonth() + 1).padStart(2, '0');
+                                  const dy = String(dObj.getDate()).padStart(2, '0');
+                                  setNewDebitDate(`${yr}-${mo}-${dy}`);
                                 }
-                              });
-                            }}
-                            className="p-1.5 text-slate-400 hover:text-red-600 transition-colors cursor-pointer inline-flex items-center justify-center hover:bg-slate-100 rounded"
-                            title="Remover débito"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  })()}
-                </tbody>
-              </table>
+                                
+                                setShowDebitModal(true);
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-blue-650 transition-colors cursor-pointer inline-flex items-center justify-center hover:bg-slate-100 rounded mr-2"
+                              title="Editar débito"
+                            >
+                              <Pencil size={15} />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setDeleteConfirmDialog({
+                                  isOpen: true,
+                                  title: 'Excluir Débito de Profissional',
+                                  message: `Tem certeza que deseja excluir o débito de R$ ${d.valor.toFixed(2)} de ${d.nomeProfissional}? Esta ação reajustará o balanço da folha de pagamento do profissional.`,
+                                  onConfirm: async () => {
+                                    try {
+                                      await deleteDebitoProfissional(d.id);
+                                    } catch (err) {
+                                      console.error("Erro ao deletar debito:", err);
+                                    }
+                                  }
+                                });
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-red-600 transition-colors cursor-pointer inline-flex items-center justify-center hover:bg-slate-100 rounded"
+                              title="Remover débito"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    })()}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         </div>

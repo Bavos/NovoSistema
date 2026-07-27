@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { sanitizeClonedDocForHtml2Canvas } from '../lib/html2canvasSanitizer';
 import { useFirebase } from '../context/FirebaseContext';
 import { Profissional, Agendamento, DocumentoAnexo, Ocorrencia } from '../types';
-import { Plus, Edit2, Trash2, X, Check, CalendarDays, Paperclip, AlertCircle, Printer, Download, FileImage, Search, Clock, User, Calendar, Receipt, Copy, Save } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Check, CalendarDays, Paperclip, AlertCircle, Printer, Download, FileImage, Search, Clock, User, Calendar, Receipt, Copy, Save, UserX } from 'lucide-react';
+import { RelatorioCuringasModal } from '../components/RelatorioCuringasModal';
 import { CardBase, DataGrid, DataField, SoftBadge } from '../components/ui/DesignSystem';
 import { db, storage } from '../lib/firebase';
 import { collection, query, where, orderBy, onSnapshot, doc, getDoc, updateDoc, addDoc, deleteDoc, getDocs } from 'firebase/firestore';
@@ -49,6 +50,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
   const [deleteProfConfirmOpen, setDeleteProfConfirmOpen] = useState(false);
   const [bankSearch, setBankSearch] = useState('');
   const [isBankDropdownOpen, setIsBankDropdownOpen] = useState(false);
+  const [isRelatorioCuringasOpen, setIsRelatorioCuringasOpen] = useState(false);
 
   const handleNavigateToProfile = (profId: string) => {
     const found = (profissionais || []).find(p => p.id === profId);
@@ -67,6 +69,30 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
       console.error('Erro ao copiar para a área de transferência', err);
     }
   };
+
+  // Cleanup no Unmount: Garante que o estado do modal e seleção seja limpo ao trocar de aba
+  useEffect(() => {
+    return () => {
+      setIsModalOpen(false);
+      setEditingProf(null);
+      setSelectedProfId('');
+      if (clearInitialSelectedProfId) {
+        clearInitialSelectedProfId();
+      }
+      try {
+        const url = new URL(window.location.href);
+        if (url.hash && (url.hash.includes('profissionais') || url.hash.startsWith('#/profissionais/'))) {
+          url.hash = '';
+        }
+        if (url.searchParams.has('profId')) {
+          url.searchParams.delete('profId');
+        }
+        window.history.replaceState({}, '', url.toString().replace(/#$/, ''));
+      } catch (err) {
+        console.warn('Erro ao limpar URL no unmount de Profissionais:', err);
+      }
+    };
+  }, [clearInitialSelectedProfId]);
 
   useEffect(() => {
     if (initialSelectedProfId) {
@@ -596,6 +622,10 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingProf(null);
+    setSelectedProfId('');
+    if (clearInitialSelectedProfId) {
+      clearInitialSelectedProfId();
+    }
     
     // Clean hash and query parameters from URL to prevent auto-opening on next view
     try {
@@ -2062,6 +2092,14 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
             <Plus size={14} />
             <span>Novo Profissional</span>
           </GlossyButton>
+
+          <GlossyButton
+            onClick={() => setIsRelatorioCuringasOpen(true)}
+            variant="red"
+          >
+            <UserX size={14} />
+            <span>Relatório de Curingas</span>
+          </GlossyButton>
         </div>
       </div>
 
@@ -3399,6 +3437,13 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                           Excluir
                       </GlossyButton>
                   )}
+                  <button
+                    type="button"
+                    onClick={handleCloseModal}
+                    className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg border border-slate-200 transition-all cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
                   <GlossyButton
                     type="submit"
                     disabled={loading}
@@ -3541,6 +3586,12 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
           confirmText="Confirmar Exclusão"
         />
       )}
+
+      {/* Relatório de Curingas Modal */}
+      <RelatorioCuringasModal
+        isOpen={isRelatorioCuringasOpen}
+        onClose={() => setIsRelatorioCuringasOpen(false)}
+      />
     </div>
   );
 };

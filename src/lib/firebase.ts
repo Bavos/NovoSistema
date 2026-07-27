@@ -25,9 +25,9 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-// Apontando explicitamente para o banco nomeado e forçando long-polling para evitar bloqueios de rede no contêiner
+// Apontando explicitamente para o banco nomeado
 export const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true,
+  experimentalAutoDetectLongPolling: true,
 }, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth();
 export const storage = getStorage(app);

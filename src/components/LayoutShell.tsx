@@ -32,7 +32,7 @@ export const LayoutShell: React.FC<LayoutShellProps> = ({
   const { notification, setNotification, isQuotaExceeded, isTestMode, toggleTestMode } = useFirebase();
 
   return (
-    <div className="min-h-screen bg-off-white text-forest-green font-sans flex overflow-x-hidden relative" id="layout-shell-container">
+    <div className="min-h-screen bg-off-white text-forest-green font-sans flex overflow-x-clip relative" id="layout-shell-container">
       {/* 1. Mobile Backdrop Backdrop Overlay */}
       {isSidebarExpanded && (
         <div
@@ -64,7 +64,7 @@ export const LayoutShell: React.FC<LayoutShellProps> = ({
         id="main-viewport-container"
       >
         {/* 4. Top Header with control of the menu */}
-        <div className="print:hidden">
+        <div className="sticky top-0 z-50 w-full print:hidden">
           <TopHeader
             isSidebarExpanded={isSidebarExpanded}
             setIsSidebarExpanded={setIsSidebarExpanded}
