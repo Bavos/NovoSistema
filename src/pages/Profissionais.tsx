@@ -12,6 +12,7 @@ import { profissionalSchema } from '../schemas/validationSchemas';
 import { mascaraCPF, mascaraCNPJ, mascaraTelefone, mascaraCEP, validarCPF, maskBankAccount, normalizeText } from '../lib/masks';
 import { fetchCep, fetchBanks } from '../lib/brasilApi';
 import { toast } from 'react-hot-toast';
+import { showSuccessToast } from '../components/CustomToast';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { CardSkeleton } from '../components/ui/CardSkeleton';
 import { GlossyButton } from '../components/GlossyButton';
@@ -1448,9 +1449,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
           grauParentescoTitular: updated.grauParentescoTitular || '',
         } as any);
 
-        toast.success(`Profissional ${updated.nome} atualizado com sucesso!`, {
-          icon: '✅',
-        });
+        showSuccessToast(`Profissional ${updated.nome} atualizado com sucesso!`, 'Cadastro Atualizado');
       } else {
         const created = await addProfissional(finalData as any, true);
         setEditingProf(created);
@@ -1499,9 +1498,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
           grauParentescoTitular: created.grauParentescoTitular || '',
         } as any);
 
-        toast.success(`Profissional ${created.nome} cadastrado com sucesso!`, {
-          icon: '✅',
-        });
+        showSuccessToast(`Profissional ${created.nome} cadastrado com sucesso!`, 'Profissional Cadastrado');
       }
     } catch (err: any) {
       console.error("Erro ao salvar:", err);
@@ -1523,7 +1520,8 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
       try {
         const url = await uploadProfissionalFoto(file);
         setFormData(prev => ({ ...prev, foto: url }));
-        toast.success("Foto do profissional atualizada com sucesso!", { id: loadingToast });
+        toast.dismiss(loadingToast);
+        showSuccessToast("Foto do profissional atualizada com sucesso!", "Foto Atualizada");
       } catch (err) {
         console.error("Erro ao subir foto:", err);
         toast.error("Erro ao enviar foto. Tente novamente.", { id: loadingToast });
@@ -1657,9 +1655,9 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
         documentoInputRef.current.value = '';
       }
 
-      // Exiba o alerta de 'Salvo com sucesso' APENAS dentro do then do Firestore
+      // Exiba o alerta de 'Salvo com sucesso' APENAS dentro do promise positivo do Firestore
       setSuccessMessage("Documento anexo salvo com sucesso!");
-      toast.success("Documento anexo salvo com sucesso!");
+      showSuccessToast("Documento anexo salvo com sucesso!", "Documento Anexado");
 
     } catch (error: any) {
       console.error("Erro no upload:", error);

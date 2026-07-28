@@ -3,20 +3,84 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, Suspense, lazy } from 'react';
 import { FirebaseProvider, useFirebase } from './context/FirebaseContext';
 import { LoginPage } from './pages/LoginPage';
 import { FirstAccessPage } from './pages/FirstAccessPage';
 import { LayoutShell } from './components/LayoutShell';
-import { Pacientes } from './pages/Pacientes';
-import { Profissionais } from './pages/Profissionais';
-import {
-  FinanceiroDashboard,
-  EmpresaDashboard
-} from './components/SimulatedDashboards';
 import { Dashboard } from './components/Dashboard';
 import { motion, AnimatePresence } from 'motion/react';
-import { ShieldAlert } from 'lucide-react';
+import { ShieldAlert, AlertTriangle, RefreshCw } from 'lucide-react';
+
+// Class-based ErrorBoundary for capturing async lazy rendering errors
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("ErrorBoundary capturou um erro de carregamento ou renderização:", error, errorInfo);
+  }
+
+  handleReset = () => {
+    this.setState({ hasError: false, error: null });
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center p-8 bg-red-50/50 border border-red-200 rounded-2xl max-w-md mx-auto my-8 text-center space-y-4 animate-in fade-in zoom-in-95 duration-200" id="error-boundary-fallback">
+          <div className="p-3 bg-red-100 text-red-600 rounded-full">
+            <AlertTriangle size={36} />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-base font-bold text-slate-800">Falha no Carregamento</h3>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Ocorreu um erro ao carregar este módulo ou página. Verifique sua conexão e tente novamente.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={this.handleReset}
+            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors cursor-pointer"
+          >
+            <RefreshCw size={14} />
+            Tentar Novamente
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+// Carregamento preguiçoso (Lazy Loading) das páginas principais para otimização de bundle
+const Pacientes = lazy(() => import('./pages/Pacientes').then(m => ({ default: m.Pacientes })));
+const Profissionais = lazy(() => import('./pages/Profissionais').then(m => ({ default: m.Profissionais })));
+const FinanceiroDashboard = lazy(() => import('./components/SimulatedDashboards').then(m => ({ default: m.FinanceiroDashboard })));
+const EmpresaDashboard = lazy(() => import('./components/SimulatedDashboards').then(m => ({ default: m.EmpresaDashboard })));
+
+const PageLoadingFallback: React.FC = () => (
+  <div className="flex flex-col items-center justify-center p-12 space-y-3 min-h-[300px]">
+    <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
+    <p className="text-xs font-semibold text-slate-500 font-mono tracking-wider">CARREGANDO MÓDULO...</p>
+  </div>
+);
 
 const AccessDeniedView: React.FC = () => (
   <div className="flex flex-col items-center justify-center p-12 bg-white rounded-3xl border border-red-200 shadow-sm max-w-lg mx-auto text-center space-y-4 animate-in fade-in zoom-in-95 duration-200" id="access-denied-view">
@@ -229,60 +293,64 @@ function DashboardContent() {
           transition={{ duration: 0.22 }}
           className="min-w-0 w-full"
         >
-          {activeSidebarTab === 'dashboard' ? (
-            <Dashboard 
-              setActiveTab={(tab, extra) => {
-                setResetKey(prev => prev + 1);
-                setActiveSidebarTab(tab);
-                if (extra?.financeiroSubTab) {
-                  setFinanceiroSubTab(extra.financeiroSubTab);
-                } else {
-                  setFinanceiroSubTab('folhas');
-                }
-                try {
-                  const url = new URL(window.location.href);
-                  url.searchParams.set('tab', tab);
-                  window.history.pushState({}, '', url.toString());
-                } catch (err) {
-                  console.warn(err);
-                }
-              }} 
-              onSelectPatientRedirect={(pac) => {
-                setInitialSelectedPatient(pac);
-                setActiveSidebarTab('pacientes');
-                try {
-                  const url = new URL(window.location.href);
-                  url.searchParams.set('tab', 'pacientes');
-                  window.history.pushState({}, '', url.toString());
-                } catch (err) {
-                  console.warn(err);
-                }
-              }}
-            />
-          ) : activeSidebarTab === 'pacientes' ? (
-            <Pacientes
-              initialSelectedPatient={initialSelectedPatient}
-              clearInitialSelectedPatient={handleClearInitialSelectedPatient}
-              onViewChange={handlePacientesViewChange}
-            />
-          ) : activeSidebarTab === 'profissionais' ? (
-            <Profissionais
-              initialSelectedProfId={initialSelectedProfId}
-              clearInitialSelectedProfId={handleClearInitialSelectedProfId}
-            />
-          ) : activeSidebarTab === 'financeiro' ? (
-            userRole?.toLowerCase() === 'colaborador' ? (
-              <AccessDeniedView />
-            ) : (
-              <FinanceiroDashboard initialSubTab={financeiroSubTab} />
-            )
-          ) : activeSidebarTab === 'empresa' ? (
-            userRole?.toLowerCase() === 'colaborador' ? (
-              <AccessDeniedView />
-            ) : (
-              <EmpresaDashboard />
-            )
-          ) : null}
+          <ErrorBoundary key={`${activeSidebarTab}-${resetKey}`}>
+            <Suspense fallback={<PageLoadingFallback />}>
+              {activeSidebarTab === 'dashboard' ? (
+                <Dashboard 
+                  setActiveTab={(tab, extra) => {
+                    setResetKey(prev => prev + 1);
+                    setActiveSidebarTab(tab);
+                    if (extra?.financeiroSubTab) {
+                      setFinanceiroSubTab(extra.financeiroSubTab);
+                    } else {
+                      setFinanceiroSubTab('folhas');
+                    }
+                    try {
+                      const url = new URL(window.location.href);
+                      url.searchParams.set('tab', tab);
+                      window.history.pushState({}, '', url.toString());
+                    } catch (err) {
+                      console.warn(err);
+                    }
+                  }} 
+                  onSelectPatientRedirect={(pac) => {
+                    setInitialSelectedPatient(pac);
+                    setActiveSidebarTab('pacientes');
+                    try {
+                      const url = new URL(window.location.href);
+                      url.searchParams.set('tab', 'pacientes');
+                      window.history.pushState({}, '', url.toString());
+                    } catch (err) {
+                      console.warn(err);
+                    }
+                  }}
+                />
+              ) : activeSidebarTab === 'pacientes' ? (
+                <Pacientes
+                  initialSelectedPatient={initialSelectedPatient}
+                  clearInitialSelectedPatient={handleClearInitialSelectedPatient}
+                  onViewChange={handlePacientesViewChange}
+                />
+              ) : activeSidebarTab === 'profissionais' ? (
+                <Profissionais
+                  initialSelectedProfId={initialSelectedProfId}
+                  clearInitialSelectedProfId={handleClearInitialSelectedProfId}
+                />
+              ) : activeSidebarTab === 'financeiro' ? (
+                userRole?.toLowerCase() === 'colaborador' ? (
+                  <AccessDeniedView />
+                ) : (
+                  <FinanceiroDashboard initialSubTab={financeiroSubTab} />
+                )
+              ) : activeSidebarTab === 'empresa' ? (
+                userRole?.toLowerCase() === 'colaborador' ? (
+                  <AccessDeniedView />
+                ) : (
+                  <EmpresaDashboard />
+                )
+              ) : null}
+            </Suspense>
+          </ErrorBoundary>
         </motion.div>
       </AnimatePresence>
     </LayoutShell>

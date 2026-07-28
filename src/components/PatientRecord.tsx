@@ -48,6 +48,7 @@ import {
   Download
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { showSuccessToast } from './CustomToast';
 import { GlossyButton } from './GlossyButton';
 import ExcelJS from 'exceljs';
 import * as docx from 'docx';
@@ -525,6 +526,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const [considerarFalta, setConsiderarFalta] = useState<boolean>(false);
   const [motivoFalta, setMotivoFalta] = useState<string>('Não Informado');
   const [atendimentoRealizado, setAtendimentoRealizado] = useState<string>('Sim');
+  const [detailsObservacao, setDetailsObservacao] = useState<string>('');
 
   // Shift Audit Inspector Modal state
   const [inspectedShiftJson, setInspectedShiftJson] = useState<any>(null);
@@ -1708,9 +1710,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         if (userRole === 'Administrador') {
           await addAuditLog('CREATE', 'pacientes', result.id, `Administrador cadastrou o prontuário do paciente ${result.nome}`);
         }
-        toast.success(`Paciente ${result.nome} cadastrado com sucesso!`, {
-          icon: '✅',
-        });
+        showSuccessToast(`Paciente ${result.nome} cadastrado com sucesso!`, 'Cadastro de Paciente');
         if (onSelectPatient) {
           onSelectPatient(result);
         }
@@ -1727,9 +1727,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         if (userRole === 'Administrador') {
           await addAuditLog('UPDATE', 'pacientes', paciente.id, `Administrador atualizou o prontuário do paciente ${updatedObj.nome}`);
         }
-        toast.success(`Paciente ${updatedObj.nome} atualizado com sucesso!`, {
-          icon: '✅',
-        });
+        showSuccessToast(`Prontuário do paciente ${updatedObj.nome} atualizado com sucesso!`, 'Cadastro Atualizado');
         if (onSelectPatient) {
           onSelectPatient(updatedObj);
         }
@@ -2243,7 +2241,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       console.log("Sucesso: Real-time listener do Firebase atualiza os dados do calendário automaticamente.");
 
       // 2. Feedback Visual (Toasts) - Sucesso
-      toast.success(totalQuantity > 1 ? `${totalQuantity} plantões agendados em lote com sucesso!` : 'Agendamento salvo com sucesso!');
+      showSuccessToast(
+        totalQuantity > 1 ? `${totalQuantity} plantões agendados em lote com sucesso!` : 'Agendamento de plantão salvo com sucesso!',
+        'Agendamento Realizado'
+      );
       return true;
     } catch (err: any) {
       // 2. Feedback Visual (Toasts) - Erro
@@ -2410,7 +2411,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       );
 
       // 4. Feedback Real para o Usuário
-      toast.success('Fatura gerada com sucesso e integrada ao Histórico Financeiro!');
+      showSuccessToast('Fatura gerada com sucesso e integrada ao Histórico Financeiro!', 'Fatura Gerada');
       setIsFaturaModalOpen(false);
     } catch (error: any) {
       console.error('Erro ao gerar fatura:', error);
@@ -6536,6 +6537,19 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         </div>
                       )}
 
+                      <div className="space-y-1">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block">OBSERVAÇÕES</span>
+                        {selectedShiftForDetails.observacao && selectedShiftForDetails.observacao.trim() !== '' ? (
+                          <div className="p-2.5 bg-gray-50 border border-gray-200 rounded-md text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">
+                            {selectedShiftForDetails.observacao}
+                          </div>
+                        ) : (
+                          <div className="p-2.5 bg-gray-50 border border-gray-200 rounded-md text-xs text-gray-400 italic">
+                            Nenhuma observação registrada.
+                          </div>
+                        )}
+                      </div>
+
                       <div className="bg-slate-50 p-3.5 border border-slate-150 rounded-xl space-y-1.5">
                         <span className="text-[9px] uppercase font-black text-slate-400 tracking-wider">Detalhamento Financeiro</span>
                         <div className="grid grid-cols-2 text-xs text-slate-600 space-y-1 font-sans">
@@ -6562,12 +6576,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           )}
                         </div>
                       </div>
-
-                      {selectedShiftForDetails.observacao && (
-                        <div className="p-3 bg-slate-50 rounded-lg text-xs leading-relaxed text-slate-600">
-                          <strong>Observações:</strong> {selectedShiftForDetails.observacao}
-                        </div>
-                      )}
 
                       {isConfirmingDelete ? (
                         <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 space-y-3 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
@@ -6642,6 +6650,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                               setConsiderarFalta(selectedShiftForDetails.considerarFalta ?? false);
                               setMotivoFalta(selectedShiftForDetails.motivoFalta ?? 'Não Informado');
                               setAtendimentoRealizado(selectedShiftForDetails.atendimentoRealizado ?? 'Sim');
+                              setDetailsObservacao(selectedShiftForDetails.observacao || '');
                               
                               // Infer the best shift template matching first hour block or default
                               const matchOpt = availableShifts.find(opt => selectedShiftForDetails.horario?.startsWith(opt.horaInicio)) || availableShifts[0];
@@ -6813,6 +6822,17 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     </div>
                   )}
 
+                  <div className="space-y-1">
+                    <label className="block text-xs font-bold text-slate-700">Observações</label>
+                    <textarea
+                      rows={3}
+                      value={detailsObservacao}
+                      onChange={(e) => setDetailsObservacao(e.target.value)}
+                      placeholder="Escreva uma observação..."
+                      className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-blue-500 font-sans resize-y min-h-[70px]"
+                    />
+                  </div>
+
                   <div className="flex items-center space-x-2 py-1">
                     <input
                       type="checkbox"
@@ -6933,7 +6953,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                             taxaAdm: considerarFalta ? 0 : taxaAdmFinal,
                             tipoDia: detailsTipoDia,
                             isCuringa: detailsCuringa,
-                            observacao: detailsCuringa ? 'CURINGA' : (selectedShiftForDetails.observacao === 'CURINGA' ? '' : selectedShiftForDetails.observacao),
+                            observacao: detailsObservacao.trim() !== '' ? detailsObservacao.trim() : (detailsCuringa ? 'CURINGA' : ''),
                             considerarFalta,
                             motivoFalta: considerarFalta ? motivoFalta : '',
                             atendimentoRealizado
@@ -6973,7 +6993,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
                           setSelectedShiftForDetails(updatedAg);
                           setIsEditingDetails(false);
-                          alert('Plantão atualizado com sucesso!');
+                          showSuccessToast('Plantão atualizado com sucesso!', 'Plantão Atualizado');
                         } catch (err) {
                           alert('Erro ao atualizar plantão.');
                         }

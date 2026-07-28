@@ -38,6 +38,7 @@ import { db } from '../lib/firebase';
 import { collection, query, where, getDocs, doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { mascaraCNPJ, mascaraCPF, mascaraFinanceira, converterMascaraParaNumero } from '../lib/masks';
 import { toast } from 'react-hot-toast';
+import { showSuccessToast } from './CustomToast';
 import { GlossyButton } from './GlossyButton';
 import { ModalInserirDebito } from './ModalInserirDebito';
 
@@ -481,7 +482,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       await setDoc(docRef, { valor: numericValue }, { merge: true });
       setValorMei(numericValue);
       setIsEditingValorMei(false);
-      alert("Valor MEI salvo com sucesso!");
+      showSuccessToast("Valor MEI salvo com sucesso!", "Configuração Salva");
     } catch (err: any) {
       console.error("Error saving valor_mei: ", err);
       alert("Erro ao salvar o Valor MEI: " + err.message);
@@ -1340,8 +1341,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
           nomeProfissional: ag.nomeProfissional || 'Não atribuído'
         }))
       });
-      toast.success(`Fatura Nº ${numero} salva com sucesso e integrada ao Histórico Financeiro!`);
-      alert(`Fatura Nº ${numero} salva com sucesso!`);
+      showSuccessToast(`Fatura Nº ${numero} salva com sucesso no Histórico Financeiro!`, 'Fatura Emitida');
     } catch (err) {
       console.error(err);
       alert('Erro ao salvar fatura.');
@@ -5012,7 +5012,7 @@ export const EmpresaDashboard: React.FC = () => {
       setIsEditingMatriz(false);
       
       toast.dismiss(loadingToast);
-      toast.success('Dados organizacionais salvos com sucesso.');
+      showSuccessToast('Dados organizacionais salvos com sucesso!', 'Empresa Atualizada');
     } catch (err: any) {
       console.error("[Diagnóstico de Erro] Erro geral ao salvar dados da matriz:", err);
       toast.dismiss(loadingToast);
