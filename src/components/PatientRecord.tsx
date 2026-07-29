@@ -8470,9 +8470,19 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
           }
         });
 
+        // Filter out absences / non-executed shifts ('Falta' / 'Cancelado' / considerarFalta)
+        const validMonthShifts = monthShifts.filter((s) => {
+          const isFalta = s.considerarFalta === true ||
+                          s.status === 'Falta' ||
+                          (s.status as string) === 'falta' ||
+                          s.status === 'Cancelado' ||
+                          (s as any).atendimentoRealizado === 'Não';
+          return !isFalta;
+        });
+
         // Group by Professional
         const groupedByProf: { [nomeProf: string]: Agendamento[] } = {};
-        monthShifts.forEach((s) => {
+        validMonthShifts.forEach((s) => {
           const profName = (s.nomeProfissional || 'Profissional Não Informado').trim();
           if (!groupedByProf[profName]) {
             groupedByProf[profName] = [];
@@ -8481,6 +8491,44 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         });
 
         const sortedProfNames = Object.keys(groupedByProf).sort();
+
+        // Utility to compute workload / carga horária for a plantão (e.g. '12h', '24h', '48h')
+        const getPlantaoCargaHoraria = (s: Agendamento): string => {
+          const explicit = (s as any).tipoEscala || (s as any).cargaHoraria || (s as any).duracao;
+          if (explicit && typeof explicit === 'string') {
+            if (explicit.includes('24h') || explicit.includes('24')) return '24h';
+            if (explicit.includes('12h') || explicit.includes('12')) return '12h';
+            if (explicit.includes('48h') || explicit.includes('48')) return '48h';
+            if (explicit.includes('6h') || explicit.includes('6')) return '6h';
+          }
+
+          const horarioStr = s.horario || '';
+          if (horarioStr.includes('24h')) return '24h';
+          if (horarioStr.includes('12h')) return '12h';
+          if (horarioStr.includes('48h')) return '48h';
+          if (horarioStr.includes('6h')) return '6h';
+
+          const timeMatch = horarioStr.match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
+          if (timeMatch) {
+            const startH = parseInt(timeMatch[1], 10);
+            const startM = parseInt(timeMatch[2], 10);
+            const endH = parseInt(timeMatch[3], 10);
+            const endM = parseInt(timeMatch[4], 10);
+
+            const startMinutes = startH * 60 + startM;
+            const endMinutes = endH * 60 + endM;
+
+            let diffMinutes = endMinutes - startMinutes;
+            if (diffMinutes <= 0) {
+              diffMinutes += 24 * 60;
+            }
+
+            const hours = Math.round(diffMinutes / 60);
+            return `${hours}h`;
+          }
+
+          return '12h';
+        };
 
         // Helper to compute repasse value for a single shift
         const getRepasseValue = (s: Agendamento) => {
@@ -8500,15 +8548,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
         // Compute grand total
         let grandTotalRepasse = 0;
-        let totalShiftsCount = 0;
+        let totalShiftsCount = validMonthShifts.length;
 
         sortedProfNames.forEach((profName) => {
           const profShifts = groupedByProf[profName];
           profShifts.forEach((s) => {
             grandTotalRepasse += getRepasseValue(s);
-            if (s.status !== 'Cancelado' && !s.considerarFalta) {
-              totalShiftsCount++;
-            }
           });
         });
 
@@ -8599,15 +8644,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       const profShifts = groupedByProf[profName].sort((a, b) => (a.data || '').localeCompare(b.data || ''));
                       
                       let profTotalVal = 0;
-                      let profValidCount = 0;
-
                       profShifts.forEach((s) => {
-                        const val = getRepasseValue(s);
-                        profTotalVal += val;
-                        if (s.status !== 'Cancelado' && !s.considerarFalta) {
-                          profValidCount++;
-                        }
+                        profTotalVal += getRepasseValue(s);
                       });
+                      const profValidCount = profShifts.length;
 
                       return (
                         <div key={profName} className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
@@ -8636,7 +8676,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                   <th className="py-2.5 px-4">Data</th>
                                   <th className="py-2.5 px-4">Horário / Turno</th>
                                   <th className="py-2.5 px-4">Tipo de Evento</th>
-                                  <th className="py-2.5 px-4">Status</th>
+                                  <th className="py-2.5 px-4">Plantão</th>
                                   <th className="py-2.5 px-4 text-right">Valor Repasse</th>
                                 </tr>
                               </thead>
@@ -8674,16 +8714,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                           {eventTypeLabel}
                                         </span>
                                       </td>
-                                      <td className="py-2.5 px-4 font-sans">
-                                        {s.status === 'Cancelado' || s.considerarFalta ? (
-                                          <span className="text-rose-600 font-bold bg-rose-50 px-2 py-0.5 rounded text-[10px] border border-rose-200">
-                                            {s.considerarFalta ? 'Falta' : 'Cancelado'}
-                                          </span>
-                                        ) : (
-                                          <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded text-[10px] border border-emerald-200">
-                                            {s.status || 'Ativo'}
-                                          </span>
-                                        )}
+                                      <td className="py-2.5 px-4 font-sans font-medium text-slate-800">
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold font-mono bg-slate-100 text-slate-700 border border-slate-200">
+                                          {getPlantaoCargaHoraria(s)}
+                                        </span>
                                       </td>
                                       <td className="py-2.5 px-4 text-right font-mono font-bold text-slate-900">
                                         {formatCurrency(val)}
