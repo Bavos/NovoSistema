@@ -5,6 +5,7 @@
 
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell } from 'docx';
 import React, { useState, useRef } from 'react';
+import { jsPDF } from 'jspdf';
 import { sanitizeClonedDocForHtml2Canvas } from '../lib/html2canvasSanitizer';
 import {
   Briefcase,
@@ -4226,17 +4227,20 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                         : docData.dataEmissao
                 };
 
-                // Cria o link de download direto para o PNG
-                const link = document.createElement('a');
-                link.href = imgData;
-                link.download = `${type === 'fatura' ? 'Fatura' : 'Folha'}_${fatura?.paciente?.replace(/\s+/g, '_') || 'Paciente'}_${fatura?.dataEmissao?.replace(/\//g, '-') || 'Data'}.png`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                console.log("[FaturaExporter] File downloaded successfully as PNG.");
+                const fileName = `${type === 'fatura' ? 'Fatura' : 'Folha'}_${fatura?.paciente?.replace(/\s+/g, '_') || 'Paciente'}_${fatura?.dataEmissao?.replace(/\//g, '-') || 'Data'}.pdf`;
+
+                const pdf = new jsPDF({
+                    orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+                    unit: 'px',
+                    format: [canvas.width, canvas.height]
+                });
+                pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+                pdf.save(fileName);
+
+                console.log("[FaturaExporter] File downloaded successfully as PDF.");
             } catch (err: any) {
-                console.error("Erro na exportação PNG:", err);
-                alert("Houve um problema ao gerar a imagem.");
+                console.error("Erro na exportação PDF:", err);
+                alert("Houve um problema ao gerar o PDF.");
             }
         } else {
             alert("Referência do elemento do faturamento não encontrada.");
@@ -4584,8 +4588,59 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                 return new Date(dateStr).getTime() || 0;
             };
 
+            const getPlantaoCargaHoraria = (s: any): string => {
+                const explicit = s?.tipoEscala || s?.cargaHoraria || s?.duracao;
+                if (explicit && typeof explicit === 'string') {
+                    if (explicit.includes('24h') || explicit.includes('24')) return '24h';
+                    if (explicit.includes('12h') || explicit.includes('12')) return '12h';
+                    if (explicit.includes('48h') || explicit.includes('48')) return '48h';
+                    if (explicit.includes('6h') || explicit.includes('6')) return '6h';
+                }
+
+                const horarioStr = s?.horario || '';
+                if (horarioStr.includes('24h')) return '24h';
+                if (horarioStr.includes('12h')) return '12h';
+                if (horarioStr.includes('48h')) return '48h';
+                if (horarioStr.includes('6h')) return '6h';
+
+                const timeMatch = horarioStr.match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
+                if (timeMatch) {
+                    const startH = parseInt(timeMatch[1], 10);
+                    const startM = parseInt(timeMatch[2], 10);
+                    const endH = parseInt(timeMatch[3], 10);
+                    const endM = parseInt(timeMatch[4], 10);
+
+                    const startMinutes = startH * 60 + startM;
+                    const endMinutes = endH * 60 + endM;
+
+                    let diffMinutes = endMinutes - startMinutes;
+                    if (diffMinutes <= 0) {
+                        diffMinutes += 24 * 60;
+                    }
+
+                    const hours = Math.round(diffMinutes / 60);
+                    return `${hours}h`;
+                }
+
+                return '12h';
+            };
+
+            const formatNomeComEspacos = (nome: any): string => {
+                if (!nome || typeof nome !== 'string') return 'A Definir';
+                return nome
+                    .replace(/([a-zà-ú0-9])([A-ZÀ-Ú])/g, '$1 $2')
+                    .replace(/\s+/g, ' ')
+                    .trim() || 'A Definir';
+            };
+
             const plantoesValidos = (viewDoc.data.plantoesCongelados || [])
-                .filter((p: any) => !p.considerarFalta && p.status !== 'falta' && p.status !== 'Falta')
+                .filter((p: any) => {
+                    if (p.considerarFalta || p.status === 'falta' || p.status === 'Falta' || p.status === 'Cancelado' || p.status === 'cancelado') {
+                        return false;
+                    }
+                    const val = calculateRowValue(p, viewDoc.type);
+                    return val > 0;
+                })
                 .sort((a: any, b: any) => parseDate(a.data) - parseDate(b.data));
 
             const totalSomaPlantoes = plantoesValidos.reduce((acc: number, curr: any) => acc + (calculateRowValue(curr, viewDoc.type) || 0), 0);
@@ -4607,7 +4662,8 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                 }}
                                 disabled={loadingExport}
                             >
-                                {loadingExport ? "Gerando..." : "Exportar Imagem (PNG)"}</GlossyButton>
+                                <FileText size={14} className="inline mr-1" />
+                                {loadingExport ? "Gerando..." : "Baixar Fatura (PDF)"}</GlossyButton>
                             <GlossyButton variant="yellow"
                                  onClick={() => {
                                      import('xlsx').then(XLSX => {
@@ -4617,6 +4673,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                                  'Data Início': formatDateBR(p.data),
                                                  'Paciente': p.nomePaciente || (viewDoc.type === 'fatura' ? viewDoc.data.nomePaciente : '---'),
                                                  'Profissional': p.nomeProfissional || (viewDoc.type === 'folha' ? viewDoc.data.nomeProfissional : '---'),
+                                                 'Carga Horária': getPlantaoCargaHoraria(p),
                                                  'Serviço': p.tipoDia || 'Plantão Normal',
                                                  'Valor': Number(valorLinha.toFixed(2))
                                              };
@@ -4630,6 +4687,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                                  'Data Início': '',
                                                  'Paciente': '',
                                                  'Profissional': '',
+                                                 'Carga Horária': '',
                                                  'Serviço': 'SOMA DOS PLANTÕES',
                                                  'Valor': Number(totalSomaPlantoes.toFixed(2))
                                              });
@@ -4637,6 +4695,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                                  'Data Início': '',
                                                  'Paciente': '',
                                                  'Profissional': '',
+                                                 'Carga Horária': '',
                                                  'Serviço': 'DESCONTOS (DÉBITOS)',
                                                  'Valor': -Number((viewDoc.data.valorTotalDebitos || 0).toFixed(2))
                                              });
@@ -4647,6 +4706,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                              'Data Início': '',
                                              'Paciente': '',
                                              'Profissional': '',
+                                             'Carga Horária': '',
                                              'Serviço': labelTotal,
                                              'Valor': Number(totalGlobal.toFixed(2))
                                          });
@@ -4658,6 +4718,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                              { wch: 15 }, // Data Início
                                              { wch: 25 }, // Paciente
                                              { wch: 25 }, // Profissional
+                                             { wch: 15 }, // Carga Horária
                                              { wch: 25 }, // Serviço
                                              { wch: 15 }  // Valor
                                          ];
@@ -4702,6 +4763,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                             <tr className="bg-[#1a3c2e] text-white border-b-2 border-[#b8860b]">
                               <th className="p-2 text-left">Data</th>
                               <th className="p-2 text-left">{viewDoc.type === 'fatura' ? 'Profissional' : 'Paciente'}</th>
+                              <th className="p-2 text-left">Carga Horária</th>
                               <th className="p-2 text-left">Serviço</th>
                               <th className="p-2 text-right">Valor</th>
                             </tr>
@@ -4712,12 +4774,13 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                               return (
                                 <tr key={i} className="border-b border-[#b8860b]/30">
                                   <td className="p-2">{formatDateBR(p.data)}</td>
-                                  <td className="p-2">
+                                  <td className="p-2 whitespace-normal break-words">
                                     {viewDoc.type === 'fatura' 
-                                      ? (p.profissional || p.nomeProfissional || 'A Definir') 
-                                      : (p.nomePaciente || 'A Definir')
+                                      ? formatNomeComEspacos(p.profissional || p.nomeProfissional) 
+                                      : formatNomeComEspacos(p.nomePaciente || 'A Definir')
                                     }
                                   </td>
+                                  <td className="p-2 font-mono font-medium">{getPlantaoCargaHoraria(p)}</td>
                                   <td className="p-2">{p.tipoDia || 'Plantão Normal'}</td>
                                   <td className="p-2 text-right text-[#1a3c2e] font-bold font-mono">R$ {valorLinha.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                 </tr>
@@ -4728,17 +4791,17 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                             {viewDoc.type === 'folha' && viewDoc.data.valorTotalDebitos > 0 && (
                               <>
                                 <tr className="font-bold bg-slate-50 text-slate-600">
-                                  <td colSpan={3} className="p-2 text-right uppercase text-[9px]">Soma dos Plantões:</td>
+                                  <td colSpan={4} className="p-2 text-right uppercase text-[9px]">Soma dos Plantões:</td>
                                   <td className="p-2 text-right text-slate-700 font-mono">R$ {totalSomaPlantoes.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                 </tr>
                                 <tr className="font-bold bg-red-50 text-red-600">
-                                  <td colSpan={3} className="p-2 text-right uppercase text-[9px]">Descontos (Débitos):</td>
+                                  <td colSpan={4} className="p-2 text-right uppercase text-[9px]">Descontos (Débitos):</td>
                                   <td className="p-2 text-right font-mono">- R$ {viewDoc.data.valorTotalDebitos.toFixed(2)}</td>
                                 </tr>
                               </>
                             )}
                             <tr className="font-bold bg-emerald-50 text-[#1a3c2e] text-xs">
-                              <td colSpan={3} className="p-2 text-right uppercase">TOTAL</td>
+                              <td colSpan={4} className="p-2 text-right uppercase">TOTAL</td>
                               <td className="p-2 text-right text-[#1a3c2e] font-black font-mono">
                                 R$ {valorTotalCorrigido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </td>

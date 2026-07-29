@@ -48,8 +48,10 @@ import {
   Download,
   Calculator,
   DollarSign,
-  FileSpreadsheet
+  FileSpreadsheet,
+  FileText
 } from 'lucide-react';
+import { jsPDF } from 'jspdf';
 import { toast } from 'react-hot-toast';
 import { showSuccessToast } from './CustomToast';
 import { GlossyButton } from './GlossyButton';
@@ -140,6 +142,52 @@ const getDaysInMonthGrid = (monthIndex: number, year: number, customHolidays?: R
   }
   
   return gridCells;
+};
+
+export const getPlantaoCargaHoraria = (s: any): string => {
+  if (!s) return '12h';
+  const explicit = s.tipoEscala || s.cargaHoraria || s.duracao;
+  if (explicit && typeof explicit === 'string') {
+    if (explicit.includes('24h') || explicit.includes('24')) return '24h';
+    if (explicit.includes('12h') || explicit.includes('12')) return '12h';
+    if (explicit.includes('48h') || explicit.includes('48')) return '48h';
+    if (explicit.includes('6h') || explicit.includes('6')) return '6h';
+  }
+
+  const horarioStr = s.horario || '';
+  if (horarioStr.includes('24h')) return '24h';
+  if (horarioStr.includes('12h')) return '12h';
+  if (horarioStr.includes('48h')) return '48h';
+  if (horarioStr.includes('6h')) return '6h';
+
+  const timeMatch = horarioStr.match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
+  if (timeMatch) {
+    const startH = parseInt(timeMatch[1], 10);
+    const startM = parseInt(timeMatch[2], 10);
+    const endH = parseInt(timeMatch[3], 10);
+    const endM = parseInt(timeMatch[4], 10);
+
+    const startMinutes = startH * 60 + startM;
+    const endMinutes = endH * 60 + endM;
+
+    let diffMinutes = endMinutes - startMinutes;
+    if (diffMinutes <= 0) {
+      diffMinutes += 24 * 60;
+    }
+
+    const hours = Math.round(diffMinutes / 60);
+    return `${hours}h`;
+  }
+
+  return '12h';
+};
+
+export const formatNomeComEspacos = (nome: any): string => {
+  if (!nome || typeof nome !== 'string') return 'A Definir';
+  return nome
+    .replace(/([a-zà-ú0-9])([A-ZÀ-Ú])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim() || 'A Definir';
 };
 
 interface PatientRecordProps {
@@ -2398,8 +2446,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
           valorPlantao: a.valorPlantao || 0,
           valorRepasse: a.valorRepasse || 0,
           status: a.status || '',
-          profissional: a.nomeProfissional || 'Não atribuído',
-          nomeProfissional: a.nomeProfissional || 'Não atribuído',
+          profissional: formatNomeComEspacos(a.nomeProfissional),
+          nomeProfissional: formatNomeComEspacos(a.nomeProfissional),
           taxaAdm: a.taxaAdm || 0,
           ajudaCusto: a.ajudaCusto || 0,
           tipoDia: a.tipoDia || ''
@@ -2609,16 +2657,16 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       // Service Table Header (Row 11)
       const tableHeaderRow = worksheet.getRow(11);
       tableHeaderRow.height = 24;
-      ['A11', 'B11', 'C11', 'D11'].forEach((cellRef, idx) => {
+      ['A11', 'B11', 'C11', 'D11', 'E11'].forEach((cellRef, idx) => {
         const hCell = worksheet.getCell(cellRef);
-        hCell.value = ['Data', 'Profissional', 'Serviço', 'Valor'][idx];
+        hCell.value = ['Data', 'Profissional', 'Carga Horária', 'Serviço', 'Valor'][idx];
         hCell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
         hCell.fill = {
           type: 'pattern',
           pattern: 'solid',
           fgColor: { argb: 'FF1A4231' } // Dark Green
         };
-        hCell.alignment = { vertical: 'middle', horizontal: idx === 3 ? 'right' : 'left' };
+        hCell.alignment = { vertical: 'middle', horizontal: idx === 4 ? 'right' : 'left' };
       });
 
       // Calculate shift total
@@ -2632,20 +2680,27 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         return (base * mult) + (adm * mult) + ajuda;
       };
 
-      const plantoes = faturaMaisRecente.plantoesCongelados || [];
+      const plantoesValidos = (faturaMaisRecente.plantoesCongelados || []).filter((p: any) => {
+        if (p.considerarFalta || p.status === 'falta' || p.status === 'Falta' || p.status === 'Cancelado' || p.status === 'cancelado') {
+          return false;
+        }
+        return calculateRowValue(p) > 0;
+      });
+
       let currentRow = 12;
 
-      plantoes.forEach((p: any) => {
+      plantoesValidos.forEach((p: any) => {
         worksheet.getCell(`A${currentRow}`).value = formatDateBR(p.data || '');
-        worksheet.getCell(`B${currentRow}`).value = p.nomeProfissional || p.profissional || '---';
-        worksheet.getCell(`C${currentRow}`).value = p.tipoDia || 'Plantão Normal';
+        worksheet.getCell(`B${currentRow}`).value = formatNomeComEspacos(p.nomeProfissional || p.profissional);
+        worksheet.getCell(`C${currentRow}`).value = getPlantaoCargaHoraria(p);
+        worksheet.getCell(`D${currentRow}`).value = p.tipoDia || 'Plantão Normal';
 
-        const valCell = worksheet.getCell(`D${currentRow}`);
+        const valCell = worksheet.getCell(`E${currentRow}`);
         valCell.value = calculateRowValue(p);
         valCell.numFmt = '"R$ "#,##0.00';
         valCell.alignment = { horizontal: 'right' };
 
-        ['A', 'B', 'C', 'D'].forEach(col => {
+        ['A', 'B', 'C', 'D', 'E'].forEach(col => {
           const c = worksheet.getCell(`${col}${currentRow}`);
           c.font = { name: 'Arial', size: 10 };
           c.border = {
@@ -2776,8 +2831,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       };
 
       const invoiceNumber = faturaMaisRecente.numeroFatura || 'FAT-' + Number(faturaMaisRecente.id).toString().substring(0, 6);
-      const totalGlobal = faturaMaisRecente.valorTotal || faturaMaisRecente.valorTotalFatura || 0;
-      const plantoes = faturaMaisRecente.plantoesCongelados || [];
+      const plantoesValidos = (faturaMaisRecente.plantoesCongelados || []).filter((p: any) => {
+        if (p.considerarFalta || p.status === 'falta' || p.status === 'Falta' || p.status === 'Cancelado' || p.status === 'cancelado') {
+          return false;
+        }
+        return calculateRowValue(p) > 0;
+      });
+      const totalGlobal = plantoesValidos.reduce((acc: number, curr: any) => acc + calculateRowValue(curr), 0);
 
       // 1. Header Table
       const headerTable = new Table({
@@ -2936,7 +2996,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       });
 
       // Items Row
-      const serviceRows = plantoes.map((p: any) => {
+      const serviceRows = plantoesValidos.map((p: any) => {
         const valorLinha = calculateRowValue(p);
         return new TableRow({
           children: [
@@ -2948,7 +3008,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             new TableCell({
               width: { size: 35, type: WidthType.PERCENTAGE },
               margins: { top: 120, bottom: 120, left: 120, right: 120 },
-              children: [new Paragraph({ children: [new TextRun({ text: p.nomeProfissional || p.profissional || '---', size: 18, font: "Arial" })] })]
+              children: [new Paragraph({ children: [new TextRun({ text: formatNomeComEspacos(p.nomeProfissional || p.profissional), size: 18, font: "Arial" })] })]
             }),
             new TableCell({
               width: { size: 35, type: WidthType.PERCENTAGE },
@@ -3070,7 +3130,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       return;
     }
 
-    const toastId = toast.loading('Preparando download da fatura em PNG...');
+    const toastId = toast.loading('Preparando download da fatura em PDF...');
 
     try {
       // Carrega dados da empresa se necessário
@@ -3084,7 +3144,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
       const printElement = tempFaturaRef.current;
       if (!printElement) {
-        throw new Error('Elemento de faturamento para PNG não renderizado no DOM.');
+        throw new Error('Elemento de faturamento para PDF não renderizado no DOM.');
       }
 
       const html2canvas = (await import('html2canvas-pro')).default;
@@ -3102,17 +3162,18 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       const formattedDate = matchedFatura.dataEmissao?.includes('T') ? matchedFatura.dataEmissao.split('T')[0] : (matchedFatura.dataEmissao?.replace(/\//g, '-') || 'Data');
       const safeName = (matchedFatura.nomePaciente || paciente.nome || 'Paciente').replace(/\s+/g, '_');
 
-      const link = document.createElement('a');
-      link.href = imgData;
-      link.download = `Fatura_${safeName}_${formattedDate}.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const pdf = new jsPDF({
+        orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+        unit: 'px',
+        format: [canvas.width, canvas.height]
+      });
+      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+      pdf.save(`Fatura_${safeName}_${formattedDate}.pdf`);
 
-      toast.success('Fatura baixada com sucesso!', { id: toastId });
+      toast.success('Fatura baixada em PDF com sucesso!', { id: toastId });
     } catch (err: any) {
-      console.error('Erro ao gerar PNG:', err);
-      toast.error('Erro ao baixar a fatura em PNG.', { id: toastId });
+      console.error('Erro ao gerar PDF da fatura:', err);
+      toast.error('Erro ao baixar a fatura em PDF.', { id: toastId });
     } finally {
       setFaturaParaBaixar(null);
     }
@@ -4726,8 +4787,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       onClick={handleBaixarFaturaPng}
                       className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-300 transform hover:-translate-y-1 bg-teal-600 shadow-lg shadow-teal-500/50 hover:shadow-teal-500/80 cursor-pointer flex items-center space-x-1.5 text-xs font-sans"
                     >
-                      <Download size={14} />
-                      <span>Baixar Fatura</span>
+                      <FileText size={14} />
+                      <span>Baixar Fatura (PDF)</span>
                     </button>
                     
                   </div>
@@ -8492,44 +8553,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
         const sortedProfNames = Object.keys(groupedByProf).sort();
 
-        // Utility to compute workload / carga horária for a plantão (e.g. '12h', '24h', '48h')
-        const getPlantaoCargaHoraria = (s: Agendamento): string => {
-          const explicit = (s as any).tipoEscala || (s as any).cargaHoraria || (s as any).duracao;
-          if (explicit && typeof explicit === 'string') {
-            if (explicit.includes('24h') || explicit.includes('24')) return '24h';
-            if (explicit.includes('12h') || explicit.includes('12')) return '12h';
-            if (explicit.includes('48h') || explicit.includes('48')) return '48h';
-            if (explicit.includes('6h') || explicit.includes('6')) return '6h';
-          }
-
-          const horarioStr = s.horario || '';
-          if (horarioStr.includes('24h')) return '24h';
-          if (horarioStr.includes('12h')) return '12h';
-          if (horarioStr.includes('48h')) return '48h';
-          if (horarioStr.includes('6h')) return '6h';
-
-          const timeMatch = horarioStr.match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
-          if (timeMatch) {
-            const startH = parseInt(timeMatch[1], 10);
-            const startM = parseInt(timeMatch[2], 10);
-            const endH = parseInt(timeMatch[3], 10);
-            const endM = parseInt(timeMatch[4], 10);
-
-            const startMinutes = startH * 60 + startM;
-            const endMinutes = endH * 60 + endM;
-
-            let diffMinutes = endMinutes - startMinutes;
-            if (diffMinutes <= 0) {
-              diffMinutes += 24 * 60;
-            }
-
-            const hours = Math.round(diffMinutes / 60);
-            return `${hours}h`;
-          }
-
-          return '12h';
-        };
-
         // Helper to compute repasse value for a single shift
         const getRepasseValue = (s: Agendamento) => {
           if (s.status === 'Cancelado' || s.considerarFalta) return 0;
@@ -8881,73 +8904,86 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       )}
 
       {/* Hidden off-screen Fatura rendering container for PNG download */}
-      {faturaParaBaixar && (
-        <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', width: '210mm', pointerEvents: 'none' }}>
-          <div ref={tempFaturaRef} className="w-[210mm] p-[10mm] bg-[#fcf8f2] text-black border border-slate-300 font-sans" style={{ color: '#1a3c2e' }}>
-            {/* Header with Company Logo etc */}
-            <div className="flex justify-between items-start border-b-2 border-[#b8860b] pb-4 mb-6">
-                <div className="flex items-center gap-4">
-                     {empresaInfo?.logoUrl && (
-                       <img src={empresaInfo.logoUrl} alt="Logo" className="w-24 h-12 object-contain" />
-                     )}
-                     <div className="text-[#1a3c2e]">
-                       <h2 className="text-xl font-black">{empresaInfo?.razaoSocial || 'EMPRESA PADRÃO'}</h2>
-                       <p className="text-sm text-gray-600 font-bold mt-1">CNPJ: {empresaInfo?.cnpj || '00.000.000/0000-00'}</p>
-                       <p className="text-sm text-gray-600 mt-0.5">{empresaInfo?.endereco || 'Endereço Indisponível'}</p>
-                     </div>
-                </div>
-                <div className="text-right text-[#1a3c2e]">
-                     <h2 className="text-lg font-black">FATURA</h2>
-                     <p className="text-xs font-mono">Nº: {faturaParaBaixar.numeroFatura || 'XXXX'}</p>
-                </div>
-            </div>
-            {/* Data Grid */}
-            <div className="grid grid-cols-2 gap-4 mb-6 text-[11px]">
-                <div><span className="font-bold">Emissão:</span> {faturaParaBaixar.dataEmissao ? (faturaParaBaixar.dataEmissao.includes('T') ? new Date(faturaParaBaixar.dataEmissao).toLocaleDateString('pt-BR') : faturaParaBaixar.dataEmissao) : ''}</div>
-                <div><span className="font-bold">Status:</span> {faturaParaBaixar.status}</div>
-                <div><span className="font-bold">Paciente:</span> {faturaParaBaixar.nomePaciente || paciente?.nome || ''}</div>
-                <div><span className="font-bold">Valor Total:</span> R$ {faturaParaBaixar.valorTotalFatura ? faturaParaBaixar.valorTotalFatura.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (faturaParaBaixar.valorTotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-            </div>
-            {/* Plantões Table */}
-            <table className="w-full text-[11px] border-collapse mb-6">
-              <thead>
-                <tr className="bg-[#1a3c2e] text-white border-b-2 border-[#b8860b]">
-                  <th className="p-2 text-left">Data</th>
-                  <th className="p-2 text-left">Profissional</th>
-                  <th className="p-2 text-left">Serviço</th>
-                  <th className="p-2 text-right">Valor</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(faturaParaBaixar.plantoesCongelados || [])
-                  .filter((p: any) => !p.considerarFalta && p.status !== 'falta' && p.status !== 'Falta')
-                  .sort((a: any, b: any) => {
-                    const parseDate = (dateStr: string): number => {
-                      if (!dateStr) return 0;
-                      if (dateStr.includes('-')) {
-                        const parts = dateStr.split('-');
-                        if (parts.length === 3) {
-                          return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])).getTime();
-                        }
-                      } else if (dateStr.includes('/')) {
-                        const parts = dateStr.split('/');
-                        if (parts.length === 3) {
-                          return new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0])).getTime();
-                        }
-                      }
-                      return new Date(dateStr).getTime() || 0;
-                    };
-                    return parseDate(a.data) - parseDate(b.data);
-                  })
-                  .map((p: any, i: number) => {
-                    const base = p.valorPlantao || 0;
-                    const adm = p.taxaAdm || 0;
-                    const ajuda = p.ajudaCusto || 0;
-                    let mult = 1.0;
-                    if (p.tipoDia === 'Feriado 20%') mult = 1.2;
-                    else if (p.tipoDia === 'Feriado 50%') mult = 1.5;
-                    const valorLinha = (base * mult) + (adm * mult) + ajuda;
+      {faturaParaBaixar && (() => {
+        const parseDate = (dateStr: string): number => {
+          if (!dateStr) return 0;
+          if (dateStr.includes('-')) {
+            const parts = dateStr.split('-');
+            if (parts.length === 3) {
+              return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])).getTime();
+            }
+          } else if (dateStr.includes('/')) {
+            const parts = dateStr.split('/');
+            if (parts.length === 3) {
+              return new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0])).getTime();
+            }
+          }
+          return new Date(dateStr).getTime() || 0;
+        };
 
+        const getFaturaRowVal = (p: any) => {
+          const base = Number(p.valorPlantao || 0);
+          const adm = Number(p.taxaAdm || 0);
+          const ajuda = Number(p.ajudaCusto || 0);
+          let mult = 1.0;
+          if (p.tipoDia === 'Feriado 20%') mult = 1.2;
+          else if (p.tipoDia === 'Feriado 50%') mult = 1.5;
+          return (base * mult) + (adm * mult) + ajuda;
+        };
+
+        const plantoesValidos = (faturaParaBaixar.plantoesCongelados || [])
+          .filter((p: any) => {
+            if (p.considerarFalta || p.status === 'falta' || p.status === 'Falta' || p.status === 'Cancelado' || p.status === 'cancelado') {
+              return false;
+            }
+            const val = getFaturaRowVal(p);
+            return val > 0;
+          })
+          .sort((a: any, b: any) => parseDate(a.data) - parseDate(b.data));
+
+        const totalSomaPlantoes = plantoesValidos.reduce((acc: number, curr: any) => acc + getFaturaRowVal(curr), 0);
+
+        return (
+          <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', width: '210mm', pointerEvents: 'none' }}>
+            <div ref={tempFaturaRef} className="w-[210mm] p-[10mm] bg-[#fcf8f2] text-black border border-slate-300 font-sans" style={{ color: '#1a3c2e' }}>
+              {/* Header with Company Logo etc */}
+              <div className="flex justify-between items-start border-b-2 border-[#b8860b] pb-4 mb-6">
+                  <div className="flex items-center gap-4">
+                       {empresaInfo?.logoUrl && (
+                         <img src={empresaInfo.logoUrl} alt="Logo" className="w-24 h-12 object-contain" />
+                       )}
+                       <div className="text-[#1a3c2e]">
+                         <h2 className="text-xl font-black">{empresaInfo?.razaoSocial || 'EMPRESA PADRÃO'}</h2>
+                         <p className="text-sm text-gray-600 font-bold mt-1">CNPJ: {empresaInfo?.cnpj || '00.000.000/0000-00'}</p>
+                         <p className="text-sm text-gray-600 mt-0.5">{empresaInfo?.endereco || 'Endereço Indisponível'}</p>
+                       </div>
+                  </div>
+                  <div className="text-right text-[#1a3c2e]">
+                       <h2 className="text-lg font-black">FATURA</h2>
+                       <p className="text-xs font-mono">Nº: {faturaParaBaixar.numeroFatura || 'XXXX'}</p>
+                  </div>
+              </div>
+              {/* Data Grid */}
+              <div className="grid grid-cols-2 gap-4 mb-6 text-[11px]">
+                  <div><span className="font-bold">Emissão:</span> {faturaParaBaixar.dataEmissao ? (faturaParaBaixar.dataEmissao.includes('T') ? new Date(faturaParaBaixar.dataEmissao).toLocaleDateString('pt-BR') : faturaParaBaixar.dataEmissao) : ''}</div>
+                  <div><span className="font-bold">Status:</span> {faturaParaBaixar.status}</div>
+                  <div><span className="font-bold">Paciente:</span> {faturaParaBaixar.nomePaciente || paciente?.nome || ''}</div>
+                  <div><span className="font-bold">Valor Total:</span> R$ {totalSomaPlantoes.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              </div>
+              {/* Plantões Table */}
+              <table className="w-full text-[11px] border-collapse mb-6">
+                <thead>
+                  <tr className="bg-[#1a3c2e] text-white border-b-2 border-[#b8860b]">
+                    <th className="p-2 text-left">Data</th>
+                    <th className="p-2 text-left">Profissional</th>
+                    <th className="p-2 text-left">Carga Horária</th>
+                    <th className="p-2 text-left">Serviço</th>
+                    <th className="p-2 text-right">Valor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {plantoesValidos.map((p: any, i: number) => {
+                    const valorLinha = getFaturaRowVal(p);
                     const formatDateBR = (dateStr: string) => {
                       if (!dateStr) return '';
                       if (dateStr.includes('-')) {
@@ -8959,28 +8995,29 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     return (
                       <tr key={i} className="border-b border-[#b8860b]/30">
                         <td className="p-2">{formatDateBR(p.data)}</td>
-                        <td className="p-2">{p.profissional || p.nomeProfissional || 'A Definir'}</td>
+                        <td className="p-2 whitespace-normal break-words">{formatNomeComEspacos(p.profissional || p.nomeProfissional)}</td>
+                        <td className="p-2 font-mono font-medium">{getPlantaoCargaHoraria(p)}</td>
                         <td className="p-2">{p.tipoDia || 'Plantão Normal'}</td>
                         <td className="p-2 text-right text-[#1a3c2e] font-bold font-mono">
                           R$ {valorLinha.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
                       </tr>
                     );
-                  })
-                }
-              </tbody>
-              <tfoot>
-                <tr className="font-bold bg-emerald-50 text-[#1a3c2e] text-xs">
-                  <td colSpan={3} className="p-2 text-right uppercase">TOTAL</td>
-                  <td className="p-2 text-right text-[#1a3c2e] font-black font-mono">
-                    R$ {(faturaParaBaixar.valorTotalFatura || faturaParaBaixar.valorTotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="font-bold bg-emerald-50 text-[#1a3c2e] text-xs">
+                    <td colSpan={4} className="p-2 text-right uppercase">TOTAL</td>
+                    <td className="p-2 text-right text-[#1a3c2e] font-black font-mono">
+                      R$ {totalSomaPlantoes.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };
