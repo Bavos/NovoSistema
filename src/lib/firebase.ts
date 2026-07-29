@@ -1,6 +1,8 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { initializeFirestore } from 'firebase/firestore';
+import { initializeFirestore, setLogLevel } from 'firebase/firestore';
+
+setLogLevel('error');
 import { getStorage } from 'firebase/storage';
 import staticConfig from '../../firebase-applet-config.json';
 

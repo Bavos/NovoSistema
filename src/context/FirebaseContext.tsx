@@ -135,7 +135,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const handleQuotaError = (err: any, source: string): boolean => {
     const errStr = String(err).toLowerCase();
     const isQuota = errStr.includes('quota') || errStr.includes('exhausted') || errStr.includes('limit exceeded') || errStr.includes('limit_exceeded') || errStr.includes('resource-exhausted') || errStr.includes('resource_exhausted');
-    if (isQuota) {
+    const isOffline = errStr.includes('offline') || errStr.includes('unavailable') || errStr.includes('could not reach') || errStr.includes('failed to get document') || errStr.includes('backend didn\'t respond');
+
+    if (isQuota || isOffline) {
       if (!isQuotaExceeded) {
         setIsQuotaExceeded(true);
         loadLocalData();
@@ -144,15 +146,33 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const now = Date.now();
       if (now - lastQuotaToastTime > 10000) {
         lastQuotaToastTime = now;
-        console.warn(`[Firebase Quota Fallback] Cota excedida detectada em: ${source}. Ativando modo de contingência local.`);
-        toast.error("⚠️ Limite de Cota do Firebase Excedido: Operando em Modo de Contingência Local.", {
-          duration: 5000,
-          position: 'top-center',
-          id: 'quota-error'
-        });
+        console.warn(`[Firebase Fallback] ${isQuota ? 'Cota excedida' : 'Conexão offline'} detectada em: ${source}. Ativando modo de contingência local.`);
+        if (isQuota) {
+          toast.error("⚠️ Limite de Cota do Firebase Excedido: Operando em Modo de Contingência Local.", {
+            duration: 5000,
+            position: 'top-center',
+            id: 'quota-error'
+          });
+        }
       }
       return true;
     }
+    return false;
+  };
+
+  const EXCLUDED_PATIENT_NAMES = [
+    'Roberto Carlos Silva',
+    'João Albuquerque',
+    'Maria Eduarda Fernandes',
+    'Clara Rezende de Oliveira'
+  ];
+  const EXCLUDED_PATIENT_IDS = ['pac-1', 'pac-2', 'pac-3', 'pac-4'];
+
+  const isExcludedPatient = (pac: any, docId?: string) => {
+    if (!pac && !docId) return false;
+    if (docId && EXCLUDED_PATIENT_IDS.includes(docId)) return true;
+    if (pac?.id && EXCLUDED_PATIENT_IDS.includes(pac.id)) return true;
+    if (pac?.nome && EXCLUDED_PATIENT_NAMES.some(name => pac.nome.toLowerCase().trim() === name.toLowerCase().trim())) return true;
     return false;
   };
 
@@ -181,17 +201,25 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const cachedUsers = localStorage.getItem('contingency_users');
 
       if (cachedPacientes) {
-        setPacientes(JSON.parse(cachedPacientes));
+        const parsed: Paciente[] = JSON.parse(cachedPacientes);
+        const filtered = parsed.filter(p => !isExcludedPatient(p));
+        setPacientes(filtered);
+        localStorage.setItem('contingency_pacientes', JSON.stringify(filtered));
       } else {
-        setPacientes(INITIAL_PACIENTES);
-        localStorage.setItem('contingency_pacientes', JSON.stringify(INITIAL_PACIENTES));
+        const filtered = INITIAL_PACIENTES.filter(p => !isExcludedPatient(p));
+        setPacientes(filtered);
+        localStorage.setItem('contingency_pacientes', JSON.stringify(filtered));
       }
 
       if (cachedPlantoes) {
-        setPlantoes(JSON.parse(cachedPlantoes));
+        const parsed: Plantao[] = JSON.parse(cachedPlantoes);
+        const filtered = parsed.filter(p => !EXCLUDED_PATIENT_IDS.includes(p.pacienteId));
+        setPlantoes(filtered);
+        localStorage.setItem('contingency_plantoes', JSON.stringify(filtered));
       } else {
-        setPlantoes(INITIAL_PLANTOES);
-        localStorage.setItem('contingency_plantoes', JSON.stringify(INITIAL_PLANTOES));
+        const filtered = INITIAL_PLANTOES.filter(p => !EXCLUDED_PATIENT_IDS.includes(p.pacienteId));
+        setPlantoes(filtered);
+        localStorage.setItem('contingency_plantoes', JSON.stringify(filtered));
       }
 
       if (cachedAgendamentos) {
@@ -283,17 +311,25 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const sandboxUsers = localStorage.getItem('sandbox_users');
 
       if (sandboxPacientes) {
-        setPacientes(JSON.parse(sandboxPacientes));
+        const parsed: Paciente[] = JSON.parse(sandboxPacientes);
+        const filtered = parsed.filter(p => !isExcludedPatient(p));
+        setPacientes(filtered);
+        localStorage.setItem('sandbox_pacientes', JSON.stringify(filtered));
       } else {
-        setPacientes(INITIAL_PACIENTES);
-        localStorage.setItem('sandbox_pacientes', JSON.stringify(INITIAL_PACIENTES));
+        const filtered = INITIAL_PACIENTES.filter(p => !isExcludedPatient(p));
+        setPacientes(filtered);
+        localStorage.setItem('sandbox_pacientes', JSON.stringify(filtered));
       }
 
       if (sandboxPlantoes) {
-        setPlantoes(JSON.parse(sandboxPlantoes));
+        const parsed: Plantao[] = JSON.parse(sandboxPlantoes);
+        const filtered = parsed.filter(p => !EXCLUDED_PATIENT_IDS.includes(p.pacienteId));
+        setPlantoes(filtered);
+        localStorage.setItem('sandbox_plantoes', JSON.stringify(filtered));
       } else {
-        setPlantoes(INITIAL_PLANTOES);
-        localStorage.setItem('sandbox_plantoes', JSON.stringify(INITIAL_PLANTOES));
+        const filtered = INITIAL_PLANTOES.filter(p => !EXCLUDED_PATIENT_IDS.includes(p.pacienteId));
+        setPlantoes(filtered);
+        localStorage.setItem('sandbox_plantoes', JSON.stringify(filtered));
       }
 
       if (sandboxAgendamentos) {
@@ -378,6 +414,19 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       loadLocalData();
     }
   }, [isTestMode, isQuotaExceeded]);
+
+  useEffect(() => {
+    const purgeExcludedPatients = async () => {
+      try {
+        for (const id of EXCLUDED_PATIENT_IDS) {
+          deleteDoc(doc(db, 'pacientes', id)).catch(() => {});
+        }
+      } catch (e) {
+        // Silently ignore if offline
+      }
+    };
+    purgeExcludedPatients();
+  }, []);
 
   // Pagination and count states for patients
   const [totalPacientes, setTotalPacientes] = useState<{ ativos: number; inativos: number }>({ ativos: 0, inativos: 0 });
@@ -468,7 +517,14 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const q = query(qBase, limit(50));
       const snap = await getDocs(q);
       const list: Paciente[] = [];
-      snap.forEach((d) => list.push(d.data() as Paciente));
+      snap.forEach((d) => {
+        const p = d.data() as Paciente;
+        if (isExcludedPatient(p, d.id)) {
+          deleteDoc(doc(db, 'pacientes', d.id)).catch(() => {});
+        } else {
+          list.push(p);
+        }
+      });
       setPacientes(list);
       
       if (!snap.empty) {
@@ -506,7 +562,14 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const q = query(qBase, startAfter(lastVisible), limit(50));
       const snap = await getDocs(q);
       const list: Paciente[] = [];
-      snap.forEach((d) => list.push(d.data() as Paciente));
+      snap.forEach((d) => {
+        const p = d.data() as Paciente;
+        if (isExcludedPatient(p, d.id)) {
+          deleteDoc(doc(db, 'pacientes', d.id)).catch(() => {});
+        } else {
+          list.push(p);
+        }
+      });
       setPacientes(list);
       
       if (!snap.empty) {
@@ -543,7 +606,14 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       const snap = await getDocs(q);
       const list: Paciente[] = [];
-      snap.forEach((d) => list.push(d.data() as Paciente));
+      snap.forEach((d) => {
+        const p = d.data() as Paciente;
+        if (isExcludedPatient(p, d.id)) {
+          deleteDoc(doc(db, 'pacientes', d.id)).catch(() => {});
+        } else {
+          list.push(p);
+        }
+      });
       setPacientes(list);
       
       if (!snap.empty) {
@@ -648,14 +718,16 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const [userRole, setUserRole] = useState<'Administrador' | 'Colaborador'>('Administrador');
   const [usuariosSistema, setUsuariosSistema] = useState<UsuarioSistema[]>([]);
-  const [notification, setNotification] = useState<string | null>(null);
+  const [notification, setNotificationState] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (notification) {
-      const timer = setTimeout(() => setNotification(null), 3000);
-      return () => clearTimeout(timer);
+  const setNotification = (msg: string | null) => {
+    setNotificationState(msg);
+    if (msg) {
+      if (msg.toLowerCase().includes('erro') || msg.toLowerCase().includes('não coincidem') || msg.toLowerCase().includes('falha')) {
+        toast.error(msg);
+      }
     }
-  }, [notification]);
+  };
 
   // Clean, non-looping userRole synchronization
   useEffect(() => {

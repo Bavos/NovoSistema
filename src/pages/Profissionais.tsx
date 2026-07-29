@@ -1730,11 +1730,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
             setConfig(docSnap.data() as any);
           }
         } catch (err: any) {
-          if (err?.message?.includes('Quota') || err?.code === 'resource-exhausted') {
-            console.warn("Quota limit exceeded when fetching configurações (ignorado).");
-          } else {
-            console.error("Erro ao buscar configurações:", err);
-          }
+          console.warn("Aviso/Fallback ao buscar configurações:", err?.message || err);
         } finally {
           setLoadingConfig(false);
         }

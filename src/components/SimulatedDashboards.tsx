@@ -124,11 +124,7 @@ export const EscalasDashboard: React.FC = () => {
     window.print();
   };
 
-  const escalasData = [
-    { id: 1, profissional: 'João Albuquerque (12h - Dia)', detalhes: 'Dra. Maria Santos • Entrada regular às 07:00', status: 'ATIVO', cor: 'emerald' },
-    { id: 2, profissional: 'Maria Eduarda (24h)', detalhes: 'Enf. Juliana Silveira • Início às 08:00', status: 'ATIVO', cor: 'emerald' },
-    { id: 3, profissional: 'Roberto Carlos Silva (Fisioterapia)', detalhes: 'Fis. Dra. Luciana Varela • Visita técnica domiciliar às 15:30', status: 'AGENDADO', cor: 'amber' },
-  ];
+  const escalasData: Array<{ id: number; profissional: string; detalhes: string; status: string; cor: string }> = [];
 
   const filteredEscalas = escalasData.filter(escala => {
     const matchesStatus = filtroStatus === 'Todos' || escala.status === filtroStatus;
@@ -428,14 +424,12 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
             const docSnap = await getDoc(docRef);
             if (docSnap.exists()) {
                 setEmpresa(docSnap.data());
+            } else {
+                setEmpresa({ nome: "Empresa Padrão", cnpj: "00.000.000/0001-00" });
             }
         } catch (err: any) {
-            if (err?.message?.includes('Quota') || err?.code === 'resource-exhausted') {
-                console.warn("Quota limit exceeded when fetching empresa (ignorado).");
-                setEmpresa({ nome: "Empresa Contingência", cnpj: "00.000.000/0001-00" });
-            } else {
-                console.error("Error loading empresa: ", err);
-            }
+            console.warn("Aviso/Fallback ao carregar empresa:", err?.message || err);
+            setEmpresa({ nome: "Empresa Contingência", cnpj: "00.000.000/0001-00" });
         }
     };
     const fetchValorMei = async () => {
@@ -451,17 +445,16 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
             const docSnap = await getDoc(docRef);
             if (docSnap.exists()) {
                 const data = docSnap.data();
-                setValorMei(data.valor || 0);
-                setTempValorMei(String(data.valor || 0));
-            }
-        } catch (err: any) {
-            if (err?.message?.includes('Quota') || err?.code === 'resource-exhausted') {
-                console.warn("Quota limit exceeded when fetching valor_mei (ignorado).");
+                setValorMei(data.valor || 81);
+                setTempValorMei(String(data.valor || 81));
+            } else {
                 setValorMei(81);
                 setTempValorMei("81");
-            } else {
-                console.error("Error loading valor_mei: ", err);
             }
+        } catch (err: any) {
+            console.warn("Aviso/Fallback ao carregar valor_mei:", err?.message || err);
+            setValorMei(81);
+            setTempValorMei("81");
         } finally {
             setLoadingValorMei(false);
         }
@@ -4326,12 +4319,8 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                     setEmpresa(docSnap.data());
                 }
             } catch (err: any) {
-                if (err?.message?.includes('Quota') || err?.code === 'resource-exhausted') {
-                    console.warn("Quota limit exceeded when fetching empresa in Historico (ignorado).");
-                    setEmpresa({ nome: "Empresa Contingência", cnpj: "00.000.000/0001-00" });
-                } else {
-                    console.error("Erro ao buscar empresa:", err);
-                }
+                console.warn("Aviso/Fallback ao buscar empresa em Histórico:", err?.message || err);
+                setEmpresa({ nome: "Empresa Contingência", cnpj: "00.000.000/0001-00" });
             }
         };
 
@@ -4836,11 +4825,7 @@ export const EmpresaDashboard: React.FC = () => {
           }
         }
       } catch (err: any) {
-        if (err?.message?.includes('Quota') || err?.code === 'resource-exhausted' || err?.message?.includes('quota')) {
-          console.warn("Quota limit exceeded ao carregar dados da matriz (ignorado).");
-        } else {
-          console.error("Erro ao carregar dados da matriz:", err);
-        }
+        console.warn("Aviso/Fallback ao carregar dados da matriz:", err?.message || err);
       } finally {
         setLoadingConfig(false);
       }

@@ -52,9 +52,9 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   const displayRole = currentUserProfile?.nivelAcesso || userRole || 'Colaborador';
 
   const notifications = [
-    { id: 1, text: 'Plantão do paciente João Albuquerque foi confirmado.', time: 'há 10 min' },
+    { id: 1, text: 'Plantão de atendimento foi confirmado.', time: 'há 10 min' },
     { id: 2, text: 'Escala médica de final de semana atualizada.', time: 'há 1 hora' },
-    { id: 3, text: 'Nova solicitação de escala para Roberto Carlos.', time: 'há 2 horas' },
+    { id: 3, text: 'Nova solicitação de escala recebida.', time: 'há 2 horas' },
   ];
 
   const handleSair = async () => {

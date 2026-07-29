@@ -45,7 +45,10 @@ import {
   Copy,
   MessageSquare,
   Phone,
-  Download
+  Download,
+  Calculator,
+  DollarSign,
+  FileSpreadsheet
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { showSuccessToast } from './CustomToast';
@@ -1217,6 +1220,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const [calendarYear, setCalendarYear] = useState<number>(new Date().getFullYear());
   const [calendarView, setCalendarView] = useState<'lista' | 'calendario'>('calendario'); // default to visual calendar view
   const [isFaturaModalOpen, setIsFaturaModalOpen] = useState(false);
+  const [isPreviaFinanceiraModalOpen, setIsPreviaFinanceiraModalOpen] = useState(false);
 
   const isCurrentMonthConcluded = useMemo(() => {
     if (!paciente) return false;
@@ -3173,6 +3177,60 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     }
   };
 
+  const handleBaixarPreviaFinanceiraPNG = async () => {
+    const toastId = toast.loading('Gerando imagem (PNG) da Prévia Financeira...');
+    try {
+      const element = document.getElementById('previa-financeira-modal-content');
+      if (!element) {
+        throw new Error('Elemento da prévia financeira não encontrado no DOM.');
+      }
+
+      const html2canvas = (await import('html2canvas-pro')).default;
+
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        windowWidth: 1024,
+        onclone: (clonedDoc) => {
+          sanitizeClonedDocForHtml2Canvas(clonedDoc, '#ffffff', '#1e293b');
+          const modalEl = clonedDoc.getElementById('previa-financeira-modal-content');
+          if (modalEl) {
+            modalEl.style.maxHeight = 'none';
+            modalEl.style.height = 'auto';
+            modalEl.style.overflow = 'visible';
+            modalEl.style.borderRadius = '16px';
+            modalEl.style.boxShadow = 'none';
+          }
+          const scrollEl = clonedDoc.getElementById('previa-financeira-modal-body');
+          if (scrollEl) {
+            scrollEl.style.maxHeight = 'none';
+            scrollEl.style.height = 'auto';
+            scrollEl.style.overflow = 'visible';
+          }
+        }
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const safeName = (paciente?.nome || 'Paciente').replace(/[^a-zA-Z0-9_\-]/g, '_');
+      const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+      const monthStr = monthNames[calendarMonth] || 'Mes';
+
+      const link = document.createElement('a');
+      link.href = imgData;
+      link.download = `Previa_Financeira_${safeName}_${monthStr}_${calendarYear}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast.success('Prévia Financeira baixada em PNG com sucesso!', { id: toastId });
+    } catch (err: any) {
+      console.error('Erro ao gerar PNG da prévia financeira:', err);
+      toast.error('Erro ao baixar a prévia financeira em PNG.', { id: toastId });
+    }
+  };
+
   const handleConfirmExcluir = async () => {
     if (!paciente) return;
     
@@ -4555,9 +4613,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     <button
                       type="button"
                       onClick={() => setIsFaturaModalOpen(true)}
-                      className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-all shadow-xs cursor-pointer font-sans border border-emerald-500/20"
+                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-300 transform hover:-translate-y-1 bg-emerald-600 shadow-lg shadow-emerald-500/50 hover:shadow-emerald-500/80 cursor-pointer flex items-center space-x-1.5 text-xs font-sans"
                     >
-                      <Receipt size={13.5} />
+                      <Receipt size={14} />
                       <span>Gerar Fatura</span>
                     </button>
 
@@ -4575,15 +4633,24 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         setAvulsoCuringa(false);
                         setAvulsoModalOpen(true);
                       }}
-                      className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white rounded-lg transition-all shadow-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer font-sans"
+                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-300 transform hover:-translate-y-1 bg-sky-600 shadow-lg shadow-sky-500/50 hover:shadow-sky-500/80 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none cursor-pointer flex items-center space-x-1.5 text-xs font-sans"
                     >
-                      <Plus size={13.5} />
+                      <Plus size={14} />
                       <span>Agendar</span>
                     </button>
 
+                    <button
+                      type="button"
+                      onClick={() => setIsPreviaFinanceiraModalOpen(true)}
+                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-300 transform hover:-translate-y-1 bg-purple-600 shadow-lg shadow-purple-500/50 hover:shadow-purple-500/80 cursor-pointer flex items-center space-x-1.5 text-xs font-sans"
+                    >
+                      <Calculator size={14} />
+                      <span>Prévia Financeira</span>
+                    </button>
+
                     {isCurrentMonthConcluded && (
-                      <div className="flex items-center gap-1.5 px-3 py-2 bg-amber-100 border border-amber-300 text-amber-900 rounded-lg text-xs font-black shadow-xs font-sans">
-                        <Lock size={13.5} className="text-amber-700" />
+                      <div className="flex items-center gap-1.5 px-4 py-2 bg-amber-100 border border-amber-300 text-amber-900 rounded-lg text-xs font-black shadow-xs font-sans">
+                        <Lock size={14} className="text-amber-700" />
                         <span>Escala Concluída</span>
                       </div>
                     )}
@@ -4598,9 +4665,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         setConcluirEndDate(`${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${formattedLastDay}`);
                         setConcluirModalOpen(true);
                       }}
-                      className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-indigo-950 hover:bg-indigo-900 text-white rounded-lg transition-all shadow-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer font-sans"
+                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-300 transform hover:-translate-y-1 bg-indigo-600 shadow-lg shadow-indigo-500/50 hover:shadow-indigo-500/80 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none cursor-pointer flex items-center space-x-1.5 text-xs font-sans"
                     >
-                      <Check size={13.5} />
+                      <Check size={14} />
                       <span>Concluir</span>
                     </button>
 
@@ -4614,9 +4681,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         setReabrirEndDate(`${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${formattedLastDay}`);
                         setReabrirModalOpen(true);
                       }}
-                      className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-all shadow-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer font-sans"
+                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-300 transform hover:-translate-y-1 bg-amber-600 shadow-lg shadow-amber-500/50 hover:shadow-amber-500/80 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none cursor-pointer flex items-center space-x-1.5 text-xs font-sans"
                     >
-                      <RotateCcw size={13.5} />
+                      <RotateCcw size={14} />
                       <span>Reabrir</span>
                     </button>
 
@@ -4630,36 +4697,36 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         setExcluirEndDate(`${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${formattedLastDay}`);
                         setExcluirModalOpen(true);
                       }}
-                      className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-red-600 hover:bg-red-750 text-white rounded-lg transition-all shadow-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer font-sans"
+                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-300 transform hover:-translate-y-1 bg-rose-600 shadow-lg shadow-rose-500/50 hover:shadow-rose-500/80 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none cursor-pointer flex items-center space-x-1.5 text-xs font-sans"
                     >
-                      <X size={13.5} />
+                      <X size={14} />
                       <span>Exclusão</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={handleBaixarFaturaExcel}
-                      className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg transition-all shadow-xs cursor-pointer font-sans border border-yellow-400/20"
+                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-300 transform hover:-translate-y-1 bg-amber-500 shadow-lg shadow-amber-400/50 hover:shadow-amber-400/80 cursor-pointer flex items-center space-x-1.5 text-xs font-sans"
                     >
-                      <Receipt size={13.5} />
+                      <FileSpreadsheet size={14} />
                       <span>Excel (.xlsx)</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={handleBaixarFaturaWord}
-                      className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all shadow-xs cursor-pointer font-sans"
+                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-300 transform hover:-translate-y-1 bg-blue-600 shadow-lg shadow-blue-500/50 hover:shadow-blue-500/80 cursor-pointer flex items-center space-x-1.5 text-xs font-sans"
                     >
-                      <Printer size={13.5} />
+                      <Printer size={14} />
                       <span>Word (.docx)</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={handleBaixarFaturaPng}
-                      className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-all shadow-xs cursor-pointer font-sans"
+                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-300 transform hover:-translate-y-1 bg-teal-600 shadow-lg shadow-teal-500/50 hover:shadow-teal-500/80 cursor-pointer flex items-center space-x-1.5 text-xs font-sans"
                     >
-                      <Download size={13.5} />
+                      <Download size={14} />
                       <span>Baixar Fatura</span>
                     </button>
                     
@@ -8377,6 +8444,298 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   Confirmar e Gerar Fatura
                 </button>
               </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* MODAL PREVIA FINANCEIRA DA ESCALA MENSAL */}
+      {isPreviaFinanceiraModalOpen && (() => {
+        const monthPrefix = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}`;
+        
+        // Filter agendamentos for current patient and active month
+        const monthShiftsRaw = agendamentos.filter(
+          (a) => a.idPaciente === (paciente?.id || '') && a.data && a.data.startsWith(monthPrefix)
+        );
+
+        // Deduplicate by ID
+        const seenIds = new Set<string>();
+        const monthShifts: Agendamento[] = [];
+        monthShiftsRaw.forEach((s) => {
+          if (s.id && !seenIds.has(s.id)) {
+            seenIds.add(s.id);
+            monthShifts.push(s);
+          } else if (!s.id) {
+            monthShifts.push(s);
+          }
+        });
+
+        // Group by Professional
+        const groupedByProf: { [nomeProf: string]: Agendamento[] } = {};
+        monthShifts.forEach((s) => {
+          const profName = (s.nomeProfissional || 'Profissional Não Informado').trim();
+          if (!groupedByProf[profName]) {
+            groupedByProf[profName] = [];
+          }
+          groupedByProf[profName].push(s);
+        });
+
+        const sortedProfNames = Object.keys(groupedByProf).sort();
+
+        // Helper to compute repasse value for a single shift
+        const getRepasseValue = (s: Agendamento) => {
+          if (s.status === 'Cancelado' || s.considerarFalta) return 0;
+          
+          let base = parseNum(s.valorRepasse) || parseNum(s.valorPlantao) || parseNum(paciente?.planoAtendimento?.valorSugeridoPlantao, 150);
+          let extra = parseNum(s.ajudaCusto) || 0;
+          
+          if (s.tipoDia === 'Feriado 20%') {
+            base = base * 1.20;
+          } else if (s.tipoDia === 'Feriado 50%') {
+            base = base * 1.50;
+          }
+          
+          return base + extra;
+        };
+
+        // Compute grand total
+        let grandTotalRepasse = 0;
+        let totalShiftsCount = 0;
+
+        sortedProfNames.forEach((profName) => {
+          const profShifts = groupedByProf[profName];
+          profShifts.forEach((s) => {
+            grandTotalRepasse += getRepasseValue(s);
+            if (s.status !== 'Cancelado' && !s.considerarFalta) {
+              totalShiftsCount++;
+            }
+          });
+        });
+
+        const formatCurrency = (val: number) => {
+          return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+        };
+
+        const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+        const monthTitle = `${monthNames[calendarMonth]} de ${calendarYear}`;
+
+        return (
+          <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-sm flex items-center justify-center z-[110] animate-in fade-in-30 p-4 font-sans text-left">
+            <div id="previa-financeira-modal-content" className="bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden max-w-4xl w-full max-h-[90vh] flex flex-col transform transition-all duration-300">
+              
+              {/* Header - Purple Theme */}
+              <div className="bg-gradient-to-r from-purple-800 to-purple-950 px-6 py-4 text-white flex items-center justify-between shrink-0 shadow-md">
+                <div className="flex items-center gap-3">
+                  <div className="bg-purple-700/50 p-2 rounded-xl border border-purple-400/30 flex items-center justify-center shadow-inner">
+                    <Calculator size={22} className="text-purple-200" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-extrabold tracking-tight text-white flex items-center gap-2">
+                      <span>Prévia Financeira da Escala</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider bg-purple-600/80 text-purple-100 px-2.5 py-0.5 rounded-full border border-purple-400/30">
+                        {monthTitle}
+                      </span>
+                    </h3>
+                    <p className="text-xs text-purple-200 font-medium">
+                      <span className="text-white font-extrabold">{nome || paciente?.nome || 'Paciente'}</span> • Demonstrativo de repasses por profissional
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsPreviaFinanceiraModalOpen(false)}
+                  className="text-purple-200 hover:text-white p-2 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Modal Body - Scrollable content */}
+              <div id="previa-financeira-modal-body" className="p-6 overflow-y-auto space-y-6 flex-1 bg-slate-50/50">
+                
+                {/* Summary Cards Header */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex items-center gap-3">
+                    <div className="bg-purple-100 p-2.5 rounded-lg text-purple-700">
+                      <User size={20} />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Profissionais Escalados</span>
+                      <span className="text-lg font-black text-slate-800">{sortedProfNames.length}</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex items-center gap-3">
+                    <div className="bg-purple-100 p-2.5 rounded-lg text-purple-700">
+                      <CalendarDays size={20} />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total de Plantões Válidos</span>
+                      <span className="text-lg font-black text-slate-800">{totalShiftsCount}</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-xl border border-purple-200 shadow-xs flex items-center gap-3">
+                    <div className="bg-purple-600 p-2.5 rounded-lg text-white shadow-sm">
+                      <Receipt size={20} />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-purple-800 uppercase tracking-wider block">Total Repasse Previsto</span>
+                      <span className="text-lg font-black text-purple-900">{formatCurrency(grandTotalRepasse)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* List of Professionals */}
+                {sortedProfNames.length === 0 ? (
+                  <div className="bg-white border border-slate-200 rounded-xl p-8 text-center space-y-2">
+                    <CalendarDays className="w-10 h-10 text-slate-300 mx-auto" />
+                    <p className="text-sm font-bold text-slate-600">Nenhum plantão agendado para este mês.</p>
+                    <p className="text-xs text-slate-400">Não foram encontrados registros de escala para o mês de {monthTitle}.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-5">
+                    {sortedProfNames.map((profName) => {
+                      const profShifts = groupedByProf[profName].sort((a, b) => (a.data || '').localeCompare(b.data || ''));
+                      
+                      let profTotalVal = 0;
+                      let profValidCount = 0;
+
+                      profShifts.forEach((s) => {
+                        const val = getRepasseValue(s);
+                        profTotalVal += val;
+                        if (s.status !== 'Cancelado' && !s.considerarFalta) {
+                          profValidCount++;
+                        }
+                      });
+
+                      return (
+                        <div key={profName} className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+                          {/* Professional Header */}
+                          <div className="bg-slate-100/80 px-4 py-3 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <User size={16} className="text-purple-700" />
+                              <h4 className="font-extrabold text-slate-800 text-sm tracking-tight">{profName}</h4>
+                              <span className="text-[11px] font-semibold text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-200">
+                                {profValidCount} {profValidCount === 1 ? 'plantão' : 'plantões'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-slate-500 font-medium">Subtotal a Pagar:</span>
+                              <span className="text-sm font-black text-purple-900 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200">
+                                {formatCurrency(profTotalVal)}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Professional Shifts Table */}
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse text-xs">
+                              <thead>
+                                <tr className="bg-slate-50/70 border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
+                                  <th className="py-2.5 px-4">Data</th>
+                                  <th className="py-2.5 px-4">Horário / Turno</th>
+                                  <th className="py-2.5 px-4">Tipo de Evento</th>
+                                  <th className="py-2.5 px-4">Status</th>
+                                  <th className="py-2.5 px-4 text-right">Valor Repasse</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 text-slate-700">
+                                {profShifts.map((s, idx) => {
+                                  const val = getRepasseValue(s);
+                                  const formattedDate = (() => {
+                                    if (!s.data) return '-';
+                                    const parts = s.data.split('-');
+                                    if (parts.length < 3) return s.data;
+                                    const year = parts[0];
+                                    const month = parts[1];
+                                    const day = parts[2];
+                                    const d = new Date(s.data + 'T12:00:00');
+                                    const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+                                    const dayName = weekDays[d.getDay()] || '';
+                                    return `${day}/${month}/${year} (${dayName})`;
+                                  })();
+
+                                  const isCuringa = s.isCuringa;
+                                  const eventTypeLabel = isCuringa ? 'Curinga' : (s.tipoDia || 'Normal');
+
+                                  return (
+                                    <tr key={s.id || idx} className="hover:bg-slate-50/80 transition-colors">
+                                      <td className="py-2.5 px-4 font-mono font-medium text-slate-800">{formattedDate}</td>
+                                      <td className="py-2.5 px-4 font-sans">{s.horario || '12h'}</td>
+                                      <td className="py-2.5 px-4 font-sans">
+                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                                          isCuringa 
+                                            ? 'bg-amber-100 text-amber-800 border border-amber-300' 
+                                            : s.tipoDia?.includes('Feriado')
+                                            ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                            : 'bg-slate-100 text-slate-700 border border-slate-200'
+                                        }`}>
+                                          {eventTypeLabel}
+                                        </span>
+                                      </td>
+                                      <td className="py-2.5 px-4 font-sans">
+                                        {s.status === 'Cancelado' || s.considerarFalta ? (
+                                          <span className="text-rose-600 font-bold bg-rose-50 px-2 py-0.5 rounded text-[10px] border border-rose-200">
+                                            {s.considerarFalta ? 'Falta' : 'Cancelado'}
+                                          </span>
+                                        ) : (
+                                          <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded text-[10px] border border-emerald-200">
+                                            {s.status || 'Ativo'}
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="py-2.5 px-4 text-right font-mono font-bold text-slate-900">
+                                        {formatCurrency(val)}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                              <tfoot>
+                                <tr className="bg-purple-50/40 border-t border-slate-200 font-bold text-xs">
+                                  <td colSpan={4} className="py-2.5 px-4 text-right text-slate-700 font-sans uppercase text-[10px] tracking-wider">
+                                    Valor Total ({profName}):
+                                  </td>
+                                  <td className="py-2.5 px-4 text-right font-mono font-extrabold text-purple-900 text-sm">
+                                    {formatCurrency(profTotalVal)}
+                                  </td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+              </div>
+
+              {/* Modal Footer */}
+              <div className="bg-slate-100 px-6 py-4 border-t border-slate-200 flex items-center justify-between shrink-0 font-sans">
+                <div className="text-xs text-slate-500 font-medium hidden sm:block">
+                  Soma geral de repasses previstos: <span className="font-extrabold text-purple-900">{formatCurrency(grandTotalRepasse)}</span>
+                </div>
+                <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                  <button
+                    type="button"
+                    onClick={handleBaixarPreviaFinanceiraPNG}
+                    className="px-4 py-2 text-xs font-bold text-white bg-purple-700 hover:bg-purple-800 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Download size={14} />
+                    <span>Baixar PNG</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsPreviaFinanceiraModalOpen(false)}
+                    className="px-5 py-2 text-xs font-bold text-white bg-purple-700 hover:bg-purple-800 rounded-lg transition-colors cursor-pointer shadow-sm"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </div>
+
             </div>
           </div>
         );

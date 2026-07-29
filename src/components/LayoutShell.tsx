@@ -73,23 +73,6 @@ export const LayoutShell: React.FC<LayoutShellProps> = ({
           />
         </div>
 
-        {/* 5. System Notifications overlay banner */}
-        {notification && (
-          <div className="fixed top-24 right-6 bg-[#FEF3C7] border-l-4 border-amber-600 text-amber-900 p-4 rounded-xl shadow-xl z-50 animate-in slide-in-from-right-4 max-w-sm flex items-start gap-3 print:hidden border border-amber-200" id="global-notification-banner">
-            <AlertCircle className="text-amber-600 shrink-0 mt-0.5" size={18} />
-            <div className="flex-1 space-y-1">
-              <p className="text-[10px] uppercase font-bold tracking-wider text-amber-800">Aviso do Sistema</p>
-              <p className="text-xs font-semibold leading-relaxed">{notification}</p>
-            </div>
-            <button
-              onClick={() => setNotification(null)}
-              className="text-amber-500 hover:text-amber-700 transition-colors p-0.5 rounded hover:bg-amber-100 cursor-pointer"
-            >
-              <X size={16} />
-            </button>
-          </div>
-        )}
-
         {/* 6. Universal Content Container (100% Mobile, side-aligned on Desktop) */}
         <main className="w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 space-y-6 min-w-0 flex-1" id="global-content-container">
           {/* ⚠️ Modo de Testes / Sandbox Banner */}
