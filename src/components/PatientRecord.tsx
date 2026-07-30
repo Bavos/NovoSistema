@@ -2342,7 +2342,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       );
 
       setConcluirModalOpen(false);
-      toast.success(`Escala concluída com sucesso! ${matches.length} turnos foram congelados.`, { id: toastId });
+      toast.success('Agenda Concluída', { id: toastId });
     } catch (err: any) {
       console.error("Erro ao processar batch de conclusão:", err);
       toast.error('Erro ao congelar escala: ' + (err.message || String(err)), { id: toastId });

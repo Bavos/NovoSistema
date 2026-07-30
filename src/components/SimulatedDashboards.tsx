@@ -536,6 +536,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   });
   const [debitFilterPatientId, setDebitFilterPatientId] = useState('');
   const [debitFilterProfId, setDebitFilterProfId] = useState('');
+  const [debitSearchTerm, setDebitSearchTerm] = useState('');
   const [isExportingDebitosPDF, setIsExportingDebitosPDF] = useState(false);
 
   const handleExportDebitosPDF = async () => {
@@ -3613,6 +3614,27 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
               
               {/* Filtro por ... */}
               <div className="flex flex-wrap items-center gap-2 print:hidden">
+                {/* Dynamic Real-time Search Input */}
+                <div className="relative min-w-[200px] sm:min-w-[240px]">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={debitSearchTerm}
+                    onChange={(e) => setDebitSearchTerm(e.target.value)}
+                    placeholder="Buscar profissional ou paciente..."
+                    className="w-full pl-8 pr-7 py-1 border border-slate-200 rounded-lg text-xs bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#1a3c2e] focus:border-[#1a3c2e] placeholder:text-slate-400"
+                  />
+                  {debitSearchTerm && (
+                    <button
+                      onClick={() => setDebitSearchTerm('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 text-xs rounded-full cursor-pointer"
+                      title="Limpar busca"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Filtrar por:</span>
                   <select
@@ -3748,7 +3770,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
 
                 const hasValidDates = Boolean(debitFilterStartDate && debitFilterEndDate);
 
-                const filteredGastoDebitos = hasValidDates ? (debitosProfissionais || []).filter(d => {
+                const filteredGastoDebitos = (hasValidDates ? (debitosProfissionais || []).filter(d => {
                   const dObj = getDebitDateObj(d.data);
                   if (!dObj) return false;
                   
@@ -3764,7 +3786,13 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                     return false;
                   }
                   return true;
-                }) : [];
+                }) : []).filter(d => {
+                  if (!debitSearchTerm.trim()) return true;
+                  const term = debitSearchTerm.toLowerCase().trim();
+                  const profMatch = (d.nomeProfissional || '').toLowerCase().includes(term);
+                  const pacMatch = (d.nomePaciente || '').toLowerCase().includes(term);
+                  return profMatch || pacMatch;
+                });
 
                 const valorTotalGasto = hasValidDates
                   ? filteredGastoDebitos.reduce((acc, curr) => acc + parseNumValor(curr.valor), 0)
@@ -3944,6 +3972,13 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                   <tbody className="divide-y divide-slate-100">
                     {(() => {
                       const filteredDebitos = (debitosProfissionais || []).filter(d => {
+                        if (debitSearchTerm.trim()) {
+                          const term = debitSearchTerm.toLowerCase().trim();
+                          const profMatch = (d.nomeProfissional || '').toLowerCase().includes(term);
+                          const pacMatch = (d.nomePaciente || '').toLowerCase().includes(term);
+                          if (!profMatch && !pacMatch) return false;
+                        }
+
                         if (debitFilterType === 'data') {
                           if (!debitFilterStartDate && !debitFilterEndDate) return true;
                           const dObj = getDebitDateObj(d.data);
@@ -4403,8 +4438,10 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
     // Filter states
     const [searchFaturaPaciente, setSearchFaturaPaciente] = useState('all');
     const [searchFaturaData, setSearchFaturaData] = useState('');
+    const [searchFaturaText, setSearchFaturaText] = useState('');
     const [searchFolhaProfissional, setSearchFolhaProfissional] = useState('all');
     const [searchFolhaData, setSearchFolhaData] = useState('');
+    const [searchFolhaText, setSearchFolhaText] = useState('');
 
     // Dynamic Lists from Firestore
     const [dropdownPacientes, setDropdownPacientes] = useState<{ id: string; nome: string }[]>([]);
@@ -4501,7 +4538,15 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
             }
         }
 
-        return matchesPaciente && matchesDate;
+        let matchesText = true;
+        if (searchFaturaText.trim()) {
+            const term = searchFaturaText.toLowerCase().trim();
+            const pacMatch = (f.nomePaciente || '').toLowerCase().includes(term);
+            const numMatch = (f.numeroFatura || '').toLowerCase().includes(term);
+            matchesText = pacMatch || numMatch;
+        }
+
+        return matchesPaciente && matchesDate && matchesText;
     });
 
     const sortedFaturas = React.useMemo(() => {
@@ -4542,7 +4587,14 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
             }
         }
 
-        return matchesProfissional && matchesDate;
+        let matchesText = true;
+        if (searchFolhaText.trim()) {
+            const term = searchFolhaText.toLowerCase().trim();
+            const profMatch = (f.nomeProfissional || '').toLowerCase().includes(term);
+            matchesText = profMatch;
+        }
+
+        return matchesProfissional && matchesDate && matchesText;
     });
 
     return (
@@ -4562,10 +4614,30 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
               )}
             </div>
             <div className="flex flex-wrap items-center gap-2 print:hidden">
+              {/* Dynamic Real-time Search Input */}
+              <div className="relative w-full sm:w-52">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchFaturaText}
+                  onChange={(e) => setSearchFaturaText(e.target.value)}
+                  placeholder="Buscar paciente ou nº..."
+                  className="w-full pl-8 pr-7 py-1 border border-slate-200 rounded-md text-xs bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder:text-slate-400"
+                />
+                {searchFaturaText && (
+                  <button
+                    onClick={() => setSearchFaturaText('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 text-xs rounded-full cursor-pointer"
+                    title="Limpar busca"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
               <button
                 onClick={handleExportFaturasPDF}
                 disabled={isExportingFaturasPDF || filteredFaturas.length === 0}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50 cursor-pointer text-xs"
                 title="Exportar relatório de faturas em PDF"
               >
                 <Printer className="w-3.5 h-3.5" /> {isExportingFaturasPDF ? 'Gerando PDF...' : 'Imprimir Relatório'}
@@ -4726,10 +4798,30 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-2 print:hidden">
+                {/* Dynamic Real-time Search Input */}
+                <div className="relative w-full sm:w-52">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={searchFolhaText}
+                    onChange={(e) => setSearchFolhaText(e.target.value)}
+                    placeholder="Buscar profissional..."
+                    className="w-full pl-8 pr-7 py-1 border border-slate-200 rounded-md text-xs bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder:text-slate-400"
+                  />
+                  {searchFolhaText && (
+                    <button
+                      onClick={() => setSearchFolhaText('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 text-xs rounded-full cursor-pointer"
+                      title="Limpar busca"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
                 <button
                   onClick={handleExportFolhasPDF}
                   disabled={isExportingFolhasPDF || filteredFolhas.length === 0}
-                  className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50 cursor-pointer text-xs"
                   title="Exportar relatório de folhas de pagamento em PDF"
                 >
                   <Printer className="w-3.5 h-3.5" /> {isExportingFolhasPDF ? 'Gerando PDF...' : 'Imprimir Relatório'}
