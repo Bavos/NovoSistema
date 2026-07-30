@@ -30,7 +30,8 @@ import {
   Cpu,
   ShieldCheck,
   FileText,
-  Filter
+  Filter,
+  Eye
 } from 'lucide-react';
 import { INITIAL_PROFESSIONALS } from '../mockData';
 import { useFirebase } from '../context/FirebaseContext';
@@ -1305,7 +1306,17 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       }
 
       const pac = pacientes.find(p => p.id === pacId);
-      const totalFatura = agends.reduce((acc, ag) => acc + getAgendamentoCalculatedValues(ag).cobradoDia, 0);
+
+      // Crie uma constante filtrando os agendamentos: exclua qualquer plantão cujo status indique ausência (ex: status === 'Falta') ou cujo valor de repasse/faturamento seja 0.
+      const agendamentosValidos = agends.filter((ag: any) => {
+        if (ag.considerarFalta || ag.status === 'falta' || ag.status === 'Falta' || ag.status === 'Cancelado' || ag.status === 'cancelado') {
+          return false;
+        }
+        const vals = getAgendamentoCalculatedValues(ag);
+        return (vals.cobradoDia || 0) > 0;
+      });
+
+      const totalFatura = agendamentosValidos.reduce((acc, ag) => acc + getAgendamentoCalculatedValues(ag).cobradoDia, 0);
 
       // 3. Bloqueio de Emissão Zerada / Negativa
       if (totalFatura <= 0) {
@@ -3094,7 +3105,14 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                     ) : (
                       (Object.entries(agendamentosPorPaciente) as [string, Agendamento[]][]).map(([pacId, agends]) => {
                         const pacNome = pacientes.find(p => p.id === pacId)?.nome || 'Paciente Desconhecido';
-                        const totalFatura = agends.reduce((acc, ag) => {
+                        const agendamentosValidos = agends.filter((ag: any) => {
+                          if (ag.considerarFalta || ag.status === 'falta' || ag.status === 'Falta' || ag.status === 'Cancelado' || ag.status === 'cancelado') {
+                            return false;
+                          }
+                          const vals = getAgendamentoCalculatedValues(ag);
+                          return (vals.cobradoDia || 0) > 0;
+                        });
+                        const totalFatura = agendamentosValidos.reduce((acc, ag) => {
                           const vals = getAgendamentoCalculatedValues(ag);
                           return acc + vals.cobradoDia;
                         }, 0);
@@ -4143,6 +4161,50 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
     const [isExportingFaturasPDF, setIsExportingFaturasPDF] = useState(false);
     const [isExportingFolhasPDF, setIsExportingFolhasPDF] = useState(false);
     const [selectedHistorico, setSelectedHistorico] = useState<string[]>([]);
+    const [selectedFaturas, setSelectedFaturas] = useState<string[]>([]);
+    const [batchDeleteConfirm, setBatchDeleteConfirm] = useState<{ isOpen: boolean; type: 'fatura' | 'folha'; ids: string[] } | null>(null);
+    const [isDeletingBatch, setIsDeletingBatch] = useState(false);
+    const [faturaSortConfig, setFaturaSortConfig] = useState<{ key: 'paciente' | 'emissao' | null; direction: 'asc' | 'desc' }>({
+        key: 'emissao',
+        direction: 'desc'
+    });
+
+    const handleBatchDelete = async () => {
+        if (!batchDeleteConfirm || batchDeleteConfirm.ids.length === 0) return;
+        setIsDeletingBatch(true);
+        const count = batchDeleteConfirm.ids.length;
+        const toastId = toast.loading(`Excluindo ${count} item(ns) em lote...`);
+        try {
+            if (batchDeleteConfirm.type === 'fatura') {
+                for (const id of batchDeleteConfirm.ids) {
+                    await deleteFaturaPaciente(id);
+                }
+                setSelectedFaturas([]);
+                toast.success(`${count} fatura(s) excluída(s) com sucesso!`, { id: toastId });
+            } else {
+                for (const id of batchDeleteConfirm.ids) {
+                    await deleteFolhaPagamento(id);
+                }
+                setSelectedHistorico([]);
+                toast.success(`${count} folha(s) de pagamento excluída(s) com sucesso!`, { id: toastId });
+            }
+        } catch (err) {
+            console.error("Erro ao excluir itens em lote:", err);
+            toast.error("Erro ao excluir alguns itens em lote.", { id: toastId });
+        } finally {
+            setIsDeletingBatch(false);
+            setBatchDeleteConfirm(null);
+        }
+    };
+
+    const handleSortFatura = (key: 'paciente' | 'emissao') => {
+        setFaturaSortConfig(prev => {
+            if (prev.key === key) {
+                return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+            }
+            return { key, direction: key === 'paciente' ? 'asc' : 'desc' };
+        });
+    };
 
     const handleExportFaturasPDF = async () => {
         if (filteredFaturas.length === 0) {
@@ -4442,6 +4504,27 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
         return matchesPaciente && matchesDate;
     });
 
+    const sortedFaturas = React.useMemo(() => {
+        return [...filteredFaturas].sort((a, b) => {
+            if (!faturaSortConfig.key) return 0;
+
+            if (faturaSortConfig.key === 'paciente') {
+                const nameA = (a.nomePaciente || '').toString().toLowerCase();
+                const nameB = (b.nomePaciente || '').toString().toLowerCase();
+                const cmp = nameA.localeCompare(nameB, 'pt-BR');
+                return faturaSortConfig.direction === 'asc' ? cmp : -cmp;
+            }
+
+            if (faturaSortConfig.key === 'emissao') {
+                const dateA = new Date(a.dataEmissao).getTime() || 0;
+                const dateB = new Date(b.dataEmissao).getTime() || 0;
+                return faturaSortConfig.direction === 'asc' ? dateA - dateB : dateB - dateA;
+            }
+
+            return 0;
+        });
+    }, [filteredFaturas, faturaSortConfig]);
+
     const filteredFolhas = folhasPagamento.filter(f => {
         const matchesProfissional = !searchFolhaProfissional || searchFolhaProfissional === 'all' || f.nomeProfissional === searchFolhaProfissional;
 
@@ -4466,7 +4549,18 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
       <div className="space-y-6 animate-in fade-in-30">
         <div className="bg-white p-4 border border-gray-100 rounded-xl shadow-sm">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-            <h2 className="text-md font-black text-slate-800">📜 Histórico de Faturas</h2>
+            <div className="flex items-center gap-3">
+              <h2 className="text-md font-black text-slate-800">📜 Histórico de Faturas</h2>
+              {selectedFaturas.length > 0 && (
+                <button
+                  onClick={() => setBatchDeleteConfirm({ isOpen: true, type: 'fatura', ids: selectedFaturas })}
+                  className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700 transition-all active:scale-95 cursor-pointer shadow-sm animate-in fade-in"
+                  title="Excluir faturas selecionadas em lote"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Excluir em Lote ({selectedFaturas.length})
+                </button>
+              )}
+            </div>
             <div className="flex flex-wrap items-center gap-2 print:hidden">
               <button
                 onClick={handleExportFaturasPDF}
@@ -4499,35 +4593,106 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
             <table className="w-full text-xs text-left">
                 <thead className="text-slate-500 uppercase border-b border-slate-100">
                     <tr>
+                        <th className="p-3 w-10 print:hidden">
+                            <input 
+                                type="checkbox"
+                                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                checked={sortedFaturas.length > 0 && selectedFaturas.length === sortedFaturas.length}
+                                onChange={(e) => {
+                                    if (e.target.checked) {
+                                        setSelectedFaturas(sortedFaturas.map(f => f.id));
+                                    } else {
+                                        setSelectedFaturas([]);
+                                    }
+                                }}
+                                title="Selecionar todas as faturas"
+                            />
+                        </th>
                         <th className="p-3">Número</th>
-                        <th className="p-3">Paciente</th>
-                        <th className="p-3">Emissão</th>
+                        <th 
+                            className="p-3 cursor-pointer hover:bg-slate-100/70 text-slate-700 hover:text-slate-900 transition-colors select-none group"
+                            onClick={() => handleSortFatura('paciente')}
+                            title="Clique para ordenar por Paciente (A-Z / Z-A)"
+                        >
+                            <div className="flex items-center gap-1.5">
+                                <span>Paciente</span>
+                                {faturaSortConfig.key === 'paciente' ? (
+                                    <span className="text-blue-600 font-bold text-xs">
+                                        {faturaSortConfig.direction === 'asc' ? '↑' : '↓'}
+                                    </span>
+                                ) : (
+                                    <span className="text-slate-300 group-hover:text-slate-400 font-normal text-[11px]">↕</span>
+                                )}
+                            </div>
+                        </th>
+                        <th 
+                            className="p-3 cursor-pointer hover:bg-slate-100/70 text-slate-700 hover:text-slate-900 transition-colors select-none group"
+                            onClick={() => handleSortFatura('emissao')}
+                            title="Clique para ordenar por Data de Emissão"
+                        >
+                            <div className="flex items-center gap-1.5">
+                                <span>Emissão</span>
+                                {faturaSortConfig.key === 'emissao' ? (
+                                    <span className="text-blue-600 font-bold text-xs">
+                                        {faturaSortConfig.direction === 'asc' ? '↑' : '↓'}
+                                    </span>
+                                ) : (
+                                    <span className="text-slate-300 group-hover:text-slate-400 font-normal text-[11px]">↕</span>
+                                )}
+                            </div>
+                        </th>
                         <th className="p-3 text-right font-bold">Valor</th>
                         <th className="p-3 text-center">Status</th>
                         <th className="p-3 text-center print:hidden">Ações</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                    {filteredFaturas.length === 0 ? (
+                    {sortedFaturas.length === 0 ? (
                         <tr>
-                            <td colSpan={6} className="p-8 text-center text-slate-400 font-semibold bg-slate-50/20">
+                            <td colSpan={7} className="p-8 text-center text-slate-400 font-semibold bg-slate-50/20">
                                 Nenhum registro encontrado para estes filtros.
                             </td>
                         </tr>
                     ) : (
-                        filteredFaturas.map(f => (
-                            <tr key={f.id}>
+                        sortedFaturas.map(f => (
+                            <tr key={f.id} className={`hover:bg-slate-50/60 transition-colors ${selectedFaturas.includes(f.id) ? 'bg-indigo-50/30' : ''}`}>
+                                <td className="p-3 w-10 print:hidden">
+                                    <input 
+                                        type="checkbox"
+                                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                        checked={selectedFaturas.includes(f.id)}
+                                        onChange={(e) => {
+                                            if (e.target.checked) {
+                                                setSelectedFaturas(prev => [...prev, f.id]);
+                                            } else {
+                                                setSelectedFaturas(prev => prev.filter(id => id !== f.id));
+                                            }
+                                        }}
+                                    />
+                                </td>
                                 <td className="p-3 font-mono">{f.numeroFatura}</td>
-                                <td className="p-3">{f.nomePaciente}</td>
+                                <td className="p-3 font-medium text-slate-800">{f.nomePaciente}</td>
                                 <td className="p-3">{new Date(f.dataEmissao).toLocaleDateString('pt-BR')}</td>
                                 <td className="p-3 text-right font-bold text-slate-700">R$ {f.valorTotal.toFixed(2)}</td>
                                 <td className="p-3 text-center"><span className="px-2 py-1 rounded-full text-[10px] bg-green-100 text-green-700 font-bold">{f.status}</span></td>
                                 <td className="p-3 text-center print:hidden">
                                     <div className="flex justify-center items-center gap-2">
-                                        <button className="text-blue-600 hover:text-blue-800 cursor-pointer" onClick={() => setViewDoc({ data: f, type: 'fatura' })}>👁️</button>
-                                        <button className="text-red-600 hover:text-red-800 cursor-pointer" onClick={() => {
-                                            setDeleteConfirm({ isOpen: true, id: f.id, type: 'fatura' });
-                                        }}>🗑️</button>
+                                        <button 
+                                            className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors cursor-pointer" 
+                                            title="Visualizar Fatura"
+                                            onClick={() => setViewDoc({ data: f, type: 'fatura' })}
+                                        >
+                                            <Eye className="w-4 h-4" />
+                                        </button>
+                                        <button 
+                                            className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors cursor-pointer" 
+                                            title="Excluir Fatura"
+                                            onClick={() => {
+                                                setDeleteConfirm({ isOpen: true, id: f.id, type: 'fatura' });
+                                            }}
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
                                     </div>
                                 </td>
                             </tr>
@@ -4539,7 +4704,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
         </div>
         <div className="bg-white p-4 border border-gray-100 rounded-xl shadow-sm">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
                 <h2 className="text-md font-black text-slate-800">📜 Histórico de Folhas de Pagamento</h2>
                 <button
                   id="btn-download-resumo-pagamento"
@@ -4550,6 +4715,15 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                 >
                   {isExportingFolhasPDF ? 'Gerando PDF...' : 'Baixar Resumo para Pagamento'}
                 </button>
+                {selectedHistorico.length > 0 && (
+                  <button
+                    onClick={() => setBatchDeleteConfirm({ isOpen: true, type: 'folha', ids: selectedHistorico })}
+                    className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700 transition-all active:scale-95 cursor-pointer shadow-sm animate-in fade-in"
+                    title="Excluir folhas selecionadas em lote"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Excluir em Lote ({selectedHistorico.length})
+                  </button>
+                )}
               </div>
               <div className="flex flex-wrap items-center gap-2 print:hidden">
                 <button
@@ -4686,7 +4860,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
               </div>
               <div className="text-right">
                 <span className="text-xs text-slate-500 block font-semibold">Total de Registros:</span>
-                <span className="text-sm font-bold text-slate-800">{filteredFaturas.length} faturas</span>
+                <span className="text-sm font-bold text-slate-800">{sortedFaturas.length} faturas</span>
               </div>
             </div>
 
@@ -4701,7 +4875,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {filteredFaturas.map((f, idx) => (
+                {sortedFaturas.map((f, idx) => (
                   <tr key={f.id || idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
                     <td className="p-2.5 font-mono font-semibold text-slate-700">{f.numeroFatura || '-'}</td>
                     <td className="p-2.5 font-bold text-slate-800">{f.nomePaciente || 'Paciente'}</td>
@@ -5110,6 +5284,33 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                             else await deleteFolhaPagamento(deleteConfirm.id);
                             setDeleteConfirm(null);
                         }} className="flex items-center justify-center gap-2 px-4 py-2 bg-red-500 text-white font-medium rounded-lg shadow-lg shadow-red-500/40 hover:bg-red-600 transition-all active:scale-95 disabled:opacity-50">Sim, Excluir</button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* Batch Delete Confirmation Modal */}
+        {batchDeleteConfirm && (
+            <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4">
+                <div className="bg-white p-6 rounded-2xl max-w-sm w-full shadow-2xl animate-in zoom-in-95 duration-150">
+                    <p className="text-sm font-bold text-slate-800">
+                      ⚠️ Tem certeza que deseja excluir em lote {batchDeleteConfirm.ids.length} {batchDeleteConfirm.type === 'fatura' ? 'fatura(s) selecionada(s)' : 'folha(s) de pagamento selecionada(s)'}? Esta ação não pode ser desfeita.
+                    </p>
+                    <div className="flex justify-end gap-3 mt-5">
+                        <button 
+                          onClick={() => setBatchDeleteConfirm(null)} 
+                          disabled={isDeletingBatch}
+                          className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50 cursor-pointer text-xs"
+                        >
+                          Cancelar
+                        </button>
+                        <button 
+                          onClick={handleBatchDelete} 
+                          disabled={isDeletingBatch}
+                          className="flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white font-medium rounded-lg shadow-lg shadow-red-600/30 hover:bg-red-700 transition-all active:scale-95 disabled:opacity-50 cursor-pointer text-xs"
+                        >
+                          {isDeletingBatch ? 'Excluindo...' : `Sim, Excluir ${batchDeleteConfirm.ids.length} Item(ns)`}
+                        </button>
                     </div>
                 </div>
             </div>

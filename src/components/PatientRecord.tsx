@@ -2396,27 +2396,29 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       }
 
       // 3. Consolidação e Integração com "Histórico Financeiro" (Firestore)
-      let sumRepasse = 0;
-      let sumTaxa = 0;
-      agendamentosPacienteMes.forEach(s => {
-        if (s.status !== 'Cancelado') {
-          let base = parseNum(s.valorPlantao) || parseNum(paciente?.planoAtendimento?.valorSugeridoPlantao, 150);
-          let extra = parseNum(s.ajudaCusto) || parseNum(paciente?.planoAtendimento?.ajudaCusto, 0);
-          let baseTaxa = parseNum(s.taxaAdm) || parseNum(paciente?.planoAtendimento?.taxaAdm, 0);
-          if (s.tipoDia === 'Feriado 20%') {
-            sumRepasse += (base * 1.20) + extra;
-            sumTaxa += baseTaxa * 1.20;
-          } else if (s.tipoDia === 'Feriado 50%') {
-            sumRepasse += (base * 1.50) + extra;
-            sumTaxa += baseTaxa * 1.50;
-          } else {
-            sumRepasse += base + extra;
-            sumTaxa += baseTaxa;
-          }
+      const plantoesValidos = agendamentosPacienteMes.filter((s: any) => {
+        if (s.considerarFalta || s.status === 'falta' || s.status === 'Falta' || s.status === 'Cancelado' || s.status === 'cancelado') {
+          return false;
         }
+        let base = parseNum(s.valorPlantao) || parseNum(paciente?.planoAtendimento?.valorSugeridoPlantao, 150);
+        let extra = parseNum(s.ajudaCusto) || parseNum(paciente?.planoAtendimento?.ajudaCusto, 0);
+        let baseTaxa = parseNum(s.taxaAdm) || parseNum(paciente?.planoAtendimento?.taxaAdm, 0);
+        let mult = 1.0;
+        if (s.tipoDia === 'Feriado 20%') mult = 1.2;
+        else if (s.tipoDia === 'Feriado 50%') mult = 1.5;
+        const val = (base * mult) + (baseTaxa * mult) + extra;
+        return val > 0;
       });
 
-      const valorTotalFatura = sumRepasse + sumTaxa;
+      const valorTotalFatura = plantoesValidos.reduce((acc: number, s: any) => {
+        let base = parseNum(s.valorPlantao) || parseNum(paciente?.planoAtendimento?.valorSugeridoPlantao, 150);
+        let extra = parseNum(s.ajudaCusto) || parseNum(paciente?.planoAtendimento?.ajudaCusto, 0);
+        let baseTaxa = parseNum(s.taxaAdm) || parseNum(paciente?.planoAtendimento?.taxaAdm, 0);
+        let mult = 1.0;
+        if (s.tipoDia === 'Feriado 20%') mult = 1.2;
+        else if (s.tipoDia === 'Feriado 50%') mult = 1.5;
+        return acc + (base * mult) + (baseTaxa * mult) + extra;
+      }, 0);
 
       const nomePaciente = nome || paciente?.nome || 'Não definido';
       const numFatSuffix = Math.floor(1000 + Math.random() * 9000);
