@@ -3060,12 +3060,36 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                     {/* Bloco 2: Endereço */}
                     <CardBase className="grid grid-cols-1 md:grid-cols-4 gap-4">
                        <span className="md:col-span-4 font-bold text-xs text-[#1a3c2e] uppercase border-b border-gray-50 pb-2 mb-1">Endereço</span>
-                       <input type="text" value={formData.endereco.cep} onChange={e => handleCepChange(e.target.value)} maxLength={9} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
-                       <input type="text" value={formData.endereco.rua} onChange={e => setFormData({...formData, endereco: {...formData.endereco, rua: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs md:col-span-2 text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
-                       <input type="text" value={formData.endereco.numero} onChange={e => setFormData({...formData, endereco: {...formData.endereco, numero: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
-                       <input type="text" value={formData.endereco.bairro} onChange={e => setFormData({...formData, endereco: {...formData.endereco, bairro: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
-                       <input type="text" value={formData.endereco.cidade} onChange={e => setFormData({...formData, endereco: {...formData.endereco, cidade: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
-                       <input type="text" value={formData.endereco.estado} onChange={e => setFormData({...formData, endereco: {...formData.endereco, estado: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none" />
+                       
+                       <div className="space-y-1">
+                         <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">C.E.P</label>
+                         <input type="text" placeholder="00000-000" value={formData.endereco.cep} onChange={e => handleCepChange(e.target.value)} maxLength={9} className="p-2 border border-gray-200 rounded-lg text-xs w-full text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none bg-white" />
+                       </div>
+
+                       <div className="space-y-1 md:col-span-2">
+                         <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Logradouro / Rua</label>
+                         <input type="text" placeholder="Rua / Avenida" value={formData.endereco.rua} onChange={e => setFormData({...formData, endereco: {...formData.endereco, rua: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs w-full text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none bg-white" />
+                       </div>
+
+                       <div className="space-y-1">
+                         <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Complemento / Nº</label>
+                         <input type="text" placeholder="Nº, Apto, Bloco" value={formData.endereco.numero} onChange={e => setFormData({...formData, endereco: {...formData.endereco, numero: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs w-full text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none bg-white" />
+                       </div>
+
+                       <div className="space-y-1">
+                         <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Bairro</label>
+                         <input type="text" placeholder="Bairro" value={formData.endereco.bairro} onChange={e => setFormData({...formData, endereco: {...formData.endereco, bairro: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs w-full text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none bg-white" />
+                       </div>
+
+                       <div className="space-y-1 md:col-span-2">
+                         <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Cidade</label>
+                         <input type="text" placeholder="Cidade" value={formData.endereco.cidade} onChange={e => setFormData({...formData, endereco: {...formData.endereco, cidade: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs w-full text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none bg-white" />
+                       </div>
+
+                       <div className="space-y-1">
+                         <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Estado</label>
+                         <input type="text" placeholder="UF" value={formData.endereco.estado} onChange={e => setFormData({...formData, endereco: {...formData.endereco, estado: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs w-full text-gray-800 focus:ring-1 focus:ring-[#1a3c2e] outline-none bg-white" />
+                       </div>
                     </CardBase>
 
                     {/* Bloco 3: Financeiro */}
@@ -3149,133 +3173,160 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                             </div>
                           </div>
                        )}
-                        <div className="relative flex flex-col gap-1 w-full" id="bank-selector-container">
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Banco</label>
+                          <div className="relative flex flex-col gap-1 w-full" id="bank-selector-container">
+                            <div className="relative">
+                              <input
+                                type="text"
+                                placeholder="Selecione ou busque o banco..."
+                                value={isBankDropdownOpen ? bankSearch : (formData.dadosBancarios.banco || '')}
+                                onFocus={() => {
+                                  setBankSearch('');
+                                  setIsBankDropdownOpen(true);
+                                }}
+                                onBlur={() => {
+                                  // Delay to allow selection before closing
+                                  setTimeout(() => setIsBankDropdownOpen(false), 200);
+                                }}
+                                onChange={(e) => {
+                                  setBankSearch(e.target.value);
+                                  setIsBankDropdownOpen(true);
+                                }}
+                                className="w-full p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e] bg-white cursor-pointer font-sans"
+                              />
+                              <div className="absolute right-2 top-2.5 pointer-events-none text-gray-400">
+                                <Search size={14} />
+                              </div>
+                            </div>
+
+                            {isBankDropdownOpen && (
+                              <div className="absolute left-0 right-0 top-full mt-1 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-xl z-50 divide-y divide-slate-100">
+                                <button
+                                  type="button"
+                                  onMouseDown={() => {
+                                    setFormData({
+                                      ...formData,
+                                      dadosBancarios: {
+                                        ...formData.dadosBancarios,
+                                        banco: ''
+                                      }
+                                    });
+                                    setBankSearch('');
+                                    setIsBankDropdownOpen(false);
+                                  }}
+                                  className="w-full text-left p-2 hover:bg-slate-50 transition-colors text-xs font-medium text-gray-400 italic"
+                                >
+                                  Limpar seleção (Sem banco)
+                                </button>
+                                {(() => {
+                                  const query = bankSearch.toLowerCase().trim();
+                                  const filtered = bankList.filter(
+                                    b => b.code.toLowerCase().includes(query) || b.name.toLowerCase().includes(query)
+                                  );
+
+                                  if (filtered.length === 0) {
+                                    return <div className="p-2 text-xs text-gray-400 text-center">Nenhum banco encontrado</div>;
+                                  }
+
+                                  return filtered.map(b => {
+                                    const valueStr = `[${b.code}] - ${b.name}`;
+                                    const isSelected = formData.dadosBancarios.banco === valueStr;
+                                    return (
+                                      <button
+                                        key={b.code}
+                                        type="button"
+                                        onMouseDown={() => {
+                                          setFormData({
+                                            ...formData,
+                                            dadosBancarios: {
+                                              ...formData.dadosBancarios,
+                                              banco: valueStr
+                                            }
+                                          });
+                                          setBankSearch('');
+                                          setIsBankDropdownOpen(false);
+                                        }}
+                                        className={`w-full text-left p-2 hover:bg-slate-50 transition-colors text-xs font-medium flex items-center justify-between ${
+                                          isSelected ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-700'
+                                        }`}
+                                      >
+                                        <span>[{b.code}] - {b.name}</span>
+                                        {isSelected && <Check size={12} className="text-blue-600" />}
+                                      </button>
+                                    );
+                                  });
+                                })()}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Tipo de Conta</label>
+                          <select
+                            id="tipo-conta-select"
+                            value={formData.dadosBancarios.tipoConta || ''}
+                            onChange={e => setFormData({
+                              ...formData,
+                              dadosBancarios: {
+                                ...formData.dadosBancarios,
+                                tipoConta: e.target.value as 'corrente' | 'poupanca' | 'pagamento' | ''
+                              }
+                            })}
+                            className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e] bg-white cursor-pointer font-sans w-full"
+                          >
+                            <option value="">Tipo de Conta...</option>
+                            <option value="corrente">Conta Corrente</option>
+                            <option value="poupanca">Conta Poupança</option>
+                            <option value="pagamento">Conta de Pagamento</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Agência</label>
+                          <input
+                            type="text"
+                            placeholder="Nº da Agência"
+                            value={formData.dadosBancarios.agencia}
+                            onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, agencia: e.target.value}})}
+                            className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e] w-full bg-white"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Conta / Dígito</label>
+                          <input
+                            type="text"
+                            placeholder="Nº da Conta com dígito"
+                            value={formData.dadosBancarios.conta}
+                            onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, conta: maskBankAccount(e.target.value)}})}
+                            className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e] w-full bg-white"
+                          />
+                        </div>
+
+                        <div className="space-y-1 md:col-span-4">
+                          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Chave PIX</label>
                           <div className="relative">
                             <input
                               type="text"
-                              value={isBankDropdownOpen ? bankSearch : (formData.dadosBancarios.banco || '')}
-                              onFocus={() => {
-                                setBankSearch('');
-                                setIsBankDropdownOpen(true);
-                              }}
-                              onBlur={() => {
-                                // Delay to allow selection before closing
-                                setTimeout(() => setIsBankDropdownOpen(false), 200);
-                              }}
-                              onChange={(e) => {
-                                setBankSearch(e.target.value);
-                                setIsBankDropdownOpen(true);
-                              }}
-                              className="w-full p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e] bg-white cursor-pointer font-sans"
+                              placeholder="CPF, CNPJ, E-mail, Telefone ou Chave Aleatória"
+                              value={formData.dadosBancarios.pix}
+                              onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, pix: e.target.value}})}
+                              className="p-2 pr-8 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e] w-full bg-white"
                             />
-                            <div className="absolute right-2 top-2.5 pointer-events-none text-gray-400">
-                              <Search size={14} />
-                            </div>
-                          </div>
-
-                          {isBankDropdownOpen && (
-                            <div className="absolute left-0 right-0 top-full mt-1 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-xl z-50 divide-y divide-slate-100">
+                            {formData.dadosBancarios.pix && (
                               <button
                                 type="button"
-                                onMouseDown={() => {
-                                  setFormData({
-                                    ...formData,
-                                    dadosBancarios: {
-                                      ...formData.dadosBancarios,
-                                      banco: ''
-                                    }
-                                  });
-                                  setBankSearch('');
-                                  setIsBankDropdownOpen(false);
-                                }}
-                                className="w-full text-left p-2 hover:bg-slate-50 transition-colors text-xs font-medium text-gray-400 italic"
+                                onClick={() => handleCopyToClipboard(formData.dadosBancarios.pix)}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-600 transition-colors cursor-pointer"
+                                title="Copiar PIX"
                               >
-                                Limpar seleção (Sem banco)
+                                <Copy size={13} />
                               </button>
-                              {(() => {
-                                const query = bankSearch.toLowerCase().trim();
-                                const filtered = bankList.filter(
-                                  b => b.code.toLowerCase().includes(query) || b.name.toLowerCase().includes(query)
-                                );
-
-                                if (filtered.length === 0) {
-                                  return <div className="p-2 text-xs text-gray-400 text-center">Nenhum banco encontrado</div>;
-                                }
-
-                                return filtered.map(b => {
-                                  const valueStr = `[${b.code}] - ${b.name}`;
-                                  const isSelected = formData.dadosBancarios.banco === valueStr;
-                                  return (
-                                    <button
-                                      key={b.code}
-                                      type="button"
-                                      onMouseDown={() => {
-                                        setFormData({
-                                          ...formData,
-                                          dadosBancarios: {
-                                            ...formData.dadosBancarios,
-                                            banco: valueStr
-                                          }
-                                        });
-                                        setBankSearch('');
-                                        setIsBankDropdownOpen(false);
-                                      }}
-                                      className={`w-full text-left p-2 hover:bg-slate-50 transition-colors text-xs font-medium flex items-center justify-between ${
-                                        isSelected ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-700'
-                                      }`}
-                                    >
-                                      <span>[{b.code}] - {b.name}</span>
-                                      {isSelected && <Check size={12} className="text-blue-600" />}
-                                    </button>
-                                  );
-                                });
-                              })()}
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </div>
-                        <select
-                          id="tipo-conta-select"
-                          value={formData.dadosBancarios.tipoConta || ''}
-                          onChange={e => setFormData({
-                            ...formData,
-                            dadosBancarios: {
-                              ...formData.dadosBancarios,
-                              tipoConta: e.target.value as 'corrente' | 'poupanca' | 'pagamento' | ''
-                            }
-                          })}
-                          className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e] bg-white cursor-pointer font-sans"
-                        >
-                          <option value="">Tipo de Conta...</option>
-                          <option value="corrente">Conta Corrente</option>
-                          <option value="poupanca">Conta Poupança</option>
-                          <option value="pagamento">Conta de Pagamento</option>
-                        </select>
-                        {false && <select value={formData.dadosBancarios.banco} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, banco: e.target.value}})} id="banco-select" className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]">
-                          <option value="">Selecione um banco...</option>
-                          {bankList.map(b => (
-                            <option key={b.code} value={`[${b.code}] - ${b.name}`}>[{b.code}] - {b.name}</option>
-                          ))}
-                        </select>}
-                        <input type="text" value={formData.dadosBancarios.agencia} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, agencia: e.target.value}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]" />
-                        <input type="text" value={formData.dadosBancarios.conta} onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, conta: maskBankAccount(e.target.value)}})} className="p-2 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e]" />
-                       <div className="relative">
-                         <input
-                           type="text"
-                           value={formData.dadosBancarios.pix}
-                           onChange={e => setFormData({...formData, dadosBancarios: {...formData.dadosBancarios, pix: e.target.value}})}
-                           className="p-2 pr-8 border border-gray-200 rounded-lg text-xs text-gray-800 outline-none focus:ring-1 focus:ring-[#1a3c2e] w-full"
-                         />
-                         {formData.dadosBancarios.pix && (
-                           <button
-                             type="button"
-                             onClick={() => handleCopyToClipboard(formData.dadosBancarios.pix)}
-                             className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-600 transition-colors cursor-pointer"
-                             title="Copiar PIX"
-                           >
-                             <Copy size={13} />
-                           </button>
-                         )}
-                       </div>
                     </CardBase>
 
                     {/* Bloco 4: Documentos Anexos */}

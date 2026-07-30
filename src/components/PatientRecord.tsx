@@ -4628,7 +4628,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                       type="button"
                                       disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
                                       onClick={() => handleDeletePlantao(tp.id, false)}
-                                      className="py-1 px-2.5 border border-red-200 text-red-100 text-red-650 bg-red-50 hover:bg-red-100 hover:text-red-750 border-red-200 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-all font-semibold inline-flex items-center space-x-1 cursor-pointer text-xs"
+                                      className="py-1 px-2.5 border border-red-200 text-red-650 hover:bg-red-50 hover:text-red-750 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-all font-semibold inline-flex items-center space-x-1 cursor-pointer text-xs"
                                       title="Excluir plantão adicional"
                                     >
                                       <Trash2 size={13} />

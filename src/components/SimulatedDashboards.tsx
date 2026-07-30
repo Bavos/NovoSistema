@@ -535,11 +535,11 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   });
   const [debitFilterPatientId, setDebitFilterPatientId] = useState('');
   const [debitFilterProfId, setDebitFilterProfId] = useState('');
-  const [isExportingDebitosPNG, setIsExportingDebitosPNG] = useState(false);
+  const [isExportingDebitosPDF, setIsExportingDebitosPDF] = useState(false);
 
-  const handleExportDebitosPNG = async () => {
-    setIsExportingDebitosPNG(true);
-    const toastId = toast.loading("Gerando imagem do relatório de débitos...");
+  const handleExportDebitosPDF = async () => {
+    setIsExportingDebitosPDF(true);
+    const toastId = toast.loading("Gerando PDF do relatório de débitos...");
     try {
       const printElement = document.getElementById('relatorio-print-area');
       if (!printElement) {
@@ -572,25 +572,26 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       });
 
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error("Tempo limite excedido ao gerar a imagem.")), 12000);
+        setTimeout(() => reject(new Error("Tempo limite excedido ao gerar o PDF.")), 12000);
       });
 
       const canvas = await Promise.race([capturePromise, timeoutPromise]);
 
       const imgData = canvas.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.href = imgData;
-      link.download = 'relatorio-debitos.png';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const pdf = new jsPDF({
+        orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+        unit: 'px',
+        format: [canvas.width, canvas.height]
+      });
+      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+      pdf.save('Relatorio_Debitos.pdf');
 
-      toast.success("Relatório de débitos baixado em PNG!", { id: toastId });
+      toast.success("Relatório de débitos baixado em PDF com sucesso!", { id: toastId });
     } catch (err: any) {
-      console.error("Erro ao gerar PNG do relatório:", err);
-      toast.error(err?.message || "Erro ao gerar imagem do relatório em PNG.", { id: toastId });
+      console.error("Erro ao gerar PDF do relatório:", err);
+      toast.error(err?.message || "Erro ao gerar PDF do relatório.", { id: toastId });
     } finally {
-      setIsExportingDebitosPNG(false);
+      setIsExportingDebitosPDF(false);
     }
   };
 
@@ -3561,12 +3562,12 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
             </div>
             <div className="flex flex-wrap gap-2 self-start print:hidden">
               <button
-                onClick={handleExportDebitosPNG}
-                disabled={isExportingDebitosPNG}
+                onClick={handleExportDebitosPDF}
+                disabled={isExportingDebitosPDF}
                 className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white font-medium rounded-lg shadow-lg shadow-blue-500/40 hover:bg-blue-700 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                title="Exportar relatório em imagem PNG"
+                title="Exportar relatório em PDF"
               >
-                <Printer size={15} /> {isExportingDebitosPNG ? 'Gerando PNG...' : 'Imprimir Relatório'}
+                <Printer size={15} /> {isExportingDebitosPDF ? 'Gerando PDF...' : 'Imprimir Relatório'}
               </button>
               <button
                 onClick={() => {
@@ -4136,8 +4137,97 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
     const [empresa, setEmpresa] = useState<any>(null);
 
     const faturaRef = useRef<HTMLDivElement>(null);
+    const historicoFaturasPrintRef = useRef<HTMLDivElement>(null);
+    const historicoFolhasPrintRef = useRef<HTMLDivElement>(null);
     const [loadingExport, setLoadingExport] = useState(false);
+    const [isExportingFaturasPDF, setIsExportingFaturasPDF] = useState(false);
+    const [isExportingFolhasPDF, setIsExportingFolhasPDF] = useState(false);
     const [selectedHistorico, setSelectedHistorico] = useState<string[]>([]);
+
+    const handleExportFaturasPDF = async () => {
+        if (filteredFaturas.length === 0) {
+            toast.error("Nenhuma fatura disponível para exportar.");
+            return;
+        }
+        setIsExportingFaturasPDF(true);
+        const toastId = toast.loading("Gerando relatório em PDF das faturas...");
+        try {
+            const printElement = historicoFaturasPrintRef.current;
+            if (!printElement) throw new Error("Elemento do relatório de faturas não encontrado.");
+
+            const html2canvasModule = await import('html2canvas-pro');
+            const html2canvas = html2canvasModule.default || html2canvasModule;
+
+            const canvas = await html2canvas(printElement, {
+                backgroundColor: '#ffffff',
+                scale: 2,
+                useCORS: true,
+                allowTaint: true,
+                logging: false,
+            });
+
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF({
+                orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+                unit: 'px',
+                format: [canvas.width, canvas.height]
+            });
+            pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+            pdf.save(`Relatorio_Historico_Faturas_${new Date().toISOString().slice(0, 10)}.pdf`);
+
+            toast.success("Relatório de faturas baixado em PDF com sucesso!", { id: toastId });
+        } catch (err: any) {
+            console.error("Erro ao gerar PDF do histórico de faturas:", err);
+            toast.error("Erro ao gerar PDF do relatório de faturas.", { id: toastId });
+        } finally {
+            setIsExportingFaturasPDF(false);
+        }
+    };
+
+    const handleExportFolhasPDF = async () => {
+        const listToExport = selectedHistorico.length > 0 
+            ? filteredFolhas.filter(f => selectedHistorico.includes(f.id))
+            : filteredFolhas;
+
+        if (listToExport.length === 0) {
+            toast.error("Nenhuma folha de pagamento encontrada para exportar.");
+            return;
+        }
+
+        setIsExportingFolhasPDF(true);
+        const toastId = toast.loading("Gerando PDF do resumo de pagamentos...");
+        try {
+            const printElement = historicoFolhasPrintRef.current;
+            if (!printElement) throw new Error("Elemento de impressão de folhas não encontrado.");
+
+            const html2canvasModule = await import('html2canvas-pro');
+            const html2canvas = html2canvasModule.default || html2canvasModule;
+
+            const canvas = await html2canvas(printElement, {
+                backgroundColor: '#ffffff',
+                scale: 2,
+                useCORS: true,
+                allowTaint: true,
+                logging: false,
+            });
+
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF({
+                orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+                unit: 'px',
+                format: [canvas.width, canvas.height]
+            });
+            pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+            pdf.save(`Resumo_Folhas_Pagamento_${new Date().toISOString().slice(0, 10)}.pdf`);
+
+            toast.success("Resumo de pagamento baixado em PDF com sucesso!", { id: toastId });
+        } catch (err: any) {
+            console.error("Erro ao gerar PDF do resumo de pagamentos:", err);
+            toast.error("Erro ao gerar PDF do resumo de pagamentos.", { id: toastId });
+        } finally {
+            setIsExportingFolhasPDF(false);
+        }
+    };
 
     const handleExportWord = () => {
         const dadosSelecionados = filteredFolhas
@@ -4379,10 +4469,12 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
             <h2 className="text-md font-black text-slate-800">📜 Histórico de Faturas</h2>
             <div className="flex flex-wrap items-center gap-2 print:hidden">
               <button
-                onClick={() => window.print()}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
+                onClick={handleExportFaturasPDF}
+                disabled={isExportingFaturasPDF || filteredFaturas.length === 0}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                title="Exportar relatório de faturas em PDF"
               >
-                <Printer className="w-3.5 h-3.5" /> Imprimir Relatório
+                <Printer className="w-3.5 h-3.5" /> {isExportingFaturasPDF ? 'Gerando PDF...' : 'Imprimir Relatório'}
               </button>
               <select
                 value={searchFaturaPaciente}
@@ -4451,19 +4543,22 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                 <h2 className="text-md font-black text-slate-800">📜 Histórico de Folhas de Pagamento</h2>
                 <button
                   id="btn-download-resumo-pagamento"
-                  onClick={handleExportWord}
-                  disabled={selectedHistorico.length === 0}
-                  className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
+                  onClick={handleExportFolhasPDF}
+                  disabled={isExportingFolhasPDF || filteredFolhas.length === 0}
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                  title="Exportar resumo de pagamento em PDF"
                 >
-                  Baixar Resumo para Pagamento
+                  {isExportingFolhasPDF ? 'Gerando PDF...' : 'Baixar Resumo para Pagamento'}
                 </button>
               </div>
               <div className="flex flex-wrap items-center gap-2 print:hidden">
                 <button
-                  onClick={() => window.print()}
-                  className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50"
+                  onClick={handleExportFolhasPDF}
+                  disabled={isExportingFolhasPDF || filteredFolhas.length === 0}
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                  title="Exportar relatório de folhas de pagamento em PDF"
                 >
-                  <Printer className="w-3.5 h-3.5" /> Imprimir Relatório
+                  <Printer className="w-3.5 h-3.5" /> {isExportingFolhasPDF ? 'Gerando PDF...' : 'Imprimir Relatório'}
                 </button>
                 <select
                   value={searchFolhaProfissional}
@@ -4553,7 +4648,196 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
             </div>
         </div>
 
-        {/* View Document Modal */}
+        {/* Hidden Printable Report for Histórico de Faturas */}
+        <div className="fixed -left-[9999px] top-0 pointer-events-none" aria-hidden="true">
+          <div
+            ref={historicoFaturasPrintRef}
+            className="w-[850px] p-8 bg-white text-slate-800 font-sans"
+            style={{ fontFamily: 'Arial, sans-serif' }}
+          >
+            <div className="flex items-center justify-between border-b-2 border-[#1a3c2e] pb-4 mb-6">
+              <div>
+                <h1 className="text-xl font-bold text-[#1a3c2e] uppercase tracking-wide">
+                  {empresa?.razaoSocial || 'SISTEMA DE GESTÃO DE HOME CARE'}
+                </h1>
+                <p className="text-xs text-slate-500 font-medium">
+                  CNPJ: {empresa?.cnpj || 'Não informado'} {empresa?.endereco ? `| ${empresa.endereco}` : ''}
+                </p>
+              </div>
+              <div className="text-right">
+                <span className="inline-block px-3 py-1 bg-[#1a3c2e] text-white font-bold text-xs uppercase rounded">
+                  Relatório Financeiro
+                </span>
+                <p className="text-[10px] text-slate-400 mt-1 font-semibold">
+                  Gerado em: {new Date().toLocaleDateString('pt-BR')} às {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-6 flex justify-between items-center">
+              <div>
+                <h2 className="text-base font-black text-slate-800 uppercase">
+                  📜 Histórico de Faturas de Pacientes
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {searchFaturaPaciente && searchFaturaPaciente !== 'all' ? `Filtro Paciente: ${searchFaturaPaciente}` : 'Todos os Pacientes'}
+                  {searchFaturaData ? ` | Data: ${new Date(searchFaturaData + 'T00:00:00').toLocaleDateString('pt-BR')}` : ''}
+                </p>
+              </div>
+              <div className="text-right">
+                <span className="text-xs text-slate-500 block font-semibold">Total de Registros:</span>
+                <span className="text-sm font-bold text-slate-800">{filteredFaturas.length} faturas</span>
+              </div>
+            </div>
+
+            <table className="w-full text-xs text-left border-collapse mb-6">
+              <thead>
+                <tr className="bg-[#1a3c2e] text-white uppercase text-[11px] font-bold">
+                  <th className="p-2.5 rounded-tl">Número</th>
+                  <th className="p-2.5">Paciente</th>
+                  <th className="p-2.5">Emissão</th>
+                  <th className="p-2.5 text-center">Status</th>
+                  <th className="p-2.5 text-right rounded-tr">Valor Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {filteredFaturas.map((f, idx) => (
+                  <tr key={f.id || idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                    <td className="p-2.5 font-mono font-semibold text-slate-700">{f.numeroFatura || '-'}</td>
+                    <td className="p-2.5 font-bold text-slate-800">{f.nomePaciente || 'Paciente'}</td>
+                    <td className="p-2.5 text-slate-600">
+                      {f.dataEmissao ? new Date(f.dataEmissao).toLocaleDateString('pt-BR') : '-'}
+                    </td>
+                    <td className="p-2.5 text-center font-bold text-emerald-700">{f.status || 'Emitida'}</td>
+                    <td className="p-2.5 text-right font-black text-slate-900">
+                      R$ {(Number(f.valorTotal) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div className="flex justify-end pt-2">
+              <div className="w-72 bg-emerald-50 border-2 border-emerald-600 rounded-xl p-4 text-right shadow-sm">
+                <span className="text-xs font-bold uppercase text-emerald-800 block tracking-wider">
+                  Soma Total das Faturas
+                </span>
+                <span className="text-2xl font-black text-emerald-900 block mt-1">
+                  R$ {filteredFaturas.reduce((acc, curr) => acc + (Number(curr.valorTotal) || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-8 pt-4 border-t border-slate-200 text-center text-[10px] text-slate-400 font-medium">
+              Relatório de histórico de faturas emitido automaticamente pelo Sistema de Gestão de Home Care
+            </div>
+          </div>
+        </div>
+
+        {/* Hidden Printable Report for Histórico de Folhas de Pagamento */}
+        <div className="fixed -left-[9999px] top-0 pointer-events-none" aria-hidden="true">
+          <div
+            ref={historicoFolhasPrintRef}
+            className="w-[850px] p-8 bg-white text-slate-800 font-sans"
+            style={{ fontFamily: 'Arial, sans-serif' }}
+          >
+            <div className="flex items-center justify-between border-b-2 border-[#1a3c2e] pb-4 mb-6">
+              <div>
+                <h1 className="text-xl font-bold text-[#1a3c2e] uppercase tracking-wide">
+                  {empresa?.razaoSocial || 'SISTEMA DE GESTÃO DE HOME CARE'}
+                </h1>
+                <p className="text-xs text-slate-500 font-medium">
+                  CNPJ: {empresa?.cnpj || 'Não informado'} {empresa?.endereco ? `| ${empresa.endereco}` : ''}
+                </p>
+              </div>
+              <div className="text-right">
+                <span className="inline-block px-3 py-1 bg-blue-700 text-white font-bold text-xs uppercase rounded">
+                  Resumo de Pagamento
+                </span>
+                <p className="text-[10px] text-slate-400 mt-1 font-semibold">
+                  Gerado em: {new Date().toLocaleDateString('pt-BR')} às {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-6 flex justify-between items-center">
+              <div>
+                <h2 className="text-base font-black text-slate-800 uppercase">
+                  📜 Relatório de Folhas de Pagamento dos Profissionais
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {selectedHistorico.length > 0 
+                    ? `Itens Selecionados: ${selectedHistorico.length} de ${filteredFolhas.length}` 
+                    : (searchFolhaProfissional && searchFolhaProfissional !== 'all' 
+                        ? `Filtro Profissional: ${searchFolhaProfissional}` 
+                        : 'Listando Todos os Profissionais')}
+                  {searchFolhaData ? ` | Data: ${new Date(searchFolhaData + 'T00:00:00').toLocaleDateString('pt-BR')}` : ''}
+                </p>
+              </div>
+              <div className="text-right">
+                <span className="text-xs text-slate-500 block font-semibold">Total de Registros:</span>
+                <span className="text-sm font-bold text-slate-800">
+                  {(selectedHistorico.length > 0 ? filteredFolhas.filter(f => selectedHistorico.includes(f.id)) : filteredFolhas).length} folhas
+                </span>
+              </div>
+            </div>
+
+            <table className="w-full text-xs text-left border-collapse mb-6">
+              <thead>
+                <tr className="bg-slate-800 text-white uppercase text-[11px] font-bold">
+                  <th className="p-2.5 rounded-tl">Profissional</th>
+                  <th className="p-2.5">Data Emissão</th>
+                  <th className="p-2.5">Mês / Período Ref.</th>
+                  <th className="p-2.5 text-center">Status</th>
+                  <th className="p-2.5 text-right rounded-tr">Valor Líquido Individual</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {(selectedHistorico.length > 0 
+                  ? filteredFolhas.filter(f => selectedHistorico.includes(f.id)) 
+                  : filteredFolhas).map((f, idx) => {
+                    let mesRef = '';
+                    if (f.periodoApurado && f.periodoApurado.inicio) {
+                      const parts = f.periodoApurado.inicio.split('-');
+                      if (parts.length >= 2) {
+                        mesRef = `${parts[1]}/${parts[0]}`;
+                      }
+                    }
+                    return (
+                      <tr key={f.id || idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                        <td className="p-2.5 font-bold text-slate-800">{f.nomeProfissional || 'Profissional'}</td>
+                        <td className="p-2.5 text-slate-600">
+                          {f.dataEmissao ? new Date(f.dataEmissao).toLocaleDateString('pt-BR') : '-'}
+                        </td>
+                        <td className="p-2.5 font-semibold text-slate-700">{mesRef || 'Referência Atual'}</td>
+                        <td className="p-2.5 text-center font-bold text-blue-700">{f.status || 'Concluída'}</td>
+                        <td className="p-2.5 text-right font-black text-slate-900">
+                          R$ {(Number(f.valorLiquidoReceber) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    );
+                })}
+              </tbody>
+            </table>
+
+            <div className="flex justify-end pt-2">
+              <div className="w-80 bg-blue-50 border-2 border-blue-600 rounded-xl p-4 text-right shadow-sm">
+                <span className="text-xs font-bold uppercase text-blue-800 block tracking-wider">
+                  Soma Total da Folha de Pagamento
+                </span>
+                <span className="text-2xl font-black text-blue-900 block mt-1">
+                  R$ {(selectedHistorico.length > 0 
+                    ? filteredFolhas.filter(f => selectedHistorico.includes(f.id)) 
+                    : filteredFolhas).reduce((acc, curr) => acc + (Number(curr.valorLiquidoReceber) || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-8 pt-4 border-t border-slate-200 text-center text-[10px] text-slate-400 font-medium">
+              Relatório de resumo para agendamento e transferência bancária gerado pelo Sistema de Gestão de Home Care
+            </div>
+          </div>
+        </div>
         {viewDoc && (() => {
             const calculateRowValue = (p: any, type: 'fatura' | 'folha') => {
                 const base = type === 'fatura' ? (p.valorPlantao || 0) : (p.valorRepasse || 0);
