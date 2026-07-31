@@ -27,6 +27,8 @@ vi.mock('firebase/auth', () => ({
 }));
 
 vi.mock('firebase/firestore', () => ({
+  setLogLevel: vi.fn(),
+  getDoc: vi.fn(() => Promise.resolve({ exists: () => false, data: () => ({}) })),
   initializeFirestore: vi.fn(() => ({})),
   getFirestore: vi.fn(() => ({})),
   collection: vi.fn(() => ({})),
@@ -65,7 +67,13 @@ vi.mock('firebase/storage', () => ({
   getDownloadURL: vi.fn(() => Promise.resolve('https://mock-url.com')),
 }));
 
-// Mock logo asset to prevent resolution failures during testing
+vi.mock('../types', async (importOriginal) => {
+  const actual = await importOriginal<any>();
+  return {
+    ...actual,
+    validarDominioCorporativo: vi.fn(() => Promise.resolve(true)),
+  };
+});
 vi.mock('../assets/images/rh_logo_v2_1781470281009.jpg', () => ({
   default: 'mock-logo-url',
 }));
@@ -82,8 +90,8 @@ describe('LoginPage Component Tests', () => {
       </FirebaseProvider>
     );
 
-    expect(screen.getByPlaceholderText('E-mail')).toBeDefined();
-    expect(screen.getByPlaceholderText('Senha')).toBeDefined();
+    expect(screen.getByLabelText('E-mail')).toBeDefined();
+    expect(screen.getByLabelText('Senha')).toBeDefined();
     expect(screen.getByRole('button', { name: 'Entrar' })).toBeDefined();
   });
 
@@ -104,8 +112,8 @@ describe('LoginPage Component Tests', () => {
       </FirebaseProvider>
     );
 
-    const emailInput = screen.getByPlaceholderText('E-mail');
-    const passwordInput = screen.getByPlaceholderText('Senha');
+    const emailInput = screen.getByLabelText('E-mail');
+    const passwordInput = screen.getByLabelText('Senha');
     const submitButton = screen.getByRole('button', { name: 'Entrar' });
 
     // fill form
@@ -134,8 +142,8 @@ describe('LoginPage Component Tests', () => {
       </FirebaseProvider>
     );
 
-    const emailInput = screen.getByPlaceholderText('E-mail');
-    const passwordInput = screen.getByPlaceholderText('Senha');
+    const emailInput = screen.getByLabelText('E-mail');
+    const passwordInput = screen.getByLabelText('Senha');
     const submitButton = screen.getByRole('button', { name: 'Entrar' });
 
     fireEvent.change(emailInput, { target: { value: 'wrong@example.com' } });

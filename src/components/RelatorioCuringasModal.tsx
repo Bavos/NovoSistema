@@ -279,7 +279,7 @@ export const RelatorioCuringasModal: React.FC<RelatorioCuringasModalProps> = ({
       const html2canvasModule = await import('html2canvas-pro');
       const html2canvas = html2canvasModule.default || html2canvasModule;
 
-      const canvas = await html2canvas(element, {
+      const canvas = await (html2canvas as any)(element, {
         scale: 2,
         useCORS: true,
         logging: false

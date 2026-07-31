@@ -22,7 +22,7 @@ const firebaseConfig = {
   messagingSenderId: getEnvVal(import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID, staticConfig.messagingSenderId),
   appId: getEnvVal(import.meta.env.VITE_FIREBASE_APP_ID, staticConfig.appId),
   measurementId: getEnvVal(import.meta.env.VITE_FIREBASE_MEASUREMENT_ID, staticConfig.measurementId),
-  firestoreDatabaseId: "ai-studio-ec969b01-95ac-467f-b5b7-48efe433d663",
+  firestoreDatabaseId: getEnvVal(import.meta.env.VITE_FIREBASE_DATABASE_ID, staticConfig.firestoreDatabaseId || "ai-studio-ec969b01-95ac-467f-b5b7-48efe433d663"),
 };
 
 const app = initializeApp(firebaseConfig);

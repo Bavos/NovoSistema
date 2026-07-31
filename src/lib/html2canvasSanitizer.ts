@@ -1,3 +1,5 @@
+import { jsPDF } from 'jspdf';
+
 export function sanitizeClonedDocForHtml2Canvas(
   clonedDoc: Document,
   defaultBg = '#ffffff',
@@ -71,3 +73,42 @@ export function sanitizeClonedDocForHtml2Canvas(
     console.warn("Sanitização do clone finalizada com aviso:", err);
   }
 }
+
+export function exportCanvasToA4PDF(canvas: HTMLCanvasElement, fileName: string) {
+  const imgData = canvas.toDataURL('image/png');
+  const isLandscape = canvas.width > canvas.height;
+
+  const pdf = new jsPDF({
+    orientation: isLandscape ? 'landscape' : 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const margin = 10; // 10mm margin for crisp standard print formatting
+  const printableWidth = pageWidth - margin * 2;
+  const printableHeight = pageHeight - margin * 2;
+
+  const pdfImgHeight = (canvas.height * printableWidth) / canvas.width;
+
+  if (pdfImgHeight <= printableHeight) {
+    pdf.addImage(imgData, 'PNG', margin, margin, printableWidth, pdfImgHeight);
+  } else {
+    let heightLeft = pdfImgHeight;
+    let position = margin;
+
+    pdf.addImage(imgData, 'PNG', margin, position, printableWidth, pdfImgHeight);
+    heightLeft -= printableHeight;
+
+    while (heightLeft > 0) {
+      position = margin - (pdfImgHeight - heightLeft);
+      pdf.addPage();
+      pdf.addImage(imgData, 'PNG', margin, position, printableWidth, pdfImgHeight);
+      heightLeft -= printableHeight;
+    }
+  }
+
+  pdf.save(fileName);
+}
+

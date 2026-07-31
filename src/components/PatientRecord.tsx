@@ -10,7 +10,7 @@ import { fetchCep, fetchBanks, getHolidays } from '../lib/brasilApi';
 import { Paciente, Plantao, CancelingReason, EscalacaoPlano, Agendamento } from '../types';
 import { useFirebase } from '../context/FirebaseContext';
 import { usePacienteData } from '../hooks/usePacienteData';
-import { sanitizeClonedDocForHtml2Canvas } from '../lib/html2canvasSanitizer';
+import { sanitizeClonedDocForHtml2Canvas, exportCanvasToA4PDF } from '../lib/html2canvasSanitizer';
 import { ModalInserirDebito, DadosAtalhoCuringa } from './ModalInserirDebito';
 import { CardBase, DataGrid, DataField, SoftBadge } from './ui/DesignSystem';
 import { pacienteSchema } from '../schemas/validationSchemas';
@@ -3157,20 +3157,16 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         logging: false,
         onclone: (clonedDoc) => {
           sanitizeClonedDocForHtml2Canvas(clonedDoc, '#fcf8f2', '#1a3c2e');
+          if (clonedDoc.body) {
+            clonedDoc.body.style.width = '850px';
+          }
         }
       });
 
-      const imgData = canvas.toDataURL('image/png');
       const formattedDate = matchedFatura.dataEmissao?.includes('T') ? matchedFatura.dataEmissao.split('T')[0] : (matchedFatura.dataEmissao?.replace(/\//g, '-') || 'Data');
       const safeName = (matchedFatura.nomePaciente || paciente.nome || 'Paciente').replace(/\s+/g, '_');
 
-      const pdf = new jsPDF({
-        orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
-        unit: 'px',
-        format: [canvas.width, canvas.height]
-      });
-      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
-      pdf.save(`Fatura_${safeName}_${formattedDate}.pdf`);
+      exportCanvasToA4PDF(canvas, `Fatura_${safeName}_${formattedDate}.pdf`);
 
       toast.success('Fatura baixada em PDF com sucesso!', { id: toastId });
     } catch (err: any) {
@@ -8536,7 +8532,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         // Filter out absences / non-executed shifts ('Falta' / 'Cancelado' / considerarFalta)
         const validMonthShifts = monthShifts.filter((s) => {
           const isFalta = s.considerarFalta === true ||
-                          s.status === 'Falta' ||
+                          (s.status as any) === 'Falta' ||
                           (s.status as string) === 'falta' ||
                           s.status === 'Cancelado' ||
                           (s as any).atendimentoRealizado === 'Não';

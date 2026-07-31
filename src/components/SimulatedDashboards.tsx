@@ -6,7 +6,7 @@
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell } from 'docx';
 import React, { useState, useRef } from 'react';
 import { jsPDF } from 'jspdf';
-import { sanitizeClonedDocForHtml2Canvas } from '../lib/html2canvasSanitizer';
+import { sanitizeClonedDocForHtml2Canvas, exportCanvasToA4PDF } from '../lib/html2canvasSanitizer';
 import {
   Briefcase,
   Calendar,
@@ -551,18 +551,25 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       const html2canvasModule = await import('html2canvas-pro');
       const html2canvas = html2canvasModule.default || html2canvasModule;
 
-      const capturePromise = html2canvas(printElement, {
+      const capturePromise = (html2canvas as any)(printElement, {
         backgroundColor: '#ffffff',
         scale: 2,
         useCORS: true,
         allowTaint: true,
         logging: false,
-        scrollX: 0,
-        scrollY: 0,
-        windowWidth: document.documentElement.offsetWidth,
         onclone: (clonedDoc) => {
           try {
             sanitizeClonedDocForHtml2Canvas(clonedDoc, '#ffffff', '#1a3c2e');
+            if (clonedDoc.body) {
+              clonedDoc.body.style.width = '1000px';
+            }
+            const printArea = clonedDoc.getElementById('relatorio-print-area');
+            if (printArea) {
+              printArea.style.width = '1000px';
+              printArea.style.maxWidth = 'none';
+              printArea.style.padding = '24px';
+              printArea.style.boxSizing = 'border-box';
+            }
             const printHiddenEls = clonedDoc.querySelectorAll('.print\\:hidden');
             printHiddenEls.forEach((el) => {
               (el as HTMLElement).style.display = 'none';
@@ -574,19 +581,12 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       });
 
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error("Tempo limite excedido ao gerar o PDF.")), 12000);
+        setTimeout(() => reject(new Error("Tempo limite excedido ao gerar o PDF.")), 15000);
       });
 
       const canvas = await Promise.race([capturePromise, timeoutPromise]);
 
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({
-        orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
-        unit: 'px',
-        format: [canvas.width, canvas.height]
-      });
-      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
-      pdf.save('Relatorio_Debitos.pdf');
+      exportCanvasToA4PDF(canvas, 'Relatorio_Debitos.pdf');
 
       toast.success("Relatório de débitos baixado em PDF com sucesso!", { id: toastId });
     } catch (err: any) {
@@ -1333,15 +1333,12 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
         idPaciente: pacId,
         pacienteId: pacId,
         nomePaciente: pacNome,
-        pacienteNome: pacNome,
         numeroFatura: numero,
         dataEmissao: new Date().toISOString(),
         mesReferencia: targetMonthYear,
         periodoApurado: { inicio: dataInicial, fim: dataFinal },
         valorTotal: totalFatura,
-        valorTotalFatura: totalFatura,
         status: 'Fechada',
-        statusPagamento: 'Pendente',
         plantoesCongelados: agends.map(ag => ({
           ...ag,
           profissional: ag.nomeProfissional || 'Não atribuído',
@@ -2504,9 +2501,9 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                               const pac = activePacientes.find(p => p.id === e.target.value);
                               if (pac) {
                                 setBoletoPagadorNome(pac.nome || '');
-                                const clean = (pac.cpf || pac.cnpj || '').replace(/\D/g, '');
+                                const clean = (pac.cpf || (pac as any).cnpj || '').replace(/\D/g, '');
                                 setBoletoCpfCnpj(clean.length > 11 ? mascaraCNPJ(clean) : mascaraCPF(clean));
-                                const endStr = pac.endereco ? `${pac.endereco.logradouro || ''}, ${pac.endereco.numero || ''} ${pac.endereco.bairro || ''} - ${pac.endereco.cidade || ''}/${pac.endereco.uf || ''}`.trim() : '';
+                                const endStr = pac.endereco ? `${pac.endereco.rua || (pac.endereco as any).logradouro || ''}, ${pac.endereco.numero || ''} ${pac.endereco.bairro || ''} - ${pac.endereco.cidade || ''}/${pac.endereco.estado || (pac.endereco as any).uf || ''}`.trim() : '';
                                 setBoletoEndereco(endStr);
                               }
                             }}
@@ -2525,9 +2522,9 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                               const prof = activeProfissionais.find(p => p.id === e.target.value);
                               if (prof) {
                                 setBoletoPagadorNome(prof.nome || '');
-                                const clean = (prof.cpf || prof.cnpj || '').replace(/\D/g, '');
+                                const clean = (prof.cpf || (prof as any).cnpj || '').replace(/\D/g, '');
                                 setBoletoCpfCnpj(clean.length > 11 ? mascaraCNPJ(clean) : mascaraCPF(clean));
-                                setBoletoEndereco(prof.endereco || '');
+                                setBoletoEndereco(typeof prof.endereco === 'string' ? prof.endereco : `${prof.endereco?.rua || (prof.endereco as any)?.logradouro || ''}`);
                               }
                             }}
                             className="p-1.5 border border-slate-200 rounded-md text-xs bg-white text-slate-800 font-bold max-w-xs cursor-pointer"
@@ -4255,22 +4252,29 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
             const html2canvasModule = await import('html2canvas-pro');
             const html2canvas = html2canvasModule.default || html2canvasModule;
 
-            const canvas = await html2canvas(printElement, {
+            const canvas = await (html2canvas as any)(printElement, {
                 backgroundColor: '#ffffff',
                 scale: 2,
                 useCORS: true,
                 allowTaint: true,
                 logging: false,
+                onclone: (clonedDoc) => {
+                    try {
+                        sanitizeClonedDocForHtml2Canvas(clonedDoc, '#ffffff', '#1a3c2e');
+                        if (clonedDoc.body) {
+                            clonedDoc.body.style.width = '1000px';
+                        }
+                        const printHiddenEls = clonedDoc.querySelectorAll('.print\\:hidden');
+                        printHiddenEls.forEach((el) => {
+                            (el as HTMLElement).style.display = 'none';
+                        });
+                    } catch (e) {
+                        console.warn("Aviso na sanitização do clone:", e);
+                    }
+                }
             });
 
-            const imgData = canvas.toDataURL('image/png');
-            const pdf = new jsPDF({
-                orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
-                unit: 'px',
-                format: [canvas.width, canvas.height]
-            });
-            pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
-            pdf.save(`Relatorio_Historico_Faturas_${new Date().toISOString().slice(0, 10)}.pdf`);
+            exportCanvasToA4PDF(canvas, `Relatorio_Historico_Faturas_${new Date().toISOString().slice(0, 10)}.pdf`);
 
             toast.success("Relatório de faturas baixado em PDF com sucesso!", { id: toastId });
         } catch (err: any) {
@@ -4300,22 +4304,29 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
             const html2canvasModule = await import('html2canvas-pro');
             const html2canvas = html2canvasModule.default || html2canvasModule;
 
-            const canvas = await html2canvas(printElement, {
+            const canvas = await (html2canvas as any)(printElement, {
                 backgroundColor: '#ffffff',
                 scale: 2,
                 useCORS: true,
                 allowTaint: true,
                 logging: false,
+                onclone: (clonedDoc) => {
+                    try {
+                        sanitizeClonedDocForHtml2Canvas(clonedDoc, '#ffffff', '#1a3c2e');
+                        if (clonedDoc.body) {
+                            clonedDoc.body.style.width = '1000px';
+                        }
+                        const printHiddenEls = clonedDoc.querySelectorAll('.print\\:hidden');
+                        printHiddenEls.forEach((el) => {
+                            (el as HTMLElement).style.display = 'none';
+                        });
+                    } catch (e) {
+                        console.warn("Aviso na sanitização do clone:", e);
+                    }
+                }
             });
 
-            const imgData = canvas.toDataURL('image/png');
-            const pdf = new jsPDF({
-                orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
-                unit: 'px',
-                format: [canvas.width, canvas.height]
-            });
-            pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
-            pdf.save(`Resumo_Folhas_Pagamento_${new Date().toISOString().slice(0, 10)}.pdf`);
+            exportCanvasToA4PDF(canvas, `Resumo_Folhas_Pagamento_${new Date().toISOString().slice(0, 10)}.pdf`);
 
             toast.success("Resumo de pagamento baixado em PDF com sucesso!", { id: toastId });
         } catch (err: any) {
@@ -4400,13 +4411,12 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                     logging: false,
                     onclone: (clonedDoc) => {
                         sanitizeClonedDocForHtml2Canvas(clonedDoc, '#fcf8f2', '#1a3c2e');
+                        if (clonedDoc.body) {
+                            clonedDoc.body.style.width = '850px';
+                        }
                     }
                 });
                 
-                // Gera a imagem final em altíssima qualidade (PNG)
-                const imgData = canvas.toDataURL('image/png');
-                
-                // Construct dynamic name using requested rule and variable mapping
                 const fatura = {
                     paciente: type === 'fatura' ? docData.nomePaciente : docData.nomeProfissional,
                     dataEmissao: docData.dataEmissao && docData.dataEmissao.includes('-')
@@ -4416,13 +4426,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
 
                 const fileName = `${type === 'fatura' ? 'Fatura' : 'Folha'}_${fatura?.paciente?.replace(/\s+/g, '_') || 'Paciente'}_${fatura?.dataEmissao?.replace(/\//g, '-') || 'Data'}.pdf`;
 
-                const pdf = new jsPDF({
-                    orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
-                    unit: 'px',
-                    format: [canvas.width, canvas.height]
-                });
-                pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
-                pdf.save(fileName);
+                exportCanvasToA4PDF(canvas, fileName);
 
                 console.log("[FaturaExporter] File downloaded successfully as PDF.");
             } catch (err: any) {
