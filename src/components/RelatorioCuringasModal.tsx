@@ -172,7 +172,7 @@ export const RelatorioCuringasModal: React.FC<RelatorioCuringasModalProps> = ({
       const matchingDebit = (debitosProfissionais || []).find(deb => {
         const debDate = parseDateToYYYYMMDD(deb.data);
         if (debDate !== agDate) return false;
-        const pacMatch = deb.idPaciente === ag.idPaciente || activePatientsMap.get(deb.idPaciente) === pacName;
+        const pacMatch = deb.idPaciente === ag.idPaciente || (deb.idPaciente ? activePatientsMap.get(deb.idPaciente) === pacName : false);
         return pacMatch && (deb.motivo || '').toLowerCase().includes('curinga');
       });
 

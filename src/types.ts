@@ -175,6 +175,7 @@ export interface Paciente {
   createdAt: string;
   profissionaisBloqueados?: string[];
   ocorrencias?: OcorrenciaPaciente[];
+  mesesConcluidos?: string[];
 }
 
 export interface Plantao {
@@ -237,6 +238,16 @@ export type CancelingReason =
   | 'Sem condução'
   | 'Cansaço';
 
+export interface ServicoExtra {
+  id: string;
+  idPaciente: string;
+  descricao: string;
+  data: string;
+  valor: number;
+  mesReferencia?: string;
+  createdAt?: string;
+}
+
 export interface DebitoProfissional {
   id: string;
   idProfissional: string;
@@ -262,6 +273,7 @@ export interface FaturaPaciente {
   valorTotal: number;
   status: 'Aberta' | 'Fechada';
   plantoesCongelados: any[];
+  servicosExtras?: ServicoExtra[];
 }
 
 export interface FolhaPagamento {

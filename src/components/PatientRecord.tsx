@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { updateDoc, doc, getDoc, addDoc, collection, serverTimestamp, getDocs, query, where, deleteDoc, limit, writeBatch } from 'firebase/firestore';
 import { fetchCep, fetchBanks, getHolidays } from '../lib/brasilApi';
@@ -28,6 +28,7 @@ import {
   ArrowLeft,
   X,
   Plus,
+  PlusCircle,
   Trash2,
   Edit2,
   Calendar,
@@ -220,8 +221,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     userRole,
     logsAuditoria,
     faturasPacientes,
+    servicosExtras,
     addAuditLog,
     addFaturaPaciente,
+    addServicoExtra,
+    deleteServicoExtra,
     isQuotaExceeded,
     isTestMode
   } = useFirebase();
@@ -253,14 +257,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       return;
     }
 
-    const monthPrefix = targetDateStr.substring(0, 7);
-    const agsTargetMonth = agendamentos.filter(
-      (a) => a.idPaciente === (paciente?.id || clipboardAgendamento.idPaciente) && a.data && a.data.startsWith(monthPrefix)
-    );
-    const isTargetConcluded = agsTargetMonth.length > 0 && agsTargetMonth.filter(a => a.status !== 'Cancelado').some(a => a.status === 'Concluido' || a.escalaCongelada === true);
+    const isTargetConcluded = isMesConcluido(targetDateStr);
 
     if (isTargetConcluded) {
-      toast.error('Esta escala já está concluída. Não é permitida a adição de novos agendamentos.');
+      const [yr, mo] = targetDateStr.split('-');
+      toast.error(`Esta escala de ${mo}/${yr} já está concluída.`);
       return;
     }
 
@@ -327,14 +328,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       return;
     }
 
-    const monthPrefix = targetDateStr.substring(0, 7);
-    const agsTargetMonth = agendamentos.filter(
-      (a) => a.idPaciente === paciente?.id && a.data && a.data.startsWith(monthPrefix)
-    );
-    const isTargetConcluded = agsTargetMonth.length > 0 && agsTargetMonth.filter(a => a.status !== 'Cancelado').some(a => a.status === 'Concluido' || a.escalaCongelada === true);
+    const isTargetConcluded = isMesConcluido(targetDateStr);
 
     if (isTargetConcluded) {
-      toast.error('Esta escala já está concluída. Não é permitida a adição de novos agendamentos.');
+      const [yr, mo] = targetDateStr.split('-');
+      toast.error(`Esta escala de ${mo}/${yr} já está concluída.`);
       return;
     }
 
@@ -477,6 +475,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const [selectedDates, setSelectedDates] = useState<{ date: string; cycle: number }[]>([]);
 
   const handleDateClick = (formattedDate: string) => {
+    if (isMesConcluido(formattedDate)) {
+      const [yr, mo] = formattedDate.split('-');
+      const formattedMonthYear = `${mo}/${yr}`;
+      toast.error(`Esta escala de ${formattedMonthYear} já está concluída.`);
+      return;
+    }
+
     // Escuta do Tipo de Turno selecionado no formulário
     const selectedOpt = avulsoPlantaoOptionId === 'principal'
       ? { tipoEscala: tipoEscala || 'Diurno 12h' }
@@ -489,6 +494,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       const d2 = new Date(d1);
       d2.setDate(d1.getDate() + 1);
       const formattedDate2 = `${d2.getFullYear()}-${String(d2.getMonth() + 1).padStart(2, '0')}-${String(d2.getDate()).padStart(2, '0')}`;
+
+      if (isMesConcluido(formattedDate2)) {
+        const [yr, mo] = formattedDate2.split('-');
+        const formattedMonthYear = `${mo}/${yr}`;
+        toast.error(`Esta escala de ${formattedMonthYear} já está concluída.`);
+        return;
+      }
 
       const isD1Selected = selectedDates.some(d => d.date === formattedDate);
 
@@ -1269,18 +1281,42 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const [calendarView, setCalendarView] = useState<'lista' | 'calendario'>('calendario'); // default to visual calendar view
   const [isFaturaModalOpen, setIsFaturaModalOpen] = useState(false);
   const [isPreviaFinanceiraModalOpen, setIsPreviaFinanceiraModalOpen] = useState(false);
+  const [isServicoExtraModalOpen, setIsServicoExtraModalOpen] = useState(false);
+  const [servicoExtraDesc, setServicoExtraDesc] = useState('Visita de Enfermeira');
+  const [servicoExtraCustomDesc, setServicoExtraCustomDesc] = useState('');
+  const [servicoExtraData, setServicoExtraData] = useState(() => new Date().toISOString().slice(0, 10));
+  const [servicoExtraValor, setServicoExtraValor] = useState('');
+  const [isSavingServicoExtra, setIsSavingServicoExtra] = useState(false);
+
+  const isMesConcluido = useCallback((dateStr?: string, targetPaciente?: Paciente | null): boolean => {
+    const baseP = targetPaciente || paciente;
+    if (!baseP || !dateStr) return false;
+    const p = pacientes.find(item => item.id === baseP.id) || baseP;
+    const parts = dateStr.split('-');
+    if (parts.length < 2) return false;
+    const year = parts[0];
+    const month = parts[1].padStart(2, '0');
+    const keyMMSlashYYYY = `${month}/${year}`;
+    const keyMMYYYY = `${month}-${year}`;
+    const keyYYYYMM = `${year}-${month}`;
+
+    if (p.mesesConcluidos && Array.isArray(p.mesesConcluidos)) {
+      return (
+        p.mesesConcluidos.includes(keyMMSlashYYYY) ||
+        p.mesesConcluidos.includes(keyMMYYYY) ||
+        p.mesesConcluidos.includes(keyYYYYMM)
+      );
+    }
+
+    return false;
+  }, [paciente, pacientes]);
 
   const isCurrentMonthConcluded = useMemo(() => {
     if (!paciente) return false;
-    const monthPrefix = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}`;
-    const agsMes = agendamentos.filter(
-      (a) => a.idPaciente === paciente.id && a.data && a.data.startsWith(monthPrefix)
-    );
-    if (agsMes.length === 0) return false;
-    const activeInMonth = agsMes.filter((a) => a.status !== 'Cancelado');
-    if (activeInMonth.length === 0) return false;
-    return activeInMonth.some((a) => a.status === 'Concluido' || a.escalaCongelada === true);
-  }, [paciente, calendarYear, calendarMonth, agendamentos]);
+    const monthStr = String(calendarMonth + 1).padStart(2, '0');
+    const yearStr = String(calendarYear);
+    return isMesConcluido(`${yearStr}-${monthStr}-01`, paciente);
+  }, [paciente, calendarYear, calendarMonth, isMesConcluido]);
 
   // Local Audit Logs on-demand loader to avoid downloading the entire collection in real-time
   const [localAuditLogs, setLocalAuditLogs] = useState<any[]>([]);
@@ -1431,7 +1467,26 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const [excluirEndDate, setExcluirEndDate] = useState(getLastDayCurrentMonth);
   const [excluirPorType, setExcluirPorType] = useState<'datas' | 'profissional' | 'periodo'>('periodo');
   const [excluirProfName, setExcluirProfName] = useState('');
+  const [selectedExcluirProfs, setSelectedExcluirProfs] = useState<string[]>([]);
   const [showExcluirProfDropdown, setShowExcluirProfDropdown] = useState(false);
+
+  // Profissionais agendados no período selecionado para a exclusão
+  const profsAgendadosNoPeriodo = useMemo(() => {
+    if (!paciente) return [];
+    const ags = agendamentos.filter(
+      (a) => a.idPaciente === paciente.id && a.data >= excluirStartDate && a.data <= excluirEndDate
+    );
+    const countMap = new Map<string, number>();
+    ags.forEach((a) => {
+      const name = (a.nomeProfissional || '').trim();
+      if (name) {
+        countMap.set(name, (countMap.get(name) || 0) + 1);
+      }
+    });
+    return Array.from(countMap.entries())
+      .map(([nome, count]) => ({ nome, count }))
+      .sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [agendamentos, paciente, excluirStartDate, excluirEndDate]);
 
   // States for adding a new plantão type inline to the list
   const [newSubTipoEscala, setNewSubTipoEscala] = useState<string>('Diurno 12h');
@@ -1651,29 +1706,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         toast.error('Falha no cadastro: Este CPF já se encontra registrado em nosso sistema.');
         return;
       }
-
-      if (!isQuotaExceeded) {
-        const pacQuery = query(collection(db, 'pacientes'), where('cpf', 'in', cpfOptions));
-        const pacSnap = await getDocs(pacQuery);
-        const duplicatePacDoc = pacSnap.docs.find(doc => isNew || doc.id !== paciente?.id);
-        if (duplicatePacDoc) {
-          toast.error('Falha no cadastro: Este CPF já se encontra registrado em nosso sistema.');
-          return;
-        }
-
-        const profQuery = query(collection(db, 'profissionais'), where('cpf', 'in', cpfOptions));
-        const profSnap = await getDocs(profQuery);
-        if (!profSnap.empty) {
-          toast.error('Falha no cadastro: Este CPF já se encontra registrado em nosso sistema.');
-          return;
-        }
-      }
     } catch (dbErr: any) {
-      if (dbErr?.code === 'resource-exhausted' || (dbErr?.message && dbErr.message.includes('Quota'))) {
-        console.warn("Quota excedida na verificação de CPF. Ignorando verificação online.");
-      } else {
-        console.error("Erro ao verificar duplicidade de CPF:", dbErr);
-      }
+      console.error("Erro ao verificar duplicidade de CPF:", dbErr);
     }
 
     // Validation for Billing Details
@@ -2111,21 +2145,27 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const handleSalvarAgendamento = async () => {
     setIsSaving(true);
     try {
-      if (isCurrentMonthConcluded) {
-        toast.error('Esta escala já está concluída. Não é permitida a adição de novos agendamentos.');
-        return false;
-      }
-      // 1. Validação de Payload (Console.log)
-      console.log("Validando Payload do Novo Agendamento:", {
-        profissional: avulsoProf,
-        selectedDates,
-        turno: avulsoPlantaoOptionId,
-        pacienteId: paciente?.id
-      });
-
       if (!paciente) {
         toast.error('Erro: Paciente não identificado.');
+        setIsSaving(false);
         return false;
+      }
+
+      if (!selectedDates || selectedDates.length === 0) {
+        toast.error('Por favor, preencha o campo obrigatório: Datas no calendário.');
+        setIsSaving(false);
+        return false;
+      }
+
+      // Action 3: Validação Inteligente no Agendamento por mês/ano das datas escolhidas
+      for (const item of selectedDates) {
+        if (isMesConcluido(item.date)) {
+          const [yr, mo] = item.date.split('-');
+          const formattedMonthYear = `${mo}/${yr}`;
+          toast.error(`Esta escala de ${formattedMonthYear} já está concluída.`);
+          setIsSaving(false);
+          return false;
+        }
       }
 
       if (!avulsoProf || avulsoProf.trim() === '') {
@@ -2310,39 +2350,51 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   };
 
   const handleConfirmConcluir = async () => {
-    if (!paciente) return;
+    const currentP = pacientes.find(p => p.id === paciente?.id) || paciente;
+    if (!currentP) return;
     if (!concluirStartDate || !concluirEndDate) {
       toast.error('Defina o início e o fim do período.');
       return;
     }
 
-    const agendamentosPaciente = agendamentos.filter((a) => a.idPaciente === paciente.id);
+    const [yr, mo] = concluirStartDate.split('-');
+    const formattedMo = mo.padStart(2, '0');
+    const mesAnoKey = `${formattedMo}/${yr}`; // Formato estrito e padronizado MM/YYYY (ex: '08/2026')
+
+    const agendamentosPaciente = agendamentos.filter((a) => a.idPaciente === currentP.id);
     const matches = agendamentosPaciente.filter(
       (s) => s.data >= concluirStartDate && s.data <= concluirEndDate && s.status !== 'Concluido' && s.status !== 'Cancelado'
     );
 
-    console.log(`Tentando concluir agendamentos do paciente ${paciente.id} de ${concluirStartDate} a ${concluirEndDate}.`);
+    console.log(`Tentando concluir agendamentos do paciente ${currentP.id} de ${concluirStartDate} a ${concluirEndDate}.`);
     console.log(`Total de agendamentos no período: ${agendamentosPaciente.filter(s => s.data >= concluirStartDate && s.data <= concluirEndDate).length}`);
     console.log(`Agendamentos filtrados (ativos): ${matches.length}`);
-
-    if (matches.length === 0) {
-      toast.error('Nenhum agendamento ativo foi encontrado neste período para ser concluído.');
-      return;
-    }
 
     const toastId = toast.loading('Processando conclusão...');
 
     try {
-      await updateAgendamentosBatch(
-        matches.map(s => ({
-          id: s.id,
-          status: 'Concluido',
-          escalaCongelada: true
-        }))
-      );
+      if (matches.length > 0) {
+        await updateAgendamentosBatch(
+          matches.map(s => ({
+            id: s.id,
+            status: 'Concluido',
+            escalaCongelada: true
+          }))
+        );
+      }
+
+      // Adiciona o mês/ano padronizado (MM/YYYY) ao array mesesConcluidos do paciente
+      const currentMeses = currentP.mesesConcluidos || [];
+      if (!currentMeses.includes(mesAnoKey)) {
+        const updatedMeses = [...currentMeses, mesAnoKey];
+        await updatePaciente({
+          ...currentP,
+          mesesConcluidos: updatedMeses
+        }, true);
+      }
 
       setConcluirModalOpen(false);
-      toast.success('Agenda Concluída', { id: toastId });
+      toast.success(`Escala de ${mesAnoKey} Concluída com sucesso!`, { id: toastId });
     } catch (err: any) {
       console.error("Erro ao processar batch de conclusão:", err);
       toast.error('Erro ao congelar escala: ' + (err.message || String(err)), { id: toastId });
@@ -2410,7 +2462,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         return val > 0;
       });
 
-      const valorTotalFatura = plantoesValidos.reduce((acc: number, s: any) => {
+      const valorTotalPlantoes = plantoesValidos.reduce((acc: number, s: any) => {
         let base = parseNum(s.valorPlantao) || parseNum(paciente?.planoAtendimento?.valorSugeridoPlantao, 150);
         let extra = parseNum(s.ajudaCusto) || parseNum(paciente?.planoAtendimento?.ajudaCusto, 0);
         let baseTaxa = parseNum(s.taxaAdm) || parseNum(paciente?.planoAtendimento?.taxaAdm, 0);
@@ -2419,6 +2471,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         else if (s.tipoDia === 'Feriado 50%') mult = 1.5;
         return acc + (base * mult) + (baseTaxa * mult) + extra;
       }, 0);
+
+      const servicosExtrasDoMes = (servicosExtras || []).filter(
+        (s) => (s.idPaciente === paciente.id || (s as any).pacienteId === paciente.id) &&
+               (s.data?.startsWith(mesDaEscalaAtual) || s.mesReferencia === mesDaEscalaAtual)
+      );
+      const somaServicosExtras = servicosExtrasDoMes.reduce((acc, item) => acc + (Number(item.valor) || 0), 0);
+      const valorTotalFatura = valorTotalPlantoes + somaServicosExtras;
 
       const nomePaciente = nome || paciente?.nome || 'Não definido';
       const numFatSuffix = Math.floor(1000 + Math.random() * 9000);
@@ -2441,6 +2500,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
           inicio: `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-01`, 
           fim: `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(new Date(calendarYear, calendarMonth + 1, 0).getDate()).padStart(2, '0')}` 
         },
+        servicosExtras: servicosExtrasDoMes.map(s => ({
+          id: s.id,
+          idPaciente: s.idPaciente,
+          descricao: s.descricao,
+          data: s.data,
+          valor: Number(s.valor)
+        })),
         plantoesCongelados: agendamentosPacienteMes.map(a => ({
           id: a.id,
           data: a.data || '',
@@ -2478,39 +2544,95 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     }
   };
 
+  const handleSaveServicoExtra = async () => {
+    const desc = servicoExtraDesc === 'Outros' ? servicoExtraCustomDesc.trim() : servicoExtraDesc.trim();
+    const val = parseFloat(String(servicoExtraValor).replace(',', '.'));
+    if (!desc) {
+      toast.error('Informe a descrição do serviço extra.');
+      return;
+    }
+    if (!servicoExtraData) {
+      toast.error('Informe a data do serviço extra.');
+      return;
+    }
+    if (isNaN(val) || val <= 0) {
+      toast.error('Informe um valor válido maior que zero.');
+      return;
+    }
+    if (!paciente?.id) {
+      toast.error('Paciente não selecionado.');
+      return;
+    }
+
+    setIsSavingServicoExtra(true);
+    try {
+      const monthPrefix = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}`;
+      await addServicoExtra({
+        idPaciente: paciente.id,
+        descricao: desc,
+        data: servicoExtraData,
+        valor: val,
+        mesReferencia: monthPrefix,
+      });
+      toast.success('Serviço extra lançado com sucesso!');
+      setServicoExtraDesc('Visita de Enfermeira');
+      setServicoExtraCustomDesc('');
+      setServicoExtraValor('');
+      setIsServicoExtraModalOpen(false);
+    } catch (err) {
+      console.error('Erro ao salvar serviço extra:', err);
+      toast.error('Erro ao salvar serviço extra.');
+    } finally {
+      setIsSavingServicoExtra(false);
+    }
+  };
+
   const handleConfirmReabrir = async () => {
-    if (!paciente) return;
+    const currentP = pacientes.find(p => p.id === paciente?.id) || paciente;
+    if (!currentP) return;
     if (!reabrirStartDate || !reabrirEndDate) {
       toast.error('Defina o início e o fim do período.');
       return;
     }
 
-    const agendamentosPaciente = agendamentos.filter((a) => a.idPaciente === paciente.id);
+    const [yr, mo] = reabrirStartDate.split('-');
+    const formattedMo = mo.padStart(2, '0');
+    const keyMMSlashYYYY = `${formattedMo}/${yr}`; // MM/YYYY (ex: '08/2026')
+    const keyMMYYYY = `${formattedMo}-${yr}`;     // MM-YYYY (ex: '08-2026')
+    const keyYYYYMM = `${yr}-${formattedMo}`;     // YYYY-MM (ex: '2026-08')
+
+    const agendamentosPaciente = agendamentos.filter((a) => a.idPaciente === currentP.id);
     const matches = agendamentosPaciente.filter(
-      (s) => s.data >= reabrirStartDate && s.data <= reabrirEndDate && s.status === 'Concluido'
+      (s) => s.data >= reabrirStartDate && s.data <= reabrirEndDate && (s.status === 'Concluido' || s.escalaCongelada)
     );
 
-    console.log(`Tentando reabrir agendamentos do paciente ${paciente.id} de ${reabrirStartDate} a ${reabrirEndDate}.`);
-    console.log(`Agendamentos filtrados (concluídos): ${matches.length}`);
-
-    if (matches.length === 0) {
-      toast.error('Nenhum agendamento concluído foi encontrado neste período para ser reaberto.');
-      return;
-    }
+    console.log(`Tentando reabrir agendamentos do paciente ${currentP.id} de ${reabrirStartDate} a ${reabrirEndDate}.`);
+    console.log(`Agendamentos filtrados (concluídos/congelados): ${matches.length}`);
 
     const toastId = toast.loading('Processando reabertura da escala...');
 
     try {
-      await updateAgendamentosBatch(
-        matches.map(s => ({
-          id: s.id,
-          status: 'Aberta',
-          escalaCongelada: false
-        }))
-      );
+      if (matches.length > 0) {
+        await updateAgendamentosBatch(
+          matches.map(s => ({
+            id: s.id,
+            status: 'Aberta',
+            escalaCongelada: false
+          }))
+        );
+      }
+
+      // Remove todas as variações da chave do mês de dentro do array mesesConcluidos no banco de dados
+      const currentMeses = currentP.mesesConcluidos || [];
+      const updatedMeses = currentMeses.filter(m => m !== keyMMSlashYYYY && m !== keyMMYYYY && m !== keyYYYYMM);
+      
+      await updatePaciente({
+        ...currentP,
+        mesesConcluidos: updatedMeses
+      }, true);
 
       setReabrirModalOpen(false);
-      toast.success(`Escala reaberta com sucesso! ${matches.length} turnos estão disponíveis para edição.`, { id: toastId });
+      toast.success(`Escala de ${keyMMSlashYYYY} reaberta com sucesso!`, { id: toastId });
     } catch (err: any) {
       console.error("Erro ao processar batch de reabertura:", err);
       toast.error('Erro ao reabrir escala: ' + (err.message || String(err)), { id: toastId });
@@ -3299,12 +3421,22 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     if (excluirPorType === 'datas') {
       matches = agendamentosPaciente.filter((s) => s.data === excluirStartDate);
     } else if (excluirPorType === 'profissional') {
-      if (!excluirProfName) {
-        alert('Selecione o profissional para remover.');
+      const profsToMatch = selectedExcluirProfs.length > 0 
+        ? selectedExcluirProfs 
+        : (excluirProfName.trim() ? [excluirProfName.trim()] : []);
+
+      if (profsToMatch.length === 0) {
+        alert('Selecione ao menos um profissional para remover.');
         return;
       }
+
       matches = agendamentosPaciente.filter(
-        (s) => s.data >= excluirStartDate && s.data <= excluirEndDate && (s.nomeProfissional || '').toLowerCase().includes((excluirProfName || '').toLowerCase())
+        (s) =>
+          s.data >= excluirStartDate &&
+          s.data <= excluirEndDate &&
+          profsToMatch.some((pName) =>
+            (s.nomeProfissional || '').toLowerCase().includes(pName.toLowerCase())
+          )
       );
     } else {
       matches = agendamentosPaciente.filter(
@@ -4671,6 +4803,22 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   <div className="flex flex-wrap gap-2.5 items-center justify-start">
                     <button
                       type="button"
+                      disabled={isCurrentlyDeactivated}
+                      onClick={() => {
+                        setServicoExtraDesc('Visita de Enfermeira');
+                        setServicoExtraCustomDesc('');
+                        setServicoExtraData(new Date().toISOString().slice(0, 10));
+                        setServicoExtraValor('');
+                        setIsServicoExtraModalOpen(true);
+                      }}
+                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-300 transform hover:-translate-y-1 bg-blue-600 shadow-lg shadow-blue-500/50 hover:shadow-blue-500/80 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none cursor-pointer flex items-center space-x-1.5 text-xs font-sans"
+                    >
+                      <PlusCircle size={14} />
+                      <span>+ Serviço Extra</span>
+                    </button>
+
+                    <button
+                      type="button"
                       onClick={() => setIsFaturaModalOpen(true)}
                       className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-300 transform hover:-translate-y-1 bg-emerald-600 shadow-lg shadow-emerald-500/50 hover:shadow-emerald-500/80 cursor-pointer flex items-center space-x-1.5 text-xs font-sans"
                     >
@@ -4680,8 +4828,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
                     <button
                       type="button"
-                      disabled={isCurrentlyDeactivated || isCurrentMonthConcluded}
-                      title={isCurrentMonthConcluded ? 'Esta escala já está concluída. Não é permitida a adição de novos agendamentos.' : ''}
+                      disabled={isCurrentlyDeactivated}
                       onClick={() => {
                         setOpenedFrom('button');
                         setSelectedDates([]);
@@ -4913,7 +5060,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                               <div
                                 key={cell.dateStr}
                                 onClick={() => {
-                                  if (isCurrentMonthConcluded || isCurrentlyDeactivated) return;
+                                  if (isCurrentlyDeactivated) return;
+                                  if (isMesConcluido(cell.dateStr)) {
+                                    const [yr, mo] = cell.dateStr.split('-');
+                                    toast.error(`Esta escala de ${mo}/${yr} já está concluída.`);
+                                    return;
+                                  }
                                   const [yr, mo, da] = cell.dateStr.split('-').map(Number);
                                   setOpenedFrom('calendar_cell');
                                   setAgnCalendarYear(yr);
@@ -4977,6 +5129,20 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                       cardBgBorder = 'bg-slate-100 border-slate-300 text-slate-700 font-bold';
                                     }
 
+                                    const profName = ag.nomeProfissional || 'Geral';
+                                    const shiftTurno = (ag as any).tipoPlantao || (ag as any).turno || (ag as any).tipo || (ag as any).tipoEscala || getShiftNameForAgendamento(ag) || '';
+                                    const shiftHorario = ag.horario || '';
+
+                                    let statusStr = 'Normal';
+                                    if (isCancelled) statusStr = 'Cancelado';
+                                    else if (isFalta) statusStr = 'Falta Registrada';
+                                    else if (isCuringa) statusStr = 'Curinga';
+                                    else if (is50) statusStr = 'Feriado 50%';
+                                    else if (is20) statusStr = 'Feriado 20%';
+                                    else if (isConcluido) statusStr = 'Concluído';
+
+                                    const fullTooltip = `${profName}${shiftTurno ? ` - ${shiftTurno}` : ''}${shiftHorario ? ` - ${shiftHorario}` : ''}${statusStr ? ` - ${statusStr}` : ''}${ag.observacao ? ` (${ag.observacao})` : ''}`;
+
                                     return (
                                       <div
                                         key={ag.id}
@@ -5002,8 +5168,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                             targetShift: ag
                                           });
                                         }}
-                                        className={`text-[10px] p-1.5 border rounded-lg cursor-pointer flex flex-col text-left w-full transition-all duration-150 relative space-y-0.5 hover:-translate-y-0.5 group/shift ${cardBgBorder}`}
-                                        title={ag.observacao || (isFalta ? 'Falta Registrada' : 'Inspecionar Plantão')}
+                                        className={`p-1.5 border rounded-lg cursor-pointer flex flex-col text-left w-full transition-all duration-150 relative space-y-0.5 hover:-translate-y-0.5 group/shift ${cardBgBorder}`}
+                                        title={fullTooltip}
                                       >
                                         {/* Copy Shift Button */}
                                         <button
@@ -5015,9 +5181,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                           <Copy size={7} />
                                         </button>
 
-                                        <div className="flex justify-between items-center gap-1">
-                                          <span className={`truncate block font-bold text-[9px] pr-2 ${isFalta ? 'line-through text-slate-500' : 'text-slate-900'}`}>
-                                            {ag.nomeProfissional || 'Geral'}
+                                        <div className="flex justify-between items-center gap-1.5 w-full min-w-0">
+                                          <span className={`flex-1 min-w-0 truncate font-bold text-[10px] leading-tight ${isFalta ? 'line-through text-slate-500' : 'text-slate-900'}`}>
+                                            {profName}
                                           </span>
                                           <div className="flex items-center space-x-0.5 shrink-0">
                                             {isFalta && (
@@ -5038,10 +5204,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                             {isConcluido && <span className="text-[8px]" title="Escala Fechada">🔒</span>}
                                           </div>
                                         </div>
-                                        <div className="flex justify-between items-center text-[8px] text-slate-600 font-medium">
-                                          <span>{(ag as any).tipoPlantao || (ag as any).turno || (ag as any).tipo || (ag as any).tipoEscala || getShiftNameForAgendamento(ag)}</span>
-                                          <span className="truncate max-w-[45px] font-mono">{ag.horario}</span>
-                                        </div>
+
+                                        {shiftTurno && (
+                                          <div className="text-[9px] text-slate-600 font-medium truncate leading-tight">
+                                            {shiftTurno}
+                                          </div>
+                                        )}
                                       </div>
                                     );
                                   })}
@@ -5999,8 +6167,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
       {/* Edit Shift/Professional Modal */}
       {editShiftModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in-30">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl p-6 max-w-sm w-full mx-4 space-y-4 font-sans">
+        <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in-30 p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto space-y-4 font-sans">
             <h3 className="font-bold text-sm text-slate-800">Editar Plantão</h3>
             <div className="space-y-4">
               <div className="space-y-1 relative">
@@ -6320,7 +6488,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         onChange={(e) => {
                           const val = e.target.value;
                           if (val) {
-                            if (!selectedDates.some(d => d.date === val)) {
+                            if (isMesConcluido(val)) {
+                              const [yr, mo] = val.split('-');
+                              toast.error(`Esta escala de ${mo}/${yr} já está concluída.`);
+                            } else if (!selectedDates.some(d => d.date === val)) {
                               setSelectedDates(prev => [...prev, { date: val, cycle: 1 }]);
                             }
                             setTempDate('');
@@ -6468,8 +6639,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               </button>
               <button
                 type="button"
-                disabled={isSaving || isCurrentMonthConcluded}
-                title={isCurrentMonthConcluded ? 'Esta escala já está concluída. Não é permitida a adição de novos agendamentos.' : ''}
+                disabled={isSaving}
                 onClick={async (e) => {
                   e.preventDefault();
                   const success = await handleSalvarAgendamento();
@@ -6477,7 +6647,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     setAvulsoModalOpen(false);
                   }
                 }}
-                className={`flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 text-white font-medium rounded-lg shadow-lg shadow-blue-500/40 hover:bg-blue-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${isSaving || isCurrentMonthConcluded ? 'opacity-55 cursor-not-allowed' : ''}`}
+                className={`flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 text-white font-medium rounded-lg shadow-lg shadow-blue-500/40 hover:bg-blue-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${isSaving ? 'opacity-55 cursor-not-allowed' : ''}`}
               >
                 {isSaving ? 'Agendando...' : 'Confirmar e Agendar'}
               </button>
@@ -6505,10 +6675,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         const dComputedAjudaValue = dBaseAjudaValue;
 
         return (
-          <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in-30 p-4 overflow-y-auto">
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full flex flex-col p-6 space-y-4 font-sans">
+          <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in-30 p-2 sm:p-4 overflow-y-auto">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full flex flex-col max-h-[90vh] my-auto overflow-hidden font-sans">
               
-              <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <div className="flex justify-between items-center border-b border-slate-100 px-5 py-4 shrink-0 bg-slate-50/50">
                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                   <Info size={15} className="text-blue-600" />
                   <span>{isEditingDetails ? '✏️ Editar Plantão' : '📋 Detalhes do Plantão'}</span>
@@ -6516,12 +6686,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 <button
                   type="button"
                   onClick={() => setDetailsModalOpen(false)}
-                  className="text-slate-400 hover:text-slate-600 transition-colors p-1"
+                  className="text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
                 >
                   <X size={16} />
                 </button>
               </div>
 
+              <div className="p-5 overflow-y-auto flex-1 space-y-3.5">
               {!isEditingDetails ? (
                 // View Mode
                 (() => {
@@ -6964,7 +7135,21 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       type="checkbox"
                       id="details-curinga-chk"
                       checked={detailsCuringa}
-                      onChange={(e) => setDetailsCuringa(e.target.checked)}
+                      onChange={(e) => {
+                        const isChecked = e.target.checked;
+                        setDetailsCuringa(isChecked);
+                        if (!isChecked) {
+                          if (detailsObservacao.trim().toUpperCase() === 'CURINGA') {
+                            setDetailsObservacao('');
+                          } else if (detailsObservacao.toUpperCase().includes('CURINGA')) {
+                            setDetailsObservacao(detailsObservacao.replace(/curinga/gi, '').trim());
+                          }
+                        } else {
+                          if (!detailsObservacao.trim()) {
+                            setDetailsObservacao('CURINGA');
+                          }
+                        }
+                      }}
                       className="w-4 h-4 text-sky-600 rounded border-slate-300 focus:ring-sky-500 cursor-pointer"
                     />
                     <label htmlFor="details-curinga-chk" className="text-xs font-bold text-slate-700 select-none cursor-pointer">
@@ -7067,6 +7252,19 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                             return;
                           }
 
+                          let cleanObs = detailsObservacao.trim();
+                          if (!detailsCuringa) {
+                            if (cleanObs.toUpperCase() === 'CURINGA') {
+                              cleanObs = '';
+                            } else if (cleanObs.toUpperCase().includes('CURINGA')) {
+                              cleanObs = cleanObs.replace(/curinga/gi, '').trim();
+                            }
+                          } else {
+                            if (!cleanObs) {
+                              cleanObs = 'CURINGA';
+                            }
+                          }
+
                           const updatedAg: any = {
                             ...selectedShiftForDetails,
                             idProfissional: pickedProf ? pickedProf.id : 'n/a',
@@ -7079,7 +7277,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                             taxaAdm: considerarFalta ? 0 : taxaAdmFinal,
                             tipoDia: detailsTipoDia,
                             isCuringa: detailsCuringa,
-                            observacao: detailsObservacao.trim() !== '' ? detailsObservacao.trim() : (detailsCuringa ? 'CURINGA' : ''),
+                            observacao: cleanObs,
                             considerarFalta,
                             motivoFalta: considerarFalta ? motivoFalta : '',
                             atendimentoRealizado
@@ -7132,6 +7330,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   </div>
                 </div>
               )}
+              </div>
             </div>
           </div>
         );
@@ -7633,36 +7832,125 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             )}
 
             {excluirPorType === 'profissional' && (
-              <div className="space-y-1 relative animate-in fade-in-15">
-                <label className="block text-[10px] font-bold text-slate-505 text-slate-605 text-slate-500">Selecione o Profissional:</label>
+              <div className="space-y-2 animate-in fade-in-15 font-sans">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase">
+                    Selecione o(s) Profissional(is) Agendado(s):
+                  </label>
+                  {profsAgendadosNoPeriodo.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedExcluirProfs(profsAgendadosNoPeriodo.map((p) => p.nome))}
+                        className="text-[10px] font-bold text-blue-600 hover:text-blue-800 underline cursor-pointer"
+                      >
+                        Selecionar Todos
+                      </button>
+                      <span className="text-slate-300">|</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedExcluirProfs([])}
+                        className="text-[10px] font-bold text-slate-500 hover:text-slate-700 underline cursor-pointer"
+                      >
+                        Limpar
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Filtro por busca / autocomplete */}
                 <input
                   type="text"
+                  placeholder="Pesquisar profissional por nome..."
                   value={excluirProfName}
-                  onFocus={() => setShowExcluirProfDropdown(true)}
-                  onBlur={() => setTimeout(() => setShowExcluirProfDropdown(false), 200)}
                   onChange={(e) => setExcluirProfName(e.target.value)}
-                  className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-800 font-bold"
+                  className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-800 font-medium focus:outline-none focus:border-blue-500"
                 />
-                {showExcluirProfDropdown && (
-                  <div className="absolute left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-white border border-slate-205 border-slate-200 rounded-lg shadow-xl z-25 divide-y divide-slate-100 font-sans">
-                    {profissionais.filter(p =>
-                      removerAcentos(p.nome || '').includes(removerAcentos(excluirProfName || '')) &&
-                      p.status === 'Ativo'
-                    ).map((prof) => (
-                      <button
-                        key={prof.id}
-                        type="button"
-                        onMouseDown={() => {
-                          setExcluirProfName(prof.nome);
-                          setShowExcluirProfDropdown(false);
-                        }}
-                        className="w-full text-left p-2 hover:bg-slate-50 transition-colors text-xs font-semibold text-slate-800"
+
+                {/* Badges dos selecionados */}
+                {selectedExcluirProfs.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 p-2 bg-blue-50/60 border border-blue-150 rounded-lg max-h-24 overflow-y-auto">
+                    {selectedExcluirProfs.map((prof) => (
+                      <span
+                        key={prof}
+                        className="inline-flex items-center gap-1 bg-blue-600 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full shadow-xs"
                       >
-                        {prof.nome}
-                      </button>
+                        {prof}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedExcluirProfs((prev) => prev.filter((p) => p !== prof))}
+                          className="hover:bg-blue-700 rounded-full p-0.5 cursor-pointer text-blue-100 hover:text-white"
+                        >
+                          <X size={10} />
+                        </button>
+                      </span>
                     ))}
                   </div>
                 )}
+
+                {/* Lista de profissionais agendados no período */}
+                <div className="max-h-44 overflow-y-auto border border-slate-200 rounded-lg bg-white divide-y divide-slate-100 shadow-xs">
+                  {(() => {
+                    const term = removerAcentos(excluirProfName.toLowerCase().trim());
+                    let listToShow = profsAgendadosNoPeriodo.filter((p) =>
+                      removerAcentos(p.nome.toLowerCase()).includes(term)
+                    );
+
+                    // Se a busca não encontrar na lista do período, pesquisa na lista geral de profissionais ativos
+                    if (listToShow.length === 0 && term) {
+                      listToShow = profissionais
+                        .filter(
+                          (p) => p.status === 'Ativo' && removerAcentos(p.nome.toLowerCase()).includes(term)
+                        )
+                        .map((p) => ({ nome: p.nome, count: 0 }));
+                    }
+
+                    if (listToShow.length === 0) {
+                      return (
+                        <div className="p-3 text-center text-xs text-slate-400 italic">
+                          {profsAgendadosNoPeriodo.length === 0
+                            ? 'Nenhum profissional agendado no período selecionado.'
+                            : 'Nenhum profissional encontrado para o termo pesquisado.'}
+                        </div>
+                      );
+                    }
+
+                    return listToShow.map(({ nome, count }) => {
+                      const isSelected = selectedExcluirProfs.includes(nome);
+                      return (
+                        <label
+                          key={nome}
+                          className={`flex items-center justify-between p-2 hover:bg-slate-50 cursor-pointer text-xs transition-colors ${
+                            isSelected ? 'bg-blue-50/70 font-bold' : ''
+                          }`}
+                        >
+                          <div className="flex items-center space-x-2 min-w-0">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedExcluirProfs((prev) => [...prev, nome]);
+                                } else {
+                                  setSelectedExcluirProfs((prev) => prev.filter((p) => p !== nome));
+                                }
+                              }}
+                              className="rounded text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 cursor-pointer"
+                            />
+                            <span className="truncate text-slate-800">{nome}</span>
+                          </div>
+                          {count > 0 ? (
+                            <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full">
+                              {count} plantão(ões)
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic">0 plantões</span>
+                          )}
+                        </label>
+                      );
+                    });
+                  })()}
+                </div>
               </div>
             )}
 
@@ -8366,6 +8654,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         const totalPlantõesValidos = concluidos + ativos;
         const isEscalaAberta = ativos > 0 || totalPlantõesValidos === 0;
 
+        const servicosExtrasDoMesModal = (servicosExtras || []).filter(
+          (s) => (s.idPaciente === paciente?.id || (s as any).pacienteId === paciente?.id) &&
+                 (s.data?.startsWith(monthPrefix) || s.mesReferencia === monthPrefix)
+        );
+        const somaServicosExtrasModal = servicosExtrasDoMesModal.reduce((acc, curr) => acc + (Number(curr.valor) || 0), 0);
+        const totalFaturaModal = grandTotal + somaServicosExtrasModal;
+
         return (
           <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-sm flex items-center justify-center z-[110] animate-in fade-in-30 p-4 font-sans text-left">
             <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden max-w-lg w-full flex flex-col transform transition-all duration-300">
@@ -8457,8 +8752,18 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         </div>
                       )}
                       <div className="flex justify-between border-t border-slate-200 pt-1 font-bold text-slate-800">
-                        <span>Valor Consolidado:</span>
+                        <span>Plantões Consolidados:</span>
                         <span className="text-emerald-700">R$ {grandTotal.toFixed(2)}</span>
+                      </div>
+                      {somaServicosExtrasModal > 0 && (
+                        <div className="flex justify-between font-bold text-blue-700">
+                          <span>Serviços Extras ({servicosExtrasDoMesModal.length}x):</span>
+                          <span>+ R$ {somaServicosExtrasModal.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between border-t border-slate-300 pt-1 font-black text-slate-900 text-xs">
+                        <span>Valor Total da Fatura:</span>
+                        <span className="text-emerald-800">R$ {totalFaturaModal.toFixed(2)}</span>
                       </div>
                     </div>
                   )}
@@ -8501,6 +8806,184 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   }`}
                 >
                   Confirmar e Gerar Fatura
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* MODAL SERVIÇO EXTRA */}
+      {isServicoExtraModalOpen && (() => {
+        const monthPrefix = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}`;
+        const servicosExtrasMes = (servicosExtras || []).filter(
+          (s) => (s.idPaciente === paciente?.id || (s as any).pacienteId === paciente?.id) &&
+                 (s.data?.startsWith(monthPrefix) || s.mesReferencia === monthPrefix)
+        );
+        const totalMes = servicosExtrasMes.reduce((acc, curr) => acc + (Number(curr.valor) || 0), 0);
+
+        return (
+          <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-sm flex items-center justify-center z-[120] animate-in fade-in-30 p-4 font-sans text-left">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden max-w-lg w-full flex flex-col transform transition-all duration-300">
+              {/* Header */}
+              <div className="bg-gradient-to-r from-blue-700 to-blue-900 px-5 py-4 text-white flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="bg-blue-600/50 p-1.5 rounded-lg border border-blue-400/30 flex items-center justify-center">
+                    <PlusCircle size={18} className="text-blue-200" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black uppercase tracking-wider leading-none">
+                      Lançar Serviço Extra / Material
+                    </h3>
+                    <p className="text-[10px] text-blue-100/80 mt-1 font-medium leading-none">
+                      Paciente: {nome || paciente?.nome || '---'} | Mês: {['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][calendarMonth]} / {calendarYear}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsServicoExtraModalOpen(false)}
+                  className="text-blue-100 hover:text-white bg-white/10 hover:bg-white/20 p-1.5 rounded-lg transition-colors cursor-pointer"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+
+              {/* Formulário */}
+              <div className="p-6 space-y-4 bg-slate-50/50 max-h-[70vh] overflow-y-auto">
+                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-3">
+                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Novo Lançamento Extra</h4>
+                  
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                      Descrição do Serviço / Material *
+                    </label>
+                    <select
+                      value={servicoExtraDesc}
+                      onChange={(e) => setServicoExtraDesc(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 font-medium focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="Visita de Enfermeira">Visita de Enfermeira</option>
+                      <option value="Coleta de Urina / Sangue">Coleta de Urina / Sangue</option>
+                      <option value="Materiais / Curativos">Materiais / Curativos</option>
+                      <option value="Medicamentos / Insumos">Medicamentos / Insumos</option>
+                      <option value="Procedimento Especial">Procedimento Especial</option>
+                      <option value="Outros">Outros (Especifique abaixo)</option>
+                    </select>
+                  </div>
+
+                  {servicoExtraDesc === 'Outros' && (
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                        Especifique a Descrição *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ex: Aluguel de Cama Hospitalar..."
+                        value={servicoExtraCustomDesc}
+                        onChange={(e) => setServicoExtraCustomDesc(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 font-medium focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                        Data *
+                      </label>
+                      <input
+                        type="date"
+                        value={servicoExtraData}
+                        onChange={(e) => setServicoExtraData(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 font-medium focus:outline-none focus:border-blue-500 font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                        Valor (R$) *
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="0,00"
+                        value={servicoExtraValor}
+                        onChange={(e) => setServicoExtraValor(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 font-bold focus:outline-none focus:border-blue-500 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={isSavingServicoExtra}
+                    onClick={handleSaveServicoExtra}
+                    className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-lg text-xs transition-all shadow-md flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <Plus size={14} />
+                    <span>{isSavingServicoExtra ? 'Salvando...' : 'Salvar Serviço Extra'}</span>
+                  </button>
+                </div>
+
+                {/* Tabela de Serviços Lançados no Mês */}
+                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-2">
+                  <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Lançamentos Extras no Mês ({servicosExtrasMes.length})
+                    </h4>
+                    <span className="text-xs font-black font-mono text-blue-700">
+                      Total: R$ {totalMes.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  {servicosExtrasMes.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic py-3 text-center">
+                      Nenhum serviço extra lançado neste mês.
+                    </p>
+                  ) : (
+                    <div className="divide-y divide-slate-100 max-h-40 overflow-y-auto">
+                      {servicosExtrasMes.map((s) => (
+                        <div key={s.id} className="py-2 flex items-center justify-between text-xs font-sans">
+                          <div>
+                            <p className="font-bold text-slate-800">{s.descricao}</p>
+                            <p className="text-[10px] text-slate-400 font-mono">
+                              {new Date(s.data + 'T00:00:00').toLocaleDateString('pt-BR')}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="font-black font-mono text-slate-800">
+                              R$ {Number(s.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                            <button
+                              type="button"
+                              title="Remover serviço extra"
+                              onClick={async () => {
+                                if (confirm('Deseja excluir este serviço extra?')) {
+                                  await deleteServicoExtra(s.id);
+                                  toast.success('Serviço extra removido.');
+                                }
+                              }}
+                              className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors cursor-pointer"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="bg-white border-t border-slate-150 px-5 py-3 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsServicoExtraModalOpen(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-all cursor-pointer"
+                >
+                  Fechar
                 </button>
               </div>
             </div>

@@ -48,14 +48,33 @@ export const PatientList: React.FC<PatientListProps> = ({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [filterPacienteId, setFilterPacienteId] = useState<string>('todos');
 
-  // Trigger server-side fetch with debounce whenever search or filter selection changes
+  // Reset na Montagem (Mount): Dispara apenas na montagem inicial ([]) para garantir
+  // que o termo de busca e o filtro sejam resetados para '' e a lista seja preenchida com todos os pacientes do Contexto.
   useEffect(() => {
+    setLocalSearch('');
+    setFilterPacienteId('todos');
+    setSelectedIds([]);
+    fetchFirstPagePacientes('', 'todos', true);
+  }, []);
+
+  // Revisão do Efeito de Busca: Sincroniza o input de busca, o filtro de paciente e o estado exibido.
+  // Se o termo de busca estiver vazio ('') e sem filtro específico, assegura que a lista exibida recebe o array completo de pacientes.
+  useEffect(() => {
+    const searchTerm = (localSearch || globalSearchQuery || '').trim();
+
+    // Condição explícita: Se o termo de busca estiver vazio e o filtro estiver em 'todos',
+    // recupera/recarrega o array completo de pacientes do Contexto.
+    if (searchTerm === '' && filterPacienteId === 'todos') {
+      fetchFirstPagePacientes('', 'todos', true);
+      return;
+    }
+
     const delayDebounceFn = setTimeout(() => {
       fetchFirstPagePacientes(localSearch, filterPacienteId);
     }, 400);
 
     return () => clearTimeout(delayDebounceFn);
-  }, [localSearch, filterPacienteId]);
+  }, [localSearch, globalSearchQuery, filterPacienteId, fetchFirstPagePacientes]);
 
   // Deactivation confirmation modal for list bulk actions
   const [bulkDeactivateOpen, setBulkDeactivateOpen] = useState(false);
@@ -235,9 +254,9 @@ export const PatientList: React.FC<PatientListProps> = ({
           {(filterPacienteId !== 'todos' || localSearch) && (
             <button
               onClick={() => {
-                alert('Ação disparada no botão: Resetar Filtros');
                 setLocalSearch('');
                 setFilterPacienteId('todos');
+                fetchFirstPagePacientes('', 'todos', true);
               }}
               className="text-xs text-slate-400 hover:text-blue-600 underline font-semibold cursor-pointer"
             >

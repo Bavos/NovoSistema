@@ -50,8 +50,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }, (error) => {
       console.warn("Sidebar company settings subscription failed:", error);
     });
-    return unsub;
-  }, [user, isQuotaExceeded, isTestMode]);
+    return () => {
+      unsub();
+    };
+  }, [user?.uid, isQuotaExceeded, isTestMode]);
 
   const allMenuItems = [
     { id: 'dashboard', label: 'Início', icon: Activity },

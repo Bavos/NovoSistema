@@ -39,8 +39,10 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     }, (error) => {
       console.warn("TopHeader company settings subscription failed:", error);
     });
-    return unsub;
-  }, [user, isQuotaExceeded, isTestMode]);
+    return () => {
+      unsub();
+    };
+  }, [user?.uid, isQuotaExceeded, isTestMode]);
 
   const currentUserProfile = (usuariosSistema || []).find(u => {
     const uEmail = u?.email;

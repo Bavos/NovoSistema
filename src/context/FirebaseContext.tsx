@@ -4,7 +4,7 @@
  */
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Paciente, Plantao, Profissional, CancelingReason, AuditLog, Agendamento, UsuarioSistema, DebitoProfissional, FaturaPaciente, FolhaPagamento } from '../types';
+import { Paciente, Plantao, Profissional, CancelingReason, AuditLog, Agendamento, UsuarioSistema, DebitoProfissional, FaturaPaciente, FolhaPagamento, ServicoExtra } from '../types';
 import { INITIAL_PACIENTES, INITIAL_PLANTOES, INITIAL_PROFESSIONALS } from '../mockData';
 import { db, auth, storage, OperationType, handleFirestoreError } from '../lib/firebase';
 import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, sendEmailVerification, User } from 'firebase/auth';
@@ -39,7 +39,7 @@ interface FirebaseContextType {
   loadingPacientes: boolean;
   hasMore: boolean;
   loadMorePacientes: () => Promise<void>;
-  fetchFirstPagePacientes: (search?: string, filterId?: string) => Promise<void>;
+  fetchFirstPagePacientes: (search?: string, filterId?: string, forceRefresh?: boolean) => Promise<void>;
   fetchNextPage: () => Promise<void>;
   fetchPreviousPage: () => Promise<void>;
   hasPreviousPage: boolean;
@@ -87,6 +87,9 @@ interface FirebaseContextType {
   deleteDebitoProfissional: (id: string) => Promise<void>;
   faturasPacientes: FaturaPaciente[];
   addFaturaPaciente: (fatura: Omit<FaturaPaciente, 'id'>) => Promise<FaturaPaciente>;
+  servicosExtras: ServicoExtra[];
+  addServicoExtra: (servico: Omit<ServicoExtra, 'id'>) => Promise<ServicoExtra>;
+  deleteServicoExtra: (id: string) => Promise<void>;
   folhasPagamento: FolhaPagamento[];
   addFolhaPagamento: (folha: Omit<FolhaPagamento, 'id'>) => Promise<FolhaPagamento>;
   deleteFaturaPaciente: (id: string) => Promise<void>;
@@ -182,6 +185,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [profissionais, setProfissionais] = useState<Profissional[]>([]);
   const [debitosProfissionais, setDebitosProfissionais] = useState<DebitoProfissional[]>([]);
   const [faturasPacientes, setFaturasPacientes] = useState<FaturaPaciente[]>([]);
+  const [servicosExtras, setServicosExtras] = useState<ServicoExtra[]>([]);
   const [folhasPagamento, setFolhasPagamento] = useState<FolhaPagamento[]>([]);
   const [logsAuditoria, setLogsAuditoria] = useState<AuditLog[]>([]);
   const [user, setUser] = useState<User | null>(null);
@@ -492,12 +496,19 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return q;
   };
 
-  const fetchFirstPagePacientes = async (search = '', filterId = 'todos') => {
+  const fetchFirstPagePacientes = async (search = '', filterId = 'todos', forceRefresh = false) => {
     setLoadingPacientes(true);
     setCurrentSearch(search);
     setCurrentFilterId(filterId);
 
     if (isTestMode || isQuotaExceeded) {
+      if (!search.trim() && filterId === 'todos') {
+        if (isTestMode) loadSandboxData();
+        else loadLocalData();
+        setLoadingPacientes(false);
+        setLoading(false);
+        return;
+      }
       let filtered = [...pacientes];
       if (filterId && filterId !== 'todos') {
         filtered = filtered.filter(p => p.id === filterId);
@@ -507,6 +518,14 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
       filtered.sort((a, b) => a.nome.localeCompare(b.nome));
       setPacientes(filtered);
+      setLoadingPacientes(false);
+      setLoading(false);
+      return;
+    }
+
+    // Cache Guard: Se não houver busca/filtro e os pacientes já estiverem carregados no estado do Contexto,
+    // reutiliza os dados locais a menos que seja um refresh explícito (forceRefresh = true).
+    if (!forceRefresh && !search.trim() && filterId === 'todos' && pacientes.length > 0) {
       setLoadingPacientes(false);
       setLoading(false);
       return;
@@ -883,6 +902,20 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     );
 
+    const unsubscribeServicosExtras = onSnapshot(
+      query(collection(db, 'servicos_extras'), limit(2000)),
+      (snap) => {
+        const list: ServicoExtra[] = [];
+        snap.forEach((d) => list.push({ ...d.data(), id: d.id } as ServicoExtra));
+        setServicosExtras(list);
+      },
+      (error) => {
+        if (!handleQuotaError(error, 'servicos_extras')) {
+          console.error("Error subscribing to servicos_extras:", error);
+        }
+      }
+    );
+
     return () => {
       unsubscribePlantoes();
       unsubscribeAgendamentos();
@@ -891,8 +924,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       unsubscribeDebitos();
       unsubscribeFaturas();
       unsubscribeFolhas();
+      unsubscribeServicosExtras();
     };
-  }, [user, isQuotaExceeded, isTestMode]);
+  }, [user?.uid, isQuotaExceeded, isTestMode]);
 
   const addAuditLog = async (
     action: AuditLog['action'],
@@ -1187,19 +1221,31 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const isEscalaConcluida = (idPaciente?: string, dateStr?: string): boolean => {
     if (!idPaciente || !dateStr) return false;
-    const monthPrefix = dateStr.substring(0, 7);
-    const agsMes = agendamentos.filter(
-      (a) => a.idPaciente === idPaciente && a.data && a.data.startsWith(monthPrefix)
-    );
-    if (agsMes.length === 0) return false;
-    const activeInMonth = agsMes.filter((a) => a.status !== 'Cancelado');
-    if (activeInMonth.length === 0) return false;
-    return activeInMonth.some((a) => a.status === 'Concluido' || a.escalaCongelada === true);
+    const parts = dateStr.split('-');
+    if (parts.length < 2) return false;
+    const year = parts[0];
+    const month = parts[1].padStart(2, '0');
+    const keyMMSlashYYYY = `${month}/${year}`;
+    const keyMMYYYY = `${month}-${year}`;
+    const keyYYYYMM = `${year}-${month}`;
+
+    const pac = pacientes.find((p) => p.id === idPaciente);
+    if (pac && pac.mesesConcluidos && Array.isArray(pac.mesesConcluidos)) {
+      return (
+        pac.mesesConcluidos.includes(keyMMSlashYYYY) ||
+        pac.mesesConcluidos.includes(keyMMYYYY) ||
+        pac.mesesConcluidos.includes(keyYYYYMM)
+      );
+    }
+
+    return false;
   };
 
   const addAgendamento = async (newAg: Omit<Agendamento, 'id'>) => {
     if (isEscalaConcluida(newAg.idPaciente, newAg.data)) {
-      const errMsg = 'Esta escala já está concluída. Não é permitida a adição de novos agendamentos.';
+      const [yr, mo] = (newAg.data || '').split('-');
+      const formattedMonthYear = yr && mo ? `${mo}/${yr}` : 'selecionado';
+      const errMsg = `Esta escala de ${formattedMonthYear} já está concluída.`;
       toast.error(errMsg);
       throw new Error(errMsg);
     }
@@ -1243,7 +1289,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const addAgendamentosBatch = async (newAgs: Omit<Agendamento, 'id'>[]) => {
     for (const ag of newAgs) {
       if (isEscalaConcluida(ag.idPaciente, ag.data)) {
-        const errMsg = 'Esta escala já está concluída. Não é permitida a adição de novos agendamentos.';
+        const [yr, mo] = (ag.data || '').split('-');
+        const formattedMonthYear = yr && mo ? `${mo}/${yr}` : 'selecionado';
+        const errMsg = `Esta escala de ${formattedMonthYear} já está concluída.`;
         toast.error(errMsg);
         throw new Error(errMsg);
       }
@@ -1393,7 +1441,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const deleteAgendamento = async (id: string) => {
     const existing = agendamentos.find(a => a.id === id);
-    if (existing && (existing.escalaCongelada || existing.status === 'Concluido')) {
+    if (existing && isEscalaConcluida(existing.idPaciente, existing.data)) {
       toast.error('Escala fechada. Não é possível excluir esse plantão.');
       return;
     }
@@ -1426,9 +1474,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const deleteAgendamentosBatch = async (ids: string[]) => {
     const toDelete = agendamentos.filter(a => ids.includes(a.id));
-    const invalid = toDelete.some(a => a.escalaCongelada || a.status === 'Concluido');
+    const invalid = toDelete.some(a => isEscalaConcluida(a.idPaciente, a.data));
     if (invalid) {
-      toast.error('Algum dos plantões selecionados está com escala fechada ou concluído.');
+      toast.error('Algum dos plantões selecionados está com escala fechada.');
       return;
     }
 
@@ -1909,6 +1957,42 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
+  const addServicoExtra = async (servico: Omit<ServicoExtra, 'id'>): Promise<ServicoExtra> => {
+    const dataToSave = {
+      ...servico,
+      createdAt: new Date().toISOString()
+    };
+    if (isTestMode || isQuotaExceeded) {
+      const newServ = { id: 'serv_' + Date.now(), ...dataToSave };
+      setServicosExtras(prev => [newServ, ...prev]);
+      return newServ;
+    }
+    try {
+      const docRef = await addDoc(collection(db, 'servicos_extras'), dataToSave);
+      await addAuditLog('CREATE', 'servicos_extras', docRef.id, `Serviço extra adicionado para paciente ${servico.idPaciente}: ${servico.descricao}`);
+      return { id: docRef.id, ...dataToSave };
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'servicos_extras');
+      const fallback = { id: 'serv_' + Date.now(), ...dataToSave };
+      setServicosExtras(prev => [fallback, ...prev]);
+      return fallback;
+    }
+  };
+
+  const deleteServicoExtra = async (id: string): Promise<void> => {
+    if (isTestMode || isQuotaExceeded) {
+      setServicosExtras(prev => prev.filter(s => s.id !== id));
+      return;
+    }
+    try {
+      await deleteDoc(doc(db, 'servicos_extras', id));
+      await addAuditLog('DELETE', 'servicos_extras', id, `Serviço extra excluído`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `servicos_extras/${id}`);
+      setServicosExtras(prev => prev.filter(s => s.id !== id));
+    }
+  };
+
   const deleteFolhaPagamento = async (id: string) => {
     if (isQuotaExceeded) {
       const updatedList = folhasPagamento.filter((f) => f.id !== id);
@@ -2223,6 +2307,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         deleteDebitoProfissional,
         faturasPacientes,
         deleteFaturaPaciente,
+        servicosExtras,
+        addServicoExtra,
+        deleteServicoExtra,
         deleteFolhaPagamento,
         uploadLogo,
         uploadProfissionalFoto,

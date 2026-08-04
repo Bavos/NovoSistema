@@ -37,7 +37,7 @@ import { INITIAL_PROFESSIONALS } from '../mockData';
 import { useFirebase } from '../context/FirebaseContext';
 import { Agendamento, DebitoProfissional } from '../types';
 import { db } from '../lib/firebase';
-import { collection, query, where, getDocs, doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { mascaraCNPJ, mascaraCPF, mascaraFinanceira, converterMascaraParaNumero } from '../lib/masks';
 import { toast } from 'react-hot-toast';
 import { showSuccessToast } from './CustomToast';
@@ -306,6 +306,21 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
 
+  // State for Payroll Table Sorting (Folha de Pagamento)
+  const [payrollSortConfig, setPayrollSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({
+    key: 'profissional',
+    direction: 'asc'
+  });
+
+  const handleSortPayroll = (key: string) => {
+    setPayrollSortConfig(prev => {
+      if (prev.key === key) {
+        return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { key, direction: 'asc' };
+    });
+  };
+
   // States for Banco Inter Integration (Transferências & Boletos)
   const [metodoPagamentoInter, setMetodoPagamentoInter] = useState<'pix_ted' | 'boleto'>('pix_ted');
   const [boletoVencimento, setBoletoVencimento] = useState<string>(() => {
@@ -539,6 +554,44 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   const [debitSearchTerm, setDebitSearchTerm] = useState('');
   const [isExportingDebitosPDF, setIsExportingDebitosPDF] = useState(false);
 
+  // States & Handler for Bulk Debit Deletion (Exclusão em Lote via writeBatch)
+  const [selectedDebts, setSelectedDebts] = useState<string[]>([]);
+  const [isDeletingDebts, setIsDeletingDebts] = useState<boolean>(false);
+
+  const handleBulkDelete = async () => {
+    if (selectedDebts.length === 0) return;
+
+    const confirmDelete = window.confirm(`Tem certeza que deseja excluir os ${selectedDebts.length} débito(s) selecionado(s)? Esta ação não pode ser desfeita.`);
+    if (!confirmDelete) return;
+
+    setIsDeletingDebts(true);
+    const toastId = toast.loading(`Excluindo ${selectedDebts.length} débito(s)...`);
+
+    try {
+      const chunkSize = 500;
+      for (let i = 0; i < selectedDebts.length; i += chunkSize) {
+        const chunk = selectedDebts.slice(i, i + chunkSize);
+        const batch = writeBatch(db);
+        chunk.forEach(id => {
+          const docRef = doc(db, 'debitos_profissionais', id);
+          batch.delete(docRef);
+        });
+        await batch.commit();
+      }
+
+      toast.success(`${selectedDebts.length} débito(s) excluído(s) com sucesso!`, { id: toastId });
+      if (typeof setNotification === 'function') {
+        setNotification(`${selectedDebts.length} débito(s) excluído(s) com sucesso.`);
+      }
+    } catch (err: any) {
+      console.error("Erro ao excluir débitos em lote via writeBatch:", err);
+      toast.error("Ocorreu um erro ao processar a exclusão em lote dos débitos.", { id: toastId });
+    } finally {
+      setIsDeletingDebts(false);
+      setSelectedDebts([]);
+    }
+  };
+
   const handleExportDebitosPDF = async () => {
     setIsExportingDebitosPDF(true);
     const toastId = toast.loading("Gerando PDF do relatório de débitos...");
@@ -557,7 +610,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
         useCORS: true,
         allowTaint: true,
         logging: false,
-        onclone: (clonedDoc) => {
+        onclone: (clonedDoc: any) => {
           try {
             sanitizeClonedDocForHtml2Canvas(clonedDoc, '#ffffff', '#1a3c2e');
             if (clonedDoc.body) {
@@ -571,7 +624,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
               printArea.style.boxSizing = 'border-box';
             }
             const printHiddenEls = clonedDoc.querySelectorAll('.print\\:hidden');
-            printHiddenEls.forEach((el) => {
+            printHiddenEls.forEach((el: any) => {
               (el as HTMLElement).style.display = 'none';
             });
           } catch (e) {
@@ -1548,7 +1601,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       const anoFormatado = retroYear;
       const textoMotivo = `RETENÇÃO DE GUIA MEI - REF. ${mesFormatado}/${anoFormatado}`;
 
-      // Pre-checks for ALL selected professionals beforehand (Scale Fechada and Anti-duplex)
+      // Pre-checks for ALL selected professionals beforehand (Scale Fechada and Anti-duplicity)
       const targetMonthYear = getMonthYearString(dataInicial);
       const readyProfIdList: string[] = [];
 
@@ -1560,7 +1613,6 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
         const closed = await isEscalaFechada(pId, 'profissional', dataInicial, dataFinal);
         if (!closed) {
           toast.error(`Ação negada: A escala do período selecionado ainda não foi fechada pela coordenação para o profissional ${name}.`);
-          setIsBatchProcessing(false);
           return;
         }
 
@@ -1577,7 +1629,6 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
           const patientClosed = await isEscalaFechada(patientId, 'paciente', dataInicial, dataFinal);
           if (!patientClosed) {
             toast.error('Ação negada: A escala do período selecionado ainda não foi fechada pela coordenação.');
-            setIsBatchProcessing(false);
             return;
           }
         }
@@ -1611,115 +1662,113 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
         }
 
         if (folhaExists) {
-          alert(`Aviso: A fatura/folha para este período já foi emitida para o profissional ${name}. Para gerar novamente, é necessário excluir o registro atual no Histórico Financeiro.`);
-          setIsBatchProcessing(false);
+          toast.error(`Aviso: A fatura/folha para este período já foi emitida para o profissional ${name}. Para gerar novamente, é necessário excluir o registro atual no Histórico Financeiro.`);
           return;
         }
 
         readyProfIdList.push(pId);
       }
 
-      await Promise.all(
-        readyProfIdList.map(async (pId) => {
-          const profissional = profissionais.find(p => p.id === pId);
-          if (!profissional) return;
+      // Process batch sequentially to avoid Firestore write congestion and deadlocks
+      for (const pId of readyProfIdList) {
+        const profissional = profissionais.find(p => p.id === pId);
+        if (!profissional) continue;
 
-          const profName = profissional.nome;
-          try {
-            const agends = agendamentosGerados.filter(ag => ag.nomeProfissional === profName);
+        const profName = profissional.nome;
+        try {
+          const agends = agendamentosGerados.filter(ag => ag.nomeProfissional === profName || ag.idProfissional === pId);
 
-            let somaRepasses = 0;
-            let somaAjudas = 0;
-            agends.forEach(ag => {
-              const vals = getAgendamentoCalculatedValues(ag);
-              somaRepasses += vals.valorRepasseFinal;
-              somaAjudas += vals.ajudaCusto;
-            });
+          let somaRepasses = 0;
+          let somaAjudas = 0;
+          agends.forEach(ag => {
+            const vals = getAgendamentoCalculatedValues(ag);
+            somaRepasses += vals.valorRepasseFinal;
+            somaAjudas += vals.ajudaCusto;
+          });
 
-            // Current debits in the period
-            const debDocsForProf = debitosNoPeriodo.filter(d => 
-              (d.idProfissional === pId || 
-              d.nomeProfissional.toLowerCase() === profName.toLowerCase()) &&
-              (d.status === 'pendente' || d.status === undefined)
-            );
-            let totalDebitos = debDocsForProf.reduce((sum, d) => sum + d.valor, 0);
+          // Current debits in the period
+          const debDocsForProf = debitosNoPeriodo.filter(d => 
+            (d.idProfissional === pId || 
+            (d.nomeProfissional && d.nomeProfissional.toLowerCase() === profName.toLowerCase())) &&
+            (d.status === 'pendente' || d.status === undefined)
+          );
+          let totalDebitos = debDocsForProf.reduce((sum, d) => sum + d.valor, 0);
 
-            let totalPlantoes = somaRepasses;
-            let totalAjudaCusto = somaAjudas;
+          let totalPlantoes = somaRepasses;
+          let totalAjudaCusto = somaAjudas;
 
-            let valorLiquido = totalPlantoes + totalAjudaCusto - totalDebitos;
+          let valorLiquido = totalPlantoes + totalAjudaCusto - totalDebitos;
 
-            const valorMeiGlobal = parseFloat(String(valorMei || 0));
+          const valorMeiGlobal = parseFloat(String(valorMei || 0));
 
-            const listDebs = [...debDocsForProf];
-            let finalTotalDebitos = totalDebitos;
+          const listDebs = [...debDocsForProf];
+          let finalTotalDebitos = totalDebitos;
 
-            // Deduct MEI value if temMei
-            if (profissional && profissional.temMei && !profissional.meiIrregular && valorMeiGlobal > 0) {
-              valorLiquido -= valorMeiGlobal;
+          // Deduct MEI value if temMei
+          if (profissional && profissional.temMei && !profissional.meiIrregular && valorMeiGlobal > 0) {
+            valorLiquido -= valorMeiGlobal;
 
-              const autoDebit = {
-                idProfissional: pId,
-                nomeProfissional: profName,
-                data: new Date(),
-                valor: valorMeiGlobal,
-                motivo: textoMotivo,
-                status: 'descontado' as const
-              };
-              const savedDebit = await addDebitoProfissional(autoDebit);
-              listDebs.push(savedDebit);
-              finalTotalDebitos += valorMeiGlobal;
-            }
-
-            // Bloqueio de Emissão Zerada - Handle gracefully per professional to prevent breaking the whole batch
-            if (valorLiquido <= 0) {
-              console.warn(`[processBatchPayroll] Pulando profissional ${profName} porque o valor líquido é zerado ou negativo: R$ ${valorLiquido}`);
-              skipCount++;
-              skippedProfs.push(profName);
-              return;
-            }
-
-            const savedFolha = await addFolhaPagamento({
+            const autoDebit = {
               idProfissional: pId,
               nomeProfissional: profName,
-              dataEmissao: new Date().toISOString(),
-              periodoApurado: { inicio: dataInicial, fim: dataFinal },
-              valorTotalPlantoes: totalPlantoes + totalAjudaCusto,
-              valorTotalDebitos: finalTotalDebitos,
-              valorLiquidoReceber: valorLiquido,
-              status: 'Fechada',
-              historicoDebitos: listDebs,
-              plantoesCongelados: agends
-            });
+              data: new Date(),
+              valor: valorMeiGlobal,
+              motivo: textoMotivo,
+              status: 'descontado' as const
+            };
+            const savedDebit = await addDebitoProfissional(autoDebit);
+            listDebs.push(savedDebit);
+            finalTotalDebitos += valorMeiGlobal;
+          }
 
-            // 3. Liquidação (Baixa) Automática de débitos pendentes que entraram no cálculo
-            for (const deb of debDocsForProf) {
-              await updateDebitoProfissional({
-                ...deb,
-                status: 'descontado',
-                folhaIdVinculada: savedFolha.id
-              });
-            }
-
-            // Associa a folha ao débito MEI automático se existir no histórico
-            const meiDebit = listDebs.find(d => d.id !== 'virtual-mei-debit' && d.motivo === textoMotivo);
-            if (meiDebit && meiDebit.id) {
-              await updateDebitoProfissional({
-                ...meiDebit,
-                status: 'descontado',
-                folhaIdVinculada: savedFolha.id
-              });
-            }
-
-            successCount++;
-            console.log(`[processBatchPayroll] Folha de pagamento criada para o profissional ${profName} com ID: ${savedFolha.id}`);
-          } catch (profErr) {
-            console.error(`[processBatchPayroll] Falha ao processar folha do profissional ${profName}:`, profErr);
+          // Bloqueio de Emissão Zerada - Handle gracefully per professional
+          if (valorLiquido <= 0) {
+            console.warn(`[processBatchPayroll] Pulando profissional ${profName} porque o valor líquido é zerado ou negativo: R$ ${valorLiquido}`);
             skipCount++;
             skippedProfs.push(profName);
+            continue;
           }
-        })
-      );
+
+          const savedFolha = await addFolhaPagamento({
+            idProfissional: pId,
+            nomeProfissional: profName,
+            dataEmissao: new Date().toISOString(),
+            periodoApurado: { inicio: dataInicial, fim: dataFinal },
+            valorTotalPlantoes: totalPlantoes + totalAjudaCusto,
+            valorTotalDebitos: finalTotalDebitos,
+            valorLiquidoReceber: valorLiquido,
+            status: 'Fechada',
+            historicoDebitos: listDebs,
+            plantoesCongelados: agends
+          });
+
+          // Liquidação (Baixa) Automática de débitos pendentes que entraram no cálculo
+          for (const deb of debDocsForProf) {
+            await updateDebitoProfissional({
+              ...deb,
+              status: 'descontado',
+              folhaIdVinculada: savedFolha.id
+            });
+          }
+
+          // Associa a folha ao débito MEI automático se existir no histórico
+          const meiDebit = listDebs.find(d => d.id !== 'virtual-mei-debit' && d.motivo === textoMotivo);
+          if (meiDebit && meiDebit.id) {
+            await updateDebitoProfissional({
+              ...meiDebit,
+              status: 'descontado',
+              folhaIdVinculada: savedFolha.id
+            });
+          }
+
+          successCount++;
+          console.log(`[processBatchPayroll] Folha de pagamento criada para o profissional ${profName} com ID: ${savedFolha.id}`);
+        } catch (profErr) {
+          console.error(`[processBatchPayroll] Falha ao processar folha do profissional ${profName}:`, profErr);
+          skipCount++;
+          skippedProfs.push(profName);
+        }
+      }
 
       let successMessage = `Folhas fechadas com sucesso para ${successCount} profissional(is).`;
       if (skipCount > 0) {
@@ -1727,12 +1776,12 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       }
       
       setNotification(successMessage);
-      alert(successMessage);
+      toast.success(successMessage);
       setSelectedProfissionais([]);
       setShowBatchModal(false);
     } catch (err: any) {
-      console.error("[processBatchPayroll] Falha crítica ao fechar as folhas em lote na coleção 'folhas_pagamento':", err);
-      alert('Erro ao fechar as folhas em lote: ' + (err.message || err));
+      console.error("[processBatchPayroll] Ocorreu um erro ao processar o lote de fechamento das folhas de pagamento:", err);
+      toast.error('Ocorreu um erro ao processar o lote de fechamento das folhas de pagamento.');
     } finally {
       setIsBatchProcessing(false);
     }
@@ -1964,7 +2013,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
     
     htmlContent += `</body></html>`;
     
-    const blob = new Blob([htmlContent], { type: 'application/msword;charset=utf-8' });
+    const blob = new Blob(['\ufeff', htmlContent], { type: 'application/msword;charset=utf-8' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
     link.download = `Relatorio_${financeTab}_${dataInicial}_a_${dataFinal}.doc`;
@@ -3257,6 +3306,16 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                         };
                       });
 
+                      const sortedProfs = [...calculatedProfs].sort((a, b) => {
+                        if (payrollSortConfig.key === 'profissional') {
+                          const nameA = a.profName || '';
+                          const nameB = b.profName || '';
+                          const cmp = nameA.localeCompare(nameB, 'pt-BR', { sensitivity: 'base' });
+                          return payrollSortConfig.direction === 'asc' ? cmp : -cmp;
+                        }
+                        return 0;
+                      });
+
                       const isAllSelected = calculatedProfs.length > 0 && selectedProfissionais.length === calculatedProfs.length;
                       const handleSelectAll = (checked: boolean) => {
                         if (checked) {
@@ -3316,7 +3375,22 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                                       className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
                                     />
                                   </th>
-                                  <th className="py-3 px-4">Profissional</th>
+                                  <th 
+                                    className="py-3 px-4 cursor-pointer hover:bg-slate-100/70 text-slate-700 hover:text-slate-900 transition-colors select-none group"
+                                    onClick={() => handleSortPayroll('profissional')}
+                                    title="Clique para ordenar por Profissional (A-Z / Z-A)"
+                                  >
+                                    <div className="flex items-center gap-1.5">
+                                      <span>Profissional</span>
+                                      {payrollSortConfig.key === 'profissional' ? (
+                                        <span className="text-indigo-600 font-bold text-xs">
+                                          {payrollSortConfig.direction === 'asc' ? '↑' : '↓'}
+                                        </span>
+                                      ) : (
+                                        <span className="text-slate-300 group-hover:text-slate-400 font-normal text-[11px]">↕</span>
+                                      )}
+                                    </div>
+                                  </th>
                                   <th className="py-3 px-4 text-center">Plantões</th>
                                   <th className="py-3 px-4 text-right">Repasses (Bruto)</th>
                                   <th className="py-3 px-4 text-right">Ajuda de Custo</th>
@@ -3326,7 +3400,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-100">
-                                {calculatedProfs.map((p) => {
+                                {sortedProfs.map((p) => {
                                   const isSelected = selectedProfissionais.includes(p.profId);
                                   const isExpanded = expandedProfissionais.includes(p.profId);
 
@@ -3577,6 +3651,17 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
               <p className="text-xs text-slate-500">Registre adiantamentos, vales de passagem, descontos ou despesas extras no perfil dos cuidadores para abatimento automático em folha.</p>
             </div>
             <div className="flex flex-wrap gap-2 self-start print:hidden">
+              {selectedDebts.length > 0 && (
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={isDeletingDebts}
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white font-medium rounded-lg shadow-lg shadow-red-500/40 hover:bg-red-700 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer animate-fadeIn"
+                  title="Excluir débitos selecionados em lote"
+                >
+                  <Trash2 size={15} />
+                  {isDeletingDebts ? 'Excluindo...' : `Excluir Selecionados (${selectedDebts.length})`}
+                </button>
+              )}
               <button
                 onClick={handleExportDebitosPDF}
                 disabled={isExportingDebitosPDF}
@@ -3954,122 +4039,156 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                     </div>
                   </div>
                 );
-              })() : (
-                <table className="w-full text-left text-xs whitespace-nowrap">
-                  <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
-                    <tr>
-                      <th className="py-3 px-5">Profissional</th>
-                      <th className="py-3 px-5">Data do Débito</th>
-                      <th className="py-3 px-5">Motivo</th>
-                      <th className="py-3 px-5 text-center">Status</th>
-                      <th className="py-3 px-5 text-right font-bold">Valor</th>
-                      <th className="py-3 px-5 text-right w-[100px] print:hidden">Ação</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {(() => {
-                      const filteredDebitos = (debitosProfissionais || []).filter(d => {
-                        if (debitSearchTerm.trim()) {
-                          const term = debitSearchTerm.toLowerCase().trim();
-                          const profMatch = (d.nomeProfissional || '').toLowerCase().includes(term);
-                          const pacMatch = (d.nomePaciente || '').toLowerCase().includes(term);
-                          if (!profMatch && !pacMatch) return false;
-                        }
+              })() : (() => {
+                const filteredDebitos = (debitosProfissionais || []).filter(d => {
+                  if (debitSearchTerm.trim()) {
+                    const term = debitSearchTerm.toLowerCase().trim();
+                    const profMatch = (d.nomeProfissional || '').toLowerCase().includes(term);
+                    const pacMatch = (d.nomePaciente || '').toLowerCase().includes(term);
+                    if (!profMatch && !pacMatch) return false;
+                  }
 
-                        if (debitFilterType === 'data') {
-                          if (!debitFilterStartDate && !debitFilterEndDate) return true;
-                          const dObj = getDebitDateObj(d.data);
-                          if (!dObj) return true;
-                          
-                          const year = dObj.getFullYear();
-                          const month = String(dObj.getMonth() + 1).padStart(2, '0');
-                          const day = String(dObj.getDate()).padStart(2, '0');
-                          const formattedDateStr = `${year}-${month}-${day}`;
+                  if (debitFilterType === 'data') {
+                    if (!debitFilterStartDate && !debitFilterEndDate) return true;
+                    const dObj = getDebitDateObj(d.data);
+                    if (!dObj) return true;
+                    
+                    const year = dObj.getFullYear();
+                    const month = String(dObj.getMonth() + 1).padStart(2, '0');
+                    const day = String(dObj.getDate()).padStart(2, '0');
+                    const formattedDateStr = `${year}-${month}-${day}`;
 
-                          if (debitFilterStartDate && formattedDateStr < debitFilterStartDate) {
-                            return false;
+                    if (debitFilterStartDate && formattedDateStr < debitFilterStartDate) {
+                      return false;
+                    }
+                    if (debitFilterEndDate && formattedDateStr > debitFilterEndDate) {
+                      return false;
+                    }
+                    return true;
+                  }
+
+                  if (debitFilterType === 'paciente') {
+                    if (!debitFilterPatientId) return true;
+                    const selectedPatient = allPatientsForFilter.find(p => p.id === debitFilterPatientId);
+                    const targetName = selectedPatient?.nome?.toLowerCase().trim();
+
+                    if (d.idPaciente === debitFilterPatientId) return true;
+                    if (targetName && d.nomePaciente && d.nomePaciente.toLowerCase().trim() === targetName) return true;
+                    return false;
+                  }
+
+                  if (debitFilterType === 'profissional') {
+                    if (!debitFilterProfId) return true;
+                    const selectedProf = allProfsForFilter.find(p => p.id === debitFilterProfId);
+                    const targetName = selectedProf?.nome?.toLowerCase().trim();
+
+                    if (d.idProfissional === debitFilterProfId) return true;
+                    if (targetName && d.nomeProfissional && d.nomeProfissional.toLowerCase().trim() === targetName) return true;
+                    return false;
+                  }
+
+                  return true;
+                });
+
+                const allFilteredSelected = filteredDebitos.length > 0 && filteredDebitos.every(d => selectedDebts.includes(d.id));
+
+                return (
+                  <table className="w-full text-left text-xs whitespace-nowrap">
+                    <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
+                      <tr>
+                        <th className="py-3 px-5 w-10 text-center print:hidden">
+                          <input
+                            type="checkbox"
+                            checked={allFilteredSelected}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                const allIds = filteredDebitos.map(d => d.id);
+                                setSelectedDebts(prev => Array.from(new Set([...prev, ...allIds])));
+                              } else {
+                                const currentIds = filteredDebitos.map(d => d.id);
+                                setSelectedDebts(prev => prev.filter(id => !currentIds.includes(id)));
+                              }
+                            }}
+                            className="rounded text-red-600 focus:ring-red-500 w-4 h-4 cursor-pointer"
+                            title="Selecionar / Desmarcar todos os débitos filtrados"
+                          />
+                        </th>
+                        <th className="py-3 px-5">Profissional</th>
+                        <th className="py-3 px-5">Data do Débito</th>
+                        <th className="py-3 px-5">Motivo</th>
+                        <th className="py-3 px-5 text-center">Status</th>
+                        <th className="py-3 px-5 text-right font-bold">Valor</th>
+                        <th className="py-3 px-5 text-right w-[100px] print:hidden">Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredDebitos.length === 0 ? (
+                        (() => {
+                          let emptyMessage = "Nenhum débito encontrado.";
+                          if (debitosProfissionais.length === 0) {
+                            emptyMessage = "Nenhum débito registrado para profissionais cuidador.";
+                          } else if (debitFilterType === 'data') {
+                            emptyMessage = "Nenhum débito encontrado para o período selecionado.";
+                          } else if (debitFilterType === 'paciente') {
+                            emptyMessage = "Nenhum débito encontrado para o paciente selecionado.";
+                          } else if (debitFilterType === 'profissional') {
+                            emptyMessage = "Nenhum débito encontrado para o profissional selecionado.";
                           }
-                          if (debitFilterEndDate && formattedDateStr > debitFilterEndDate) {
-                            return false;
-                          }
-                          return true;
-                        }
 
-                        if (debitFilterType === 'paciente') {
-                          if (!debitFilterPatientId) return true;
-                          const selectedPatient = allPatientsForFilter.find(p => p.id === debitFilterPatientId);
-                          const targetName = selectedPatient?.nome?.toLowerCase().trim();
-
-                          if (d.idPaciente === debitFilterPatientId) return true;
-                          if (targetName && d.nomePaciente && d.nomePaciente.toLowerCase().trim() === targetName) return true;
-                          return false;
-                        }
-
-                        if (debitFilterType === 'profissional') {
-                          if (!debitFilterProfId) return true;
-                          const selectedProf = allProfsForFilter.find(p => p.id === debitFilterProfId);
-                          const targetName = selectedProf?.nome?.toLowerCase().trim();
-
-                          if (d.idProfissional === debitFilterProfId) return true;
-                          if (targetName && d.nomeProfissional && d.nomeProfissional.toLowerCase().trim() === targetName) return true;
-                          return false;
-                        }
-
-                        return true;
-                      });
-
-                      if (filteredDebitos.length === 0) {
-                        let emptyMessage = "Nenhum débito encontrado.";
-                        if (debitosProfissionais.length === 0) {
-                          emptyMessage = "Nenhum débito registrado para profissionais cuidador.";
-                        } else if (debitFilterType === 'data') {
-                          emptyMessage = "Nenhum débito encontrado para o período selecionado.";
-                        } else if (debitFilterType === 'paciente') {
-                          emptyMessage = "Nenhum débito encontrado para o paciente selecionado.";
-                        } else if (debitFilterType === 'profissional') {
-                          emptyMessage = "Nenhum débito encontrado para o profissional selecionado.";
-                        }
-
-                        return (
-                          <tr>
-                            <td colSpan={6} className="py-12 text-center text-slate-400 italic">
-                              {emptyMessage}
+                          return (
+                            <tr>
+                              <td colSpan={7} className="py-12 text-center text-slate-400 italic">
+                                {emptyMessage}
+                              </td>
+                            </tr>
+                          );
+                        })()
+                      ) : (
+                        filteredDebitos.sort((a, b) => {
+                          const dateA = a.data?.seconds ? a.data.seconds : new Date(a.data).getTime();
+                          const dateB = b.data?.seconds ? b.data.seconds : new Date(b.data).getTime();
+                          return dateB - dateA;
+                        }).map((d) => (
+                          <tr key={d.id} className={`hover:bg-slate-50/40 ${selectedDebts.includes(d.id) ? 'bg-red-50/30' : ''}`}>
+                            <td className="py-3.5 px-5 text-center print:hidden">
+                              <input
+                                type="checkbox"
+                                checked={selectedDebts.includes(d.id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedDebts(prev => [...prev, d.id]);
+                                  } else {
+                                    setSelectedDebts(prev => prev.filter(id => id !== d.id));
+                                  }
+                                }}
+                                className="rounded text-red-600 focus:ring-red-500 w-4 h-4 cursor-pointer"
+                              />
                             </td>
-                          </tr>
-                        );
-                      }
-
-                      return filteredDebitos.sort((a, b) => {
-                        const dateA = a.data?.seconds ? a.data.seconds : new Date(a.data).getTime();
-                        const dateB = b.data?.seconds ? b.data.seconds : new Date(b.data).getTime();
-                        return dateB - dateA;
-                      }).map((d) => (
-                        <tr key={d.id} className="hover:bg-slate-50/40">
-                          <td className="py-3.5 px-5 font-semibold text-slate-800">
-                            <div>{d.nomeProfissional}</div>
-                            {d.nomePaciente && (
-                              <div className="text-[10px] text-slate-400 font-normal">Paciente: {d.nomePaciente}</div>
-                            )}
-                          </td>
-                          <td className="py-3.5 px-5 text-slate-500">{formatDebitDateDisplay(d.data)}</td>
-                          <td className="py-3.5 px-5">
-                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                              d.motivo === 'Curinga' ? 'bg-amber-100 text-amber-800' :
-                              d.motivo === 'Passagem' ? 'bg-sky-100 text-sky-800' :
-                              'bg-slate-100 text-slate-700'
-                            }`}>
-                              {d.motivo}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-5 text-center">
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              d.status === 'descontado' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-                            }`}>
-                              {d.status === 'descontado' ? 'Descontado' : 'Pendente'}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-5 text-right font-black text-red-600 text-sm font-mono">R$ {d.valor.toFixed(2)}</td>
-                          <td className="py-3.5 px-5 text-right print:hidden">
+                            <td className="py-3.5 px-5 font-semibold text-slate-800">
+                              <div>{d.nomeProfissional}</div>
+                              {d.nomePaciente && (
+                                <div className="text-[10px] text-slate-400 font-normal">Paciente: {d.nomePaciente}</div>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-5 text-slate-500">{formatDebitDateDisplay(d.data)}</td>
+                            <td className="py-3.5 px-5">
+                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                d.motivo === 'Curinga' ? 'bg-amber-100 text-amber-800' :
+                                d.motivo === 'Passagem' ? 'bg-sky-100 text-sky-800' :
+                                'bg-slate-100 text-slate-700'
+                              }`}>
+                                {d.motivo}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-5 text-center">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                d.status === 'descontado' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                              }`}>
+                                {d.status === 'descontado' ? 'Descontado' : 'Pendente'}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-5 text-right font-black text-red-600 text-sm font-mono">R$ {d.valor.toFixed(2)}</td>
+                            <td className="py-3.5 px-5 text-right print:hidden">
                             <button
                               onClick={() => {
                                 setEditingDebitId(d.id);
@@ -4122,11 +4241,11 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                             </button>
                           </td>
                         </tr>
-                      ))
-                    })()}
-                  </tbody>
-                </table>
-              )}
+                      )))}
+                    </tbody>
+                  </table>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -4258,14 +4377,14 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                 useCORS: true,
                 allowTaint: true,
                 logging: false,
-                onclone: (clonedDoc) => {
+                onclone: (clonedDoc: any) => {
                     try {
                         sanitizeClonedDocForHtml2Canvas(clonedDoc, '#ffffff', '#1a3c2e');
                         if (clonedDoc.body) {
                             clonedDoc.body.style.width = '1000px';
                         }
                         const printHiddenEls = clonedDoc.querySelectorAll('.print\\:hidden');
-                        printHiddenEls.forEach((el) => {
+                        printHiddenEls.forEach((el: any) => {
                             (el as HTMLElement).style.display = 'none';
                         });
                     } catch (e) {
@@ -4310,14 +4429,14 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                 useCORS: true,
                 allowTaint: true,
                 logging: false,
-                onclone: (clonedDoc) => {
+                onclone: (clonedDoc: any) => {
                     try {
                         sanitizeClonedDocForHtml2Canvas(clonedDoc, '#ffffff', '#1a3c2e');
                         if (clonedDoc.body) {
                             clonedDoc.body.style.width = '1000px';
                         }
                         const printHiddenEls = clonedDoc.querySelectorAll('.print\\:hidden');
-                        printHiddenEls.forEach((el) => {
+                        printHiddenEls.forEach((el: any) => {
                             (el as HTMLElement).style.display = 'none';
                         });
                     } catch (e) {
@@ -5008,61 +5127,62 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
         <div className="fixed -left-[9999px] top-0 pointer-events-none" aria-hidden="true">
           <div
             ref={historicoFolhasPrintRef}
-            className="w-[850px] p-8 bg-white text-slate-800 font-sans"
+            className="w-[850px] p-6 bg-white text-slate-800 font-sans border border-gray-300"
             style={{ fontFamily: 'Arial, sans-serif' }}
           >
-            <div className="flex items-center justify-between border-b-2 border-[#1a3c2e] pb-4 mb-6">
-              <div>
-                <h1 className="text-xl font-bold text-[#1a3c2e] uppercase tracking-wide">
-                  {empresa?.razaoSocial || 'SISTEMA DE GESTÃO DE HOME CARE'}
-                </h1>
-                <p className="text-xs text-slate-500 font-medium">
-                  CNPJ: {empresa?.cnpj || 'Não informado'} {empresa?.endereco ? `| ${empresa.endereco}` : ''}
-                </p>
+            {/* Cabeçalho Corporativo de Duas Pontas */}
+            <div className="flex items-center justify-between border-b-2 border-slate-700 pb-3 mb-4">
+              <div className="flex items-center gap-3">
+                {empresa?.logoUrl ? (
+                  <img src={empresa.logoUrl} alt="Logo" className="w-20 h-10 object-contain" />
+                ) : (
+                  <div className="w-10 h-10 bg-slate-200 border border-slate-300 rounded flex items-center justify-center font-bold text-[10px] text-slate-600">
+                    LOGO
+                  </div>
+                )}
+                <div>
+                  <h1 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+                    {empresa?.razaoSocial || 'SISTEMA DE GESTÃO DE HOME CARE'}
+                  </h1>
+                  <p className="text-[10px] text-slate-500 font-medium">
+                    CNPJ: {empresa?.cnpj || 'Não informado'} {empresa?.endereco ? `| ${empresa.endereco}` : ''}
+                  </p>
+                </div>
               </div>
-              <div className="text-right">
-                <span className="inline-block px-3 py-1 bg-blue-700 text-white font-bold text-xs uppercase rounded">
-                  Resumo de Pagamento
-                </span>
-                <p className="text-[10px] text-slate-400 mt-1 font-semibold">
-                  Gerado em: {new Date().toLocaleDateString('pt-BR')} às {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+
+              <div className="text-right text-xs">
+                <p className="font-semibold text-slate-700">
+                  Data de Fechamento: <span className="font-bold text-slate-900">{new Date().toLocaleDateString('pt-BR')}</span>
+                </p>
+                <p className="text-[10px] text-slate-500 font-semibold mt-0.5">
+                  Total de Registros: <span className="font-bold text-slate-800">{(selectedHistorico.length > 0 ? filteredFolhas.filter(f => selectedHistorico.includes(f.id)) : filteredFolhas).length} folhas</span>
                 </p>
               </div>
             </div>
 
-            <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-6 flex justify-between items-center">
-              <div>
-                <h2 className="text-base font-black text-slate-800 uppercase">
-                  📜 Relatório de Folhas de Pagamento dos Profissionais
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {selectedHistorico.length > 0 
-                    ? `Itens Selecionados: ${selectedHistorico.length} de ${filteredFolhas.length}` 
-                    : (searchFolhaProfissional && searchFolhaProfissional !== 'all' 
-                        ? `Filtro Profissional: ${searchFolhaProfissional}` 
-                        : 'Listando Todos os Profissionais')}
-                  {searchFolhaData ? ` | Data: ${new Date(searchFolhaData + 'T00:00:00').toLocaleDateString('pt-BR')}` : ''}
-                </p>
-              </div>
-              <div className="text-right">
-                <span className="text-xs text-slate-500 block font-semibold">Total de Registros:</span>
-                <span className="text-sm font-bold text-slate-800">
-                  {(selectedHistorico.length > 0 ? filteredFolhas.filter(f => selectedHistorico.includes(f.id)) : filteredFolhas).length} folhas
-                </span>
-              </div>
+            {/* Sub-cabeçalho Informativo */}
+            <div className="mb-3 flex justify-between items-center text-xs">
+              <h2 className="text-xs font-bold text-slate-800 uppercase tracking-tight">
+                RELATÓRIO CORPORATIVO DE FOLHA DE PAGAMENTO DE PROFISSIONAIS
+              </h2>
+              <span className="text-[10px] text-slate-500 italic">
+                {searchFolhaProfissional && searchFolhaProfissional !== 'all' ? `Profissional: ${searchFolhaProfissional}` : 'Todos os Profissionais'}
+              </span>
             </div>
 
-            <table className="w-full text-xs text-left border-collapse mb-6">
+            {/* Tabela Corporativa Densa */}
+            <table className="w-full text-[9px] text-left border-collapse border border-gray-300 mb-4">
               <thead>
-                <tr className="bg-slate-800 text-white uppercase text-[11px] font-bold">
-                  <th className="p-2.5 rounded-tl">Profissional</th>
-                  <th className="p-2.5">Data Emissão</th>
-                  <th className="p-2.5">Mês / Período Ref.</th>
-                  <th className="p-2.5 text-center">Status</th>
-                  <th className="p-2.5 text-right rounded-tr">Valor Líquido Individual</th>
+                <tr className="bg-gray-200 text-slate-900 uppercase font-bold text-[10px]">
+                  <th className="px-2 py-1 border border-gray-300">Profissional</th>
+                  <th className="px-2 py-1 border border-gray-300">DATA EMISSÃO</th>
+                  <th className="px-2 py-1 border border-gray-300">PERÍODO</th>
+                  <th className="px-2 py-1 border border-gray-300 text-center">Status</th>
+                  <th className="px-2 py-1 border border-gray-300 text-right">Débitos</th>
+                  <th className="px-2 py-1 border border-gray-300 text-right">VALOR LÍQUIDO</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200">
+              <tbody>
                 {(selectedHistorico.length > 0 
                   ? filteredFolhas.filter(f => selectedHistorico.includes(f.id)) 
                   : filteredFolhas).map((f, idx) => {
@@ -5073,16 +5193,23 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                         mesRef = `${parts[1]}/${parts[0]}`;
                       }
                     }
+
+                    const valorDebitos = Number(f.valorTotalDebitos) || 0;
+                    const valorLiquido = Number(f.valorLiquidoReceber) || 0;
+
                     return (
-                      <tr key={f.id || idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
-                        <td className="p-2.5 font-bold text-slate-800">{f.nomeProfissional || 'Profissional'}</td>
-                        <td className="p-2.5 text-slate-600">
+                      <tr key={f.id || idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/70'}>
+                        <td className="px-2 py-1 border border-gray-300 font-bold text-slate-800">{f.nomeProfissional || 'Profissional'}</td>
+                        <td className="px-2 py-1 border border-gray-300 text-slate-700 whitespace-nowrap">
                           {f.dataEmissao ? new Date(f.dataEmissao).toLocaleDateString('pt-BR') : '-'}
                         </td>
-                        <td className="p-2.5 font-semibold text-slate-700">{mesRef || 'Referência Atual'}</td>
-                        <td className="p-2.5 text-center font-bold text-blue-700">{f.status || 'Concluída'}</td>
-                        <td className="p-2.5 text-right font-black text-slate-900">
-                          R$ {(Number(f.valorLiquidoReceber) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <td className="px-2 py-1 border border-gray-300 font-semibold text-slate-700 whitespace-nowrap">{mesRef || 'Referência Atual'}</td>
+                        <td className="px-2 py-1 border border-gray-300 text-center font-bold text-slate-700">{f.status || 'Concluída'}</td>
+                        <td className="px-2 py-1 border border-gray-300 text-right font-semibold text-red-600 whitespace-nowrap">
+                          {valorDebitos > 0 ? `- R$ ${valorDebitos.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'R$ 0,00'}
+                        </td>
+                        <td className="px-2 py-1 border border-gray-300 text-right font-bold text-green-700 whitespace-nowrap">
+                          R$ {valorLiquido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
                       </tr>
                     );
@@ -5090,12 +5217,13 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
               </tbody>
             </table>
 
-            <div className="flex justify-end pt-2">
-              <div className="w-80 bg-blue-50 border-2 border-blue-600 rounded-xl p-4 text-right shadow-sm">
-                <span className="text-xs font-bold uppercase text-blue-800 block tracking-wider">
+            {/* Sumário Total */}
+            <div className="flex justify-end pt-1">
+              <div className="w-72 bg-gray-50 border border-gray-300 rounded p-2.5 text-right shadow-sm text-xs">
+                <span className="text-[10px] font-bold uppercase text-slate-600 block tracking-wider">
                   Soma Total da Folha de Pagamento
                 </span>
-                <span className="text-2xl font-black text-blue-900 block mt-1">
+                <span className="text-base font-black text-green-700 block mt-0.5">
                   R$ {(selectedHistorico.length > 0 
                     ? filteredFolhas.filter(f => selectedHistorico.includes(f.id)) 
                     : filteredFolhas).reduce((acc, curr) => acc + (Number(curr.valorLiquidoReceber) || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -5103,8 +5231,8 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
               </div>
             </div>
 
-            <div className="mt-8 pt-4 border-t border-slate-200 text-center text-[10px] text-slate-400 font-medium">
-              Relatório de resumo para agendamento e transferência bancária gerado pelo Sistema de Gestão de Home Care
+            <div className="mt-6 pt-2 border-t border-gray-300 text-center text-[9px] text-slate-400 font-medium">
+              Relatório Corporativo de Folha de Pagamento emitido pelo Sistema de Gestão de Home Care
             </div>
           </div>
         </div>
@@ -5197,10 +5325,12 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                 })
                 .sort((a: any, b: any) => parseDate(a.data) - parseDate(b.data));
 
+            const servicosExtrasDoc = viewDoc.type === 'fatura' ? (viewDoc.data.servicosExtras || []) : [];
+            const somaExtrasDoc = servicosExtrasDoc.reduce((acc: number, curr: any) => acc + (Number(curr.valor) || 0), 0);
             const totalSomaPlantoes = plantoesValidos.reduce((acc: number, curr: any) => acc + (calculateRowValue(curr, viewDoc.type) || 0), 0);
 
             const valorTotalCorrigido = viewDoc.type === 'fatura'
-                ? totalSomaPlantoes
+                ? (totalSomaPlantoes + somaExtrasDoc)
                 : (totalSomaPlantoes - (viewDoc.data.valorTotalDebitos || 0));
 
             return (
@@ -5236,6 +5366,27 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                          // Mapeamento e consolidação de rodapés
                                          const totalGlobal = valorTotalCorrigido;
 
+                                         if (viewDoc.type === 'fatura' && servicosExtrasDoc.length > 0) {
+                                             rows.push({
+                                                 'Data Início': '',
+                                                 'Paciente': '',
+                                                 'Profissional': '',
+                                                 'Carga Horária': '',
+                                                 'Serviço': 'SUBTOTAL PLANTÕES',
+                                                 'Valor': Number(totalSomaPlantoes.toFixed(2))
+                                             });
+                                             servicosExtrasDoc.forEach((s: any) => {
+                                                 rows.push({
+                                                     'Data Início': formatDateBR(s.data),
+                                                     'Paciente': viewDoc.data.nomePaciente || '---',
+                                                     'Profissional': '---',
+                                                     'Carga Horária': '---',
+                                                     'Serviço': `[Serviço Extra] ${s.descricao}`,
+                                                     'Valor': Number((Number(s.valor) || 0).toFixed(2))
+                                                 });
+                                             });
+                                         }
+
                                          if (viewDoc.type === 'folha' && viewDoc.data.valorTotalDebitos > 0) {
                                              rows.push({
                                                  'Data Início': '',
@@ -5255,7 +5406,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                              });
                                          }
 
-                                         const labelTotal = viewDoc.type === 'fatura' ? 'TOTAL DA FATURA' : 'TOTAL DA FOLHA';
+                                         const labelTotal = viewDoc.type === 'fatura' ? 'TOTAL A PAGAR' : 'TOTAL DA FOLHA';
                                          rows.push({
                                              'Data Início': '',
                                              'Paciente': '',
@@ -5342,6 +5493,18 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                             })}
                           </tbody>
                           <tfoot>
+                            {viewDoc.type === 'fatura' && somaExtrasDoc > 0 && (
+                              <>
+                                <tr className="font-bold bg-slate-50 text-slate-600">
+                                  <td colSpan={4} className="p-2 text-right uppercase text-[9px]">Soma dos Plantões:</td>
+                                  <td className="p-2 text-right text-slate-700 font-mono">R$ {totalSomaPlantoes.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                </tr>
+                                <tr className="font-bold bg-blue-50/50 text-blue-900">
+                                  <td colSpan={4} className="p-2 text-right uppercase text-[9px]">Serviços Adicionais:</td>
+                                  <td className="p-2 text-right text-blue-950 font-mono">+ R$ {somaExtrasDoc.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                </tr>
+                              </>
+                            )}
                             {viewDoc.type === 'folha' && viewDoc.data.valorTotalDebitos > 0 && (
                               <>
                                 <tr className="font-bold bg-slate-50 text-slate-600">
@@ -5355,13 +5518,60 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                               </>
                             )}
                             <tr className="font-bold bg-emerald-50 text-[#1a3c2e] text-xs">
-                              <td colSpan={4} className="p-2 text-right uppercase">TOTAL</td>
+                              <td colSpan={4} className="p-2 text-right uppercase">TOTAL A PAGAR</td>
                               <td className="p-2 text-right text-[#1a3c2e] font-black font-mono">
                                 R$ {valorTotalCorrigido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </td>
                             </tr>
                           </tfoot>
                         </table>
+
+                        {/* Seção de Serviços Adicionais / Materiais na Fatura */}
+                        {viewDoc.type === 'fatura' && (
+                          <div className="mb-6">
+                            <h4 className="font-black text-xs uppercase text-[#1a3c2e] border-b border-[#b8860b] pb-1 mb-2">
+                              Serviços Adicionais / Materiais
+                            </h4>
+                            <table className="w-full text-[10px] border-collapse">
+                              <thead>
+                                <tr className="bg-[#1a3c2e] text-white border-b-2 border-[#b8860b]">
+                                  <th className="p-2 text-left">Data</th>
+                                  <th className="p-2 text-left">Descrição</th>
+                                  <th className="p-2 text-right">Valor</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {servicosExtrasDoc.length > 0 ? (
+                                  servicosExtrasDoc.map((s: any, idx: number) => (
+                                    <tr key={s.id || idx} className="border-b border-[#b8860b]/30">
+                                      <td className="p-2 font-mono">{formatDateBR(s.data)}</td>
+                                      <td className="p-2 font-semibold text-slate-800">{s.descricao}</td>
+                                      <td className="p-2 text-right text-[#1a3c2e] font-bold font-mono">
+                                        R$ {(Number(s.valor) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      </td>
+                                    </tr>
+                                  ))
+                                ) : (
+                                  <tr>
+                                    <td colSpan={3} className="p-2 text-center text-slate-400 italic">
+                                      Nenhum serviço adicional registrado neste período.
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                              {servicosExtrasDoc.length > 0 && (
+                                <tfoot>
+                                  <tr className="font-bold bg-blue-50/50 text-[#1a3c2e]">
+                                    <td colSpan={2} className="p-2 text-right uppercase text-[9px]">Soma dos Serviços Adicionais:</td>
+                                    <td className="p-2 text-right font-mono font-bold">
+                                      R$ {somaExtrasDoc.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </td>
+                                  </tr>
+                                </tfoot>
+                              )}
+                            </table>
+                          </div>
+                        )}
                       </div>
                   </div>
               </div>

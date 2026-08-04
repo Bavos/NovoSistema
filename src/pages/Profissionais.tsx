@@ -276,91 +276,24 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
   useEffect(() => {
     if (editingProf && activeTab === 'agenda') {
       setLoadingAgenda(true);
-
-      if (isQuotaExceeded) {
-        const agList = (agendamentos || []).filter(a => a.idProfissional === editingProf.id);
-        agList.sort((a, b) => {
-          const dateA = a.data || '';
-          const dateB = b.data || '';
-          if (dateA !== dateB) {
-            return dateB.localeCompare(dateA);
-          }
-          const timeA = a.horario || '';
-          const timeB = b.horario || '';
-          return timeB.localeCompare(timeA);
-        });
-        setAgendamentosProf(agList);
-        setLoadingAgenda(false);
-        return;
-      }
-
-      if (isQuotaExceeded || isTestMode) {
-        const agList = (agendamentos || []).filter(a => a.idProfissional === editingProf.id);
-        agList.sort((a, b) => {
-          const dateA = a.data || '';
-          const dateB = b.data || '';
-          if (dateA !== dateB) return dateB.localeCompare(dateA);
-          return (b.horario || '').localeCompare(a.horario || '');
-        });
-        setAgendamentosProf(agList);
-        setLoadingAgenda(false);
-        return;
-      }
-
-      const q = query(
-        collection(db, 'agendamentos'),
-        where('idProfissional', '==', editingProf.id),
-        orderBy('data', 'desc')
-      );
-      
-      let unsubscribeFallback: (() => void) | null = null;
-      
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const agList: Agendamento[] = [];
-        snapshot.forEach(doc => {
-          agList.push({ ...doc.data(), id: doc.id } as Agendamento);
-        });
-        setAgendamentosProf(agList);
-        setLoadingAgenda(false);
-      }, (err) => {
-        console.warn('Erro ao buscar com orderBy (provável falta de índice), tentando fallback de ordenação em memória:', err);
-        const fallbackQ = query(
-          collection(db, 'agendamentos'),
-          where('idProfissional', '==', editingProf.id)
-        );
-        unsubscribeFallback = onSnapshot(fallbackQ, (snapshot) => {
-          const agList: Agendamento[] = [];
-          snapshot.forEach(doc => {
-            agList.push({ ...doc.data(), id: doc.id } as Agendamento);
-          });
-          // Sort in-memory from most recent to oldest
-          agList.sort((a, b) => {
-            const dateA = a.data || '';
-            const dateB = b.data || '';
-            if (dateA !== dateB) {
-              return dateB.localeCompare(dateA);
-            }
-            const timeA = a.horario || '';
-            const timeB = b.horario || '';
-            return timeB.localeCompare(timeA);
-          });
-          setAgendamentosProf(agList);
-          setLoadingAgenda(false);
-        }, (fallbackErr) => {
-          console.error('Erro total no fallback de agendamentos:', fallbackErr);
-          setLoadingAgenda(false);
-        });
+      const agList = (agendamentos || []).filter(a => a.idProfissional === editingProf.id);
+      agList.sort((a, b) => {
+        const dateA = a.data || '';
+        const dateB = b.data || '';
+        if (dateA !== dateB) {
+          return dateB.localeCompare(dateA);
+        }
+        const timeA = a.horario || '';
+        const timeB = b.horario || '';
+        return timeB.localeCompare(timeA);
       });
-      
-      return () => {
-        unsubscribe();
-        if (unsubscribeFallback) unsubscribeFallback();
-      };
+      setAgendamentosProf(agList);
+      setLoadingAgenda(false);
     } else {
       setAgendamentosProf([]);
       setLoadingAgenda(false);
     }
-  }, [editingProf, activeTab, isQuotaExceeded, isTestMode, agendamentos]);
+  }, [editingProf?.id, activeTab, agendamentos]);
 
   useEffect(() => {
     if (editingProf && activeTab === 'ocorrencias') {
@@ -3359,6 +3292,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                                     <option value="Vacinas">Vacinas</option>
                                     <option value="Certificado">Certificado</option>
                                     <option value="Formulário">Formulário</option>
+                                    <option value="Outros">Outros</option>
                                   </select>
                                 </div>
                                 
