@@ -554,42 +554,49 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   const [debitSearchTerm, setDebitSearchTerm] = useState('');
   const [isExportingDebitosPDF, setIsExportingDebitosPDF] = useState(false);
 
-  // States & Handler for Bulk Debit Deletion (Exclusão em Lote via writeBatch)
+  // States & Handler for Bulk Debit Deletion (Exclusão em Lote)
   const [selectedDebts, setSelectedDebts] = useState<string[]>([]);
   const [isDeletingDebts, setIsDeletingDebts] = useState<boolean>(false);
+  const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void | Promise<void>;
+  } | null>(null);
 
-  const handleBulkDelete = async () => {
-    if (selectedDebts.length === 0) return;
-
-    const confirmDelete = window.confirm(`Tem certeza que deseja excluir os ${selectedDebts.length} débito(s) selecionado(s)? Esta ação não pode ser desfeita.`);
-    if (!confirmDelete) return;
-
-    setIsDeletingDebts(true);
-    const toastId = toast.loading(`Excluindo ${selectedDebts.length} débito(s)...`);
-
-    try {
-      const chunkSize = 500;
-      for (let i = 0; i < selectedDebts.length; i += chunkSize) {
-        const chunk = selectedDebts.slice(i, i + chunkSize);
-        const batch = writeBatch(db);
-        chunk.forEach(id => {
-          const docRef = doc(db, 'debitos_profissionais', id);
-          batch.delete(docRef);
-        });
-        await batch.commit();
-      }
-
-      toast.success(`${selectedDebts.length} débito(s) excluído(s) com sucesso!`, { id: toastId });
-      if (typeof setNotification === 'function') {
-        setNotification(`${selectedDebts.length} débito(s) excluído(s) com sucesso.`);
-      }
-    } catch (err: any) {
-      console.error("Erro ao excluir débitos em lote via writeBatch:", err);
-      toast.error("Ocorreu um erro ao processar a exclusão em lote dos débitos.", { id: toastId });
-    } finally {
-      setIsDeletingDebts(false);
-      setSelectedDebts([]);
+  const handleBulkDelete = () => {
+    if (selectedDebts.length === 0) {
+      toast.error("Nenhum débito selecionado para exclusão.");
+      return;
     }
+
+    const count = selectedDebts.length;
+    setDeleteConfirmDialog({
+      isOpen: true,
+      title: 'Excluir Débitos Selecionados',
+      message: `Tem certeza que deseja excluir os ${count} débito(s) selecionado(s)? Esta ação não pode ser desfeita e reajustará os balanços financeiros.`,
+      onConfirm: async () => {
+        setIsDeletingDebts(true);
+        const toastId = toast.loading(`Excluindo ${count} débito(s)...`);
+
+        try {
+          for (const id of selectedDebts) {
+            await deleteDebitoProfissional(id);
+          }
+
+          toast.success(`${count} débito(s) excluído(s) com sucesso!`, { id: toastId });
+          if (typeof setNotification === 'function') {
+            setNotification(`${count} débito(s) excluído(s) com sucesso.`);
+          }
+        } catch (err: any) {
+          console.error("Erro ao excluir débitos em lote:", err);
+          toast.error("Ocorreu um erro ao processar a exclusão dos débitos selecionados.", { id: toastId });
+        } finally {
+          setIsDeletingDebts(false);
+          setSelectedDebts([]);
+        }
+      }
+    });
   };
 
   const handleExportDebitosPDF = async () => {
@@ -675,12 +682,6 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
     });
     return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
   }, [profissionais, debitosProfissionais]);
-  const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<{
-    isOpen: boolean;
-    title: string;
-    message: string;
-    onConfirm: () => void | Promise<void>;
-  } | null>(null);
 
   const parseInputDateToDateObject = (dateStr: string): Date => {
     const [year, month, day] = dateStr.split('-').map(Number);
@@ -4117,6 +4118,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                         <th className="py-3 px-5">Data do Débito</th>
                         <th className="py-3 px-5">Motivo</th>
                         <th className="py-3 px-5 text-center">Status</th>
+                        <th className="py-3 px-5">Observação</th>
                         <th className="py-3 px-5 text-right font-bold">Valor</th>
                         <th className="py-3 px-5 text-right w-[100px] print:hidden">Ação</th>
                       </tr>
@@ -4137,7 +4139,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
 
                           return (
                             <tr>
-                              <td colSpan={7} className="py-12 text-center text-slate-400 italic">
+                              <td colSpan={8} className="py-12 text-center text-slate-400 italic">
                                 {emptyMessage}
                               </td>
                             </tr>
@@ -4185,6 +4187,14 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                                 d.status === 'descontado' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
                               }`}>
                                 {d.status === 'descontado' ? 'Descontado' : 'Pendente'}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-5 text-slate-500 text-xs">
+                              <span
+                                className="max-w-[100px] md:max-w-[120px] lg:max-w-[150px] truncate block text-slate-500 text-xs"
+                                title={d.observacao || d.observacoes || ''}
+                              >
+                                {d.observacao || d.observacoes || '-'}
                               </span>
                             </td>
                             <td className="py-3.5 px-5 text-right font-black text-red-600 text-sm font-mono">R$ {d.valor.toFixed(2)}</td>

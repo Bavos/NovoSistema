@@ -205,6 +205,7 @@ export const ModalInserirDebito: React.FC<ModalInserirDebitoProps> = ({
   const [newDebitDate, setNewDebitDate] = useState('');
   const [newDebitValor, setNewDebitValor] = useState('');
   const [newDebitMotivo, setNewDebitMotivo] = useState('Curinga');
+  const [newDebitObservacao, setNewDebitObservacao] = useState('');
   const [isInsertingDebit, setIsInsertingDebit] = useState(false);
 
   // Inicialização e reinicialização dos estados com base na prioridade exigida
@@ -217,6 +218,7 @@ export const ModalInserirDebito: React.FC<ModalInserirDebitoProps> = ({
       setNewDebitPacienteId(editingDebit.idPaciente || '');
       setNewDebitValor(editingDebit.valor !== undefined && editingDebit.valor !== null ? formatarMoeda(editingDebit.valor) : '');
       setNewDebitMotivo(editingDebit.motivo || 'Curinga');
+      setNewDebitObservacao(editingDebit.observacao || editingDebit.observacoes || '');
       
       if (editingDebit.data) {
         let dObj: Date;
@@ -269,12 +271,14 @@ export const ModalInserirDebito: React.FC<ModalInserirDebitoProps> = ({
 
       setNewDebitValor(dadosAtalhoCuringa.valor !== undefined && dadosAtalhoCuringa.valor !== null && dadosAtalhoCuringa.valor !== '' ? formatarMoeda(dadosAtalhoCuringa.valor) : '');
       setNewDebitMotivo(dadosAtalhoCuringa.motivo || 'Curinga');
+      setNewDebitObservacao('');
     } else {
       // c) Se nenhum dos dois existir, inicie os campos vazios.
       setNewDebitProfId('');
       setNewDebitPacienteId('');
       setNewDebitValor('');
       setNewDebitMotivo('Curinga');
+      setNewDebitObservacao('');
 
       const today = new Date();
       const yr = today.getFullYear();
@@ -319,7 +323,8 @@ export const ModalInserirDebito: React.FC<ModalInserirDebitoProps> = ({
         data: dateObj,
         valor: valNumber,
         motivo: newDebitMotivo,
-        status: 'pendente'
+        observacao: newDebitObservacao.trim(),
+        status: editingDebit?.status || 'pendente'
       };
 
       if (idPaciente) {
@@ -362,7 +367,7 @@ export const ModalInserirDebito: React.FC<ModalInserirDebitoProps> = ({
           </p>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-3 max-h-[75vh] overflow-y-auto px-1">
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">Profissional *</label>
             <SearchableSelect
@@ -389,29 +394,31 @@ export const ModalInserirDebito: React.FC<ModalInserirDebitoProps> = ({
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Data do Débito *</label>
-            <input
-              type="date"
-              value={newDebitDate}
-              onChange={(e) => setNewDebitDate(e.target.value)}
-              className="w-full p-2.5 border border-slate-200 rounded-lg text-sm bg-white"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Valor do Débito *</label>
-            <div className="relative">
-              <span className="absolute left-3 top-2.5 text-sm text-slate-400 font-bold font-mono">R$</span>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Data do Débito *</label>
               <input
-                type="text"
-                inputMode="numeric"
-                value={newDebitValor}
-                onChange={(e) => setNewDebitValor(mascaraFinanceira(e.target.value))}
-                className="w-full pl-9 pr-3 p-2.5 border border-slate-200 rounded-lg text-sm bg-white font-mono font-bold text-slate-800"
+                type="date"
+                value={newDebitDate}
+                onChange={(e) => setNewDebitDate(e.target.value)}
+                className="w-full p-2.5 border border-slate-200 rounded-lg text-sm bg-white"
                 required
               />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Valor do Débito *</label>
+              <div className="relative">
+                <span className="absolute left-3 top-2.5 text-sm text-slate-400 font-bold font-mono">R$</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={newDebitValor}
+                  onChange={(e) => setNewDebitValor(mascaraFinanceira(e.target.value))}
+                  className="w-full pl-9 pr-3 p-2.5 border border-slate-200 rounded-lg text-sm bg-white font-mono font-bold text-slate-800"
+                  required
+                />
+              </div>
             </div>
           </div>
 
@@ -428,6 +435,17 @@ export const ModalInserirDebito: React.FC<ModalInserirDebitoProps> = ({
               <option value="MEI">MEI</option>
               <option value="Outros">Outros</option>
             </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">Observação (Opcional)</label>
+            <textarea
+              rows={2}
+              value={newDebitObservacao}
+              onChange={(e) => setNewDebitObservacao(e.target.value)}
+              placeholder="Digite observações ou detalhes adicionais..."
+              className="w-full p-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-sans resize-none"
+            />
           </div>
 
           <div className="flex gap-3 pt-3 border-t border-slate-100 justify-end transition-all">

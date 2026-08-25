@@ -3,11 +3,15 @@ import { useFirebase } from '../context/FirebaseContext';
 import logo from '../assets/images/rh_logo_v2_1781470281009.jpg';
 import { validarDominioCorporativo } from '../types';
 import { toast } from 'react-hot-toast';
+import { auth } from '../lib/firebase';
+import { signInWithEmailAndPassword, sendEmailVerification, signOut } from 'firebase/auth';
 
 export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ onNavigateToFirstAccess }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [isResending, setIsResending] = useState(false);
+    const [showResendVerification, setShowResendVerification] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const { login, setNotification } = useFirebase();
 
@@ -15,6 +19,7 @@ export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ o
         e.preventDefault();
         setIsLoading(true);
         setError(null);
+        setShowResendVerification(false);
 
         const domainAllowed = await validarDominioCorporativo(email);
         if (!domainAllowed) {
@@ -26,10 +31,39 @@ export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ o
         try {
             await login(email, password);
         } catch (err: any) {
-            setError(err.message || 'auth/invalid-credential');
-            setNotification(`Erro: ${err.message || 'auth/invalid-credential'}`);
+            if (err.message === 'auth/email-not-verified' || err.code === 'auth/email-not-verified') {
+                setShowResendVerification(true);
+            } else {
+                setError(err.message || 'auth/invalid-credential');
+                setNotification(`Erro: ${err.message || 'auth/invalid-credential'}`);
+            }
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleResendVerification = async () => {
+        setIsResending(true);
+        try {
+            if (auth.currentUser) {
+                await sendEmailVerification(auth.currentUser);
+            } else if (email && password) {
+                const userCredential = await signInWithEmailAndPassword(auth, email, password);
+                if (userCredential.user) {
+                    await sendEmailVerification(userCredential.user);
+                    await signOut(auth);
+                }
+            } else {
+                toast.error('Informe o e-mail e a senha para reenviar o link de confirmação.');
+                return;
+            }
+            toast.success('Novo link de confirmação enviado para o seu e-mail!');
+            setShowResendVerification(false);
+        } catch (err: any) {
+            console.error('Erro ao reenviar confirmação de e-mail:', err);
+            toast.error('Erro ao reenviar o e-mail. Verifique suas credenciais.');
+        } finally {
+            setIsResending(false);
         }
     };
 
@@ -54,7 +88,10 @@ export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ o
                             id="login-email"
                             type="email" 
                             value={email} 
-                            onChange={e => setEmail(e.target.value)} 
+                            onChange={e => {
+                                setEmail(e.target.value);
+                                setShowResendVerification(false);
+                            }} 
                             className="w-full h-12 px-4 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#1A3626]/20 focus:border-[#1A3626] transition-all text-sm text-slate-800" 
                             required 
                         />
@@ -67,7 +104,10 @@ export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ o
                             id="login-password"
                             type="password" 
                             value={password} 
-                            onChange={e => setPassword(e.target.value)} 
+                            onChange={e => {
+                                setPassword(e.target.value);
+                                setShowResendVerification(false);
+                            }} 
                             className="w-full h-12 px-4 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#1A3626]/20 focus:border-[#1A3626] transition-all text-sm text-slate-800" 
                             required 
                         />
@@ -80,6 +120,20 @@ export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ o
                     >
                         {isLoading ? 'Carregando...' : 'Entrar'}
                     </button>
+
+                    {showResendVerification && (
+                        <div className="text-center pt-1 animate-in fade-in duration-200">
+                            <button
+                                type="button"
+                                onClick={handleResendVerification}
+                                disabled={isResending}
+                                className="text-xs font-medium text-emerald-700 hover:text-emerald-900 hover:underline transition-colors cursor-pointer disabled:opacity-50 inline-flex items-center gap-1"
+                            >
+                                {isResending ? 'Enviando...' : 'Não recebeu o e-mail de confirmação? Reenviar link'}
+                            </button>
+                        </div>
+                    )}
+
                     <button 
                         id="login-register-link-btn"
                         type="button" 

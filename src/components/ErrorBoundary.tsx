@@ -1,5 +1,6 @@
 import React, { ErrorInfo, ReactNode } from 'react';
 import { AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
+import { logError } from '../lib/diagnostics';
 
 interface Props {
   children?: ReactNode;
@@ -27,6 +28,10 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("[ErrorBoundary] Erro de renderização não capturado no prontuário/paciente:", error, errorInfo);
+    logError(error, 'PatientRecord / Patient ErrorBoundary', {
+      componentStack: errorInfo.componentStack,
+      title: this.props.title || 'Falha no Carregamento do Prontuário',
+    });
   }
 
   private handleReset = () => {

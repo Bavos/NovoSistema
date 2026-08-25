@@ -10,6 +10,8 @@ import { db, auth, storage, OperationType, handleFirestoreError } from '../lib/f
 import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, sendEmailVerification, User } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { toast } from 'react-hot-toast';
+import { normalizeText } from '../lib/masks';
+import { logError } from '../lib/diagnostics';
 import {
   collection,
   doc,
@@ -513,8 +515,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (filterId && filterId !== 'todos') {
         filtered = filtered.filter(p => p.id === filterId);
       } else if (search) {
-        const s = search.toLowerCase();
-        filtered = filtered.filter(p => p.nome.toLowerCase().includes(s));
+        const normSearch = normalizeText(search);
+        filtered = filtered.filter(p => normalizeText(p.nome).includes(normSearch));
       }
       filtered.sort((a, b) => a.nome.localeCompare(b.nome));
       setPacientes(filtered);
@@ -528,6 +530,43 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!forceRefresh && !search.trim() && filterId === 'todos' && pacientes.length > 0) {
       setLoadingPacientes(false);
       setLoading(false);
+      return;
+    }
+
+    if (search.trim()) {
+      try {
+        let qBase = query(collection(db, 'pacientes'), orderBy('nome'));
+        if (filterId && filterId !== 'todos') {
+          qBase = query(collection(db, 'pacientes'), where('id', '==', filterId));
+        }
+        const q = query(qBase, limit(1000));
+        const snap = await getDocs(q);
+        let list: Paciente[] = [];
+        snap.forEach((d) => {
+          const p = d.data() as Paciente;
+          if (isExcludedPatient(p, d.id)) {
+            deleteDoc(doc(db, 'pacientes', d.id)).catch(() => {});
+          } else {
+            list.push(p);
+          }
+        });
+
+        const normSearch = normalizeText(search);
+        list = list.filter(p => normalizeText(p.nome).includes(normSearch));
+        setPacientes(list);
+        setLastVisible(null);
+        setHasMore(false);
+        setPageHistory([]);
+      } catch (error) {
+        if (handleQuotaError(error, 'fetchFirstPagePacientesSearch')) {
+          // Fallback triggers local
+        } else {
+          console.error("Erro ao buscar pacientes:", error);
+        }
+      } finally {
+        setLoadingPacientes(false);
+        setLoading(false);
+      }
       return;
     }
 
@@ -662,7 +701,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         // Guard for email verification (exempting the bootstrap developer/admin email)
         if (!currentUser.emailVerified && emailLower !== 'renatobz@gmail.com') {
           await signOut(auth);
-          alert('Acesso negado: Você precisa confirmar o link que enviamos para o seu e-mail antes de acessar o sistema.');
+          toast.error('Acesso negado: Você precisa confirmar o link que enviamos para o seu e-mail antes de acessar o sistema.');
           setUser(null);
           setLoading(false);
           return;
@@ -674,7 +713,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             const querySnapshot = await getDocs(q);
             if (querySnapshot.empty) {
               await signOut(auth);
-              alert('Acesso Bloqueado: Esta conta foi desativada ou excluída pelo administrador.');
+              toast.error('Acesso Bloqueado: Esta conta foi desativada ou excluída pelo administrador.');
               setUser(null);
               setLoading(false);
               return;
@@ -682,7 +721,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               const docData = querySnapshot.docs[0].data();
               if (docData && docData.status === 'Inativo') {
                 await signOut(auth);
-                alert('Acesso Bloqueado: Esta conta foi desativada ou excluída pelo administrador.');
+                toast.error('Acesso Bloqueado: Esta conta foi desativada ou excluída pelo administrador.');
                 setUser(null);
                 setLoading(false);
                 return;
@@ -706,8 +745,10 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const loggedUser = userCredential.user;
     if (loggedUser && !loggedUser.emailVerified && loggedUser.email?.toLowerCase() !== 'renatobz@gmail.com') {
       await signOut(auth);
-      alert('Acesso negado: Você precisa confirmar o link que enviamos para o seu e-mail antes de acessar o sistema.');
-      return;
+      toast.error('Acesso negado: Você precisa confirmar o link que enviamos para o seu e-mail antes de acessar o sistema.');
+      const err: any = new Error('auth/email-not-verified');
+      err.code = 'auth/email-not-verified';
+      throw err;
     }
   };
 
@@ -724,7 +765,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
     await signOut(auth);
     setNotification('Acesso criado! Um e-mail de verificação oficial foi enviado para o colaborador.');
-    alert('Acesso criado! Um e-mail de verificação oficial foi enviado para o colaborador.');
+    toast.success('Acesso criado! Um e-mail de verificação oficial foi enviado para o seu e-mail.');
   };
 
   const logout = async () => {

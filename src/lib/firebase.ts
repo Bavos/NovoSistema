@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { initializeFirestore, setLogLevel } from 'firebase/firestore';
+import { logError } from './diagnostics';
 
 setLogLevel('error');
 import { getStorage } from 'firebase/storage';
@@ -80,6 +81,15 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   };
 
   console.error('Firestore Error: ', JSON.stringify(errInfo));
+
+  // Evitar recursão infinita se houver falha ao gravar o próprio log de diagnóstico
+  const isLoggingCollection = path && (path.includes('system_errors') || path.includes('error_logs'));
+  if (!isLoggingCollection) {
+    logError(error, `Firestore Database Operation: ${operationType}`, {
+      path,
+      errInfo
+    });
+  }
 
   // Only throw if it is a permission-denied, security rules, or auth-related permissions error
   const isPermissionErr =

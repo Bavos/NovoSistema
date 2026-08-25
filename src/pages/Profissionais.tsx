@@ -39,6 +39,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
 
   const [selectedProfId, setSelectedProfId] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchType, setSearchType] = useState<'nome' | 'profissao'>('nome');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -1931,18 +1932,26 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
           return false;
         }
 
-        const cleanCpf = (prof.cpf || '').replace(/\D/g, '');
-        const cleanPhone = (prof.telefone || '').replace(/\D/g, '');
+        if (!query) {
+          return true;
+        }
 
-        const matchSearch = !query ||
-          normalizeText(prof.nome).includes(query) ||
-          normalizeText(prof.cpf).includes(query) ||
-          normalizeText(prof.telefone).includes(query) ||
-          normalizeText(prof.especialidade).includes(query) ||
-          (cleanQuery && cleanCpf.includes(cleanQuery)) ||
-          (cleanQuery && cleanPhone.includes(cleanQuery));
+        if (searchType === 'profissao') {
+          const profProfissao = normalizeText(prof.profissao || '');
+          const profEspecialidade = normalizeText(prof.especialidade || '');
+          const profCargo = normalizeText((prof as any).cargo || '');
+          return profProfissao.includes(query) || profEspecialidade.includes(query) || profCargo.includes(query);
+        } else {
+          // searchType === 'nome'
+          const cleanCpf = (prof.cpf || '').replace(/\D/g, '');
+          const cleanPhone = (prof.telefone || '').replace(/\D/g, '');
 
-        return matchSearch;
+          return normalizeText(prof.nome || '').includes(query) ||
+            normalizeText(prof.cpf || '').includes(query) ||
+            normalizeText(prof.telefone || '').includes(query) ||
+            (cleanQuery.length > 0 && cleanCpf.includes(cleanQuery)) ||
+            (cleanQuery.length > 0 && cleanPhone.includes(cleanQuery));
+        }
       })
       .sort((a, b) => {
         const statusA = a.status === 'Ativo' ? 0 : 1;
@@ -1954,22 +1963,34 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
         const nameB = (b.nome || '').toLowerCase();
         return nameA.localeCompare(nameB, 'pt-BR');
       });
-  }, [profissionais, selectedProfId, searchTerm]);
+  }, [profissionais, selectedProfId, searchTerm, searchType]);
 
   return (
     <div className="space-y-5">
       {/* Search and filter block */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm print:hidden">
         <div className="flex flex-wrap items-center gap-3 flex-1">
-          {/* Universal Search Field */}
-          <div className="relative max-w-xs w-full">
-            <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-700 bg-slate-50 focus:outline-none focus:border-emerald-500 focus:bg-white transition-all shadow-inner"
-            />
+          {/* Universal Search Field & Criteria Select */}
+          <div className="flex items-center gap-2 max-w-md w-full">
+            <select
+              value={searchType}
+              onChange={(e) => setSearchType(e.target.value as 'nome' | 'profissao')}
+              className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 font-medium focus:outline-none focus:border-emerald-500 focus:bg-white transition-all shadow-inner cursor-pointer shrink-0"
+            >
+              <option value="nome">Buscar por Nome</option>
+              <option value="profissao">Buscar por Profissão</option>
+            </select>
+
+            <div className="relative w-full">
+              <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder={searchType === 'nome' ? "Digite o nome..." : "Digite a profissão (ex: cuidador)..."}
+                className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-700 bg-slate-50 focus:outline-none focus:border-emerald-500 focus:bg-white transition-all shadow-inner"
+              />
+            </div>
           </div>
 
           {/* Status/Professional Selector dropdown */}
@@ -2002,8 +2023,9 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
               onClick={() => {
                 setSearchTerm('');
                 setSelectedProfId('');
+                setSearchType('nome');
               }}
-              className="text-xs text-slate-400 hover:text-emerald-600 underline font-semibold cursor-pointer"
+              className="text-xs text-slate-400 hover:text-emerald-600 underline font-semibold cursor-pointer shrink-0"
             >
               Resetar Filtros
             </button>

@@ -259,6 +259,8 @@ export interface DebitoProfissional {
   nomePaciente?: string;
   status?: 'pendente' | 'descontado';
   folhaIdVinculada?: string;
+  observacao?: string;
+  observacoes?: string;
 }
 
 export interface FaturaPaciente {

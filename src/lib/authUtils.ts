@@ -4,8 +4,8 @@ import { db } from './firebase';
 export async function validarDominioCorporativo(email: string): Promise<boolean> {
   const emailLower = email.trim().toLowerCase();
   
-  // Exceção de superusuário/teste
-  if (emailLower === 'renatobz@gmail.com') {
+  // Exceções de superusuário e e-mail principal da gestão (whitelist)
+  if (emailLower === 'renatobz@gmail.com' || emailLower === 'rhgestaodomiciliar@gmail.com') {
     return true;
   }
 
@@ -24,5 +24,5 @@ export async function validarDominioCorporativo(email: string): Promise<boolean>
     console.warn("Erro ao buscar domínios whitelist do Firestore, usando fallbacks:", err);
   }
 
-  return dominiosPermitidos.some(dom => emailLower.endsWith(dom));
+  return dominiosPermitidos.some(dom => emailLower.endsWith(dom)) || emailLower === 'rhgestaodomiciliar@gmail.com';
 }

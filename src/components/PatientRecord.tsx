@@ -4831,6 +4831,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       disabled={isCurrentlyDeactivated}
                       onClick={() => {
                         setOpenedFrom('button');
+                        setAgnCalendarYear(calendarYear);
+                        setAgnCalendarMonth(calendarMonth);
                         setSelectedDates([]);
                         setAvulsoProf('');
                         setAvulsoPlantaoOptionId('principal');
@@ -6369,169 +6371,157 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 )}
               </div>
 
-              {/* Data do(s) Plantão(ões) - Conditional Rendering based on openedFrom */}
-              {openedFrom === 'button' ? (
-                <div className="space-y-2.5">
-                  <label className="block text-xs font-bold text-slate-700">Data do(s) Plantão(ões) (Múltiplas Escolhas - Clique nos dias)</label>
-                  
-                  <div className="bg-[#fcfbf9] border border-gray-200 rounded-xl p-3 shadow-sm font-sans w-full">
-                    {/* Calendar Header with Navigation */}
-                    <div className="flex items-center justify-between mb-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (agnCalendarMonth === 0) {
-                            setAgnCalendarMonth(11);
-                            setAgnCalendarYear(agnCalendarYear - 1);
-                          } else {
-                            setAgnCalendarMonth(agnCalendarMonth - 1);
-                          }
-                        }}
-                        className="p-1 px-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                      >
-                        <ChevronLeft size={16} />
-                      </button>
-                      <span className="font-semibold text-xs uppercase tracking-wider text-[#1a3c2e]">
-                        {["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"][agnCalendarMonth]} {agnCalendarYear}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (agnCalendarMonth === 11) {
-                            setAgnCalendarMonth(0);
-                            setAgnCalendarYear(agnCalendarYear + 1);
-                          } else {
-                            setAgnCalendarMonth(agnCalendarMonth + 1);
-                          }
-                        }}
-                        className="p-1 px-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                      >
-                        <ChevronRight size={16} />
-                      </button>
-                    </div>
-
-                    {/* Day Names Grid */}
-                    <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-gray-400 mb-1.5">
-                      {["D", "S", "T", "Q", "Q", "S", "S"].map((d, index) => (
-                        <div key={`cal-header-${index}`} className="py-1">{d}</div>
-                      ))}
-                    </div>
-
-                    {/* Days Grid */}
-                    <div className="grid grid-cols-7 w-full gap-0 border border-gray-200 rounded-lg overflow-hidden">
-                      {Array.from({ length: new Date(agnCalendarYear, agnCalendarMonth, 1).getDay() }).map((_, i) => (
-                        <div key={`empty-${agnCalendarMonth}-${agnCalendarYear}-${i}`} className="border border-gray-200 min-h-[60px] w-full bg-gray-50/50" />
-                      ))}
-                      {Array.from({ length: new Date(agnCalendarYear, agnCalendarMonth + 1, 0).getDate() }, (_, i) => i + 1).map((dayNum) => {
-                        const formattedDate = `${agnCalendarYear}-${String(agnCalendarMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
-                        const isSelected = selectedDates.some(d => d.date === formattedDate);
-                        const isToday = new Date().toDateString() === new Date(agnCalendarYear, agnCalendarMonth, dayNum).toDateString();
-                        const isHoliday = feriados.some(f => f.date === formattedDate);
-                        
-                        const baseClass = "border border-gray-200 min-h-[60px] w-full flex flex-col justify-start items-center p-1 transition-all cursor-pointer select-none";
-                        const stateClass = isSelected 
-                          ? 'bg-green-700 text-white font-extrabold hover:bg-green-800 shadow-xs' 
-                          : isHoliday
-                            ? 'bg-rose-100 text-rose-950 hover:bg-rose-200'
-                            : isToday
-                              ? 'bg-amber-100 text-amber-950 hover:bg-amber-200 border-2 border-amber-400'
-                              : 'bg-white hover:bg-gray-100 text-gray-700';
-
-                        return (
-                          <button
-                            key={`${agnCalendarMonth}-${agnCalendarYear}-${dayNum}`}
-                            type="button"
-                            onClick={() => handleDateClick(formattedDate)}
-                            className={`${baseClass} ${stateClass}`}
-                          >
-                            <span className="text-xs font-extrabold self-start pl-1 pt-0.5">{dayNum}</span>
-                            {isSelected && <span className="text-[9px] text-white/90">✓</span>}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  
-                  {/* Selected summary chips */}
+              {/* Data do(s) Plantão(ões) - Componente de Calendário Inline Multi-Date Picker */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-700">
+                    Data do(s) Plantão(ões) <span className="text-slate-400 font-normal">(Clique nos dias para compor o lote)</span>
+                  </label>
                   {selectedDates.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                      <span className="text-[11px] font-semibold text-slate-500">Selecionados ({selectedDates.length}):</span>
-                      {selectedDates.map((item) => {
-                        const [y, m, day] = item.date.split('-');
-                        return (
-                          <span key={item.date} className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded text-xs font-semibold">
-                            <span>{day}/{m}/{y}</span>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedDates(prev => prev.filter(d => d.date !== item.date))}
-                              className="text-emerald-600 hover:text-emerald-900"
-                            >
-                              <X size={11} />
-                            </button>
-                          </span>
-                        );
-                      })}
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDates([])}
+                      className="text-[11px] font-semibold text-rose-600 hover:text-rose-800 hover:underline transition-colors cursor-pointer"
+                    >
+                      Limpar Todas ({selectedDates.length})
+                    </button>
                   )}
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  <label className="block text-xs font-bold text-slate-700">Data do(s) Plantão(ões) (Múltiplas Escolhas)</label>
-                  
-                  <div className="flex flex-wrap items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                    {/* Compact Native Date Input for adding more days */}
-                    <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 shadow-xs">
-                      <Calendar size={14} className="text-slate-400" />
-                      <input
-                        type="date"
-                        value={tempDate}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val) {
-                            if (isMesConcluido(val)) {
-                              const [yr, mo] = val.split('-');
-                              toast.error(`Esta escala de ${mo}/${yr} já está concluída.`);
-                            } else if (!selectedDates.some(d => d.date === val)) {
-                              setSelectedDates(prev => [...prev, { date: val, cycle: 1 }]);
-                            }
-                            setTempDate('');
-                          }
-                        }}
-                        className="text-xs text-slate-700 bg-transparent outline-none cursor-pointer"
-                      />
-                      <span className="text-[10px] text-slate-400 font-medium pl-1 border-l border-slate-200">Adicionar</span>
-                    </div>
 
-                    {/* Selected Date Tags / Chips */}
+                {/* Container do Calendário Inline */}
+                <div className="bg-slate-50/70 border border-slate-200 rounded-xl p-3.5 shadow-2xs font-sans w-full space-y-2.5">
+                  {/* Cabeçalho do Calendário com Navegação */}
+                  <div className="flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (agnCalendarMonth === 0) {
+                          setAgnCalendarMonth(11);
+                          setAgnCalendarYear(agnCalendarYear - 1);
+                        } else {
+                          setAgnCalendarMonth(agnCalendarMonth - 1);
+                        }
+                      }}
+                      className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-white border border-transparent hover:border-slate-200 rounded-lg transition-all shadow-2xs cursor-pointer"
+                      title="Mês Anterior"
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                    <span className="font-bold text-xs uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                      <Calendar size={14} className="text-sky-600" />
+                      <span>
+                        {["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"][agnCalendarMonth]} {agnCalendarYear}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (agnCalendarMonth === 11) {
+                          setAgnCalendarMonth(0);
+                          setAgnCalendarYear(agnCalendarYear + 1);
+                        } else {
+                          setAgnCalendarMonth(agnCalendarMonth + 1);
+                        }
+                      }}
+                      className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-white border border-transparent hover:border-slate-200 rounded-lg transition-all shadow-2xs cursor-pointer"
+                      title="Próximo Mês"
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
+
+                  {/* Dias da Semana */}
+                  <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                    {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((d, index) => (
+                      <div key={`cal-header-${index}`} className="py-0.5">{d}</div>
+                    ))}
+                  </div>
+
+                  {/* Grid de Dias */}
+                  <div className="grid grid-cols-7 gap-1 w-full">
+                    {Array.from({ length: new Date(agnCalendarYear, agnCalendarMonth, 1).getDay() }).map((_, i) => (
+                      <div key={`empty-${agnCalendarMonth}-${agnCalendarYear}-${i}`} className="h-9 w-full rounded-lg bg-transparent" />
+                    ))}
+                    {Array.from({ length: new Date(agnCalendarYear, agnCalendarMonth + 1, 0).getDate() }, (_, i) => i + 1).map((dayNum) => {
+                      const formattedDate = `${agnCalendarYear}-${String(agnCalendarMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+                      const isSelected = selectedDates.some(d => d.date === formattedDate);
+                      const isToday = new Date().toDateString() === new Date(agnCalendarYear, agnCalendarMonth, dayNum).toDateString();
+                      const isHoliday = feriados.some(f => f.date === formattedDate);
+                      const isConcluded = isMesConcluido(formattedDate);
+
+                      let stateClasses = 'bg-white hover:bg-sky-50 text-slate-700 hover:text-sky-800 border border-slate-200 shadow-2xs';
+
+                      if (isSelected) {
+                        stateClasses = 'bg-sky-600 hover:bg-sky-700 text-white font-black border border-sky-700 shadow-md shadow-sky-500/30 scale-100';
+                      } else if (isConcluded) {
+                        stateClasses = 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60';
+                      } else if (isHoliday) {
+                        stateClasses = 'bg-rose-50 hover:bg-rose-100 text-rose-900 border border-rose-200 font-semibold';
+                      } else if (isToday) {
+                        stateClasses = 'bg-amber-50 hover:bg-amber-100 text-amber-950 border-2 border-amber-400 font-bold';
+                      }
+
+                      return (
+                        <button
+                          key={`${agnCalendarMonth}-${agnCalendarYear}-${dayNum}`}
+                          type="button"
+                          onClick={() => handleDateClick(formattedDate)}
+                          className={`h-9 w-full rounded-lg flex items-center justify-center relative transition-all duration-150 cursor-pointer select-none text-xs font-semibold ${stateClasses}`}
+                          title={isHoliday ? `Feriado (${formattedDate})` : isConcluded ? 'Mês Concluído' : formattedDate}
+                        >
+                          <span>{dayNum}</span>
+                          {isSelected && (
+                            <span className="absolute top-0.5 right-0.5 text-[8px] font-bold leading-none text-white/90">✓</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Resumo Visual em Pílulas (Tags Verdes com 'X') */}
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                    Plantões Selecionados ({selectedDates.length})
+                  </span>
+
+                  <div className="flex flex-wrap items-center gap-1.5 p-2 bg-slate-50 border border-slate-200 rounded-xl min-h-[42px]">
                     {selectedDates.length === 0 ? (
-                      <span className="text-xs text-slate-400 italic">Nenhuma data selecionada. Adicione acima.</span>
+                      <span className="text-xs text-slate-400 italic px-1 flex items-center gap-1.5">
+                        <Calendar size={13} className="text-slate-400" />
+                        Nenhum dia selecionado. Clique nos dias do calendário acima para compor o lote.
+                      </span>
                     ) : (
-                      selectedDates.map((item) => {
-                        const [y, m, day] = item.date.split('-');
-                        const displayDate = `${day}/${m}/${y}`;
-                        return (
-                          <span
-                            key={item.date}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-semibold shadow-xs"
-                          >
-                            <span>{displayDate}</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedDates(prev => prev.filter(d => d.date !== item.date));
-                              }}
-                              className="text-emerald-600 hover:text-emerald-900 transition-colors p-0.5 rounded-full hover:bg-emerald-100"
-                              title="Remover data"
+                      selectedDates
+                        .slice()
+                        .sort((a, b) => a.date.localeCompare(b.date))
+                        .map((item) => {
+                          const [y, m, day] = item.date.split('-');
+                          const displayDate = `${day}/${m}/${y}`;
+                          return (
+                            <span
+                              key={item.date}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-semibold shadow-2xs animate-in fade-in-50"
                             >
-                              <X size={12} />
-                            </button>
-                          </span>
-                        );
-                      })
+                              <span>{displayDate}</span>
+                              {item.cycle === 2 && (
+                                <span className="text-[10px] text-emerald-600 font-medium">(2º dia)</span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setSelectedDates(prev => prev.filter(d => d.date !== item.date))}
+                                className="text-emerald-600 hover:text-emerald-950 transition-colors p-0.5 rounded-full hover:bg-emerald-200/60 cursor-pointer"
+                                title="Remover esta data"
+                              >
+                                <X size={12} />
+                              </button>
+                            </span>
+                          );
+                        })
                     )}
                   </div>
                 </div>
-              )}
+              </div>
 
               {/* Horário / Plantão Option Select Dropdown */}
               <div className="space-y-1 col-span-12">

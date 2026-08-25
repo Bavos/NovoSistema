@@ -11,6 +11,7 @@ import { LayoutShell } from './components/LayoutShell';
 import { Dashboard } from './components/Dashboard';
 import { motion, AnimatePresence } from 'motion/react';
 import { ShieldAlert, AlertTriangle, RefreshCw } from 'lucide-react';
+import { logError } from './lib/diagnostics';
 
 // Class-based ErrorBoundary for capturing async lazy rendering errors
 interface ErrorBoundaryProps {
@@ -34,6 +35,9 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error("ErrorBoundary capturou um erro de carregamento ou renderização:", error, errorInfo);
+    logError(error, 'App Level ErrorBoundary (Lazy Component Loading)', {
+      componentStack: errorInfo.componentStack,
+    });
   }
 
   handleReset = () => {
@@ -135,7 +139,7 @@ function DashboardContent() {
     setInitialSelectedProfId('');
   }, []);
 
-  const { pacientes, profissionais, loading, userRole, user, usuariosSistema, isQuotaExceeded, seedDatabase } = useFirebase();
+  const { pacientes, profissionais, loading, userRole, user, usuariosSistema, isQuotaExceeded } = useFirebase();
 
   const currentUserProfile = (usuariosSistema || []).find(u => {
     const uEmail = u?.email;
@@ -164,9 +168,9 @@ function DashboardContent() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Redirect away from Empresa and Financeiro if role is Colaborador
+  // Redirect away from Empresa if role is Colaborador (Empresa is exclusively for Administrador)
   React.useEffect(() => {
-    if (userRole?.toLowerCase() === 'colaborador' && (activeSidebarTab === 'empresa' || activeSidebarTab === 'financeiro')) {
+    if (userRole?.toLowerCase() === 'colaborador' && activeSidebarTab === 'empresa') {
       setActiveSidebarTab('dashboard');
     }
   }, [userRole, activeSidebarTab]);
@@ -262,28 +266,6 @@ function DashboardContent() {
         </div>
       }
     >
-      {pacientes.length === 0 && profissionais.length === 0 && !loading && !isQuotaExceeded && (
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4 rounded-xl shadow-lg border border-indigo-100 flex flex-col md:flex-row items-center justify-between gap-3 mb-6 animate-in fade-in duration-300" id="firestore-empty-seed-banner">
-          <div className="space-y-1">
-            <h3 className="text-sm font-extrabold flex items-center gap-2">
-              <span>✨ Banco de dados Firestore Vazio</span>
-            </h3>
-            <p className="text-xs text-indigo-100">
-              Seu banco de dados do Firestore está conectado, mas atualmente não contém dados de demonstração. Deseja popular o banco agora com pacientes, profissionais e plantões de teste?
-            </p>
-          </div>
-          <button
-            onClick={() => {
-              if (seedDatabase) {
-                seedDatabase();
-              }
-            }}
-            className="bg-white text-indigo-600 hover:bg-indigo-50 px-4 py-2 rounded-lg font-bold text-xs shadow-md transition-all active:scale-95 shrink-0 cursor-pointer"
-          >
-            Popular Banco de Dados
-          </button>
-        </div>
-      )}
       <AnimatePresence mode="wait">
         <motion.div
           key={`${activeSidebarTab}-${resetKey}`}
@@ -337,16 +319,16 @@ function DashboardContent() {
                   clearInitialSelectedProfId={handleClearInitialSelectedProfId}
                 />
               ) : activeSidebarTab === 'financeiro' ? (
-                userRole?.toLowerCase() === 'colaborador' ? (
-                  <AccessDeniedView />
-                ) : (
+                ['administrador', 'colaborador'].includes(userRole?.toLowerCase() || '') ? (
                   <FinanceiroDashboard initialSubTab={financeiroSubTab} />
+                ) : (
+                  <AccessDeniedView />
                 )
               ) : activeSidebarTab === 'empresa' ? (
-                userRole?.toLowerCase() === 'colaborador' ? (
-                  <AccessDeniedView />
-                ) : (
+                userRole?.toLowerCase() === 'administrador' ? (
                   <EmpresaDashboard />
+                ) : (
+                  <AccessDeniedView />
                 )
               ) : null}
             </Suspense>
