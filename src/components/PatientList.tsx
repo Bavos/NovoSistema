@@ -435,10 +435,7 @@ export const PatientList: React.FC<PatientListProps> = ({
           {/* Pagination Buttons */}
           <div className="flex items-center space-x-2">
             <button
-              onClick={() => {
-                alert('Ação disparada no botão: [< Anterior]');
-                fetchPreviousPage();
-              }}
+              onClick={fetchPreviousPage}
               disabled={!hasPreviousPage || loadingPacientes || isLoading}
               className="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-600 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-600 transition-all cursor-pointer flex items-center gap-1 border border-transparent hover:border-slate-200"
               title="Página Anterior"
@@ -446,10 +443,7 @@ export const PatientList: React.FC<PatientListProps> = ({
               [&lt; Anterior]
             </button>
             <button
-              onClick={() => {
-                alert('Ação disparada no botão: [Próxima >]');
-                fetchNextPage();
-              }}
+              onClick={fetchNextPage}
               disabled={!hasMore || loadingPacientes || isLoading}
               className="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-600 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-600 transition-all cursor-pointer flex items-center gap-1 border border-transparent hover:border-slate-200"
               title="Próxima Página"

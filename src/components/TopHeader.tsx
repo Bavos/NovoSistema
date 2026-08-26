@@ -12,6 +12,7 @@ import { db } from '../lib/firebase';
 interface TopHeaderProps {
   isSidebarExpanded: boolean;
   setIsSidebarExpanded: (expanded: boolean) => void;
+  pageTitle?: string;
   onSelectPatientRedirect?: (pac: any) => void;
   onSelectProfRedirect?: (profId: string) => void;
 }
@@ -19,6 +20,7 @@ interface TopHeaderProps {
 export const TopHeader: React.FC<TopHeaderProps> = ({
   isSidebarExpanded,
   setIsSidebarExpanded,
+  pageTitle,
 }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -65,29 +67,28 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   };
 
   return (
-    <header className="h-16 bg-off-white/95 backdrop-blur-md border-b border-[#254A34]/20 flex items-center justify-between px-6 w-full sticky top-0 z-50 shadow-xs" id="top-header">
+    <header className="h-16 md:h-18 bg-off-white/95 backdrop-blur-md border-b border-[#254A34]/20 flex flex-wrap sm:flex-nowrap items-center justify-between px-4 sm:px-6 md:px-8 lg:px-10 w-full sticky top-0 z-50 shadow-xs gap-3 md:gap-6" id="top-header">
       {/* Brand & Menu section */}
-      <div className="flex items-center space-x-4 shrink-0">
+      <div className="flex items-center space-x-2 sm:space-x-3 md:space-x-4 shrink-0 min-w-0">
         <button
           onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
-          className="p-2 hover:bg-[#e8e4db] rounded-full text-forest-green transition-colors md:hidden"
+          className="p-2 hover:bg-[#e8e4db] rounded-full text-forest-green transition-colors md:hidden shrink-0"
           title="Alternar Menu"
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        {empresa?.logoUrl && (
-          <img 
-            src={empresa.logoUrl} 
-            alt="Logo da Empresa" 
-            className="h-12 w-auto object-contain mix-blend-multiply hidden sm:block" 
-          />
+        {pageTitle && (
+          <div className="flex items-center gap-2 text-forest-green max-w-[200px] sm:max-w-xs md:max-w-sm lg:max-w-md truncate">
+            <span className="hidden sm:inline-block text-[11px] font-mono font-bold uppercase tracking-wider text-mustard-gold shrink-0">Módulo:</span>
+            <span className="text-xs sm:text-sm font-bold text-forest-green truncate">{pageTitle}</span>
+          </div>
         )}
       </div>
 
       {/* Control Actions */}
-      <div className="flex items-center space-x-3 sm:space-x-4 shrink-0">
+      <div className="flex items-center space-x-2 sm:space-x-3 md:space-x-4 lg:space-x-5 shrink-0">
         {/* Modo de Testes / Sandbox Toggle Switch */}
         <button
           type="button"
@@ -98,7 +99,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               ? 'Modo de Testes ATIVADO — Clique para alternar para o banco real'
               : 'Modo de Testes DESATIVADO — Clique para ativar o modo de testes local'
           }
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all duration-200 select-none cursor-pointer ${
+          className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full border transition-all duration-200 select-none cursor-pointer shrink-0 ${
             isTestMode
               ? 'bg-amber-100/90 border-amber-400 text-amber-950 shadow-xs ring-2 ring-amber-400/30 hover:bg-amber-200/90'
               : 'bg-[#e8e4db]/60 border-forest-green/15 text-forest-green/80 hover:border-forest-green/30 hover:bg-[#e8e4db]'
@@ -127,7 +128,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         </button>
 
         {/* Notification Center */}
-        <div className="relative">
+        <div className="relative shrink-0">
           <button
             onClick={() => {
               setShowNotifications(!showNotifications);
@@ -142,7 +143,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           </button>
 
           {showNotifications && (
-            <div className="absolute right-0 mt-2 w-80 bg-white border border-forest-green/10 rounded-2xl shadow-xl z-50 overflow-hidden" id="notification-dropdown">
+            <div className="absolute right-0 top-full mt-2 w-80 bg-white border border-forest-green/10 rounded-2xl shadow-xl z-50 overflow-hidden" id="notification-dropdown">
               <div className="bg-[#e8e4db] py-2.5 px-4 border-b border-forest-green/10 flex justify-between items-center">
                 <span className="text-xs font-semibold text-forest-green">Notificações Recentes</span>
                 <span className="text-[10px] bg-mustard-gold text-white font-medium px-2 py-0.5 rounded-full">3 Novas</span>
@@ -168,8 +169,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         </div>
 
         {/* User Info & Dropdown */}
-        <div className="relative flex items-center space-x-1">
-          <div className="hidden lg:flex flex-col text-right mr-1">
+        <div className="relative shrink-0 flex items-center space-x-1 sm:space-x-2">
+          <div className="hidden lg:flex flex-col text-right mr-1.5">
             <span className="text-xs font-semibold text-forest-green leading-3">{displayName}</span>
             <span className="text-[10px] text-forest-green/60 mt-0.5">{displayEmail}</span>
           </div>
@@ -190,7 +191,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           </button>
 
           {showDropdown && (
-            <div className="absolute right-0 top-11 w-52 bg-white border border-forest-green/10 rounded-2xl shadow-xl z-50 overflow-hidden py-1" id="user-menu-dropdown">
+            <div className="absolute right-0 top-full mt-2 w-52 bg-white border border-forest-green/10 rounded-2xl shadow-xl z-50 overflow-hidden py-1" id="user-menu-dropdown">
               <div className="px-4 py-2.5 border-b border-forest-green/10 bg-off-white">
                 <p className="text-xs font-semibold text-forest-green line-clamp-1">{displayName}</p>
                 <p className="text-[9px] text-forest-green/60 truncate mt-0.5">{displayEmail}</p>

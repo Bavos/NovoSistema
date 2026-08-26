@@ -3616,12 +3616,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
   return (
     <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 space-y-6" id="patient-record-container">
-      {/* Return       <div className="flex items-center justify-between">
+      {/* Return */}
+      <div className="flex items-center justify-between">
         <button
-          onClick={(e) => {
-            alert('Ação disparada no botão: ← Voltar');
-            onBack(e);
-          }}
+          onClick={onBack}
           className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded hover:bg-slate-50 transition-colors flex items-center space-x-1"
           id="btn-voltar-listagem"
         >
@@ -3658,7 +3656,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       {/* Header of the Prontuário Consolidado (Single Header Flex) */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-6 border-b border-slate-200 gap-4 mb-6" id="cons-header-paciente">
         {/* Lado Esquerdo: Identificação do Paciente */}
-        <div className="space-y-2 text-left">
+        <div className="space-y-2 text-left min-w-0">
           <div className="flex flex-wrap items-center gap-2.5">
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight" id="prontuario-title-novo">
               {nome}
@@ -3763,10 +3761,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
           <nav className="border-b border-gray-200 flex overflow-x-auto whitespace-nowrap gap-6 pb-0 w-full no-scrollbar md:flex-nowrap md:overflow-x-auto">
             <button
               type="button"
-              onClick={() => {
-                alert('Ação disparada no botão: Geral & Contato');
-                setActiveTab('geral');
-              }}
+              onClick={() => setActiveTab('geral')}
               className={`shrink-0 flex items-center space-x-1.5 pb-2.5 px-1 text-xs md:text-sm font-semibold transition-all border-b-2 ${
                 activeTab === 'geral'
                   ? 'border-emerald-500 text-emerald-600 font-bold bg-transparent'
@@ -3778,10 +3773,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             </button>
             <button
               type="button"
-              onClick={() => {
-                alert('Ação disparada no botão: Endereço');
-                setActiveTab('endereco');
-              }}
+              onClick={() => setActiveTab('endereco')}
               className={`shrink-0 flex items-center space-x-1.5 pb-2.5 px-1 text-xs md:text-sm font-semibold transition-all border-b-2 ${
                 activeTab === 'endereco'
                   ? 'border-emerald-500 text-emerald-600 font-bold bg-transparent'
@@ -3793,10 +3785,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             </button>
             <button
               type="button"
-              onClick={() => {
-                alert('Ação disparada no botão: Info Médica');
-                setActiveTab('medico');
-              }}
+              onClick={() => setActiveTab('medico')}
               className={`shrink-0 flex items-center space-x-1.5 pb-2.5 px-1 text-xs md:text-sm font-semibold transition-all border-b-2 ${
                 activeTab === 'medico'
                   ? 'border-emerald-500 text-emerald-600 font-bold bg-transparent'
@@ -3809,10 +3798,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             {!isColaborador && (
               <button
                 type="button"
-                onClick={() => {
-                  alert('Ação disparada no botão: Plano de Atendimento');
-                  setActiveTab('plano');
-                }}
+                onClick={() => setActiveTab('plano')}
                 className={`shrink-0 flex items-center space-x-1.5 pb-2.5 px-1 text-xs md:text-sm font-semibold transition-all border-b-2 ${
                   activeTab === 'plano'
                     ? 'border-emerald-500 text-emerald-600 font-bold bg-transparent'
@@ -3825,10 +3811,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             )}
             <button
               type="button"
-              onClick={() => {
-                alert('Ação disparada no botão: Agendamento');
-                setActiveTab('agendamento');
-              }}
+              onClick={() => setActiveTab('agendamento')}
               className={`shrink-0 flex items-center space-x-1.5 pb-2.5 px-1 text-xs md:text-sm font-semibold transition-all border-b-2 ${
                 activeTab === 'agendamento'
                   ? 'border-emerald-500 text-emerald-600 font-bold bg-transparent'
@@ -3840,10 +3823,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             </button>
             <button
               type="button"
-              onClick={() => {
-                alert('Ação disparada no botão: Ocorrências');
-                setActiveTab('ocorrencias');
-              }}
+              onClick={() => setActiveTab('ocorrencias')}
               className={`shrink-0 flex items-center space-x-1.5 pb-2.5 px-1 text-xs md:text-sm font-semibold transition-all border-b-2 ${
                 activeTab === 'ocorrencias'
                   ? 'border-emerald-500 text-emerald-600 font-bold bg-transparent'
@@ -8577,11 +8557,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             <div className="bg-slate-50 p-3.5 border-t border-slate-200 text-right print:hidden">
               <button
                 type="button"
-                onClick={() => {
-                  alert('Ação disparada no botão: Retornar ao Prontuário');
-                  setImprimirProntuarioModalOpen(false);
-                }}
-                className="px-5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-705 text-slate-700 text-xs font-bold rounded-lg transition-all cursor-pointer font-sans"
+                onClick={() => setImprimirProntuarioModalOpen(false)}
+                className="px-5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-lg transition-all cursor-pointer font-sans"
               >
                 Retornar ao Prontuário
               </button>

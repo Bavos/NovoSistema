@@ -68,17 +68,18 @@ export const LayoutShell: React.FC<LayoutShellProps> = ({
           <TopHeader
             isSidebarExpanded={isSidebarExpanded}
             setIsSidebarExpanded={setIsSidebarExpanded}
+            pageTitle={pageTitle}
             onSelectPatientRedirect={onSelectPatientRedirect}
             onSelectProfRedirect={onSelectProfRedirect}
           />
         </div>
 
         {/* 6. Universal Content Container (100% Mobile, side-aligned on Desktop) */}
-        <main className="w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 space-y-6 min-w-0 flex-1" id="global-content-container">
+        <main className="w-full max-w-5xl md:max-w-7xl lg:max-w-[1600px] xl:max-w-[1750px] mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-6 md:py-8 lg:py-10 space-y-6 md:space-y-8 min-w-0 flex-1" id="global-content-container">
           {/* ⚠️ Modo de Testes / Sandbox Banner */}
           {isTestMode && (
             <div
-              className="bg-amber-500/10 border-l-4 border-amber-500 text-amber-950 p-3.5 rounded-xl shadow-xs mb-4 flex items-center justify-between gap-3 print:hidden animate-in fade-in slide-in-from-top-2 border border-amber-200"
+              className="bg-amber-500/10 border-l-4 border-amber-500 text-amber-950 p-3.5 md:p-4 rounded-xl shadow-xs mb-4 flex items-center justify-between gap-3 print:hidden animate-in fade-in slide-in-from-top-2 border border-amber-200"
               id="sandbox-mode-active-banner"
             >
               <div className="flex items-center space-x-2 text-xs sm:text-sm font-semibold">
@@ -95,7 +96,7 @@ export const LayoutShell: React.FC<LayoutShellProps> = ({
           )}
 
           {isQuotaExceeded && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 text-red-900 shadow-sm mb-4 print:hidden animate-in fade-in slide-in-from-top-4" id="quota-exceeded-contingency-banner">
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 md:p-5 flex flex-col sm:flex-row items-start sm:items-center gap-3 text-red-900 shadow-sm mb-4 print:hidden animate-in fade-in slide-in-from-top-4" id="quota-exceeded-contingency-banner">
               <AlertCircle className="text-red-600 shrink-0 mt-0.5 sm:mt-0" size={20} />
               <div className="flex-1 text-sm leading-normal">
                 <span className="font-bold">Modo de Contingência Ativo:</span> O banco de dados atingiu o limite de leitura gratuita diária do Firestore. Suas alterações e cadastros serão salvos localmente neste navegador de forma segura.
@@ -111,16 +112,16 @@ export const LayoutShell: React.FC<LayoutShellProps> = ({
             </div>
           )}
           {/* Dashboard Page Header block */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-4 print:hidden" id="page-header-block">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6 border-b border-slate-200 pb-4 md:pb-5 print:hidden" id="page-header-block">
             <div className="space-y-1 min-w-0">
-              <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight flex items-center space-x-2 truncate">
+              <h1 className="text-xl md:text-2xl lg:text-3xl font-black text-slate-900 tracking-tight flex items-center space-x-2 truncate">
                 <span>{pageTitle}</span>
               </h1>
             </div>
 
             {/* Quick KPIs badge or actions slot */}
             {rightHeaderKpi && (
-              <div className="shrink-0" id="header-kpi-slot">
+              <div className="shrink-0 flex flex-wrap items-center gap-2 md:gap-3" id="header-kpi-slot">
                 {rightHeaderKpi}
               </div>
             )}
