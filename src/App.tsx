@@ -78,6 +78,7 @@ const Pacientes = lazy(() => import('./pages/Pacientes').then(m => ({ default: m
 const Profissionais = lazy(() => import('./pages/Profissionais').then(m => ({ default: m.Profissionais })));
 const FinanceiroDashboard = lazy(() => import('./components/SimulatedDashboards').then(m => ({ default: m.FinanceiroDashboard })));
 const EmpresaDashboard = lazy(() => import('./components/SimulatedDashboards').then(m => ({ default: m.EmpresaDashboard })));
+const UserManagement = lazy(() => import('./components/UserManagement').then(m => ({ default: m.UserManagement })));
 
 const PageLoadingFallback: React.FC = () => (
   <div className="flex flex-col items-center justify-center p-12 space-y-3 min-h-[300px]">
@@ -168,9 +169,9 @@ function DashboardContent() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Redirect away from Empresa if role is Colaborador (Empresa is exclusively for Administrador)
+  // Redirect away from Empresa and Usuarios if role is Colaborador (exclusively for Administrador)
   React.useEffect(() => {
-    if (userRole?.toLowerCase() === 'colaborador' && activeSidebarTab === 'empresa') {
+    if (userRole?.toLowerCase() === 'colaborador' && (activeSidebarTab === 'empresa' || activeSidebarTab === 'usuarios')) {
       setActiveSidebarTab('dashboard');
     }
   }, [userRole, activeSidebarTab]);
@@ -183,6 +184,7 @@ function DashboardContent() {
     }
     if (activeSidebarTab === 'profissionais') return 'Gestão de Profissionais';
     if (activeSidebarTab === 'financeiro') return 'Financeiro';
+    if (activeSidebarTab === 'usuarios') return 'Gestão de Usuários';
     if (activeSidebarTab === 'empresa') return 'Informações Gerais';
     return 'CuidarHome';
   };
@@ -321,6 +323,12 @@ function DashboardContent() {
               ) : activeSidebarTab === 'financeiro' ? (
                 ['administrador', 'colaborador'].includes(userRole?.toLowerCase() || '') ? (
                   <FinanceiroDashboard initialSubTab={financeiroSubTab} />
+                ) : (
+                  <AccessDeniedView />
+                )
+              ) : activeSidebarTab === 'usuarios' ? (
+                userRole?.toLowerCase() === 'administrador' ? (
+                  <UserManagement />
                 ) : (
                   <AccessDeniedView />
                 )

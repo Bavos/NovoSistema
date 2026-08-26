@@ -11,6 +11,7 @@ import {
   Calendar,
   DollarSign,
   Building2,
+  UserCheck,
   ChevronRight,
   Menu,
   Activity
@@ -60,12 +61,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'pacientes', label: 'Pacientes', icon: Users },
     { id: 'profissionais', label: 'Profissionais', icon: Briefcase },
     { id: 'financeiro', label: 'Faturas & Pagamentos', icon: DollarSign },
+    { id: 'usuarios', label: 'Usuários', icon: UserCheck },
     { id: 'empresa', label: 'Empresa', icon: Building2 },
   ];
 
-  // Restrict access for 'colaborador' role: Empresa is exclusively for 'Administrador'
+  // Restrict access for 'colaborador' role: Empresa and Usuários are exclusively for 'Administrador'
   const menuItems = allMenuItems.filter(item => {
-    if (userRole?.toLowerCase() === 'colaborador' && item.id === 'empresa') {
+    if (userRole?.toLowerCase() === 'colaborador' && (item.id === 'empresa' || item.id === 'usuarios')) {
       return false;
     }
     return true;
