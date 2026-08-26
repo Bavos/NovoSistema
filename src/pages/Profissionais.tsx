@@ -722,7 +722,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
       return;
     }
 
-    let empresaNome = 'RH Cuidado Domiciliar';
+    let empresaNome = 'RH Gestão Domiciliar';
     let empresaCnpj = '12.345.678/0001-99';
     let empresaEndereco = 'Rua Martins Ferreira, 71';
     try {
@@ -936,7 +936,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
       return;
     }
 
-    let empresaNome = 'RH Cuidado Domiciliar';
+    let empresaNome = 'RH Gestão Domiciliar';
     let empresaCnpj = '12.345.678/0001-99';
     let empresaEndereco = 'Rua Martins Ferreira, 71';
     try {

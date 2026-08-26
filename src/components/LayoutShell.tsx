@@ -29,7 +29,10 @@ export const LayoutShell: React.FC<LayoutShellProps> = ({
   onSelectProfRedirect,
 }) => {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState<boolean>(false);
+  const [isSidebarHovered, setIsSidebarHovered] = useState<boolean>(false);
   const { notification, setNotification, isQuotaExceeded, isTestMode, toggleTestMode } = useFirebase();
+
+  const effectiveExpanded = isSidebarExpanded || isSidebarHovered;
 
   return (
     <div className="min-h-screen bg-off-white text-forest-green font-sans flex overflow-x-clip relative" id="layout-shell-container">
@@ -53,13 +56,15 @@ export const LayoutShell: React.FC<LayoutShellProps> = ({
           }}
           isSidebarExpanded={isSidebarExpanded}
           setIsSidebarExpanded={setIsSidebarExpanded}
+          isHovered={isSidebarHovered}
+          setIsHovered={setIsSidebarHovered}
         />
       </div>
 
       {/* 3. Main Viewport Area */}
       <div
         className={`flex-1 min-h-screen flex flex-col transition-all duration-300 w-full min-w-0 ${
-          isSidebarExpanded ? 'pl-0 md:pl-[240px]' : 'pl-0 md:pl-[64px]'
+          effectiveExpanded ? 'pl-0 md:pl-[240px]' : 'pl-0 md:pl-[64px]'
         }`}
         id="main-viewport-container"
       >
@@ -135,7 +140,7 @@ export const LayoutShell: React.FC<LayoutShellProps> = ({
 
         {/* 7. Global Footer Info Brand */}
         <footer className="py-4 border-t border-slate-200 text-center text-xs text-slate-500 select-none font-mono print:hidden mt-auto">
-          <p>© 2026 CuidarHome S.A. • Todos os direitos reservados • Auditoria Integrada Firestore</p>
+          <p>© 2026 RH Gestão Domiciliar • Todos os direitos reservados • Auditoria Integrada Firestore</p>
         </footer>
       </div>
     </div>

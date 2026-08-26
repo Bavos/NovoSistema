@@ -780,7 +780,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       return;
     }
 
-    let empresaNome = 'RH Cuidado Domiciliar';
+    let empresaNome = 'RH Gestão Domiciliar';
     let empresaCnpj = '12.345.678/0001-99';
     let empresaEndereco = 'Rua Martins Ferreira, 71';
     try {
@@ -939,7 +939,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       return;
     }
 
-    let empresaNome = 'RH Cuidado Domiciliar';
+    let empresaNome = 'RH Gestão Domiciliar';
     let empresaCnpj = '12.345.678/0001-99';
     let empresaEndereco = 'Rua Martins Ferreira, 71';
     try {
@@ -2663,7 +2663,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
     const faturaMaisRecente = faturaMaisRecenteRaw as any;
 
-    let empresaNome = 'RH Cuidado Domiciliar';
+    let empresaNome = 'RH Gestão Domiciliar';
     let empresaCnpj = '12.345.678/0001-99';
     let empresaEndereco = 'Rua Martins Ferreira, 71';
     try {
@@ -2906,7 +2906,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
     const faturaMaisRecente = faturaMaisRecenteRaw as any;
 
-    let empresaNome = 'RH Cuidado Domiciliar';
+    let empresaNome = 'RH Gestão Domiciliar';
     let empresaCnpj = '12.345.678/0001-99';
     let empresaEndereco = 'Rua Martins Ferreira, 71';
     try {
@@ -3226,7 +3226,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       console.warn("Erro ao buscar dados da empresa para PNG, usando fallbacks:", err);
     }
     const fallback = {
-      razaoSocial: 'RH Cuidado Domiciliar',
+      razaoSocial: 'RH Gestão Domiciliar',
       cnpj: '12.345.678/0001-99',
       endereco: 'Rua Martins Ferreira, 71',
       logoUrl: ''
@@ -4777,7 +4777,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
             {activeTab === 'agendamento' && (
               <div className="w-full max-w-6xl mx-auto bg-white rounded-2xl shadow-xl border border-gray-200 p-6 md:p-8 mt-6 mb-12 space-y-4 animate-in fade-in-30 slide-in-from-right-3">
-                {/* Operations Header Buttons Deck - RH Cuidado Domiciliar */}
+                {/* Operations Header Buttons Deck - RH Gestão Domiciliar */}
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-xs space-y-2.5">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block font-sans">🛠️ Controles de Escala Operacional</span>
                   <div className="flex flex-wrap gap-2.5 items-center justify-start">
@@ -6268,7 +6268,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             </div>
 
             <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
-              Estrutura de dados NoSQL/Firestore homologada para faturamento corporativo no portal CuidarHome S.A.
+              Estrutura de dados NoSQL/Firestore homologada para faturamento corporativo no portal RH Gestão Domiciliar S.A.
             </p>
 
             <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 overflow-x-auto max-h-80 text-[11px] text-violet-300 leading-relaxed scrollbar-thin">
@@ -8196,7 +8196,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 <div className="grid grid-cols-2 gap-8 pt-8 text-[11px]">
                   <div className="space-y-4 text-center">
                     <p className="border-t border-slate-400 pt-1.5 font-bold uppercase font-sans text-slate-800">
-                      Coordenadoria de RH Cuidado Domiciliar S.A.
+                      Coordenadoria de RH Gestão Domiciliar S.A.
                     </p>
                     <p className="text-[9px] text-slate-450 text-slate-400 leading-none">Representante Geral Legal Corporativo</p>
                   </div>
@@ -8547,7 +8547,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
                 {/* Termo de Veracidade / Encerramento */}
                 <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[9px] text-slate-400 leading-relaxed font-sans text-left mt-4">
-                  O prontuário acima compreende dados confidenciais e de uso clínico estrito da coordenadoria do RH Cuidado Domiciliar Ltda. em conformidade com as diretivas do CFM (Conselho Federal de Medicina), COFEN e a Lei Geral de Proteção de Dados (LGPD). É de inteira obrigação das partes a confidencialidade e zelo no arquivamento deste registro impresso.
+                  O prontuário acima compreende dados confidenciais e de uso clínico estrito da coordenadoria do RH Gestão Domiciliar Ltda. em conformidade com as diretivas do CFM (Conselho Federal de Medicina), COFEN e a Lei Geral de Proteção de Dados (LGPD). É de inteira obrigação das partes a confidencialidade e zelo no arquivamento deste registro impresso.
                 </div>
 
               </div>

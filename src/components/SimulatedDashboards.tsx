@@ -5645,7 +5645,7 @@ export const EmpresaDashboard: React.FC = () => {
   const { userRole, setNotification, uploadLogo } = useFirebase();
   const isAdmin = userRole?.toLowerCase() === 'administrador';
 
-  const [razaoSocial, setRazaoSocial] = useState('CuidarHome Prestadora de Serviços Médicos S.A.');
+  const [razaoSocial, setRazaoSocial] = useState('RH Gestão Domiciliar');
   const [cnpj, setCnpj] = useState('12.345.678/0001-99');
   const [unidadeOperacao, setUnidadeOperacao] = useState('Rio de Janeiro - RJ (Zona Sul & Barra)');
   const [direcaoGeral, setDirecaoGeral] = useState('Renato B. Z.');

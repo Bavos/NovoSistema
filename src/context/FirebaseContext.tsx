@@ -2267,7 +2267,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       
       await setDoc(doc(db, 'configuracoes_empresa', 'empresa'), {
         id: 'empresa',
-        razaoSocial: 'CuidarHome S.A. Gestão de Cuidado',
+        razaoSocial: 'RH Gestão Domiciliar',
         cnpj: '12.345.678/0001-99',
         endereco: 'Avenida Atlântica, 1720, Copacabana, Rio de Janeiro - RJ',
         logoUrl: '',

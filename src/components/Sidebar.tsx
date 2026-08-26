@@ -26,6 +26,8 @@ interface SidebarProps {
   setActiveTab: (tab: string) => void;
   isSidebarExpanded: boolean;
   setIsSidebarExpanded: (expanded: boolean) => void;
+  isHovered?: boolean;
+  setIsHovered?: (hovered: boolean) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -33,8 +35,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setActiveTab,
   isSidebarExpanded,
   setIsSidebarExpanded,
+  isHovered,
+  setIsHovered,
 }) => {
-  const [isHovered, setIsHovered] = useState(false);
+  const [localHovered, setLocalHovered] = useState(false);
+  const hoverActive = isHovered !== undefined ? isHovered : localHovered;
+  const setHoverActive = setIsHovered !== undefined ? setIsHovered : setLocalHovered;
   const [empresa, setEmpresa] = useState<any>(null);
   const { userRole, user, isQuotaExceeded, isTestMode } = useFirebase();
 
@@ -73,7 +79,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return true;
   });
 
-  const effectiveExpanded = isSidebarExpanded || isHovered;
+  const effectiveExpanded = isSidebarExpanded || hoverActive;
 
   return (
     <motion.aside
@@ -82,8 +88,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       }`}
       animate={{ width: effectiveExpanded ? 240 : 64 }}
       transition={{ duration: 0.3, ease: [0.25, 0.8, 0.25, 1] }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseEnter={() => setHoverActive(true)}
+      onMouseLeave={() => setHoverActive(false)}
       id="sidebar-main"
     >
       {/* Sidebar Header */}

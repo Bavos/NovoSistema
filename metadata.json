@@ -1,5 +1,5 @@
 {
-  "name": "Sistema RH GD",
+  "name": "RH Gestão Domiciliar",
   "description": "Sistema integrado de alta performance para controle de prontuários, alocação de escalas, agendamentos em lote e auditoria financeira de cuidadores.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
