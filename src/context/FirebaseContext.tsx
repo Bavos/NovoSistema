@@ -728,8 +728,27 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               }
             }
           }
-        } catch (e) {
-          console.error("Erro na validação de login:", e);
+        } catch (e: any) {
+          console.warn("Aviso na validação de login (verificando cota/modo contingência):", e);
+          const wasQuota = handleQuotaError(e, 'validação-login');
+          if (wasQuota) {
+            try {
+              const localUsersStr = localStorage.getItem('contingency_users');
+              if (localUsersStr) {
+                const localUsers = JSON.parse(localUsersStr);
+                const localUser = localUsers.find((u: any) => u.email?.toLowerCase() === emailLower);
+                if (localUser && localUser.status === 'Inativo') {
+                  await signOut(auth);
+                  toast.error('Acesso Bloqueado: Esta conta foi desativada ou excluída pelo administrador.');
+                  setUser(null);
+                  setLoading(false);
+                  return;
+                }
+              }
+            } catch (err) {
+              console.warn("Erro ao verificar usuário local em contingência:", err);
+            }
+          }
         }
         setUser(currentUser);
       } else {
@@ -753,11 +772,19 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const activateAccount = async (email: string, pass: string) => {
-    const usersRef = collection(db, 'usuarios_sistema');
-    const q = query(usersRef, where('email', '==', email), where('status', '==', 'Ativo'));
-    const querySnapshot = await getDocs(q);
-    if (querySnapshot.empty) {
+    try {
+      const usersRef = collection(db, 'usuarios_sistema');
+      const q = query(usersRef, where('email', '==', email), where('status', '==', 'Ativo'));
+      const querySnapshot = await getDocs(q);
+      if (querySnapshot.empty) {
         throw new Error('⚠️ Acesso Negado: Este e-mail não está autorizado pelo administrador da empresa.');
+      }
+    } catch (e: any) {
+      if (handleQuotaError(e, 'activateAccount')) {
+        console.warn("Quota exceeded during activateAccount, proceeding with fallback");
+      } else {
+        throw e;
+      }
     }
     const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
     if (userCredential.user) {

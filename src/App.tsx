@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, Suspense, lazy } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { FirebaseProvider, useFirebase } from './context/FirebaseContext';
+import { useAutoLogout } from './hooks/useAutoLogout';
 import { LoginPage } from './pages/LoginPage';
 import { FirstAccessPage } from './pages/FirstAccessPage';
 import { LayoutShell } from './components/LayoutShell';
@@ -141,6 +142,14 @@ function DashboardContent() {
   }, []);
 
   const { pacientes, profissionais, loading, userRole, user, usuariosSistema, isQuotaExceeded } = useFirebase();
+
+  // Monitorar inatividade do usuário e realizar logout automático com segurança
+  useAutoLogout();
+
+  // Manter o título da aba do navegador padronizado
+  useEffect(() => {
+    document.title = 'Sistema RH GD';
+  }, []);
 
   const currentUserProfile = (usuariosSistema || []).find(u => {
     const uEmail = u?.email;
