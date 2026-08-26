@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
-import logo from '../assets/images/rh_logo_v2_1781470281009.jpg';
+import { Logo } from '../components/Logo';
 
 interface FirstAccessPageProps {
   onBackToLogin: () => void;
@@ -30,8 +30,8 @@ export const FirstAccessPage: React.FC<FirstAccessPageProps> = ({ onBackToLogin 
   return (
     <div className="flex justify-center items-center h-screen bg-slate-50">
         <div className="bg-white p-10 rounded-2xl shadow-xl w-full max-w-sm border border-slate-100">
-            <div className="flex justify-center mb-6">
-                <img src={logo} alt="Logo" className="h-20 w-auto" />
+            <div className="flex justify-center mb-4">
+                <Logo className="w-full max-w-[250px] h-auto" />
             </div>
             <h1 className="text-2xl font-bold text-slate-800 mb-6 text-center">Ativar Conta</h1>
             <form onSubmit={handleActivate} className="space-y-4">

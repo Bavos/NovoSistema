@@ -19,7 +19,7 @@ import {
 import { useFirebase } from '../context/FirebaseContext';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import logo from '../assets/images/rh_logo_v2_1781470281009.jpg';
+import logo from '../assets/images/rh_logo_1781469900395.jpg';
 
 interface SidebarProps {
   activeTab: string;
