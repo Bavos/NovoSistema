@@ -753,6 +753,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setUser(currentUser);
       } else {
         setUser(null);
+        try {
+          if (window.location.search || window.location.hash || window.location.pathname !== '/') {
+            window.history.replaceState({}, '', '/');
+          }
+        } catch (e) {
+          console.warn("Erro ao resetar histórico da rota:", e);
+        }
       }
       setLoading(false);
     });
@@ -796,6 +803,11 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const logout = async () => {
+    try {
+      window.history.replaceState({}, '', '/');
+    } catch (e) {
+      console.warn("Erro ao limpar URL no logout:", e);
+    }
     await signOut(auth);
   };
 

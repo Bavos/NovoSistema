@@ -62,6 +62,11 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   ];
 
   const handleSair = async () => {
+    try {
+      window.history.replaceState({}, '', '/');
+    } catch (e) {
+      console.warn("Erro ao limpar URL no logout:", e);
+    }
     await logout();
     setShowDropdown(false);
   };

@@ -28,12 +28,9 @@ export function useAutoLogout(timeoutMs: number = INACTIVITY_TIMEOUT_MS) {
       try {
         console.warn(`[Auto-Logout] Sessão expirada por inatividade (${timeoutMs / 60000} minutos).`);
         
-        // Limpar parâmetros de rota/URL para retornar à tela inicial limpa
+        // Limpar parâmetros de rota/URL e substituir o histórico para '/'
         try {
-          const url = new URL(window.location.href);
-          url.search = '';
-          url.hash = '';
-          window.history.replaceState({}, '', url.toString());
+          window.history.replaceState({}, '', '/');
         } catch (e) {
           console.warn('Erro ao limpar URL no auto-logout:', e);
         }
