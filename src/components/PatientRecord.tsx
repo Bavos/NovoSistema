@@ -230,6 +230,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     isTestMode
   } = useFirebase();
 
+  const lastLoadedPatientIdRef = useRef<string | null>(null);
+  const hasInitializedPlanoTabRef = useRef<string | null>(null);
+
   const handleCopyToClipboard = async (text: string) => {
     if (!text) return;
     try {
@@ -1508,6 +1511,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   // Load patient details into state
   useEffect(() => {
     if (paciente) {
+      if (lastLoadedPatientIdRef.current === paciente.id) {
+        return;
+      }
+      lastLoadedPatientIdRef.current = paciente.id;
       setIsNew(false);
       setNome(paciente.nome);
       setDataNascimento(paciente.dataNascimento);
@@ -1562,6 +1569,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       setPDeactDate(paciente.desativadoEm || null);
       setPDeactReason(paciente.desativadoMotivo || null);
     } else {
+      if (lastLoadedPatientIdRef.current === null) {
+        return;
+      }
+      lastLoadedPatientIdRef.current = null;
       console.log("[PatientRecord] isNew set to true");
       setIsNew(true);
       setNome('');
@@ -1612,8 +1623,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   // Carregamento Inicial (useEffect) do Firestore na montagem da sub-aba 'Plano de Atendimento'
   useEffect(() => {
     if (activeTab === 'plano' && paciente) {
+      if (hasInitializedPlanoTabRef.current === paciente.id) {
+        return;
+      }
       const found = pacientes.find(p => p.id === paciente.id) || paciente;
       if (found && found.planoAtendimento) {
+        hasInitializedPlanoTabRef.current = paciente.id;
         setTipoEscala(found.planoAtendimento.tipoEscala || 'Diurno 12h');
         setHoraInicioPadrao(found.planoAtendimento.horaInicioPadrao || '07:00');
         setValorSugeridoPlantao(formatarMoeda(found.planoAtendimento.valorSugeridoPlantao ?? 150));
@@ -1623,6 +1638,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         setTaxaAdm(formatarMoeda(found.planoAtendimento.taxaAdm ?? 0));
         setTiposPlantao(found.planoAtendimento.tiposPlantao || []);
       }
+    } else if (activeTab !== 'plano') {
+      hasInitializedPlanoTabRef.current = null;
     }
   }, [activeTab, paciente, pacientes, setTipoEscala, setHoraInicioPadrao, setValorSugeridoPlantao, setAjudaCusto, setTaxaAdm, setTiposPlantao]);
 

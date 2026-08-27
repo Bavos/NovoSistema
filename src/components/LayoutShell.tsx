@@ -118,7 +118,7 @@ export const LayoutShell: React.FC<LayoutShellProps> = ({
           )}
           {/* Dashboard Page Header block */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6 border-b border-slate-200 pb-4 md:pb-5 print:hidden" id="page-header-block">
-            <div className="space-y-1 min-w-0">
+            <div className="space-y-1 min-w-0 lg:w-auto">
               <h1 className="text-xl md:text-2xl lg:text-3xl font-black text-slate-900 tracking-tight flex items-center space-x-2 truncate">
                 <span>{pageTitle}</span>
               </h1>
@@ -126,7 +126,7 @@ export const LayoutShell: React.FC<LayoutShellProps> = ({
 
             {/* Quick KPIs badge or actions slot */}
             {rightHeaderKpi && (
-              <div className="shrink-0 flex flex-wrap items-center gap-2 md:gap-3" id="header-kpi-slot">
+              <div className="shrink-0 flex flex-wrap items-center gap-2 md:gap-3 lg:w-auto xl:w-[500px] justify-end" id="header-kpi-slot">
                 {rightHeaderKpi}
               </div>
             )}

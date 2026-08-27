@@ -600,7 +600,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
   const handleSaveOcorrencia = async () => {
     if (!editingProf) return;
     if (!ocDescricao.trim()) {
-      alert('Por favor, detalhe a ocorrência.');
+      toast.error('Por favor, detalhe a ocorrência.');
       return;
     }
 
@@ -1235,7 +1235,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
     e.preventDefault();
     
     if (uploading) {
-      alert("Aguarde o upload dos arquivos finalizar.");
+      toast.error("Aguarde o upload dos arquivos finalizar.");
       return;
     }
 
@@ -1244,7 +1244,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
     const validation = profissionalSchema.safeParse({ ...formData, cpf: cleanCpfVal });
     
     if (!validation.success) {
-      alert(validation.error.issues[0].message);
+      toast.error(validation.error.issues[0].message);
       return;
     }
 
@@ -1510,7 +1510,6 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
     ];
     if (!allowedTypes.includes(arquivoAnexo.type)) {
       toast.error('Formato inválido. Envie apenas JPG, PNG, PDF ou Word (Doc/Docx).');
-      alert('Formato inválido. Envie apenas JPG, PNG, PDF ou Word (Doc/Docx).');
       return;
     }
 
@@ -1597,7 +1596,6 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
       console.error("Erro no upload:", error);
       const errMsg = error?.message || 'Verifique sua conexão ou permissões.';
       toast.error(`Erro ao enviar o arquivo. ${errMsg}`);
-      alert(`Erro ao enviar o arquivo. ${errMsg}`);
     } finally {
       // 4. Verificação de Regras do Storage (Lembrete):
       // LEMBRETE: Verificar as regras do Firebase Storage (storage.rules).
@@ -1731,10 +1729,10 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
           console.log("[BadgeGerador] PNG file downloaded.");
         } catch (err: any) {
           console.error("Erro ao gerar PNG:", err);
-          alert(`Infelizmente erro ao gerar o arquivo PNG: ${err.message || String(err)}`);
+          toast.error(`Infelizmente erro ao gerar o arquivo PNG: ${err.message || String(err)}`);
         }
       } else {
-        alert("Referência do elemento do crachá não encontrada.");
+        toast.error("Referência do elemento do crachá não encontrada.");
       }
       setLoading(false);
     };
@@ -1784,10 +1782,10 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
           console.log("[BadgeGerador] Badge file triggered for download.");
         } catch (err: any) {
           console.error("Erro ao gerar Word:", err);
-          alert(`Infelizmente erro ao gerar o arquivo de download: ${err.message || String(err)}\nPor favor tente novamente.`);
+          toast.error(`Infelizmente erro ao gerar o arquivo de download: ${err.message || String(err)}`);
         }
       } else {
-        alert("Referência do elemento do crachá não encontrada.");
+        toast.error("Referência do elemento do crachá não encontrada.");
       }
       setLoading(false);
     };
@@ -3336,7 +3334,6 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                                         ];
                                         if (!allowedTypes.includes(file.type)) {
                                           toast.error('Formato inválido. Envie apenas JPG, PNG, PDF ou Word (Doc/Docx).');
-                                          alert('Formato inválido. Envie apenas JPG, PNG, PDF ou Word (Doc/Docx).');
                                           e.target.value = '';
                                           setArquivoAnexo(null);
                                           return;

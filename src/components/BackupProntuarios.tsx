@@ -353,7 +353,7 @@ export const BackupProntuarios: React.FC = () => {
       });
 
       if (patientsArray.length === 0 && !isAutomatic) {
-        alert('Nenhum prontuário de paciente foi localizado para salvar no backup.');
+        toast.error('Nenhum prontuário de paciente foi localizado para salvar no backup.');
         setIsCreatingBackup(false);
         return;
       }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, ChevronDown, Check } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import { useFirebase } from '../context/FirebaseContext';
 import { mascaraFinanceira, formatarMoeda, converterMascaraParaNumero } from '../lib/masks';
 
@@ -292,19 +293,19 @@ export const ModalInserirDebito: React.FC<ModalInserirDebitoProps> = ({
 
   const handleAddDebit = async () => {
     if (!newDebitProfId || !newDebitDate || !newDebitValor || !newDebitMotivo) {
-      alert('Por favor, preencha todos os campos obrigatórios.');
+      toast.error('Por favor, preencha todos os campos obrigatórios.');
       return;
     }
 
     const valNumber = converterMascaraParaNumero(newDebitValor);
     if (isNaN(valNumber) || valNumber <= 0) {
-      alert('O valor deve ser um número maior que zero.');
+      toast.error('O valor deve ser um número maior que zero.');
       return;
     }
 
     const profSelected = activeProfissionais.find(p => p.id === newDebitProfId);
     if (!profSelected) {
-      alert('Profissional selecionado inválido ou inativo.');
+      toast.error('Profissional selecionado inválido ou inativo.');
       return;
     }
 
@@ -342,7 +343,7 @@ export const ModalInserirDebito: React.FC<ModalInserirDebitoProps> = ({
       onClose();
     } catch (err) {
       console.error(err);
-      alert('Erro ao gravar débito.');
+      toast.error('Erro ao gravar débito.');
     } finally {
       setIsInsertingDebit(false);
     }

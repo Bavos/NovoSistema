@@ -886,8 +886,18 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     );
 
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
+    const inicioDoMes = `${currentYear}-${currentMonth}-01`;
+
     const unsubscribeAgendamentos = onSnapshot(
-      query(collection(db, 'agendamentos'), orderBy('data', 'desc'), limit(5000)),
+      query(
+        collection(db, 'agendamentos'),
+        where('data', '>=', inicioDoMes),
+        orderBy('data', 'desc'),
+        limit(5000)
+      ),
       (snap) => {
         const list: Agendamento[] = [];
         snap.forEach((d) => list.push({ ...d.data(), id: d.id } as Agendamento));

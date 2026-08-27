@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
 import { Paciente, EscalacaoPlano } from '../types';
 import { formatarMoeda, converterMascaraParaNumero } from '../lib/masks';
@@ -16,26 +16,36 @@ export function usePacienteData(pacienteId: string | null | undefined, initialPa
   const [tiposPlantao, setTiposPlantao] = useState<EscalacaoPlano[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
+  const lastInitializedId = useRef<string | null>(null);
+
   // Simulate Firestore fetch for the specific patient
   useEffect(() => {
     if (pacienteId) {
+      if (lastInitializedId.current === pacienteId) {
+        return;
+      }
       setLoading(true);
       // Simulate network look-up delay from Firestore
       const timer = setTimeout(() => {
         const found = pacientes.find(p => p.id === pacienteId) || initialPaciente;
-        if (found && found.planoAtendimento) {
-          setTipoEscala(found.planoAtendimento.tipoEscala || 'Diurno 12h');
-          setHoraInicioPadrao(found.planoAtendimento.horaInicioPadrao || '07:00');
-          setValorSugeridoPlantao(formatarMoeda(found.planoAtendimento.valorSugeridoPlantao ?? 150));
-          setAjudaCusto(formatarMoeda(found.planoAtendimento.ajudaCusto ?? 0));
-          setValorTransporte(formatarMoeda(found.planoAtendimento.valorTransporte ?? found.planoAtendimento.ajudaCusto ?? 0));
-          setValorAlimentacao(formatarMoeda(found.planoAtendimento.valorAlimentacao ?? 0));
-          setTaxaAdm(formatarMoeda(found.planoAtendimento.taxaAdm ?? 0));
-          setTiposPlantao(found.planoAtendimento.tiposPlantao || []);
+        if (found) {
+          lastInitializedId.current = pacienteId;
+          if (found.planoAtendimento) {
+            setTipoEscala(found.planoAtendimento.tipoEscala || 'Diurno 12h');
+            setHoraInicioPadrao(found.planoAtendimento.horaInicioPadrao || '07:00');
+            setValorSugeridoPlantao(formatarMoeda(found.planoAtendimento.valorSugeridoPlantao ?? 150));
+            setAjudaCusto(formatarMoeda(found.planoAtendimento.ajudaCusto ?? 0));
+            setValorTransporte(formatarMoeda(found.planoAtendimento.valorTransporte ?? found.planoAtendimento.ajudaCusto ?? 0));
+            setValorAlimentacao(formatarMoeda(found.planoAtendimento.valorAlimentacao ?? 0));
+            setTaxaAdm(formatarMoeda(found.planoAtendimento.taxaAdm ?? 0));
+            setTiposPlantao(found.planoAtendimento.tiposPlantao || []);
+          }
         }
         setLoading(false);
       }, 100);
       return () => clearTimeout(timer);
+    } else {
+      lastInitializedId.current = null;
     }
   }, [pacienteId, pacientes, initialPaciente]);
 
