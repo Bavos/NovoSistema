@@ -140,7 +140,7 @@ export const EscalasDashboard: React.FC = () => {
     <div className="space-y-4 animate-in fade-in-30" id="escalas-dashboard">
       {/* Visual Report Header ONLY during print */}
       <div className="hidden print:block border-b-2 border-[#1a3c2e] pb-4 mb-4">
-        <h1 className="text-xl font-bold text-[#1a3c2e] uppercase">SISTEMA RH CUIDADO DOMICILIAR</h1>
+        <h1 className="text-xl font-bold text-[#1a3c2e] uppercase">SISTEMA RH GESTÃO DOMICILIAR</h1>
         <h2 className="text-lg font-black text-slate-800">Relatório de Escala de Plantões Diária</h2>
         <p className="text-xs text-slate-500 mt-1">Visão integrada das escalas ativas para o dia {new Date().toLocaleDateString('pt-BR')}</p>
         <div className="flex gap-4 text-[10px] text-slate-400 mt-2">
@@ -3064,7 +3064,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                     <div className="hidden print:block border-b border-slate-300 pb-4 mb-6">
                       <div className="flex justify-between items-start">
                         <div>
-                          <h1 className="text-xl font-bold text-slate-950 uppercase">SISTEMA RH CUIDADO DOMICILIAR</h1>
+                          <h1 className="text-xl font-bold text-slate-950 uppercase">SISTEMA RH GESTÃO DOMICILIAR</h1>
                           <h2 className="text-base font-black text-slate-800">Relatório de Listagem MEI</h2>
                           <p className="text-xs text-slate-500 mt-1">Período de Referência: {getReferenciaMesNome(referenciaMes)} de {referenciaAno}</p>
                         </div>

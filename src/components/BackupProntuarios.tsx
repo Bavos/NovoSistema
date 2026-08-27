@@ -675,7 +675,7 @@ export const BackupProntuarios: React.FC = () => {
             <Database size={16} />
           </div>
           <div>
-            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-tight">Cuidado Domiciliar: Backup de Prontuários</h3>
+            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-tight">Gestão Domiciliar: Backup de Prontuários</h3>
             <p className="text-[10px] text-slate-400">Guarda periódica automatizada e manual das fichas clínicas na nuvem para contingência externa.</p>
           </div>
         </div>
