@@ -14,7 +14,6 @@ interface LayoutShellProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   pageTitle: string;
-  rightHeaderKpi?: React.ReactNode;
   onSelectPatientRedirect?: (pac: any) => void;
   onSelectProfRedirect?: (profId: string) => void;
 }
@@ -24,7 +23,6 @@ export const LayoutShell: React.FC<LayoutShellProps> = ({
   activeTab,
   setActiveTab,
   pageTitle,
-  rightHeaderKpi,
   onSelectPatientRedirect,
   onSelectProfRedirect,
 }) => {
@@ -123,13 +121,6 @@ export const LayoutShell: React.FC<LayoutShellProps> = ({
                 <span>{pageTitle}</span>
               </h1>
             </div>
-
-            {/* Quick KPIs badge or actions slot */}
-            {rightHeaderKpi && (
-              <div className="shrink-0 flex flex-wrap items-center gap-2 md:gap-3 lg:w-auto xl:w-[500px] justify-end" id="header-kpi-slot">
-                {rightHeaderKpi}
-              </div>
-            )}
           </div>
 
           {/* Render Active View Tab Content */}
