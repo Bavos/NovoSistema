@@ -43,6 +43,7 @@ import { toast } from 'react-hot-toast';
 import { showSuccessToast } from './CustomToast';
 import { GlossyButton } from './GlossyButton';
 import { ModalInserirDebito } from './ModalInserirDebito';
+import { Logo } from './Logo';
 
 /* ----------------------------------------------------
  * Tab 2: Profissionais Co-curators
@@ -5447,141 +5448,199 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                             <GlossyButton onClick={() => setViewDoc(null)} variant="gray">Fechar</GlossyButton>
                         </div>
                       </div>
-                      <div id="print-area" ref={faturaRef} className="w-[210mm] p-[10mm] bg-[#fcf8f2] text-black border border-slate-300 mx-auto print:w-full print:p-0 print:border-none print:shadow-none print:m-0">
-                        {/* Header with Company Logo etc */}
-                        <div className="flex justify-between items-start border-b-2 border-[#b8860b] pb-4 mb-6">
+                      <div id="print-area" ref={faturaRef} className="w-[210mm] min-h-[297mm] p-[12mm] bg-white text-slate-800 font-sans border border-slate-200 mx-auto print:w-full print:min-h-0 print:p-0 print:border-none print:shadow-none print:m-0 flex flex-col justify-between" style={{ color: '#1e293b' }}>
+                        <div>
+                          {/* 1. Cabeçalho Corporativo */}
+                          <div className="flex justify-between items-start border-b-2 border-[#1E3A2F] pb-4 mb-5">
                             <div className="flex items-center gap-4">
-                                 {empresa?.logoUrl && (
-                                   <img src={empresa.logoUrl} alt="Logo" className="w-24 h-12 object-contain" />
-                                 )}
-                                 <div className="text-[#1a3c2e]">
-                                   <h2 className="text-xl font-black">{empresa?.razaoSocial || 'EMPRESA PADRÃO'}</h2>
-                                   <p className="text-sm text-gray-600 font-bold mt-1">CNPJ: {empresa?.cnpj || '00.000.000/0000-00'}</p>
-                                   <p className="text-sm text-gray-600 mt-0.5">{empresa?.endereco || 'Endereço Indisponível'}</p>
-                                 </div>
+                              {empresa?.logoUrl ? (
+                                <img src={empresa.logoUrl} alt="Logo" className="h-14 max-h-16 w-auto object-contain shrink-0" />
+                              ) : (
+                                <div className="w-28 shrink-0">
+                                  <Logo className="h-14 w-auto object-contain" />
+                                </div>
+                              )}
+                              <div>
+                                <h2 className="text-base font-extrabold text-[#1E3A2F] tracking-tight leading-tight">
+                                  {empresa?.razaoSocial || 'RH GESTÃO DOMICILIAR LTDA.'}
+                                </h2>
+                                <p className="text-xs text-slate-500 font-semibold mt-0.5">
+                                  CNPJ: {empresa?.cnpj || '00.000.000/0000-00'}
+                                </p>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                  {empresa?.endereco || 'Atendimento Domiciliar Especializado'}
+                                </p>
+                              </div>
                             </div>
-                            <div className="text-right text-[#1a3c2e]">
-                                 <h2 className="text-lg font-black">{viewDoc.type === 'fatura' ? 'FATURA' : 'FOLHA DE PAGAMENTO'}</h2>
-                                 <p className="text-xs font-mono">Nº: {viewDoc.data.numeroFatura || (viewDoc.type === 'folha' ? 'FOLHA-' + viewDoc.data.id.substring(0,6) : 'XXXX')}</p>
+                            <div className="text-right">
+                              <h1 className="text-2xl font-black text-[#1E3A2F] tracking-wide">
+                                {viewDoc.type === 'fatura' ? 'FATURA' : 'FOLHA DE PAGAMENTO'}
+                              </h1>
+                              <p className="text-xs font-mono font-bold text-slate-700 mt-1">
+                                Nº: {viewDoc.data.numeroFatura || (viewDoc.type === 'folha' ? 'FOLHA-' + (viewDoc.data.id ? viewDoc.data.id.substring(0, 6) : 'XXXX') : 'FAT-0000')}
+                              </p>
+                              <p className="text-xs text-slate-500 mt-0.5">
+                                Emissão: {viewDoc.data.dataEmissao ? (viewDoc.data.dataEmissao.includes('T') ? new Date(viewDoc.data.dataEmissao).toLocaleDateString('pt-BR') : viewDoc.data.dataEmissao) : new Date().toLocaleDateString('pt-BR')}
+                              </p>
                             </div>
-                        </div>
-                        {/* Data Grid */}
-                        <div className="grid grid-cols-2 gap-4 mb-6 text-[10px]">
-                            <div><span className="font-bold">Emissão:</span> {new Date(viewDoc.data.dataEmissao).toLocaleDateString('pt-BR')}</div>
-                            <div><span className="font-bold">Status:</span> {viewDoc.data.status}</div>
-                            <div><span className="font-bold">{viewDoc.type === 'fatura' ? 'Paciente:' : 'Profissional:'}</span> {viewDoc.type === 'fatura' ? viewDoc.data.nomePaciente : viewDoc.data.nomeProfissional}</div>
-                            <div><span className="font-bold">Valor Total:</span> R$ {valorTotalCorrigido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                        </div>
-                        {/* Plantões Table */}
-                        <table className="w-full text-[10px] border-collapse mb-6">
-                          <thead>
-                            <tr className="bg-[#1a3c2e] text-white border-b-2 border-[#b8860b]">
-                              <th className="p-2 text-left">Data</th>
-                              <th className="p-2 text-left">{viewDoc.type === 'fatura' ? 'Profissional' : 'Paciente'}</th>
-                              <th className="p-2 text-left">Carga Horária</th>
-                              <th className="p-2 text-left">Serviço</th>
-                              <th className="p-2 text-right">Valor</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {plantoesValidos.map((p: any, i: number) => {
-                              const valorLinha = calculateRowValue(p, viewDoc.type);
-                              return (
-                                <tr key={i} className="border-b border-[#b8860b]/30">
-                                  <td className="p-2">{formatDateBR(p.data)}</td>
-                                  <td className="p-2 whitespace-normal break-words">
-                                    {viewDoc.type === 'fatura' 
-                                      ? formatNomeComEspacos(p.profissional || p.nomeProfissional) 
-                                      : formatNomeComEspacos(p.nomePaciente || 'A Definir')
-                                    }
-                                  </td>
-                                  <td className="p-2 font-mono font-medium">{getPlantaoCargaHoraria(p)}</td>
-                                  <td className="p-2">{p.tipoDia || 'Plantão Normal'}</td>
-                                  <td className="p-2 text-right text-[#1a3c2e] font-bold font-mono">R$ {valorLinha.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                          <tfoot>
-                            {viewDoc.type === 'fatura' && somaExtrasDoc > 0 && (
-                              <>
-                                <tr className="font-bold bg-slate-50 text-slate-600">
-                                  <td colSpan={4} className="p-2 text-right uppercase text-[9px]">Soma dos Plantões:</td>
-                                  <td className="p-2 text-right text-slate-700 font-mono">R$ {totalSomaPlantoes.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                                </tr>
-                                <tr className="font-bold bg-blue-50/50 text-blue-900">
-                                  <td colSpan={4} className="p-2 text-right uppercase text-[9px]">Serviços Adicionais:</td>
-                                  <td className="p-2 text-right text-blue-950 font-mono">+ R$ {somaExtrasDoc.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                                </tr>
-                              </>
-                            )}
-                            {viewDoc.type === 'folha' && viewDoc.data.valorTotalDebitos > 0 && (
-                              <>
-                                <tr className="font-bold bg-slate-50 text-slate-600">
-                                  <td colSpan={4} className="p-2 text-right uppercase text-[9px]">Soma dos Plantões:</td>
-                                  <td className="p-2 text-right text-slate-700 font-mono">R$ {totalSomaPlantoes.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                                </tr>
-                                <tr className="font-bold bg-red-50 text-red-600">
-                                  <td colSpan={4} className="p-2 text-right uppercase text-[9px]">Descontos (Débitos):</td>
-                                  <td className="p-2 text-right font-mono">- R$ {viewDoc.data.valorTotalDebitos.toFixed(2)}</td>
-                                </tr>
-                              </>
-                            )}
-                            <tr className="font-bold bg-emerald-50 text-[#1a3c2e] text-xs">
-                              <td colSpan={4} className="p-2 text-right uppercase">TOTAL A PAGAR</td>
-                              <td className="p-2 text-right text-[#1a3c2e] font-black font-mono">
-                                R$ {valorTotalCorrigido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </td>
-                            </tr>
-                          </tfoot>
-                        </table>
+                          </div>
 
-                        {/* Seção de Serviços Adicionais / Materiais na Fatura */}
-                        {viewDoc.type === 'fatura' && (
-                          <div className="mb-6">
-                            <h4 className="font-black text-xs uppercase text-[#1a3c2e] border-b border-[#b8860b] pb-1 mb-2">
-                              Serviços Adicionais / Materiais
-                            </h4>
-                            <table className="w-full text-[10px] border-collapse">
+                          {/* 2. Box de Identificação - Dois Cards Informativos */}
+                          <div className="grid grid-cols-2 gap-3 mb-5">
+                            {/* Card 1: Paciente / Profissional & Período de Atendimento */}
+                            <div className="bg-[#F8FAF9] border border-slate-200/80 rounded-xl p-3.5 flex flex-col justify-between">
+                              <div>
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                                  Identificação do Atendimento
+                                </span>
+                                <p className="text-xs text-slate-500 font-medium">
+                                  {viewDoc.type === 'fatura' ? 'Paciente' : 'Profissional'}:
+                                </p>
+                                <p className="text-sm font-bold text-slate-900 leading-tight">
+                                  {viewDoc.type === 'fatura' ? viewDoc.data.nomePaciente : viewDoc.data.nomeProfissional}
+                                </p>
+                              </div>
+                              <div className="mt-2.5 pt-2 border-t border-slate-200/60 text-xs text-slate-600 flex items-center justify-between">
+                                <span className="text-slate-500 font-medium">Período:</span>
+                                <span className="font-semibold text-slate-800">
+                                  {plantoesValidos.length > 0
+                                    ? `${formatDateBR(plantoesValidos[0].data)} a ${formatDateBR(plantoesValidos[plantoesValidos.length - 1].data)}`
+                                    : 'Período Mensal'}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Card 2: Status & Valor Previsto */}
+                            <div className="bg-[#F8FAF9] border border-slate-200/80 rounded-xl p-3.5 flex flex-col justify-between">
+                              <div className="flex justify-between items-start">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                  Status e Consolidação
+                                </span>
+                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-emerald-100/80 text-emerald-800 border border-emerald-300/60">
+                                  {viewDoc.data.status || 'Emitida'}
+                                </span>
+                              </div>
+                              <div className="mt-2 text-right">
+                                <span className="text-[11px] text-slate-500 font-medium block">Valor Total Previsto:</span>
+                                <p className="text-xl font-black text-[#1E3A2F] font-mono leading-none mt-1">
+                                  R$ {valorTotalCorrigido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* 3. Tabela de Escalas / Plantões */}
+                          <div className="rounded-lg overflow-hidden border border-slate-200 mb-5">
+                            <table className="w-full text-xs border-collapse">
                               <thead>
-                                <tr className="bg-[#1a3c2e] text-white border-b-2 border-[#b8860b]">
-                                  <th className="p-2 text-left">Data</th>
-                                  <th className="p-2 text-left">Descrição</th>
-                                  <th className="p-2 text-right">Valor</th>
+                                <tr className="bg-[#1E3A2F] text-white">
+                                  <th className="py-2.5 px-3 text-center font-semibold text-[11px] uppercase tracking-wider w-[90px]">Data</th>
+                                  <th className="py-2.5 px-3 text-left font-semibold text-[11px] uppercase tracking-wider min-w-[170px]">
+                                    {viewDoc.type === 'fatura' ? 'Profissional' : 'Paciente'}
+                                  </th>
+                                  <th className="py-2.5 px-3 text-center font-semibold text-[11px] uppercase tracking-wider w-[100px]">Carga Horária</th>
+                                  <th className="py-2.5 px-3 text-center font-semibold text-[11px] uppercase tracking-wider w-[120px]">Serviço</th>
+                                  <th className="py-2.5 px-3 text-right font-semibold text-[11px] uppercase tracking-wider whitespace-nowrap min-w-[110px] w-[120px]">Valor (R$)</th>
                                 </tr>
                               </thead>
-                              <tbody>
-                                {servicosExtrasDoc.length > 0 ? (
-                                  servicosExtrasDoc.map((s: any, idx: number) => (
-                                    <tr key={s.id || idx} className="border-b border-[#b8860b]/30">
-                                      <td className="p-2 font-mono">{formatDateBR(s.data)}</td>
-                                      <td className="p-2 font-semibold text-slate-800">{s.descricao}</td>
-                                      <td className="p-2 text-right text-[#1a3c2e] font-bold font-mono">
+                              <tbody className="divide-y divide-[#E5E7EB]">
+                                {plantoesValidos.map((p: any, i: number) => {
+                                  const valorLinha = calculateRowValue(p, viewDoc.type);
+                                  return (
+                                    <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-[#F9FAFB]'}>
+                                      <td className="py-2 px-3 text-center font-mono text-slate-700">{formatDateBR(p.data)}</td>
+                                      <td className="py-2 px-3 text-left font-medium text-slate-800 whitespace-normal break-words">
+                                        {viewDoc.type === 'fatura' 
+                                          ? formatNomeComEspacos(p.profissional || p.nomeProfissional) 
+                                          : formatNomeComEspacos(p.nomePaciente || 'A Definir')
+                                        }
+                                      </td>
+                                      <td className="py-2 px-3 text-center font-mono text-slate-600 font-medium">{getPlantaoCargaHoraria(p)}</td>
+                                      <td className="py-2 px-3 text-center text-slate-600">{p.tipoDia || 'Plantão Normal'}</td>
+                                      <td className="py-2 px-3 text-right text-slate-900 font-bold font-mono whitespace-nowrap">
+                                        R$ {valorLinha.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+
+                          {/* Seção de Serviços Adicionais / Materiais na Fatura */}
+                          {viewDoc.type === 'fatura' && servicosExtrasDoc.length > 0 && (
+                            <div className="rounded-lg overflow-hidden border border-slate-200 mb-5">
+                              <div className="bg-[#1E3A2F] text-white px-3 py-1.5 font-bold text-[11px] uppercase tracking-wider">
+                                Serviços Adicionais / Materiais
+                              </div>
+                              <table className="w-full text-xs border-collapse">
+                                <thead>
+                                  <tr className="bg-slate-100 text-slate-700 text-[10px] uppercase font-bold border-b border-slate-200">
+                                    <th className="py-1.5 px-3 text-center w-[90px]">Data</th>
+                                    <th className="py-1.5 px-3 text-left">Descrição</th>
+                                    <th className="py-1.5 px-3 text-right whitespace-nowrap w-[120px]">Valor (R$)</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-[#E5E7EB]">
+                                  {servicosExtrasDoc.map((s: any, idx: number) => (
+                                    <tr key={s.id || idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-[#F9FAFB]'}>
+                                      <td className="py-1.5 px-3 text-center font-mono text-slate-700">{formatDateBR(s.data)}</td>
+                                      <td className="py-1.5 px-3 text-left font-medium text-slate-800">{s.descricao}</td>
+                                      <td className="py-1.5 px-3 text-right text-slate-900 font-bold font-mono whitespace-nowrap">
                                         R$ {(Number(s.valor) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                       </td>
                                     </tr>
-                                  ))
-                                ) : (
-                                  <tr>
-                                    <td colSpan={3} className="p-2 text-center text-slate-400 italic">
-                                      Nenhum serviço adicional registrado neste período.
-                                    </td>
-                                  </tr>
-                                )}
-                              </tbody>
-                              {servicosExtrasDoc.length > 0 && (
-                                <tfoot>
-                                  <tr className="font-bold bg-blue-50/50 text-[#1a3c2e]">
-                                    <td colSpan={2} className="p-2 text-right uppercase text-[9px]">Soma dos Serviços Adicionais:</td>
-                                    <td className="p-2 text-right font-mono font-bold">
-                                      R$ {somaExtrasDoc.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    </td>
-                                  </tr>
-                                </tfoot>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+
+                          {/* Seção de Descontos / Débitos na Folha */}
+                          {viewDoc.type === 'folha' && viewDoc.data.valorTotalDebitos > 0 && (
+                            <div className="rounded-lg overflow-hidden border border-red-200 mb-5">
+                              <div className="bg-red-800 text-white px-3 py-1.5 font-bold text-[11px] uppercase tracking-wider">
+                                Descontos / Débitos Aplicados
+                              </div>
+                              <div className="p-3 bg-red-50/50 flex justify-between items-center text-xs">
+                                <span className="text-red-900 font-medium">Total de Débitos / Descontos da Folha:</span>
+                                <span className="font-mono font-bold text-red-700 whitespace-nowrap">
+                                  - R$ {Number(viewDoc.data.valorTotalDebitos || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 4. Totalizador */}
+                          <div className="flex justify-end mb-6">
+                            <div className="bg-[#F8FAF9] border border-slate-200/90 rounded-xl p-4 text-right min-w-[240px] shadow-sm">
+                              {viewDoc.type === 'fatura' && servicosExtrasDoc.length > 0 && (
+                                <div className="text-[11px] text-slate-600 mb-1 flex justify-between gap-4">
+                                  <span>Soma Plantões:</span>
+                                  <span className="font-mono">R$ {totalSomaPlantoes.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                </div>
                               )}
-                            </table>
+                              {viewDoc.type === 'fatura' && servicosExtrasDoc.length > 0 && (
+                                <div className="text-[11px] text-slate-600 mb-2 flex justify-between gap-4 pb-1.5 border-b border-slate-200">
+                                  <span>Serviços Extras:</span>
+                                  <span className="font-mono">+ R$ {somaExtrasDoc.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                </div>
+                              )}
+                              <span className="text-[10px] font-extrabold uppercase text-slate-500 tracking-wider block">
+                                VALOR TOTAL {viewDoc.type === 'fatura' ? 'DA FATURA' : 'LÍQUIDO'}
+                              </span>
+                              <span className="text-2xl font-black text-[#1E3A2F] font-mono block mt-0.5">
+                                R$ {valorTotalCorrigido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            </div>
                           </div>
-                        )}
+                        </div>
+
+                        {/* 4. Rodapé Corporativo */}
+                        <div className="pt-3 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-400">
+                          <span>Documento gerado eletronicamente pelo Sistema RH Gestão Domiciliar</span>
+                          <span>Página 1 de 1</span>
+                        </div>
                       </div>
                   </div>
               </div>

@@ -13,6 +13,7 @@ import { usePacienteData } from '../hooks/usePacienteData';
 import { sanitizeClonedDocForHtml2Canvas, exportCanvasToA4PDF } from '../lib/html2canvasSanitizer';
 import { ModalInserirDebito, DadosAtalhoCuringa } from './ModalInserirDebito';
 import { CardBase, DataGrid, DataField, SoftBadge } from './ui/DesignSystem';
+import { Logo } from './Logo';
 import { pacienteSchema } from '../schemas/validationSchemas';
 import { mascaraCPF, mascaraTelefone, mascaraCEP, mascaraMesAno, validarCPF, mascaraAltura, mascaraPeso, mascaraFinanceira, formatarMoeda, converterMascaraParaNumero } from '../lib/masks';
 import {
@@ -9410,75 +9411,142 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
         return (
           <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', width: '210mm', pointerEvents: 'none' }}>
-            <div ref={tempFaturaRef} className="w-[210mm] p-[10mm] bg-[#fcf8f2] text-black border border-slate-300 font-sans" style={{ color: '#1a3c2e' }}>
-              {/* Header with Company Logo etc */}
-              <div className="flex justify-between items-start border-b-2 border-[#b8860b] pb-4 mb-6">
+            <div ref={tempFaturaRef} className="w-[210mm] min-h-[297mm] p-[12mm] bg-white text-slate-800 font-sans border border-slate-200 mx-auto flex flex-col justify-between" style={{ color: '#1e293b' }}>
+              <div>
+                {/* 1. Cabeçalho Corporativo */}
+                <div className="flex justify-between items-start border-b-2 border-[#1E3A2F] pb-4 mb-5">
                   <div className="flex items-center gap-4">
-                       {empresaInfo?.logoUrl && (
-                         <img src={empresaInfo.logoUrl} alt="Logo" className="w-24 h-12 object-contain" />
-                       )}
-                       <div className="text-[#1a3c2e]">
-                         <h2 className="text-xl font-black">{empresaInfo?.razaoSocial || 'EMPRESA PADRÃO'}</h2>
-                         <p className="text-sm text-gray-600 font-bold mt-1">CNPJ: {empresaInfo?.cnpj || '00.000.000/0000-00'}</p>
-                         <p className="text-sm text-gray-600 mt-0.5">{empresaInfo?.endereco || 'Endereço Indisponível'}</p>
-                       </div>
+                    {empresaInfo?.logoUrl ? (
+                      <img src={empresaInfo.logoUrl} alt="Logo" className="h-14 max-h-16 w-auto object-contain shrink-0" />
+                    ) : (
+                      <div className="w-28 shrink-0">
+                        <Logo className="h-14 w-auto object-contain" />
+                      </div>
+                    )}
+                    <div>
+                      <h2 className="text-base font-extrabold text-[#1E3A2F] tracking-tight leading-tight">
+                        {empresaInfo?.razaoSocial || 'RH GESTÃO DOMICILIAR LTDA.'}
+                      </h2>
+                      <p className="text-xs text-slate-500 font-semibold mt-0.5">
+                        CNPJ: {empresaInfo?.cnpj || '00.000.000/0000-00'}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {empresaInfo?.endereco || 'Atendimento Domiciliar Especializado'}
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-right text-[#1a3c2e]">
-                       <h2 className="text-lg font-black">FATURA</h2>
-                       <p className="text-xs font-mono">Nº: {faturaParaBaixar.numeroFatura || 'XXXX'}</p>
+                  <div className="text-right">
+                    <h1 className="text-2xl font-black text-[#1E3A2F] tracking-wide">FATURA</h1>
+                    <p className="text-xs font-mono font-bold text-slate-700 mt-1">
+                      Nº: {faturaParaBaixar.numeroFatura || 'FAT-0000'}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Emissão: {faturaParaBaixar.dataEmissao ? (faturaParaBaixar.dataEmissao.includes('T') ? new Date(faturaParaBaixar.dataEmissao).toLocaleDateString('pt-BR') : faturaParaBaixar.dataEmissao) : new Date().toLocaleDateString('pt-BR')}
+                    </p>
                   </div>
-              </div>
-              {/* Data Grid */}
-              <div className="grid grid-cols-2 gap-4 mb-6 text-[11px]">
-                  <div><span className="font-bold">Emissão:</span> {faturaParaBaixar.dataEmissao ? (faturaParaBaixar.dataEmissao.includes('T') ? new Date(faturaParaBaixar.dataEmissao).toLocaleDateString('pt-BR') : faturaParaBaixar.dataEmissao) : ''}</div>
-                  <div><span className="font-bold">Status:</span> {faturaParaBaixar.status}</div>
-                  <div><span className="font-bold">Paciente:</span> {faturaParaBaixar.nomePaciente || paciente?.nome || ''}</div>
-                  <div><span className="font-bold">Valor Total:</span> R$ {totalSomaPlantoes.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-              </div>
-              {/* Plantões Table */}
-              <table className="w-full text-[11px] border-collapse mb-6">
-                <thead>
-                  <tr className="bg-[#1a3c2e] text-white border-b-2 border-[#b8860b]">
-                    <th className="p-2 text-left">Data</th>
-                    <th className="p-2 text-left">Profissional</th>
-                    <th className="p-2 text-left">Carga Horária</th>
-                    <th className="p-2 text-left">Serviço</th>
-                    <th className="p-2 text-right">Valor</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {plantoesValidos.map((p: any, i: number) => {
-                    const valorLinha = getFaturaRowVal(p);
-                    const formatDateBR = (dateStr: string) => {
-                      if (!dateStr) return '';
-                      if (dateStr.includes('-')) {
-                        return dateStr.split('-').reverse().join('/');
-                      }
-                      return dateStr;
-                    };
+                </div>
 
-                    return (
-                      <tr key={i} className="border-b border-[#b8860b]/30">
-                        <td className="p-2">{formatDateBR(p.data)}</td>
-                        <td className="p-2 whitespace-normal break-words">{formatNomeComEspacos(p.profissional || p.nomeProfissional)}</td>
-                        <td className="p-2 font-mono font-medium">{getPlantaoCargaHoraria(p)}</td>
-                        <td className="p-2">{p.tipoDia || 'Plantão Normal'}</td>
-                        <td className="p-2 text-right text-[#1a3c2e] font-bold font-mono">
-                          R$ {valorLinha.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
+                {/* 2. Box de Identificação - Dois Cards Informativos */}
+                <div className="grid grid-cols-2 gap-3 mb-5">
+                  {/* Card 1: Paciente & Período de Atendimento */}
+                  <div className="bg-[#F8FAF9] border border-slate-200/80 rounded-xl p-3.5 flex flex-col justify-between">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                        Identificação do Atendimento
+                      </span>
+                      <p className="text-xs text-slate-500 font-medium">Paciente:</p>
+                      <p className="text-sm font-bold text-slate-900 leading-tight">
+                        {faturaParaBaixar.nomePaciente || paciente?.nome || 'Paciente'}
+                      </p>
+                    </div>
+                    <div className="mt-2.5 pt-2 border-t border-slate-200/60 text-xs text-slate-600 flex items-center justify-between">
+                      <span className="text-slate-500 font-medium">Período:</span>
+                      <span className="font-semibold text-slate-800">
+                        {plantoesValidos.length > 0
+                          ? `${(plantoesValidos[0].data || '').split('-').reverse().join('/')} a ${(plantoesValidos[plantoesValidos.length - 1].data || '').split('-').reverse().join('/')}`
+                          : 'Período Mensal'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Status & Valor Previsto */}
+                  <div className="bg-[#F8FAF9] border border-slate-200/80 rounded-xl p-3.5 flex flex-col justify-between">
+                    <div className="flex justify-between items-start">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        Status e Consolidação
+                      </span>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-emerald-100/80 text-emerald-800 border border-emerald-300/60">
+                        {faturaParaBaixar.status || 'Emitida'}
+                      </span>
+                    </div>
+                    <div className="mt-2 text-right">
+                      <span className="text-[11px] text-slate-500 font-medium block">Valor Total Previsto:</span>
+                      <p className="text-xl font-black text-[#1E3A2F] font-mono leading-none mt-1">
+                        R$ {(faturaParaBaixar.valorTotal || faturaParaBaixar.valorTotalFatura || totalSomaPlantoes).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Tabela de Escalas / Plantões */}
+                <div className="rounded-lg overflow-hidden border border-slate-200 mb-5">
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-[#1E3A2F] text-white">
+                        <th className="py-2.5 px-3 text-center font-semibold text-[11px] uppercase tracking-wider w-[90px]">Data</th>
+                        <th className="py-2.5 px-3 text-left font-semibold text-[11px] uppercase tracking-wider min-w-[170px]">Profissional</th>
+                        <th className="py-2.5 px-3 text-center font-semibold text-[11px] uppercase tracking-wider w-[100px]">Carga Horária</th>
+                        <th className="py-2.5 px-3 text-center font-semibold text-[11px] uppercase tracking-wider w-[120px]">Serviço</th>
+                        <th className="py-2.5 px-3 text-right font-semibold text-[11px] uppercase tracking-wider whitespace-nowrap min-w-[110px] w-[120px]">Valor (R$)</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr className="font-bold bg-emerald-50 text-[#1a3c2e] text-xs">
-                    <td colSpan={4} className="p-2 text-right uppercase">TOTAL</td>
-                    <td className="p-2 text-right text-[#1a3c2e] font-black font-mono">
-                      R$ {totalSomaPlantoes.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
+                    </thead>
+                    <tbody className="divide-y divide-[#E5E7EB]">
+                      {plantoesValidos.map((p: any, i: number) => {
+                        const valorLinha = getFaturaRowVal(p);
+                        const formatDateBR = (dateStr: string) => {
+                          if (!dateStr) return '';
+                          if (dateStr.includes('-')) {
+                            return dateStr.split('-').reverse().join('/');
+                          }
+                          return dateStr;
+                        };
+
+                        return (
+                          <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-[#F9FAFB]'}>
+                            <td className="py-2 px-3 text-center font-mono text-slate-700">{formatDateBR(p.data)}</td>
+                            <td className="py-2 px-3 text-left font-medium text-slate-800 whitespace-normal break-words">
+                              {formatNomeComEspacos(p.profissional || p.nomeProfissional)}
+                            </td>
+                            <td className="py-2 px-3 text-center font-mono text-slate-600 font-medium">{getPlantaoCargaHoraria(p)}</td>
+                            <td className="py-2 px-3 text-center text-slate-600">{p.tipoDia || 'Plantão Normal'}</td>
+                            <td className="py-2 px-3 text-right text-slate-900 font-bold font-mono whitespace-nowrap">
+                              R$ {valorLinha.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* 4. Totalizador */}
+                <div className="flex justify-end mb-6">
+                  <div className="bg-[#F8FAF9] border border-slate-200/90 rounded-xl p-4 text-right min-w-[240px] shadow-sm">
+                    <span className="text-[10px] font-extrabold uppercase text-slate-500 tracking-wider block">
+                      VALOR TOTAL DA FATURA
+                    </span>
+                    <span className="text-2xl font-black text-[#1E3A2F] font-mono block mt-0.5">
+                      R$ {(faturaParaBaixar.valorTotal || faturaParaBaixar.valorTotalFatura || totalSomaPlantoes).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. Rodapé Corporativo */}
+              <div className="pt-3 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-400">
+                <span>Documento gerado eletronicamente pelo Sistema RH Gestão Domiciliar</span>
+                <span>Página 1 de 1</span>
+              </div>
             </div>
           </div>
         );
