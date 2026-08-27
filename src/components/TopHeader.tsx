@@ -67,12 +67,12 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   };
 
   return (
-    <header className="h-16 md:h-18 bg-off-white border-b border-forest-green/10 flex flex-nowrap items-center justify-between px-4 sm:px-6 md:px-8 lg:px-10 w-full sticky top-0 z-50 shadow-xs gap-3 md:gap-6" id="top-header">
+    <header className="h-16 md:h-18 bg-off-white border-b border-forest-green/10 flex flex-nowrap items-center justify-between px-4 sm:px-6 md:px-8 lg:px-10 w-full sticky top-0 z-50 shadow-xs gap-2 sm:gap-3 md:gap-6" id="top-header">
       {/* Brand & Menu section */}
       <div className="flex items-center space-x-2 sm:space-x-3 md:space-x-4 shrink-0 min-w-0">
         <button
           onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
-          className="p-2 hover:bg-[#e8e4db] rounded-full text-forest-green transition-colors md:hidden shrink-0"
+          className="w-11 h-11 flex items-center justify-center hover:bg-[#e8e4db] rounded-full text-forest-green transition-colors md:hidden shrink-0"
           title="Alternar Menu"
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -80,7 +80,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           </svg>
         </button>
         {pageTitle && (
-          <div className="flex items-center gap-2 text-forest-green max-w-[200px] sm:max-w-xs md:max-w-sm lg:max-w-md truncate">
+          <div className="flex items-center gap-2 text-forest-green max-w-[80px] min-[380px]:max-w-[120px] min-[450px]:max-w-[180px] sm:max-w-xs md:max-w-sm lg:max-w-md truncate">
             <span className="hidden sm:inline-block text-[11px] font-mono font-bold uppercase tracking-wider text-mustard-gold shrink-0">Módulo:</span>
             <span className="text-xs sm:text-sm font-bold text-forest-green truncate">{pageTitle}</span>
           </div>
@@ -88,7 +88,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
       </div>
 
       {/* Control Actions */}
-      <div className="flex items-center space-x-2 sm:space-x-3 md:space-x-4 lg:space-x-5 shrink-0">
+      <div className="flex items-center pr-2 sm:pr-0 space-x-2 sm:space-x-3 md:space-x-4 lg:space-x-5 shrink-0" id="control-actions-container">
         {/* Modo de Testes / Sandbox Toggle Switch */}
         <button
           type="button"
@@ -99,7 +99,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               ? 'Modo de Testes ATIVADO — Clique para alternar para o banco real'
               : 'Modo de Testes DESATIVADO — Clique para ativar o modo de testes local'
           }
-          className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full border transition-all duration-200 select-none cursor-pointer shrink-0 ${
+          className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 sm:py-1.5 rounded-full border transition-all duration-200 select-none cursor-pointer shrink-0 min-h-[44px] sm:min-h-0 ${
             isTestMode
               ? 'bg-amber-100/90 border-amber-400 text-amber-950 shadow-xs ring-2 ring-amber-400/30 hover:bg-amber-200/90'
               : 'bg-[#e8e4db]/60 border-forest-green/15 text-forest-green/80 hover:border-forest-green/30 hover:bg-[#e8e4db]'
@@ -108,7 +108,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           <span className="text-[11px] font-extrabold tracking-tight hidden sm:inline-block">
             Modo de Testes / Sandbox
           </span>
-          <span className="text-[10px] font-extrabold tracking-tight sm:hidden">
+          <span className="text-[10px] font-extrabold tracking-tight hidden min-[420px]:inline-block sm:hidden">
             Sandbox
           </span>
           <div
@@ -134,12 +134,12 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               setShowNotifications(!showNotifications);
               setShowDropdown(false);
             }}
-            className="p-2 hover:bg-[#e8e4db] rounded-full text-forest-green transition-colors relative"
+            className="w-11 h-11 md:w-10 md:h-10 flex items-center justify-center hover:bg-[#e8e4db] rounded-full text-forest-green transition-colors relative"
             title="Notificações"
             id="notification-bell-btn"
           >
             <Bell size={20} />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-mustard-gold rounded-full"></span>
+            <span className="absolute top-2.5 right-2.5 md:top-2 md:right-2 w-2 h-2 bg-mustard-gold rounded-full"></span>
           </button>
 
           {showNotifications && (
@@ -180,7 +180,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               setShowDropdown(!showDropdown);
               setShowNotifications(false);
             }}
-            className="w-9 h-9 rounded-full bg-white border border-mustard-gold/30 flex items-center justify-center text-forest-green hover:border-mustard-gold transition-all shadow-sm focus:outline-none overflow-hidden"
+            className="w-11 h-11 md:w-9 md:h-9 rounded-full bg-white border border-mustard-gold/30 flex items-center justify-center text-forest-green hover:border-mustard-gold transition-all shadow-sm focus:outline-none overflow-hidden"
             id="user-menu-btn"
           >
             <div className={`w-full h-full flex items-center justify-center font-bold text-off-white text-xs select-none ${

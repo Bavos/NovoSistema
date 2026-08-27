@@ -463,7 +463,7 @@ export const BackupProntuarios: React.FC = () => {
       });
       
     } catch (err: any) {
-      alert('Erro ao salvar configurações de backup: ' + err.message);
+      toast.error('Erro ao salvar configurações de backup: ' + err.message);
     } finally {
       setIsSavingSettings(false);
     }
@@ -493,7 +493,7 @@ export const BackupProntuarios: React.FC = () => {
         description: `Administrador excluiu o log de backup ID: ${id}`
       });
     } catch (err: any) {
-      alert('Erro ao excluir backup: ' + err.message);
+      toast.error('Erro ao excluir backup: ' + err.message);
     }
   };
 
@@ -517,7 +517,7 @@ export const BackupProntuarios: React.FC = () => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (err) {
-      alert('Erro ao ler dados para exportação JSON.');
+      toast.error('Erro ao ler dados para exportação JSON.');
     }
   };
 
@@ -626,7 +626,7 @@ export const BackupProntuarios: React.FC = () => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (err) {
-      alert('Erro ao converter dados para formato CSV.');
+      toast.error('Erro ao converter dados para formato CSV.');
     }
   };
 

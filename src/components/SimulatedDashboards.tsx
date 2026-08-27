@@ -59,7 +59,7 @@ export const ProfissionaisDashboard: React.FC = () => {
           <p className="text-xs text-slate-400">Verifique a disponibilidade, telefones e avaliações técnicas da equipe ativa.</p>
         </div>
         <button
-          onClick={() => alert('Simulação de cadastro de novo profissional')}
+          onClick={() => toast.success('Simulação de cadastro de novo profissional')}
           className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-500 text-white font-medium rounded-lg shadow-lg shadow-emerald-500/40 hover:bg-emerald-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           + Credenciar Profissional
@@ -101,7 +101,7 @@ export const ProfissionaisDashboard: React.FC = () => {
                 {prof.status}
               </span>
               <button
-                onClick={() => alert(`Acessando escala do profissional ${prof.name}`)}
+                onClick={() => toast.success(`Acessando escala do profissional ${prof.name}`)}
                 className="text-blue-600 font-semibold hover:underline"
               >
                 Ver Escala →
@@ -483,7 +483,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   const handleSaveValorMei = async () => {
     const numericValue = parseFloat(tempValorMei || '0');
     if (isNaN(numericValue) || numericValue < 0) {
-      alert("Por favor, digite um valor numérico válido maior ou igual a zero.");
+      toast.error("Por favor, digite um valor numérico válido maior ou igual a zero.");
       return;
     }
     setLoadingValorMei(true);
@@ -495,7 +495,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       showSuccessToast("Valor MEI salvo com sucesso!", "Configuração Salva");
     } catch (err: any) {
       console.error("Error saving valor_mei: ", err);
-      alert("Erro ao salvar o Valor MEI: " + err.message);
+      toast.error("Erro ao salvar o Valor MEI: " + err.message);
     } finally {
       setLoadingValorMei(false);
     }
@@ -756,22 +756,22 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   const handleGerarRelatorios = async () => {
     if (financeTab === 'mei') {
       if (meiProfissionaisSelecionados.length === 0) {
-        alert('Por favor, selecione ao menos um profissional MEI para gerar a listagem.');
+        toast.error('Por favor, selecione ao menos um profissional MEI para gerar a listagem.');
         return;
       }
     } else {
       if (!dataInicial || !dataFinal) {
-        alert('Por favor, preencha ambas as datas.');
+        toast.error('Por favor, preencha ambas as datas.');
         return;
       }
       
       if (financeTab === 'fatura' && !pacienteSelecionado) {
-        alert('Por favor, selecione um paciente para gerar a fatura.');
+        toast.error('Por favor, selecione um paciente para gerar a fatura.');
         return;
       }
 
       if (financeTab === 'pagamento' && !profissionalSelecionado) {
-        alert('Por favor, selecione um profissional para gerar a folha de pagamento.');
+        toast.error('Por favor, selecione um profissional para gerar a folha de pagamento.');
         return;
       }
     }
@@ -807,7 +807,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       });
 
       if (financeTab === 'fatura' && !todasFechadas) {
-        alert('⚠️ Acesso Negado: A escala de um ou mais pacientes precisa de ser consolidada e fechada na aba de Agendamentos antes da emissão da faturação.');
+        toast.error('⚠️ Acesso Negado: A escala de um ou mais pacientes precisa de ser consolidada e fechada na aba de Agendamentos antes da emissão da faturação.');
         setIsGenerating(false);
         return false;
       }
@@ -935,7 +935,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       });
       
       if (financeTab === 'fatura' && !todasFechadas) {
-        alert('⚠️ Acesso Negado: A escala de um ou mais pacientes precisa de ser consolidada e fechada na aba de Agendamentos antes da emissão da faturação.');
+        toast.error('⚠️ Acesso Negado: A escala de um ou mais pacientes precisa de ser consolidada e fechada na aba de Agendamentos antes da emissão da faturação.');
         setIsGenerating(false);
         return; // Abort query result
       }
@@ -1355,7 +1355,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       }
 
       if (faturaExists) {
-        alert('Aviso: A fatura/folha para este período já foi emitida. Para gerar novamente, é necessário excluir o registro atual no Histórico Financeiro.');
+        toast.error('Aviso: A fatura/folha para este período já foi emitida. Para gerar novamente, é necessário excluir o registro atual no Histórico Financeiro.');
         setIsSaving(false);
         return;
       }
@@ -1375,7 +1375,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
 
       // 3. Bloqueio de Emissão Zerada / Negativa
       if (totalFatura <= 0) {
-        alert('Não é possível gerar uma fatura com valor zerado ou negativo.');
+        toast.error('Não é possível gerar uma fatura com valor zerado ou negativo.');
         setIsSaving(false);
         return;
       }
@@ -1402,7 +1402,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       showSuccessToast(`Fatura Nº ${numero} salva com sucesso no Histórico Financeiro!`, 'Fatura Emitida');
     } catch (err) {
       console.error(err);
-      alert('Erro ao salvar fatura.');
+      toast.error('Erro ao salvar fatura.');
     } finally {
       setIsSaving(false);
     }
@@ -1469,7 +1469,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
         }
 
         if (folhaExists) {
-          alert('Aviso: A fatura/folha para este período já foi emitida. Para gerar novamente, é necessário excluir o registro atual no Histórico Financeiro.');
+          toast.error('Aviso: A fatura/folha para este período já foi emitida. Para gerar novamente, é necessário excluir o registro atual no Histórico Financeiro.');
           setIsSaving(false);
           return;
         }
@@ -1534,7 +1534,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
 
         // 3. Bloqueio de Emissão Zerada
         if (valorLiquido <= 0) {
-          alert('Não é possível gerar uma folha com valor zerado ou negativo.');
+          toast.error('Não é possível gerar uma folha com valor zerado ou negativo.');
           setIsSaving(false);
           return;
         }
@@ -1570,11 +1570,11 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
             folhaIdVinculada: savedFolha.id
           });
         }
-        alert(`Folha para ${profName} fechada com sucesso!`);
+        toast.success(`Folha para ${profName} fechada com sucesso!`);
         console.log(`[handleFecharFolhaProfissional] Folha de pagamento criada com sucesso no Firestore (ID: ${savedFolha.id}) para o profissional ${profName}.`);
       } catch (err: any) {
         console.error(`[handleFecharFolhaProfissional] Falha crítica ao salvar folha para o profissional ${profName} na coleção 'folhas_pagamento':`, err);
-        alert(`Erro ao fechar folha de pagamento para ${profName}: ${err.message || err}`);
+        toast.error(`Erro ao fechar folha de pagamento para ${profName}: ${err.message || err}`);
       } finally {
         setIsSaving(false);
       }
@@ -2023,19 +2023,19 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
 
   const handleAddDebit = async () => {
     if (!newDebitProfId || !newDebitDate || !newDebitValor || !newDebitMotivo) {
-      alert('Por favor, preencha todos os campos obrigatórios.');
+      toast.error('Por favor, preencha todos os campos obrigatórios.');
       return;
     }
     
     const valNumber = parseFloat(newDebitValor);
     if (isNaN(valNumber) || valNumber <= 0) {
-      alert('O valor deve ser um número maior que zero.');
+      toast.error('O valor deve ser um número maior que zero.');
       return;
     }
 
     const profSelected = activeProfissionais.find(p => p.id === newDebitProfId);
     if (!profSelected) {
-      alert('Profissional selecionado inválido ou inativo.');
+      toast.error('Profissional selecionado inválido ou inativo.');
       return;
     }
 
@@ -2077,7 +2077,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       setShowDebitModal(false);
     } catch (err) {
       console.error(err);
-      alert('Erro ao gravar débito.');
+      toast.error('Erro ao gravar débito.');
     } finally {
       setIsInsertingDebit(false);
     }
@@ -4560,10 +4560,10 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                 console.log("[FaturaExporter] File downloaded successfully as PDF.");
             } catch (err: any) {
                 console.error("Erro na exportação PDF:", err);
-                alert("Houve um problema ao gerar o PDF.");
+                toast.error("Houve um problema ao gerar o PDF.");
             }
         } else {
-            alert("Referência do elemento do faturamento não encontrada.");
+            toast.error("Referência do elemento do faturamento não encontrada.");
         }
         setLoadingExport(false);
     };
@@ -5713,7 +5713,7 @@ export const EmpresaDashboard: React.FC = () => {
 
   const handleLogoUpload = async (file: File) => {
     if (!isAdmin) {
-      alert("Apenas administradores podem alterar as informações.");
+      toast.error("Apenas administradores podem alterar as informações.");
       return;
     }
     setUploadDiagnostics([]);
@@ -5785,7 +5785,7 @@ export const EmpresaDashboard: React.FC = () => {
       console.error("[Diagnóstico de Erro] Erro retornado no uploadLogo ou Firestore:", err);
       const errMsg = err.message || String(err);
       setDiagnosticError(`Falha ao salvar logo: ${errMsg}`);
-      alert(`Erro ao fazer upload da logo da empresa: ${errMsg}`);
+      toast.error(`Erro ao fazer upload da logo da empresa: ${errMsg}`);
     } finally {
       setIsUploading(false);
     }

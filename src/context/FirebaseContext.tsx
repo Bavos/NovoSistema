@@ -2312,7 +2312,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } catch (err: any) {
       console.error("Error seeding database:", err);
       setNotification("Erro ao popular banco de dados.");
-      alert("Erro ao popular banco de dados: " + (err.message || String(err)));
+      toast.error("Erro ao popular banco de dados: " + (err.message || String(err)));
     }
   };
 

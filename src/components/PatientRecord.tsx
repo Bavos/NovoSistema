@@ -607,21 +607,21 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const handleSaveOcorrencia = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!paciente) {
-      alert('Salve o paciente antes de cadastrar uma ocorrência.');
+      toast.error('Salve o paciente antes de cadastrar uma ocorrência.');
       return;
     }
     const targetPatient = pacientes.find(p => p.id === paciente.id) || paciente;
     if (!targetPatient) {
-      alert('Paciente correspondente não foi encontrado.');
+      toast.error('Paciente correspondente não foi encontrado.');
       return;
     }
 
     if (!ocData) {
-      alert('Selecione uma data para a ocorrência.');
+      toast.error('Selecione uma data para a ocorrência.');
       return;
     }
     if (!ocDescricao.trim()) {
-      alert('Informe a descrição do motivo da ocorrência.');
+      toast.error('Informe a descrição do motivo da ocorrência.');
       return;
     }
 
@@ -1239,7 +1239,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
           setCidade(data.city || cidade);
           setEstado(data.state || estado);
         } else {
-            alert("CEP não encontrado.");
+            toast.error("CEP não encontrado.");
         }
       } catch (err) {
         console.error("Erro ao buscar CEP:", err);
@@ -1830,16 +1830,16 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const handleSavePlanoAtendimento = async () => {
     if (isCurrentlyDeactivated) return;
     if (userRole?.toLowerCase() === 'colaborador') {
-      alert('Acesso Negado: Usuários com perfil Colaborador não possuem permissão para alterar o Plano de Atendimento.');
+      toast.error('Acesso Negado: Usuários com perfil Colaborador não possuem permissão para alterar o Plano de Atendimento.');
       return;
     }
     if (!paciente?.id) {
-      alert('Erro: ID do paciente não fornecido. Por favor, salve primeiro o formulário geral do paciente.');
+      toast.error('Erro: ID do paciente não fornecido. Por favor, salve primeiro o formulário geral do paciente.');
       return;
     }
 
     if (valorSugeridoPlantao === '' || valorTransporte === '' || valorAlimentacao === '' || taxaAdm === '') {
-      alert('Erro de Validação: Ajuste os valores do Plano de Atendimento. Os campos "Valor do Plantão", "Transporte", "Alimentação" e "Taxa Adm" não podem ficar vazios / em branco.');
+      toast.error('Erro de Validação: Ajuste os valores do Plano de Atendimento. Os campos "Valor do Plantão", "Transporte", "Alimentação" e "Taxa Adm" não podem ficar vazios / em branco.');
       return;
     }
 
@@ -1895,7 +1895,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
           });
         } catch (error) {
           console.error("Erro ao deletar agendamento:", error);
-          alert('Erro ao excluir agendamento. Verifique o console.');
+          toast.error('Erro ao excluir agendamento. Verifique o console.');
         }
       }
     });
@@ -1904,11 +1904,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   // Function to delete or clear a configuration/mode of shift (either Principal or Additional) from Plano de Atendimento
   const handleDeletePlantao = (id: string, isPrincipal: boolean) => {
     if (userRole?.toLowerCase() === 'colaborador') {
-      alert('Acesso Negado: Usuários com perfil Colaborador não possuem permissão para realizar alterações no Plano de Atendimento.');
+      toast.error('Acesso Negado: Usuários com perfil Colaborador não possuem permissão para realizar alterações no Plano de Atendimento.');
       return;
     }
     if (!paciente?.id) {
-      alert('Erro: ID do paciente não localizado. Por favor, salve primeiro os dados gerais do paciente.');
+      toast.error('Erro: ID do paciente não localizado. Por favor, salve primeiro os dados gerais do paciente.');
       return;
     }
 
@@ -1981,7 +1981,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
           }
         } catch (error: any) {
           console.error("Erro ao deletar configuracao:", error);
-          alert('Erro ao excluir: ' + error.message);
+          toast.error('Erro ao excluir: ' + error.message);
         }
       }
     });
@@ -2052,7 +2052,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     e.preventDefault();
     if (isCurrentlyDeactivated) return;
     if (!paciente) {
-      alert('Você precisa primeiro salvar o cadastro do paciente para adicionar plantões na escala.');
+      toast.error('Você precisa primeiro salvar o cadastro do paciente para adicionar plantões na escala.');
       return;
     }
     if (!newShiftProf || newShiftProf.trim() === '') {
@@ -2105,9 +2105,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       setNewShiftProf('');
       setNewShiftDatesList([]);
       setNewShiftFeriado(null);
-      alert(datesToSchedule.length > 1 ? `${datesToSchedule.length} plantões agendados com sucesso!` : 'Plantão agendado com sucesso!');
+      toast.success(datesToSchedule.length > 1 ? `${datesToSchedule.length} plantões agendados com sucesso!` : 'Plantão agendado com sucesso!');
     } catch (err: any) {
-      alert('Erro ao agendar plantão.');
+      toast.error('Erro ao agendar plantão.');
       console.error(err);
     }
   };
@@ -2116,7 +2116,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const handleTriggerCancelClick = (shiftId: string) => {
     const originalShift = agendamentos.find((pl) => pl.id === shiftId);
     if (originalShift && originalShift.status === 'Concluido') {
-      alert('Atenção: Este agendamento está CONCLUÍDO (congelado) e não pode ser cancelado ou alterado. Reabra a escala primeiro!');
+      toast.error('Atenção: Este agendamento está CONCLUÍDO (congelado) e não pode ser cancelado ou alterado. Reabra a escala primeiro!');
       return;
     }
     setSelectedShiftForCancel(shiftId);
@@ -2136,7 +2136,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       }
       setCancelShiftModalOpen(false);
       setSelectedShiftForCancel(null);
-      alert('Agendamento cancelado com sucesso.');
+      toast.success('Agendamento cancelado com sucesso.');
     }
   };
 
@@ -3426,7 +3426,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         : (excluirProfName.trim() ? [excluirProfName.trim()] : []);
 
       if (profsToMatch.length === 0) {
-        alert('Selecione ao menos um profissional para remover.');
+        toast.error('Selecione ao menos um profissional para remover.');
         return;
       }
 
@@ -3445,7 +3445,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     }
 
     if (matches.length === 0) {
-      alert('Nenhum agendamento correspondente aos filtros foi encontrado para exclusão.');
+      toast.error('Nenhum agendamento correspondente aos filtros foi encontrado para exclusão.');
       return;
     }
 
@@ -3468,9 +3468,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         try {
           await deleteAgendamentosBatch(matches.map((m) => m.id));
           setExcluirModalOpen(false);
-          alert(`${matches.length} agendamento(s) excluído(s) com sucesso.`);
+          toast.success(`${matches.length} agendamento(s) excluído(s) com sucesso.`);
         } catch (err: any) {
-          alert('Erro ao excluir agendamento: ' + (err.message || String(err)));
+          toast.error('Erro ao excluir agendamento: ' + (err.message || String(err)));
         } finally {
           setIsDeleting(false);
         }
@@ -3493,13 +3493,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       return;
     }
     if (!editShiftDate) {
-      alert('Preencha as informações obrigatórias.');
+      toast.error('Preencha as informações obrigatórias.');
       return;
     }
     if (editingShiftId && paciente) {
       const originalShift = plantoes.find((pl) => pl.id === editingShiftId);
       if (originalShift && originalShift.escalaCongelada) {
-        alert('Atenção: Este plantão está CONGELADO e não pode ser editado. Reabra a escala primeiro!');
+        toast.error('Atenção: Este plantão está CONGELADO e não pode ser editado. Reabra a escala primeiro!');
         return;
       }
       await updatePlantao({
@@ -3514,7 +3514,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       });
       setEditShiftModalOpen(false);
       setEditingShiftId(null);
-      alert('Plantão updated successfully.');
+      toast.success('Plantão atualizado com sucesso.');
     }
   };
 
@@ -4616,7 +4616,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                             disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
                             onClick={() => {
                               if (userRole?.toLowerCase() === 'colaborador') {
-                                alert('Acesso Negado: Usuários com perfil Colaborador não possuem permissão para realizar alterações no Plano de Atendimento.');
+                                toast.error('Acesso Negado: Usuários com perfil Colaborador não possuem permissão para realizar alterações no Plano de Atendimento.');
                                 return;
                               }
                               if (editingSubId) {
@@ -5365,7 +5365,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                               if (!newShiftDatesList.includes(newShiftDate)) {
                                 setNewShiftDatesList([...newShiftDatesList, newShiftDate]);
                               } else {
-                                alert('Esta data já foi incluída na lista.');
+                                toast.error('Esta data já foi incluída na lista.');
                               }
                             }}
                             title="Adicionar esta data na lista de múltiplos plantões"
@@ -5471,13 +5471,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                 type="button"
                                 onClick={() => {
                                   if (!batchStartDate || !batchEndDate) {
-                                    alert('Selecione as datas de início e fim.');
+                                    toast.error('Selecione as datas de início e fim.');
                                     return;
                                   }
                                   const start = new Date(batchStartDate + 'T12:00:00');
                                   const end = new Date(batchEndDate + 'T12:00:00');
                                   if (end < start) {
-                                    alert('A data de término deve ser maior ou igual à data de início.');
+                                    toast.error('A data de término deve ser maior ou igual à data de início.');
                                     return;
                                   }
                                   const tempDates: string[] = [];
@@ -5497,7 +5497,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                     curr.setDate(curr.getDate() + 1);
                                   }
                                   if (tempDates.length === 0) {
-                                    alert('Nenhuma data encontrada correspondente aos dias marcados no período.');
+                                    toast.error('Nenhuma data encontrada correspondente aos dias marcados no período.');
                                   } else {
                                     setNewShiftDatesList([...newShiftDatesList, ...tempDates]);
                                   }
@@ -6874,7 +6874,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                   setSelectedShiftForDetails(null);
                                   setIsConfirmingDelete(false);
                                 } catch (err: any) {
-                                  alert(err.message || "Erro ao excluir o plantão.");
+                                  toast.error(err.message || "Erro ao excluir o plantão.");
                                 }
                               }}
                               className="flex-1 py-1.5 text-xs font-extrabold bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-all text-center shadow-sm cursor-pointer"
@@ -7289,7 +7289,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           setIsEditingDetails(false);
                           showSuccessToast('Plantão atualizado com sucesso!', 'Plantão Atualizado');
                         } catch (err) {
-                          alert('Erro ao atualizar plantão.');
+                          toast.error('Erro ao atualizar plantão.');
                         }
                       }}
                       variant="green"

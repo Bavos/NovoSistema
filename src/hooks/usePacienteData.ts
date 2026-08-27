@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
 import { Paciente, EscalacaoPlano } from '../types';
 import { formatarMoeda, converterMascaraParaNumero } from '../lib/masks';
+import { toast } from 'react-hot-toast';
 
 export function usePacienteData(pacienteId: string | null | undefined, initialPaciente?: Paciente | null) {
   const { pacientes, updatePaciente } = useFirebase();
@@ -71,12 +72,12 @@ export function usePacienteData(pacienteId: string | null | undefined, initialPa
 
   const savePlanoAtendimento = async () => {
     if (!pacienteId) {
-      alert('Erro: ID do paciente não fornecido.');
+      toast.error('Erro: ID do paciente não fornecido.');
       return;
     }
 
     if (valorSugeridoPlantao === '' || valorTransporte === '' || valorAlimentacao === '' || taxaAdm === '') {
-      alert('Erro de Validação: Os campos "Valor do Plantão", "Transporte", "Alimentação" e "Taxa Adm" não podem ficar vazios/em branco.');
+      toast.error('Erro de Validação: Os campos "Valor do Plantão", "Transporte", "Alimentação" e "Taxa Adm" não podem ficar vazios/em branco.');
       return;
     }
 
@@ -95,9 +96,9 @@ export function usePacienteData(pacienteId: string | null | undefined, initialPa
       };
 
       await updateDoc(pacienteId, payload);
-      alert('Plano de Atendimento salvo com sucesso no Firestore!');
+      toast.success('Plano de Atendimento salvo com sucesso no Firestore!');
     } catch (error: any) {
-      alert('Erro ao persistir plano de Atendimento: ' + error.message);
+      toast.error('Erro ao persistir plano de Atendimento: ' + error.message);
     }
   };
 

@@ -90,7 +90,7 @@ export const GestaoAcessos: React.FC = () => {
     try {
       await deleteUsuarioSistema(id);
     } catch (err) {
-      alert('Erro ao remover utilizador.');
+      toast.error('Erro ao remover utilizador.');
     }
   };
 
