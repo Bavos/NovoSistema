@@ -43,6 +43,15 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 
   handleReset = () => {
     this.setState({ hasError: false, error: null });
+    try {
+      Object.keys(window.sessionStorage).forEach((key) => {
+        if (key.startsWith('retry-lazy-refreshed-')) {
+          window.sessionStorage.removeItem(key);
+        }
+      });
+    } catch {
+      // Ignorar falhas de acesso a storage
+    }
   };
 
   render() {
@@ -60,11 +69,14 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
           </div>
           <button
             type="button"
-            onClick={this.handleReset}
+            onClick={() => {
+              this.handleReset();
+              window.location.reload();
+            }}
             className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors cursor-pointer"
           >
             <RefreshCw size={14} />
-            Tentar Novamente
+            Recarregar Página
           </button>
         </div>
       );
@@ -74,12 +86,52 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 }
 
-// Carregamento preguiçoso (Lazy Loading) das páginas principais para otimização de bundle
-const Pacientes = lazy(() => import('./pages/Pacientes').then(m => ({ default: m.Pacientes })));
-const Profissionais = lazy(() => import('./pages/Profissionais').then(m => ({ default: m.Profissionais })));
-const FinanceiroDashboard = lazy(() => import('./components/SimulatedDashboards').then(m => ({ default: m.FinanceiroDashboard })));
-const EmpresaDashboard = lazy(() => import('./components/SimulatedDashboards').then(m => ({ default: m.EmpresaDashboard })));
-const UserManagement = lazy(() => import('./components/UserManagement').then(m => ({ default: m.UserManagement })));
+/**
+ * Utilitário resiliente de Lazy Loading com retry e recuperação automática de ChunkLoadError.
+ * Trata cenários onde novas versões/deploys invalidam hashes de chunks no cache do navegador.
+ */
+export function lazyWithRetry<T extends React.ComponentType<any>>(
+  componentImport: () => Promise<{ default: T } | any>,
+  moduleName = 'module'
+): React.LazyExoticComponent<T> {
+  return lazy(async () => {
+    const storageKey = `retry-lazy-refreshed-${moduleName}`;
+    const pageHasAlreadyBeenForceRefreshed = window.sessionStorage.getItem(storageKey) === 'true';
+
+    try {
+      const component = await componentImport();
+      window.sessionStorage.removeItem(storageKey);
+      return component.default ? component : { default: component };
+    } catch (error: any) {
+      console.error(`[lazyWithRetry] Erro ao carregar módulo dinâmico "${moduleName}":`, error);
+
+      const errorMessage = String(error?.message || '');
+      const isChunkOrFetchError =
+        errorMessage.includes('dynamically imported module') ||
+        errorMessage.includes('Loading chunk') ||
+        errorMessage.includes('Failed to fetch') ||
+        errorMessage.includes('text/html') ||
+        errorMessage.includes('MIME type') ||
+        error?.name === 'ChunkLoadError';
+
+      if (!pageHasAlreadyBeenForceRefreshed && isChunkOrFetchError) {
+        window.sessionStorage.setItem(storageKey, 'true');
+        console.warn(`[lazyWithRetry] Recarregando página para buscar a versão mais recente do módulo "${moduleName}"...`);
+        window.location.reload();
+        return new Promise<{ default: T }>(() => {});
+      }
+
+      throw error;
+    }
+  });
+}
+
+// Carregamento preguiçoso resiliente (Lazy Loading com Retry) das páginas principais
+const Pacientes = lazyWithRetry(() => import('./pages/Pacientes').then(m => ({ default: m.Pacientes })), 'Pacientes');
+const Profissionais = lazyWithRetry(() => import('./pages/Profissionais').then(m => ({ default: m.Profissionais })), 'Profissionais');
+const FinanceiroDashboard = lazyWithRetry(() => import('./components/SimulatedDashboards').then(m => ({ default: m.FinanceiroDashboard })), 'FinanceiroDashboard');
+const EmpresaDashboard = lazyWithRetry(() => import('./components/SimulatedDashboards').then(m => ({ default: m.EmpresaDashboard })), 'EmpresaDashboard');
+const UserManagement = lazyWithRetry(() => import('./components/UserManagement').then(m => ({ default: m.UserManagement })), 'UserManagement');
 
 const PageLoadingFallback: React.FC = () => (
   <div className="flex flex-col items-center justify-center p-12 space-y-3 min-h-[300px]">
