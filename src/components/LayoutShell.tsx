@@ -80,7 +80,7 @@ export const LayoutShell: React.FC<LayoutShellProps> = ({
         </div>
 
         {/* 6. Universal Content Container (100% Mobile, side-aligned on Desktop) */}
-        <main className="w-full max-w-5xl md:max-w-7xl lg:max-w-[1600px] xl:max-w-[1750px] mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-6 md:py-8 lg:py-10 space-y-6 md:space-y-8 min-w-0 flex-1" id="global-content-container">
+        <main className="w-full max-w-5xl md:max-w-7xl lg:max-w-[1600px] xl:max-w-[1750px] mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 lg:pl-8 xl:pl-10 py-6 md:py-8 lg:py-10 space-y-6 md:space-y-8 min-w-0 flex-1" id="global-content-container">
           {/* ⚠️ Modo de Testes / Sandbox Banner */}
           {isTestMode && (
             <div

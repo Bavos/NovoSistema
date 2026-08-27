@@ -3632,7 +3632,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 space-y-6" id="patient-record-container">
+    <div className="w-full max-w-5xl lg:max-w-6xl xl:max-w-7xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 space-y-6" id="patient-record-container">
       {/* Return */}
       <div className="flex items-center justify-between">
         <button

@@ -261,21 +261,6 @@ function DashboardContent() {
         }
       }}
       pageTitle={getPageTitle()}
-      rightHeaderKpi={
-        <div className="hidden sm:flex items-center space-x-3.5 text-xs text-slate-500 select-none bg-white p-2 rounded-xl border border-slate-200 shadow-sm shrink-0">
-          <div className="text-center px-2">
-            <span className="block text-[10px] text-slate-400 font-mono font-bold uppercase">Pacientes Ativos</span>
-            <span className="text-sm font-extrabold text-blue-600">
-              {pacientes.filter((p) => p.status === 'Ativo').length}
-            </span>
-          </div>
-          <div className="w-px h-6 bg-slate-25 bg-slate-200"></div>
-          <div className="text-center px-2">
-            <span className="block text-[10px] text-slate-400 font-mono font-bold uppercase">Escalas Hoje</span>
-            <span className="text-sm font-extrabold text-slate-700">3 Plantões</span>
-          </div>
-        </div>
-      }
     >
       <AnimatePresence mode="wait">
         <motion.div
