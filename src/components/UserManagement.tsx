@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { validarDominioCorporativo } from '../types';
+import { getFriendlyErrorMessage } from '../utils/errorSanitizer';
 
 export interface UsuarioSistemaDoc {
   id: string;
@@ -184,7 +185,7 @@ export const UserManagement: React.FC = () => {
       handleCloseModal();
     } catch (err: any) {
       console.error('Erro ao salvar usuário:', err);
-      toast.error('Erro ao salvar no Firestore: ' + (err.message || String(err)));
+      toast.error(getFriendlyErrorMessage(err, 'Erro ao salvar os dados do usuário. Tente novamente.'));
     } finally {
       setIsSaving(false);
     }
@@ -201,7 +202,8 @@ export const UserManagement: React.FC = () => {
       await updateDoc(userRef, { status: nextStatus });
       toast.success(`Status de ${user.nome} alterado para ${nextStatus}.`);
     } catch (err: any) {
-      toast.error('Erro ao alterar status: ' + (err.message || String(err)));
+      console.error('Erro ao alterar status:', err);
+      toast.error(getFriendlyErrorMessage(err, 'Erro ao alterar status. Tente novamente.'));
     }
   };
 
@@ -216,7 +218,8 @@ export const UserManagement: React.FC = () => {
       toast.success(`Usuário ${user.nome} excluído com sucesso!`);
       setDeleteConfirmUser(null);
     } catch (err: any) {
-      toast.error('Erro ao excluir usuário: ' + (err.message || String(err)));
+      console.error('Erro ao excluir usuário:', err);
+      toast.error(getFriendlyErrorMessage(err, 'Erro ao excluir usuário. Tente novamente.'));
     }
   };
 

@@ -1,5 +1,16 @@
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from './firebase';
+import { getFriendlyErrorMessage } from '../utils/errorSanitizer';
+
+export { getFriendlyErrorMessage };
+
+/**
+ * Traduz códigos e erros de autenticação técnicos para mensagens seguras,
+ * limpas e amigáveis ao usuário, evitando vazamento de termos internos (Firebase, auth/, Firestore, etc.).
+ */
+export function getSanitizedAuthErrorMessage(error: any): string {
+  return getFriendlyErrorMessage(error, 'Não foi possível realizar o login. Tente novamente.');
+}
 
 export async function validarDominioCorporativo(email: string): Promise<boolean> {
   const emailLower = email.trim().toLowerCase();

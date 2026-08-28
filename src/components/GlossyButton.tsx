@@ -21,7 +21,7 @@ export const GlossyButton: React.FC<GlossyButtonProps> = ({
   return (
     <button
       type={type}
-      className={`btn-glossy btn-${variant} ${className}`}
+      className={`btn-glossy btn-${variant} relative z-20 flex-shrink-0 isolate pointer-events-auto ${className}`}
       onClick={handleClick}
       {...props}
     >

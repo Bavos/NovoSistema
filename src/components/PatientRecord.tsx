@@ -55,6 +55,7 @@ import {
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { toast } from 'react-hot-toast';
+import { getFriendlyErrorMessage } from '../utils/errorSanitizer';
 import { showSuccessToast } from './CustomToast';
 import { GlossyButton } from './GlossyButton';
 import ExcelJS from 'exceljs';
@@ -711,7 +712,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         icon: '✅',
       });
     } catch (err: any) {
-      toast.error('Erro ao salvar ocorrência: ' + err.message);
+      console.error('Erro ao salvar ocorrência:', err);
+      toast.error(getFriendlyErrorMessage(err, 'Erro ao salvar a ocorrência. Tente novamente.'));
     } finally {
       setSavingOcorrencia(false);
     }
@@ -765,7 +767,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         icon: '✅',
       });
     } catch (err: any) {
-      toast.error('Erro ao excluir ocorrência: ' + err.message);
+      console.error('Erro ao excluir ocorrência:', err);
+      toast.error(getFriendlyErrorMessage(err, 'Erro ao excluir a ocorrência. Tente novamente.'));
     } finally {
       setDeleteConfirmOc(null);
     }
@@ -1840,7 +1843,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       }
     } catch (err: any) {
       console.error('Erro ao tentar salvar o prontuário:', err);
-      toast.error('Erro ao tentar salvar o prontuário: ' + err.message);
+      toast.error(getFriendlyErrorMessage(err, 'Erro ao salvar o prontuário do paciente. Tente novamente.'));
     }
   };
 
@@ -1892,7 +1895,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         icon: '✅',
       });
     } catch (error: any) {
-      toast.error('Erro ao persistir plano de Atendimento: ' + error.message);
+      console.error('Erro ao persistir plano de Atendimento:', error);
+      toast.error(getFriendlyErrorMessage(error, 'Erro ao salvar o plano de atendimento. Tente novamente.'));
     }
   };
 
@@ -1999,7 +2003,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
           }
         } catch (error: any) {
           console.error("Erro ao deletar configuracao:", error);
-          toast.error('Erro ao excluir: ' + error.message);
+          toast.error(getFriendlyErrorMessage(error, 'Erro ao excluir configuração. Tente novamente.'));
         }
       }
     });
@@ -2030,7 +2034,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         });
       } catch (err: any) {
         console.error("Erro ao desativar paciente:", err);
-        toast.error("Erro ao desativar paciente: " + (err?.message || 'Falha ao salvar.'));
+        toast.error(getFriendlyErrorMessage(err, 'Erro ao desativar paciente. Tente novamente.'));
       }
     }
   };
@@ -2415,7 +2419,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       toast.success(`Escala de ${mesAnoKey} Concluída com sucesso!`, { id: toastId });
     } catch (err: any) {
       console.error("Erro ao processar batch de conclusão:", err);
-      toast.error('Erro ao congelar escala: ' + (err.message || String(err)), { id: toastId });
+      toast.error(getFriendlyErrorMessage(err, 'Erro ao concluir a escala. Tente novamente.'), { id: toastId });
     }
   };
 
@@ -2653,7 +2657,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       toast.success(`Escala de ${keyMMSlashYYYY} reaberta com sucesso!`, { id: toastId });
     } catch (err: any) {
       console.error("Erro ao processar batch de reabertura:", err);
-      toast.error('Erro ao reabrir escala: ' + (err.message || String(err)), { id: toastId });
+      toast.error(getFriendlyErrorMessage(err, 'Erro ao reabrir a escala. Tente novamente.'), { id: toastId });
     }
   };
 
@@ -3488,7 +3492,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
           setExcluirModalOpen(false);
           toast.success(`${matches.length} agendamento(s) excluído(s) com sucesso.`);
         } catch (err: any) {
-          toast.error('Erro ao excluir agendamento: ' + (err.message || String(err)));
+          console.error('Erro ao excluir agendamentos em lote:', err);
+          toast.error(getFriendlyErrorMessage(err, 'Erro ao excluir os agendamentos selecionados. Tente novamente.'));
         } finally {
           setIsDeleting(false);
         }
@@ -6892,7 +6897,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                   setSelectedShiftForDetails(null);
                                   setIsConfirmingDelete(false);
                                 } catch (err: any) {
-                                  toast.error(err.message || "Erro ao excluir o plantão.");
+                                  console.error('Erro ao excluir plantão:', err);
+                                  toast.error(getFriendlyErrorMessage(err, "Erro ao excluir o plantão. Tente novamente."));
                                 }
                               }}
                               className="flex-1 py-1.5 text-xs font-extrabold bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-all text-center shadow-sm cursor-pointer"
@@ -9417,7 +9423,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 <div className="flex justify-between items-start border-b-2 border-[#1E3A2F] pb-4 mb-5">
                   <div className="flex items-center gap-4">
                     {empresaInfo?.logoUrl ? (
-                      <img src={empresaInfo.logoUrl} alt="Logo" className="h-14 max-h-16 w-auto object-contain shrink-0" />
+                      <img 
+                        src={empresaInfo.logoUrl} 
+                        alt="Logo" 
+                        className="h-14 max-h-16 w-auto object-contain max-w-full shrink-0" 
+                        style={{ imageRendering: '-webkit-optimize-contrast' }} 
+                      />
                     ) : (
                       <div className="w-28 shrink-0">
                         <Logo className="h-14 w-auto object-contain" />

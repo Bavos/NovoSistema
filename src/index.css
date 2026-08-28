@@ -166,6 +166,11 @@ body {
 .btn-glossy {
   --radii: 0.5em;
   --btn-bg-color: #ffffff;
+  position: relative;
+  z-index: 20;
+  flex-shrink: 0;
+  isolation: isolate;
+  pointer-events: auto;
   cursor: pointer;
   padding: 0.7em 1.2em;
   min-width: 140px;

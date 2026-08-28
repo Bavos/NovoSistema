@@ -132,9 +132,10 @@ describe('LoginPage Component Tests', () => {
     });
   });
 
-  it('deve simular erro do Firebase auth/invalid-credential e exibir mensagem corretiva', async () => {
-    const errorMsg = 'auth/invalid-credential';
-    mockSignInWithEmailAndPassword.mockRejectedValue(new Error(errorMsg));
+  it('deve simular erro auth/invalid-credential e exibir mensagem amigável e higienizada', async () => {
+    const rawErrorMsg = 'auth/invalid-credential';
+    const expectedSanitizedMsg = 'E-mail ou senha incorretos. Verifique os dados digitados.';
+    mockSignInWithEmailAndPassword.mockRejectedValue(new Error(rawErrorMsg));
 
     render(
       <FirebaseProvider>
@@ -151,11 +152,38 @@ describe('LoginPage Component Tests', () => {
 
     fireEvent.click(submitButton);
 
-    // Wait for the simulated Firebase error display
+    // Wait for the sanitized error display and ensure raw terms are not rendered
     await waitFor(() => {
-      const errorDiv = screen.queryByText(errorMsg);
+      const errorDiv = screen.queryByText(expectedSanitizedMsg);
       expect(errorDiv).not.toBeNull();
-      expect(errorDiv?.textContent).toContain(errorMsg);
+      expect(errorDiv?.textContent).toContain(expectedSanitizedMsg);
+      expect(screen.queryByText(rawErrorMsg)).toBeNull();
+      expect(screen.queryByText(/Firebase/i)).toBeNull();
+    });
+  });
+
+  it('deve higienizar erro auth/too-many-requests exibindo mensagem amigável', async () => {
+    mockSignInWithEmailAndPassword.mockRejectedValue(new Error('Firebase: Error (auth/too-many-requests).'));
+
+    render(
+      <FirebaseProvider>
+        <LoginPage onNavigateToFirstAccess={() => {}} />
+      </FirebaseProvider>
+    );
+
+    const emailInput = screen.getByLabelText('E-mail');
+    const passwordInput = screen.getByLabelText('Senha');
+    const submitButton = screen.getByRole('button', { name: 'Entrar' });
+
+    fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
+    fireEvent.change(passwordInput, { target: { value: 'password123' } });
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      const expected = 'Muitas tentativas incorretas. Aguarde alguns instantes e tente novamente.';
+      expect(screen.queryByText(expected)).not.toBeNull();
+      expect(screen.queryByText(/too-many-requests/i)).toBeNull();
+      expect(screen.queryByText(/Firebase/i)).toBeNull();
     });
   });
 });

@@ -11,8 +11,8 @@ export const Logo: React.FC<LogoProps> = ({ className = 'w-full h-auto', style }
       viewBox="0 0 500 360"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      className={className}
-      style={style}
+      className={`object-contain max-w-full ${className}`}
+      style={{ imageRendering: '-webkit-optimize-contrast', ...style }}
       id="svg-logo-branding"
     >
       <defs>

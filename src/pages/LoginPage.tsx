@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
 import { Logo } from '../components/Logo';
 import { validarDominioCorporativo } from '../types';
+import { getFriendlyErrorMessage } from '../utils/errorSanitizer';
 import { toast } from 'react-hot-toast';
 import { auth } from '../lib/firebase';
 import { signInWithEmailAndPassword, sendEmailVerification, signOut } from 'firebase/auth';
@@ -13,7 +14,7 @@ export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ o
     const [isResending, setIsResending] = useState(false);
     const [showResendVerification, setShowResendVerification] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const { login, setNotification } = useFirebase();
+    const { login } = useFirebase();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -23,7 +24,9 @@ export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ o
 
         const domainAllowed = await validarDominioCorporativo(email);
         if (!domainAllowed) {
-            toast.error('Acesso restrito. O domínio do seu e-mail não está autorizado nas configurações da empresa.');
+            const domainMsg = 'Acesso restrito. O domínio do seu e-mail não está autorizado nas configurações da empresa.';
+            setError(domainMsg);
+            toast.error(domainMsg);
             setIsLoading(false);
             return;
         }
@@ -31,11 +34,16 @@ export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ o
         try {
             await login(email, password);
         } catch (err: any) {
-            if (err.message === 'auth/email-not-verified' || err.code === 'auth/email-not-verified') {
+            const raw = ((err?.code || '') + ' ' + (err?.message || '')).toLowerCase();
+            if (raw.includes('email-not-verified')) {
                 setShowResendVerification(true);
+                const friendlyMsg = 'Acesso negado: Você precisa confirmar o link que enviamos para o seu e-mail antes de acessar o sistema.';
+                setError(friendlyMsg);
+                toast.error(friendlyMsg);
             } else {
-                setError(err.message || 'auth/invalid-credential');
-                setNotification(`Erro: ${err.message || 'auth/invalid-credential'}`);
+                const friendlyMessage = getFriendlyErrorMessage(err, 'E-mail ou senha incorretos. Verifique os dados digitados.');
+                setError(friendlyMessage);
+                toast.error(friendlyMessage);
             }
         } finally {
             setIsLoading(false);
@@ -61,7 +69,8 @@ export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ o
             setShowResendVerification(false);
         } catch (err: any) {
             console.error('Erro ao reenviar confirmação de e-mail:', err);
-            toast.error('Erro ao reenviar o e-mail. Verifique suas credenciais.');
+            const friendlyMsg = getFriendlyErrorMessage(err, 'Erro ao reenviar o e-mail. Verifique suas credenciais.');
+            toast.error(friendlyMsg);
         } finally {
             setIsResending(false);
         }

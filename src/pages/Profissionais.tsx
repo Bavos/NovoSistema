@@ -12,6 +12,7 @@ import { profissionalSchema } from '../schemas/validationSchemas';
 import { mascaraCPF, mascaraCNPJ, mascaraTelefone, mascaraCEP, validarCPF, maskBankAccount, normalizeText } from '../lib/masks';
 import { fetchCep, fetchBanks } from '../lib/brasilApi';
 import { toast } from 'react-hot-toast';
+import { getFriendlyErrorMessage } from '../utils/errorSanitizer';
 import { showSuccessToast } from '../components/CustomToast';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { CardSkeleton } from '../components/ui/CardSkeleton';
@@ -1729,7 +1730,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
           console.log("[BadgeGerador] PNG file downloaded.");
         } catch (err: any) {
           console.error("Erro ao gerar PNG:", err);
-          toast.error(`Infelizmente erro ao gerar o arquivo PNG: ${err.message || String(err)}`);
+          toast.error(getFriendlyErrorMessage(err, "Erro ao gerar o arquivo de imagem do crachá. Tente novamente."));
         }
       } else {
         toast.error("Referência do elemento do crachá não encontrada.");
@@ -1782,7 +1783,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
           console.log("[BadgeGerador] Badge file triggered for download.");
         } catch (err: any) {
           console.error("Erro ao gerar Word:", err);
-          toast.error(`Infelizmente erro ao gerar o arquivo de download: ${err.message || String(err)}`);
+          toast.error(getFriendlyErrorMessage(err, "Erro ao gerar o arquivo de download do crachá. Tente novamente."));
         }
       } else {
         toast.error("Referência do elemento do crachá não encontrada.");
@@ -1850,7 +1851,8 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                 <img 
                   src={logoBase64} 
                   alt="Logo da Empresa" 
-                  className="h-13 w-auto object-contain mix-blend-multiply bg-transparent" 
+                  className="h-13 w-auto object-contain max-w-full mix-blend-multiply bg-transparent" 
+                  style={{ imageRendering: '-webkit-optimize-contrast' }}
                   crossOrigin="anonymous" 
                 />
               ) : (

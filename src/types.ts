@@ -270,6 +270,9 @@ export interface FaturaPaciente {
   nomePaciente: string;
   numeroFatura: string;
   dataEmissao: string;
+  criadoEm?: any;
+  createdAt?: any;
+  dataEmissaoTimestamp?: any;
   mesReferencia?: string;
   periodoApurado: { inicio: string; fim: string };
   valorTotal: number;
@@ -292,9 +295,9 @@ export interface FolhaPagamento {
   plantoesCongelados?: any[];
 }
 
-import { validarDominioCorporativo } from './lib/authUtils';
+import { validarDominioCorporativo, getSanitizedAuthErrorMessage, getFriendlyErrorMessage } from './lib/authUtils';
 
-export { validarDominioCorporativo };
+export { validarDominioCorporativo, getSanitizedAuthErrorMessage, getFriendlyErrorMessage };
 
 export const DOMINIOS_CORPORATIVOS_PERMITIDOS = ['@vallidare.com.br', '@cuidarhome.com.br', '@rhcuidado.com.br'];
 

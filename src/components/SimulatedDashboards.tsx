@@ -4569,9 +4569,117 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
         setLoadingExport(false);
     };
 
+    // Helper functions for safe date parsing and formatting
+    const extractISODateString = (rawDate: any): string | null => {
+        if (!rawDate) return null;
+        
+        // Firestore Timestamp or object with toDate()
+        if (typeof rawDate === 'object' && typeof rawDate.toDate === 'function') {
+            try {
+                const d = rawDate.toDate();
+                if (!isNaN(d.getTime())) {
+                    const yr = d.getFullYear();
+                    const mo = String(d.getMonth() + 1).padStart(2, '0');
+                    const dy = String(d.getDate()).padStart(2, '0');
+                    return `${yr}-${mo}-${dy}`;
+                }
+            } catch {
+                // fallback
+            }
+        }
+
+        // Firestore Timestamp with seconds
+        if (typeof rawDate === 'object' && typeof rawDate.seconds === 'number') {
+            try {
+                const d = new Date(rawDate.seconds * 1000);
+                if (!isNaN(d.getTime())) {
+                    const yr = d.getFullYear();
+                    const mo = String(d.getMonth() + 1).padStart(2, '0');
+                    const dy = String(d.getDate()).padStart(2, '0');
+                    return `${yr}-${mo}-${dy}`;
+                }
+            } catch {
+                // fallback
+            }
+        }
+
+        // JS Date instance
+        if (rawDate instanceof Date) {
+            if (!isNaN(rawDate.getTime())) {
+                const yr = rawDate.getFullYear();
+                const mo = String(rawDate.getMonth() + 1).padStart(2, '0');
+                const dy = String(rawDate.getDate()).padStart(2, '0');
+                return `${yr}-${mo}-${dy}`;
+            }
+            return null;
+        }
+
+        // Number timestamp in ms
+        if (typeof rawDate === 'number') {
+            const d = new Date(rawDate);
+            if (!isNaN(d.getTime())) {
+                const yr = d.getFullYear();
+                const mo = String(d.getMonth() + 1).padStart(2, '0');
+                const dy = String(d.getDate()).padStart(2, '0');
+                return `${yr}-${mo}-${dy}`;
+            }
+            return null;
+        }
+
+        // String formats
+        if (typeof rawDate === 'string') {
+            const trimmed = rawDate.trim();
+            if (!trimmed) return null;
+
+            // Match DD/MM/YYYY
+            const brMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+            if (brMatch) {
+                const dy = brMatch[1].padStart(2, '0');
+                const mo = brMatch[2].padStart(2, '0');
+                const yr = brMatch[3];
+                return `${yr}-${mo}-${dy}`;
+            }
+
+            // Match YYYY-MM-DD or ISO string
+            const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+            if (isoMatch) {
+                const yr = isoMatch[1];
+                const mo = isoMatch[2].padStart(2, '0');
+                const dy = isoMatch[3].padStart(2, '0');
+                return `${yr}-${mo}-${dy}`;
+            }
+
+            // Fallback generic Date parse
+            const parsed = new Date(trimmed);
+            if (!isNaN(parsed.getTime())) {
+                const yr = parsed.getFullYear();
+                const mo = String(parsed.getMonth() + 1).padStart(2, '0');
+                const dy = String(parsed.getDate()).padStart(2, '0');
+                return `${yr}-${mo}-${dy}`;
+            }
+        }
+
+        return null;
+    };
+
+    const formatDisplayDate = (val: any) => {
+        if (!val) return '-';
+        const iso = extractISODateString(val);
+        if (iso) {
+            const [y, m, d] = iso.split('-');
+            return `${d}/${m}/${y}`;
+        }
+        try {
+            const d = new Date(val);
+            if (!isNaN(d.getTime())) return d.toLocaleDateString('pt-BR');
+        } catch {}
+        return String(val);
+    };
+
     // Filter states
     const [searchFaturaPaciente, setSearchFaturaPaciente] = useState('all');
-    const [searchFaturaData, setSearchFaturaData] = useState('');
+    const [searchFaturaDataInicio, setSearchFaturaDataInicio] = useState('');
+    const [searchFaturaDataFim, setSearchFaturaDataFim] = useState('');
     const [searchFaturaText, setSearchFaturaText] = useState('');
     const [searchFolhaProfissional, setSearchFolhaProfissional] = useState('all');
     const [searchFolhaData, setSearchFolhaData] = useState('');
@@ -4658,17 +4766,27 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
     const filteredFaturas = faturasPacientes.filter(f => {
         const matchesPaciente = !searchFaturaPaciente || searchFaturaPaciente === 'all' || f.nomePaciente === searchFaturaPaciente;
 
+        // Extrai a data normalizada YYYY-MM-DD com suporte seguro a múltiplos formatos e timestamps
+        const faturaDateStr = extractISODateString(f.dataEmissao) || extractISODateString(f.criadoEm) || extractISODateString((f as any).dataEmissaoTimestamp) || extractISODateString((f as any).createdAt);
+
         let matchesDate = true;
-        if (searchFaturaData) {
-            try {
-                const docDate = new Date(f.dataEmissao);
-                const yr = docDate.getFullYear();
-                const mo = String(docDate.getMonth() + 1).padStart(2, '0');
-                const dy = String(docDate.getDate()).padStart(2, '0');
-                const docFormatted = `${yr}-${mo}-${dy}`;
-                matchesDate = docFormatted === searchFaturaData;
-            } catch (e) {
+        if (searchFaturaDataInicio && searchFaturaDataFim) {
+            if (!faturaDateStr) {
                 matchesDate = false;
+            } else {
+                matchesDate = faturaDateStr >= searchFaturaDataInicio && faturaDateStr <= searchFaturaDataFim;
+            }
+        } else if (searchFaturaDataInicio) {
+            if (!faturaDateStr) {
+                matchesDate = false;
+            } else {
+                matchesDate = faturaDateStr >= searchFaturaDataInicio;
+            }
+        } else if (searchFaturaDataFim) {
+            if (!faturaDateStr) {
+                matchesDate = false;
+            } else {
+                matchesDate = faturaDateStr <= searchFaturaDataFim;
             }
         }
 
@@ -4695,9 +4813,11 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
             }
 
             if (faturaSortConfig.key === 'emissao') {
-                const dateA = new Date(a.dataEmissao).getTime() || 0;
-                const dateB = new Date(b.dataEmissao).getTime() || 0;
-                return faturaSortConfig.direction === 'asc' ? dateA - dateB : dateB - dateA;
+                const dateStrA = extractISODateString(a.dataEmissao) || extractISODateString(a.criadoEm);
+                const dateStrB = extractISODateString(b.dataEmissao) || extractISODateString(b.criadoEm);
+                const timeA = dateStrA ? new Date(dateStrA + 'T00:00:00').getTime() : 0;
+                const timeB = dateStrB ? new Date(dateStrB + 'T00:00:00').getTime() : 0;
+                return faturaSortConfig.direction === 'asc' ? timeA - timeB : timeB - timeA;
             }
 
             return 0;
@@ -4734,7 +4854,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
     return (
       <div className="space-y-6 animate-in fade-in-30">
         <div className="bg-white p-4 border border-gray-100 rounded-xl shadow-sm">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 mb-4">
             <div className="flex items-center gap-3">
               <h2 className="text-md font-black text-slate-800">📜 Histórico de Faturas</h2>
               {selectedFaturas.length > 0 && (
@@ -4749,7 +4869,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
             </div>
             <div className="flex flex-wrap items-center gap-2 print:hidden">
               {/* Dynamic Real-time Search Input */}
-              <div className="relative w-full sm:w-52">
+              <div className="relative w-full sm:w-44">
                 <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 <input
                   type="text"
@@ -4768,30 +4888,68 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                   </button>
                 )}
               </div>
-              <button
-                onClick={handleExportFaturasPDF}
-                disabled={isExportingFaturasPDF || filteredFaturas.length === 0}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50 cursor-pointer text-xs"
-                title="Exportar relatório de faturas em PDF"
-              >
-                <Printer className="w-3.5 h-3.5" /> {isExportingFaturasPDF ? 'Gerando PDF...' : 'Imprimir Relatório'}
-              </button>
+
+              {/* Dropdown Pacientes */}
               <select
                 value={searchFaturaPaciente}
                 onChange={(e) => setSearchFaturaPaciente(e.target.value)}
-                className="border border-slate-200 rounded-md px-3 py-1 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 w-48 cursor-pointer"
+                className="border border-slate-200 rounded-md px-2.5 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 w-44 cursor-pointer text-slate-700 font-medium"
               >
                 <option value="all">Todos os Pacientes</option>
                 {dropdownPacientes.map(p => (
                   <option key={p.id} value={p.nome}>{p.nome}</option>
                 ))}
               </select>
-              <input
-                type="date"
-                value={searchFaturaData}
-                onChange={(e) => setSearchFaturaData(e.target.value)}
-                className="border border-slate-200 rounded-md px-3 py-1 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              />
+
+              {/* Filtro por Período de Datas (Data Inicial e Data Final) */}
+              <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200">
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">De:</span>
+                  <input
+                    type="date"
+                    value={searchFaturaDataInicio}
+                    onChange={(e) => setSearchFaturaDataInicio(e.target.value)}
+                    title="Data Inicial"
+                    aria-label="Data Inicial"
+                    className="border border-slate-200 rounded px-1.5 py-0.5 text-xs bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                  />
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">Até:</span>
+                  <input
+                    type="date"
+                    value={searchFaturaDataFim}
+                    onChange={(e) => setSearchFaturaDataFim(e.target.value)}
+                    title="Data Final"
+                    aria-label="Data Final"
+                    className="border border-slate-200 rounded px-1.5 py-0.5 text-xs bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                  />
+                </div>
+                {(searchFaturaDataInicio || searchFaturaDataFim) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchFaturaDataInicio('');
+                      setSearchFaturaDataFim('');
+                    }}
+                    className="flex items-center gap-1 px-1.5 py-0.5 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded transition-colors font-bold cursor-pointer ml-0.5"
+                    title="Limpar filtro por período"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span className="text-[10px] hidden sm:inline">Limpar</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Botão Imprimir Relatório */}
+              <button
+                onClick={handleExportFaturasPDF}
+                disabled={isExportingFaturasPDF || filteredFaturas.length === 0}
+                className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50 cursor-pointer text-xs"
+                title="Exportar relatório de faturas em PDF"
+              >
+                <Printer className="w-3.5 h-3.5" /> {isExportingFaturasPDF ? 'Gerando...' : 'Imprimir Relatório'}
+              </button>
             </div>
           </div>
           
@@ -4878,8 +5036,8 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                 </td>
                                 <td className="p-3 font-mono">{f.numeroFatura}</td>
                                 <td className="p-3 font-medium text-slate-800">{f.nomePaciente}</td>
-                                <td className="p-3">{new Date(f.dataEmissao).toLocaleDateString('pt-BR')}</td>
-                                <td className="p-3 text-right font-bold text-slate-700">R$ {f.valorTotal.toFixed(2)}</td>
+                                <td className="p-3">{formatDisplayDate(f.dataEmissao || f.criadoEm)}</td>
+                                <td className="p-3 text-right font-bold text-slate-700">R$ {(Number(f.valorTotal) || 0).toFixed(2)}</td>
                                 <td className="p-3 text-center"><span className="px-2 py-1 rounded-full text-[10px] bg-green-100 text-green-700 font-bold">{f.status}</span></td>
                                 <td className="p-3 text-center print:hidden">
                                     <div className="flex justify-center items-center gap-2">
@@ -4905,6 +5063,20 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                         ))
                     )}
                 </tbody>
+                {sortedFaturas.length > 0 && (
+                    <tfoot className="border-t-2 border-slate-200 bg-slate-50/80 font-bold text-slate-800">
+                        <tr>
+                            <td className="p-3 print:hidden"></td>
+                            <td colSpan={3} className="p-3 text-slate-700 font-medium">
+                                Total ({sortedFaturas.length} {sortedFaturas.length === 1 ? 'fatura filtrada' : 'faturas filtradas'}):
+                            </td>
+                            <td className="p-3 text-right font-black text-slate-900 text-sm">
+                                R$ {sortedFaturas.reduce((acc, curr) => acc + (Number(curr.valorTotal) || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td colSpan={2} className="p-3"></td>
+                        </tr>
+                    </tfoot>
+                )}
             </table>
           </div>
         </div>
@@ -5081,7 +5253,15 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
                   {searchFaturaPaciente && searchFaturaPaciente !== 'all' ? `Filtro Paciente: ${searchFaturaPaciente}` : 'Todos os Pacientes'}
-                  {searchFaturaData ? ` | Data: ${new Date(searchFaturaData + 'T00:00:00').toLocaleDateString('pt-BR')}` : ''}
+                  {searchFaturaDataInicio && searchFaturaDataFim 
+                    ? ` | Período: ${formatDisplayDate(searchFaturaDataInicio)} até ${formatDisplayDate(searchFaturaDataFim)}`
+                    : searchFaturaDataInicio 
+                      ? ` | A partir de: ${formatDisplayDate(searchFaturaDataInicio)}`
+                      : searchFaturaDataFim 
+                        ? ` | Até: ${formatDisplayDate(searchFaturaDataFim)}`
+                        : ''
+                  }
+                  {searchFaturaText.trim() ? ` | Busca: "${searchFaturaText.trim()}"` : ''}
                 </p>
               </div>
               <div className="text-right">
@@ -5106,7 +5286,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                     <td className="p-2.5 font-mono font-semibold text-slate-700">{f.numeroFatura || '-'}</td>
                     <td className="p-2.5 font-bold text-slate-800">{f.nomePaciente || 'Paciente'}</td>
                     <td className="p-2.5 text-slate-600">
-                      {f.dataEmissao ? new Date(f.dataEmissao).toLocaleDateString('pt-BR') : '-'}
+                      {formatDisplayDate(f.dataEmissao || f.criadoEm)}
                     </td>
                     <td className="p-2.5 text-center font-bold text-emerald-700">{f.status || 'Emitida'}</td>
                     <td className="p-2.5 text-right font-black text-slate-900">
@@ -5123,7 +5303,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                   Soma Total das Faturas
                 </span>
                 <span className="text-2xl font-black text-emerald-900 block mt-1">
-                  R$ {filteredFaturas.reduce((acc, curr) => acc + (Number(curr.valorTotal) || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  R$ {sortedFaturas.reduce((acc, curr) => acc + (Number(curr.valorTotal) || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
             </div>
@@ -5145,7 +5325,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
             <div className="flex items-center justify-between border-b-2 border-slate-700 pb-3 mb-4">
               <div className="flex items-center gap-3">
                 {empresa?.logoUrl ? (
-                  <img src={empresa.logoUrl} alt="Logo" className="w-20 h-10 object-contain" />
+                  <img src={empresa.logoUrl} alt="Logo" className="w-20 h-10 object-contain max-w-full" style={{ imageRendering: '-webkit-optimize-contrast' }} />
                 ) : (
                   <div className="w-10 h-10 bg-slate-200 border border-slate-300 rounded flex items-center justify-center font-bold text-[10px] text-slate-600">
                     LOGO
@@ -5347,11 +5527,12 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
             return (
               <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 print:absolute print:inset-0 print:p-0 print:h-auto print:overflow-visible print:bg-white print:z-[999999]">
                   <div className="bg-white p-6 rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto print:p-0 print:max-h-none print:max-w-none print:w-full print:bg-white print:static print:shadow-none print:rounded-none print:overflow-visible">
-                       <div className="flex justify-between items-center mb-4 print:hidden">
+                       <div className="flex justify-between items-center mb-4 print:hidden relative z-20 flex-shrink-0">
                         <h3 className="font-black text-lg text-slate-800">Visualização de {viewDoc.type === 'fatura' ? 'Fatura' : 'Folha'}</h3>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 relative z-20 flex-shrink-0">
                             <GlossyButton 
                                 variant="blue"
+                                className="relative z-20 flex-shrink-0 isolate pointer-events-auto"
                                 onClick={async () => {
                                     await handleDownloadWordFromCanvas(viewDoc.data, viewDoc.type);
                                 }}
@@ -5360,6 +5541,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                 <FileText size={14} className="inline mr-1" />
                                 {loadingExport ? "Gerando..." : "Baixar Fatura (PDF)"}</GlossyButton>
                             <GlossyButton variant="yellow"
+                                 className="relative z-20 flex-shrink-0 isolate pointer-events-auto"
                                  onClick={() => {
                                      import('xlsx').then(XLSX => {
                                          const rows = plantoesValidos.map((p: any) => {
@@ -5445,7 +5627,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                      });
                                  }}
                             >Exportar XLSX</GlossyButton>
-                            <GlossyButton onClick={() => setViewDoc(null)} variant="gray">Fechar</GlossyButton>
+                            <GlossyButton onClick={() => setViewDoc(null)} variant="gray" className="relative z-20 flex-shrink-0 isolate pointer-events-auto">Fechar</GlossyButton>
                         </div>
                       </div>
                       <div id="print-area" ref={faturaRef} className="w-[210mm] min-h-[297mm] p-[12mm] bg-white text-slate-800 font-sans border border-slate-200 mx-auto print:w-full print:min-h-0 print:p-0 print:border-none print:shadow-none print:m-0 flex flex-col justify-between" style={{ color: '#1e293b' }}>
@@ -5454,7 +5636,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                           <div className="flex justify-between items-start border-b-2 border-[#1E3A2F] pb-4 mb-5">
                             <div className="flex items-center gap-4">
                               {empresa?.logoUrl ? (
-                                <img src={empresa.logoUrl} alt="Logo" className="h-14 max-h-16 w-auto object-contain shrink-0" />
+                                <img src={empresa.logoUrl} alt="Logo" className="h-14 max-h-16 w-auto object-contain max-w-full shrink-0" style={{ imageRendering: '-webkit-optimize-contrast' }} />
                               ) : (
                                 <div className="w-28 shrink-0">
                                   <Logo className="h-14 w-auto object-contain" />
@@ -6040,7 +6222,7 @@ export const EmpresaDashboard: React.FC = () => {
                     <div className="flex flex-col gap-3 p-3 bg-white border border-slate-200 rounded-xl">
                       <div className="flex items-center gap-4">
                         {logoUrl ? (
-                          <img src={logoUrl} alt="Logo" className="w-16 h-12 object-contain border rounded bg-slate-50" />
+                          <img src={logoUrl} alt="Logo" className="w-16 h-12 object-contain max-w-full border rounded bg-slate-50" style={{ imageRendering: '-webkit-optimize-contrast' }} />
                         ) : (
                           <div className="w-16 h-12 border-2 border-dashed border-slate-200 flex items-center justify-center text-[10px] text-slate-400 bg-slate-50 font-bold rounded">SEM LOGO</div>
                         )}

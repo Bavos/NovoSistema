@@ -10,6 +10,7 @@ import { db, auth, storage, OperationType, handleFirestoreError } from '../lib/f
 import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, sendEmailVerification, User } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { toast } from 'react-hot-toast';
+import { getFriendlyErrorMessage } from '../utils/errorSanitizer';
 import { normalizeText } from '../lib/masks';
 import { logError } from '../lib/diagnostics';
 import {
@@ -153,7 +154,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         lastQuotaToastTime = now;
         console.warn(`[Firebase Fallback] ${isQuota ? 'Cota excedida' : 'Conexão offline'} detectada em: ${source}. Ativando modo de contingência local.`);
         if (isQuota) {
-          toast.error("⚠️ Limite de Cota do Firebase Excedido: Operando em Modo de Contingência Local.", {
+          toast.error("⚠️ Limite de Cota Excedido: Operando em Modo de Contingência Local.", {
             duration: 5000,
             position: 'top-center',
             id: 'quota-error'
@@ -804,6 +805,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const logout = async () => {
     try {
+      window.sessionStorage.removeItem('rh_session_token');
       window.history.replaceState({}, '', '/');
     } catch (e) {
       console.warn("Erro ao limpar URL no logout:", e);
@@ -2330,11 +2332,11 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       await fetchCounts();
       await fetchFirstPagePacientes();
 
-      setNotification("Banco de dados populado com sucesso!");
+      setNotification("Dados demonstrativos carregados com sucesso!");
     } catch (err: any) {
       console.error("Error seeding database:", err);
-      setNotification("Erro ao popular banco de dados.");
-      toast.error("Erro ao popular banco de dados: " + (err.message || String(err)));
+      setNotification("Erro ao carregar dados demonstrativos. Tente novamente.");
+      toast.error(getFriendlyErrorMessage(err, "Erro ao carregar dados demonstrativos. Tente novamente."));
     }
   };
 

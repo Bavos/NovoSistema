@@ -99,7 +99,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <img 
               src={empresa?.logoUrl || logo} 
               alt="Logo" 
-              className="w-full h-full object-contain" 
+              className="w-full h-full object-contain max-w-full" 
+              style={{ imageRendering: '-webkit-optimize-contrast' }}
             />
           </div>
           <motion.div

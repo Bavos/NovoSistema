@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
 import { Logo } from '../components/Logo';
+import { getSanitizedAuthErrorMessage } from '../types';
+import { toast } from 'react-hot-toast';
 
 interface FirstAccessPageProps {
   onBackToLogin: () => void;
@@ -10,12 +12,16 @@ export const FirstAccessPage: React.FC<FirstAccessPageProps> = ({ onBackToLogin 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const { activateAccount, setNotification } = useFirebase();
 
   const handleActivate = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     if (password !== confirmPassword) {
-      setNotification('As senhas não coincidem.');
+      const msg = 'As senhas digitadas não coincidem. Verifique e tente novamente.';
+      setError(msg);
+      toast.error(msg);
       return;
     }
     try {
@@ -23,7 +29,9 @@ export const FirstAccessPage: React.FC<FirstAccessPageProps> = ({ onBackToLogin 
       // Wait a bit or let context handle notification, then go back
       onBackToLogin();
     } catch (err: any) {
-      setNotification(err.message || 'Erro ao ativar conta.');
+      const friendlyMsg = getSanitizedAuthErrorMessage(err);
+      setError(friendlyMsg);
+      toast.error(friendlyMsg);
     }
   };
 
@@ -34,6 +42,11 @@ export const FirstAccessPage: React.FC<FirstAccessPageProps> = ({ onBackToLogin 
                 <Logo className="w-full max-w-[250px] h-auto" />
             </div>
             <h1 className="text-2xl font-bold text-slate-800 mb-6 text-center">Ativar Conta</h1>
+            {error && (
+                <div className="bg-red-50 text-red-600 p-3 rounded-xl text-xs mb-4 border border-red-100 text-center font-medium">
+                    {error}
+                </div>
+            )}
             <form onSubmit={handleActivate} className="space-y-4">
                 <input 
                     type="email" 

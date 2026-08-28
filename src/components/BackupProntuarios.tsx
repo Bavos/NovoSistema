@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
 import { db } from '../lib/firebase';
 import { toast } from 'react-hot-toast';
+import { getFriendlyErrorMessage } from '../utils/errorSanitizer';
 import { 
   collection, 
   query, 
@@ -109,11 +110,11 @@ export const BackupProntuarios: React.FC = () => {
         description: `Restauração de backup realizada a partir do ponto de restauração de ${formatTimestamp(record.timestamp)}. Total de ${patientsArray.length} prontuários restaurados.`
       });
 
-      toast.success('Banco de dados restaurado com sucesso a partir do backup!');
+      toast.success('Prontuários restaurados com sucesso a partir do backup!');
       setShowFullHistoryModal(false);
     } catch (err: any) {
       console.error('Erro ao restaurar backup:', err);
-      toast.error('Erro ao restaurar backup: ' + (err.message || String(err)));
+      toast.error(getFriendlyErrorMessage(err, 'Erro ao restaurar os dados do backup. Tente novamente.'));
     } finally {
       setIsRestoring(false);
     }
@@ -192,10 +193,10 @@ export const BackupProntuarios: React.FC = () => {
           description: `Restauração de backup manual via arquivo JSON executada por ${user?.email || 'Administrador'}. Total de ${parsed.length} prontuários restaurados.`
         });
 
-        toast.success('Banco de dados restaurado com sucesso a partir do backup!');
+        toast.success('Prontuários restaurados com sucesso a partir do backup!');
       } catch (err: any) {
         console.error('Erro na importação manual:', err);
-        toast.error('Falha na importação: ' + (err.message || String(err)));
+        toast.error(getFriendlyErrorMessage(err, 'Falha na importação do backup. Verifique o arquivo.'));
       } finally {
         setIsRestoring(false);
         e.target.value = ''; // Reset file input
@@ -417,7 +418,7 @@ export const BackupProntuarios: React.FC = () => {
       toast.success(`Backup de prontuários em nuvem criado com sucesso com ${patientsArray.length} prontuários incluídos!`);
     } catch (err: any) {
       console.error('Erro ao gerar backup de prontuários:', err);
-      toast.error('Erro ao gerar backup: ' + (err.message || String(err)));
+      toast.error(getFriendlyErrorMessage(err, 'Erro ao gerar backup de prontuários. Tente novamente.'));
     } finally {
       setIsCreatingBackup(false);
     }
@@ -463,7 +464,7 @@ export const BackupProntuarios: React.FC = () => {
       });
       
     } catch (err: any) {
-      toast.error('Erro ao salvar configurações de backup: ' + err.message);
+      toast.error(getFriendlyErrorMessage(err, 'Erro ao salvar configurações de backup. Tente novamente.'));
     } finally {
       setIsSavingSettings(false);
     }
@@ -493,7 +494,7 @@ export const BackupProntuarios: React.FC = () => {
         description: `Administrador excluiu o log de backup ID: ${id}`
       });
     } catch (err: any) {
-      toast.error('Erro ao excluir backup: ' + err.message);
+      toast.error(getFriendlyErrorMessage(err, 'Erro ao excluir backup. Tente novamente.'));
     }
   };
 

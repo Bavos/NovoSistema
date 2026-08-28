@@ -4,6 +4,10 @@
  */
 
 import React, { useState, useEffect, Suspense, lazy } from 'react';
+import { onSnapshot, doc, updateDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { signOut } from 'firebase/auth';
+import { auth, db } from './lib/firebase';
+import { toast } from 'react-hot-toast';
 import { FirebaseProvider, useFirebase } from './context/FirebaseContext';
 import { useAutoLogout } from './hooks/useAutoLogout';
 import { LoginPage } from './pages/LoginPage';
@@ -194,6 +198,73 @@ function DashboardContent() {
   }, []);
 
   const { pacientes, profissionais, loading, userRole, user, usuariosSistema, isQuotaExceeded } = useFirebase();
+
+  // Listener e Gerenciamento de Sessão Única (Single Active Session)
+  useEffect(() => {
+    if (!user || !user.uid) return;
+
+    let isSubscribed = true;
+    let localSessionId = window.sessionStorage.getItem('rh_session_token');
+
+    if (!localSessionId) {
+      localSessionId = typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).substring(2)}`;
+      window.sessionStorage.setItem('rh_session_token', localSessionId);
+    }
+
+    const userDocRef = doc(db, 'usuarios', user.uid);
+
+    // Atualiza activeSessionId no documento do Firestore usuarios/{uid}
+    const registerSession = async () => {
+      try {
+        await updateDoc(userDocRef, {
+          activeSessionId: localSessionId,
+          lastLogin: serverTimestamp(),
+        }).catch(async (err: any) => {
+          // Se o documento ainda não existir, cria com setDoc
+          await setDoc(userDocRef, {
+            activeSessionId: localSessionId,
+            lastLogin: serverTimestamp(),
+            email: user.email || '',
+            uid: user.uid,
+          }, { merge: true });
+        });
+      } catch (err) {
+        console.warn('[SingleSession] Erro ao sincronizar token de sessão:', err);
+      }
+    };
+
+    registerSession();
+
+    // Listener em tempo real para monitorar se a sessão ativa mudou no banco
+    const unsubscribe = onSnapshot(userDocRef, async (snapshot) => {
+      if (!isSubscribed) return;
+
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        const serverSessionId = data?.activeSessionId;
+        const currentLocalSessionId = window.sessionStorage.getItem('rh_session_token');
+
+        if (serverSessionId && currentLocalSessionId && serverSessionId !== currentLocalSessionId) {
+          console.warn('[SingleSession] Sessão encerrada: login detectado em outro dispositivo.');
+          window.sessionStorage.removeItem('rh_session_token');
+          await signOut(auth);
+          toast.error('Sessão encerrada: Sua conta foi conectada em outro dispositivo ou navegador.', {
+            id: 'single-session-alert',
+            duration: 8000,
+          });
+        }
+      }
+    }, (error) => {
+      console.warn('[SingleSession] Erro no listener onSnapshot da sessão:', error);
+    });
+
+    return () => {
+      isSubscribed = false;
+      unsubscribe();
+    };
+  }, [user]);
 
   // Monitorar inatividade do usuário e realizar logout automático com segurança
   useAutoLogout();
