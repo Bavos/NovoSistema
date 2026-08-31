@@ -1698,7 +1698,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       telefoneResponsavel,
       telefoneResponsavel2: showSecondPhone ? telefoneResponsavel2 : undefined,
       parentescoResponsavel,
-      telefone: showPacientePhone ? telefonePaciente : undefined
+      telefone: showPacientePhone ? telefonePaciente : undefined,
+      email: email.trim() ? email.trim() : undefined,
     });
 
     if (!validation.success) {
@@ -1747,13 +1748,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     if (opcaoEnvio === 'WhatsApp' || opcaoEnvio === 'Ambos') {
       if (!whatsappFaturamento.trim()) {
         toast.error('Por favor, preencha o WhatsApp para Faturamento.');
-        return;
-      }
-    }
-
-    if (opcaoEnvio === 'E-mail' || opcaoEnvio === 'Ambos') {
-      if (!email.trim()) {
-        toast.error('Por favor, preencha o E-mail para Envio.');
         return;
       }
     }
@@ -4208,13 +4202,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
                     {(opcaoEnvio === 'E-mail' || opcaoEnvio === 'Ambos') && (
                       <div className="space-y-1 col-span-1 md:col-span-2">
-                        <label className="block text-xs font-medium text-gray-750">E-mail para Envio *</label>
+                        <label className="block text-xs font-medium text-gray-750">E-mail para Envio <span className="text-slate-400 font-normal text-[11px]">(Opcional)</span></label>
                         <input
                           type="email"
-                          required
                           disabled={isCurrentlyDeactivated || isColaborador}
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
+                          placeholder="exemplo@email.com"
                           className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#C09A6D] focus:border-[#C09A6D] disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none font-normal"
                         />
                       </div>

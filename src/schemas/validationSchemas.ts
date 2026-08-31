@@ -8,6 +8,7 @@ export const pacienteSchema = z.object({
   telefoneResponsavel2: z.string().optional(),
   parentescoResponsavel: z.string().optional(),
   telefone: z.string().optional(),
+  email: z.string().optional(),
 });
 
 export const profissionalSchema = z.object({
