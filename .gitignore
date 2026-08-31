@@ -15,3 +15,4 @@ coverage/
 !firebase-applet-config.json
 *-adminsdk-*.json
 .firebase/
+.firebase/
