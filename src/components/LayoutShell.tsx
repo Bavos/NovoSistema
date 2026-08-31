@@ -131,7 +131,7 @@ export const LayoutShell: React.FC<LayoutShellProps> = ({
 
         {/* 7. Global Footer Info Brand */}
         <footer className="py-4 border-t border-slate-200 text-center text-xs text-slate-500 select-none font-mono print:hidden mt-auto">
-          <p>© 2026 RH Gestão Domiciliar • Todos os direitos reservados • Auditoria Integrada Firestore</p>
+          <p>© 2026 RH Gestão Domiciliar • Todos os direitos reservados</p>
         </footer>
       </div>
     </div>
