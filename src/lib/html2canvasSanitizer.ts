@@ -86,13 +86,21 @@ export function exportCanvasToA4PDF(canvas: HTMLCanvasElement, fileName: string)
 
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
-  const margin = 10; // 10mm margin for crisp standard print formatting
+  const margin = 8;
   const printableWidth = pageWidth - margin * 2;
   const printableHeight = pageHeight - margin * 2;
 
-  const pdfImgHeight = (canvas.height * printableWidth) / canvas.width;
+  let pdfImgHeight = (canvas.height * printableWidth) / canvas.width;
+  let renderWidth = printableWidth;
 
-  if (pdfImgHeight <= printableHeight) {
+  // Ajuste inteligente: se ultrapassar por até 15%, auto-escala para caber perfeitamente em 1 página
+  if (pdfImgHeight > printableHeight && pdfImgHeight <= printableHeight * 1.15) {
+    const scaleRatio = printableHeight / pdfImgHeight;
+    renderWidth = printableWidth * scaleRatio;
+    pdfImgHeight = printableHeight;
+    const xOffset = margin + (printableWidth - renderWidth) / 2;
+    pdf.addImage(imgData, 'PNG', xOffset, margin, renderWidth, pdfImgHeight);
+  } else if (pdfImgHeight <= printableHeight) {
     pdf.addImage(imgData, 'PNG', margin, margin, printableWidth, pdfImgHeight);
   } else {
     let heightLeft = pdfImgHeight;
@@ -101,7 +109,7 @@ export function exportCanvasToA4PDF(canvas: HTMLCanvasElement, fileName: string)
     pdf.addImage(imgData, 'PNG', margin, position, printableWidth, pdfImgHeight);
     heightLeft -= printableHeight;
 
-    while (heightLeft > 0) {
+    while (heightLeft > 8) {
       position = margin - (pdfImgHeight - heightLeft);
       pdf.addPage();
       pdf.addImage(imgData, 'PNG', margin, position, printableWidth, pdfImgHeight);

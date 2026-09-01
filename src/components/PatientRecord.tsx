@@ -478,6 +478,100 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
   // Multi-date selection state for Novo Agendamento
   const [selectedDates, setSelectedDates] = useState<{ date: string; cycle: number }[]>([]);
+  const [agendamentoModo, setAgendamentoModo] = useState<"manual" | "automatico">("manual");
+  const [autoDataInicio, setAutoDataInicio] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [autoDataFim, setAutoDataFim] = useState<string>(() => {
+    const d = new Date();
+    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+  });
+  const [autoPadraoEscala, setAutoPadraoEscala] = useState<"12x36" | "24x48" | "48x48" | "todos" | "uteis">("12x36");
+  const [autoPagarTransporte48hDia2, setAutoPagarTransporte48hDia2] = useState<boolean>(false);
+
+  // Função geradora de datas automáticas conforme ciclo
+  const handleGerarEscalaAutomatica = () => {
+    if (!autoDataInicio || !autoDataFim) {
+      toast.error("Informe a Data Início e a Data Fim.");
+      return;
+    }
+
+    const dInicio = new Date(autoDataInicio + "T12:00:00");
+    const dFim = new Date(autoDataFim + "T12:00:00");
+
+    if (dInicio > dFim) {
+      toast.error("A Data Início não pode ser maior que a Data Fim.");
+      return;
+    }
+
+    const novasDatas: { date: string; cycle: number }[] = [];
+    const curr = new Date(dInicio);
+
+    if (autoPadraoEscala === "12x36") {
+      // Trabalha 1 dia, folga 1 dia (avança de 2 em 2 dias)
+      while (curr <= dFim) {
+        const str = curr.toISOString().slice(0, 10);
+        if (!isMesConcluido(str)) {
+          novasDatas.push({ date: str, cycle: 1 });
+        }
+        curr.setDate(curr.getDate() + 2);
+      }
+    } else if (autoPadraoEscala === "24x48") {
+      // Trabalha 1 dia, folga 2 dias (avança de 3 em 3 dias)
+      while (curr <= dFim) {
+        const str = curr.toISOString().slice(0, 10);
+        if (!isMesConcluido(str)) {
+          novasDatas.push({ date: str, cycle: 1 });
+        }
+        curr.setDate(curr.getDate() + 3);
+      }
+    } else if (autoPadraoEscala === "48x48") {
+      // Trabalha 2 dias consecutivos (Dia 1 e Dia 2), folga 2 dias (avança de 4 em 4 dias)
+      while (curr <= dFim) {
+        const str1 = curr.toISOString().slice(0, 10);
+        if (!isMesConcluido(str1)) {
+          novasDatas.push({ date: str1, cycle: 1 });
+        }
+
+        const nextDay = new Date(curr);
+        nextDay.setDate(curr.getDate() + 1);
+        if (nextDay <= dFim) {
+          const str2 = nextDay.toISOString().slice(0, 10);
+          if (!isMesConcluido(str2)) {
+            novasDatas.push({ date: str2, cycle: 2 });
+          }
+        }
+
+        curr.setDate(curr.getDate() + 4);
+      }
+    } else if (autoPadraoEscala === "todos") {
+      while (curr <= dFim) {
+        const str = curr.toISOString().slice(0, 10);
+        if (!isMesConcluido(str)) {
+          novasDatas.push({ date: str, cycle: 1 });
+        }
+        curr.setDate(curr.getDate() + 1);
+      }
+    } else if (autoPadraoEscala === "uteis") {
+      while (curr <= dFim) {
+        const dayOfWeek = curr.getDay();
+        if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+          const str = curr.toISOString().slice(0, 10);
+          if (!isMesConcluido(str)) {
+            novasDatas.push({ date: str, cycle: 1 });
+          }
+        }
+        curr.setDate(curr.getDate() + 1);
+      }
+    }
+
+    if (novasDatas.length === 0) {
+      toast.error("Nenhuma data válida pôde ser gerada no intervalo (ou as escalas do período já estão concluídas).");
+      return;
+    }
+
+    setSelectedDates(novasDatas);
+    toast.success(`${novasDatas.length} plantões calculados automaticamente!`);
+  };
 
   const handleDateClick = (formattedDate: string) => {
     if (isMesConcluido(formattedDate)) {
@@ -1284,6 +1378,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
   // New States for attached Calendar Layout & Buttons
   const [calendarMonth, setCalendarMonth] = useState<number>(new Date().getMonth());
+  const [statusBoletoLocal, setStatusBoletoLocal] = useState<Record<string, string>>({});
   const [calendarYear, setCalendarYear] = useState<number>(new Date().getFullYear());
   const [calendarView, setCalendarView] = useState<'lista' | 'calendario'>('calendario'); // default to visual calendar view
   const [isFaturaModalOpen, setIsFaturaModalOpen] = useState(false);
@@ -2289,7 +2384,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         let dayAlimentacao = baseAlimentacao;
 
         if (is48h && curCycle === 2) {
-          dayTransporte = 0; // O valor de transporte é rigorosamente ignorado/zerado no Dia 2
+          dayTransporte = autoPagarTransporte48hDia2 ? baseTransporte : 0;
         }
 
         const dayAjudaCusto = dayTransporte + dayAlimentacao;
@@ -3251,6 +3346,170 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     return fallback;
   };
 
+  
+  
+  const handleVerificarStatusBoleto = async (codigoSolicitacao: string, faturaId: string, monthKey?: string) => {
+    if (!codigoSolicitacao) {
+      toast.error("Código de cobrança não localizado nesta fatura.");
+      return;
+    }
+    const tId = toast.loading("Consultando status em tempo real no Banco Inter...");
+    try {
+      const { getFunctions, httpsCallable } = await import("firebase/functions");
+      const { app } = await import("../lib/firebase");
+      const functions = getFunctions(app, "southamerica-east1");
+      const consultar = httpsCallable(functions, "consultarStatusBoletoInter");
+      const res: any = await consultar({ codigoSolicitacao, faturaId });
+      toast.dismiss(tId);
+
+      const st = (res.data?.status || "").toLowerCase();
+      const currentMonthKey = monthKey || `${calendarYear}-${String(calendarMonth + 1).padStart(2, "0")}`;
+
+      // Atualização imediata do estado da tela
+      if (st === "pago") {
+        setStatusBoletoLocal(prev => ({ ...prev, [currentMonthKey]: "pago", [faturaId]: "pago" }));
+        toast.success("Pagamento confirmado! Fatura liquidada no Banco Inter.");
+      } else if (st === "vencido") {
+        setStatusBoletoLocal(prev => ({ ...prev, [currentMonthKey]: "vencido", [faturaId]: "vencido" }));
+        toast.error("Boleto vencido sem confirmação de pagamento.");
+      } else {
+        setStatusBoletoLocal(prev => ({ ...prev, [currentMonthKey]: "pendente", [faturaId]: "pendente" }));
+        toast.info(`Status no Banco Inter: ${res.data?.situacaoInter || "Aguardando Pagamento"}`);
+      }
+    } catch (err: any) {
+      toast.dismiss(tId);
+      console.error("Erro ao consultar status no Inter:", err);
+      toast.error(`Falha ao consultar status: ${err.message || "Erro desconhecido"}`);
+    }
+  };
+
+  const handleGerarBoletoInter = async () => {
+    if (!paciente) {
+      toast.error("Dados do paciente não carregados.");
+      return;
+    }
+
+    const docPagador = (
+      (paciente as any).cpf ||
+      (paciente as any).documento ||
+      (paciente as any).cpfCnpj ||
+      (paciente as any).cpfResponsavel ||
+      (paciente as any).responsavelCpf ||
+      (paciente as any).cnpj ||
+      ""
+    ).replace(/\D/g, "");
+
+    if (!docPagador || docPagador.length < 11) {
+      toast.error("CPF ou CNPJ do pagador/responsável não configurado no cadastro.");
+      return;
+    }
+
+    const mesFormatado = `${calendarYear}-${String(calendarMonth + 1).padStart(2, "0")}`;
+    
+    // 1. Busca fatura já emitida para o período
+    const matchedFatura: any = (faturasPacientes || []).find((f: any) => {
+      const matchesPaciente = f.idPaciente === (paciente?.id || "") || f.pacienteId === (paciente?.id || "") || f.nomePaciente?.toLowerCase() === (paciente?.nome || "").toLowerCase();
+      const matchesPeriodo = f.mesReferencia === mesFormatado || (f.periodoApurado?.inicio && f.periodoApurado.inicio.startsWith(mesFormatado));
+      return matchesPaciente && matchesPeriodo;
+    });
+
+    let valorFinal = 0;
+    if (matchedFatura && Number(matchedFatura.valorTotal || matchedFatura.valorTotalFatura) > 0) {
+      valorFinal = Number(matchedFatura.valorTotal || matchedFatura.valorTotalFatura);
+    } else {
+      const agendsDoMes = agendamentos.filter((s: any) =>
+        (s.idPaciente === (paciente?.id || "") || s.pacienteId === (paciente?.id || "")) &&
+        s.data && s.data.startsWith(mesFormatado) &&
+        !s.considerarFalta && s.status !== "falta" && s.status !== "Falta" && s.status !== "Cancelado" && s.status !== "cancelado"
+      );
+
+      const totalCalculado = agendsDoMes.reduce((acc: number, ag: any) => {
+        let v = 0;
+        if (typeof ag.cobradoDia === "number" && ag.cobradoDia > 0) {
+          v = ag.cobradoDia;
+        } else if (typeof ag.valorCobrado === "number" && ag.valorCobrado > 0) {
+          v = ag.valorCobrado;
+        } else {
+          const maoObra = Number(ag.valorPlantao || ag.valorProfissional || 0);
+          const taxaAdm = Number(ag.taxaAdm || ag.taxaAdministrativa || 0);
+          const ajudaCusto = Number(ag.ajudaCusto || 0);
+          v = (maoObra + taxaAdm + ajudaCusto) > 0 ? (maoObra + taxaAdm + ajudaCusto) : maoObra;
+        }
+        return acc + v;
+      }, 0);
+
+      valorFinal = totalCalculado > 0 ? totalCalculado : Number((paciente as any).valorMensalidade || 0);
+    }
+
+    if (valorFinal <= 0) {
+      toast.error("Nenhum valor faturável encontrado para este mês.");
+      return;
+    }
+
+    const loaderId = toast.loading("Emitindo Boleto Oficial no Banco Inter...");
+    const seuNum = matchedFatura?.numeroFatura ? String(matchedFatura.numeroFatura).substring(0, 15) : `FAT-${Date.now().toString().slice(-6)}`;
+
+    try {
+      const { getFunctions, httpsCallable } = await import("firebase/functions");
+      const { app } = await import("../lib/firebase");
+      const functions = getFunctions(app, "southamerica-east1");
+      const emitir = httpsCallable(functions, "emitirBoletoInter");
+
+      const response: any = await emitir({
+        faturaId: seuNum,
+        clienteNome: (paciente as any).nomeResponsavel || (paciente as any).responsavel || paciente.nome,
+        clienteDocumento: docPagador,
+        clienteEmail: (paciente as any).email || (paciente as any).emailResponsavel || "",
+        valor: valorFinal,
+        dataVencimento: new Date(Date.now() + 5 * 86400000).toISOString().split("T")[0],
+        descricao: `Prestação de Serviços - Ref: ${String(calendarMonth + 1).padStart(2, "0")}/${calendarYear}`
+      });
+
+      const resData: any = response.data;
+      toast.dismiss(loaderId);
+
+      // Atualizar dados do boleto na fatura do Firestore se ela já existir
+      if (matchedFatura?.id) {
+        try {
+          const { doc, updateDoc } = await import("firebase/firestore");
+          const { db } = await import("../lib/firebase");
+          await updateDoc(doc(db, "faturas_pacientes", matchedFatura.id), {
+            codigoSolicitacao: resData.codigoSolicitacao || "",
+            nossoNumero: resData.nossoNumero || "",
+            linhaDigitavel: resData.linhaDigitavel || "",
+            codigoBarras: resData.codigoBarras || "",
+            pixCopiaECola: resData.pixCopiaECola || "",
+            pdfBase64: resData.pdfBase64 || "",
+            statusPagamento: "Pendente",
+            situacaoInter: resData.situacaoInter || "A_RECEBER"
+          });
+        } catch (dbErr) {
+          console.warn("Aviso ao vincular boleto na fatura existente:", dbErr);
+        }
+      }
+
+      if (resData?.pdfBase64) {
+        const byteCharacters = atob(resData.pdfBase64);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: "application/pdf" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `Boleto_Inter_${paciente.nome.replace(/\s+/g, "_")}_${mesFormatado}.pdf`;
+        link.click();
+      }
+
+      toast.success("Boleto emitido e PDF baixado com sucesso!");
+    } catch (err: any) {
+      toast.dismiss(loaderId);
+      console.error("Erro ao gerar boleto:", err);
+      toast.error(`Falha ao emitir boleto: ${err.message || "Erro de conexão com o banco"}`);
+    }
+  };
+
   const handleBaixarFaturaPng = async () => {
     if (!paciente || !paciente.id) {
       toast.error('Paciente não identificado.');
@@ -3289,12 +3548,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
       const html2canvas = (await import('html2canvas-pro')).default;
       const canvas = await html2canvas(printElement, {
-        backgroundColor: '#fcf8f2',
+        backgroundColor: '#ffffff',
         scale: 2,
         useCORS: true,
         logging: false,
         onclone: (clonedDoc) => {
-          sanitizeClonedDocForHtml2Canvas(clonedDoc, '#fcf8f2', '#1a3c2e');
+          sanitizeClonedDocForHtml2Canvas(clonedDoc, '#ffffff', '#0f172a');
           if (clonedDoc.body) {
             clonedDoc.body.style.width = '850px';
           }
@@ -3634,15 +3893,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   return (
     <div className="w-full max-w-5xl lg:max-w-6xl xl:max-w-7xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 space-y-6" id="patient-record-container">
       {/* Return */}
-      <div className="flex items-center justify-between">
-        <button
-          onClick={onBack}
-          className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded hover:bg-slate-50 transition-colors flex items-center space-x-1"
-          id="btn-voltar-listagem"
-        >
-          <ArrowLeft size={14} />
-          <span>← Voltar</span>
-        </button>
+      <div className="flex items-center justify-end">
         <span className="text-xs text-slate-400 font-mono">
           ID: {isNew ? 'PROVISÓRIO' : paciente?.id}
         </span>
@@ -4795,20 +5046,53 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             {activeTab === 'agendamento' && (
               <div className="w-full max-w-6xl mx-auto bg-white rounded-2xl shadow-xl border border-gray-200 p-6 md:p-8 mt-6 mb-12 space-y-4 animate-in fade-in-30 slide-in-from-right-3">
                 {/* Operations Header Buttons Deck - RH Gestão Domiciliar */}
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-xs space-y-2.5">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block font-sans">🛠️ Controles de Escala Operacional</span>
+                <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3 font-sans">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider block font-sans">
+                      🛠️ Controles de Escala Operacional
+                    </span>
+                    {isCurrentMonthConcluded && (
+                      <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-100 border border-amber-300 text-amber-900 rounded-lg text-xs font-black shadow-xs font-sans">
+                        <Lock size={13} className="text-amber-700" />
+                        <span>Escala Concluída</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Linha 1: Operações de Escala e Agendamento */}
                   <div className="flex flex-wrap gap-2.5 items-center justify-start">
                     <button
                       type="button"
                       disabled={isCurrentlyDeactivated}
                       onClick={() => {
-                        setServicoExtraDesc('Visita de Enfermeira');
-                        setServicoExtraCustomDesc('');
+                        setOpenedFrom("button");
+                        setAgnCalendarYear(calendarYear);
+                        setAgnCalendarMonth(calendarMonth);
+                        setSelectedDates([]);
+                        setAvulsoProf("");
+                        setAvulsoPlantaoOptionId("principal");
+                        setAvulsoTipoDia("Normal");
+                        setAvulsoObs("");
+                        setAvulsoCuringa(false);
+                        setAvulsoModalOpen(true);
+                      }}
+                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-200 transform hover:-translate-y-0.5 bg-sky-600 hover:bg-sky-700 shadow-md shadow-sky-500/30 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none cursor-pointer flex items-center space-x-1.5 text-xs active:scale-95"
+                    >
+                      <Plus size={14} />
+                      <span>+ Agendar</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isCurrentlyDeactivated}
+                      onClick={() => {
+                        setServicoExtraDesc("Visita de Enfermeira");
+                        setServicoExtraCustomDesc("");
                         setServicoExtraData(new Date().toISOString().slice(0, 10));
-                        setServicoExtraValor('');
+                        setServicoExtraValor("");
                         setIsServicoExtraModalOpen(true);
                       }}
-                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-300 transform hover:-translate-y-1 bg-blue-600 shadow-lg shadow-blue-500/50 hover:shadow-blue-500/80 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none cursor-pointer flex items-center space-x-1.5 text-xs font-sans"
+                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-200 transform hover:-translate-y-0.5 bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none cursor-pointer flex items-center space-x-1.5 text-xs active:scale-95"
                     >
                       <PlusCircle size={14} />
                       <span>+ Serviço Extra</span>
@@ -4816,61 +5100,24 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
                     <button
                       type="button"
-                      onClick={() => setIsFaturaModalOpen(true)}
-                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-300 transform hover:-translate-y-1 bg-emerald-600 shadow-lg shadow-emerald-500/50 hover:shadow-emerald-500/80 cursor-pointer flex items-center space-x-1.5 text-xs font-sans"
-                    >
-                      <Receipt size={14} />
-                      <span>Gerar Fatura</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={isCurrentlyDeactivated}
-                      onClick={() => {
-                        setOpenedFrom('button');
-                        setAgnCalendarYear(calendarYear);
-                        setAgnCalendarMonth(calendarMonth);
-                        setSelectedDates([]);
-                        setAvulsoProf('');
-                        setAvulsoPlantaoOptionId('principal');
-                        setAvulsoTipoDia('Normal');
-                        setAvulsoObs('');
-                        setAvulsoCuringa(false);
-                        setAvulsoModalOpen(true);
-                      }}
-                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-300 transform hover:-translate-y-1 bg-sky-600 shadow-lg shadow-sky-500/50 hover:shadow-sky-500/80 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none cursor-pointer flex items-center space-x-1.5 text-xs font-sans"
-                    >
-                      <Plus size={14} />
-                      <span>Agendar</span>
-                    </button>
-
-                    <button
-                      type="button"
                       onClick={() => setIsPreviaFinanceiraModalOpen(true)}
-                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-300 transform hover:-translate-y-1 bg-purple-600 shadow-lg shadow-purple-500/50 hover:shadow-purple-500/80 cursor-pointer flex items-center space-x-1.5 text-xs font-sans"
+                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-200 transform hover:-translate-y-0.5 bg-purple-600 hover:bg-purple-700 shadow-md shadow-purple-500/30 cursor-pointer flex items-center space-x-1.5 text-xs active:scale-95"
                     >
                       <Calculator size={14} />
                       <span>Prévia Financeira</span>
                     </button>
-
-                    {isCurrentMonthConcluded && (
-                      <div className="flex items-center gap-1.5 px-4 py-2 bg-amber-100 border border-amber-300 text-amber-900 rounded-lg text-xs font-black shadow-xs font-sans">
-                        <Lock size={14} className="text-amber-700" />
-                        <span>Escala Concluída</span>
-                      </div>
-                    )}
 
                     <button
                       type="button"
                       disabled={isCurrentlyDeactivated}
                       onClick={() => {
                         const lastDay = new Date(calendarYear, calendarMonth + 1, 0).getDate();
-                        const formattedLastDay = String(lastDay).padStart(2, '0');
-                        setConcluirStartDate(`${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-01`);
-                        setConcluirEndDate(`${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${formattedLastDay}`);
+                        const formattedLastDay = String(lastDay).padStart(2, "0");
+                        setConcluirStartDate(`${calendarYear}-${String(calendarMonth + 1).padStart(2, "0")}-01`);
+                        setConcluirEndDate(`${calendarYear}-${String(calendarMonth + 1).padStart(2, "0")}-${formattedLastDay}`);
                         setConcluirModalOpen(true);
                       }}
-                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-300 transform hover:-translate-y-1 bg-indigo-600 shadow-lg shadow-indigo-500/50 hover:shadow-indigo-500/80 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none cursor-pointer flex items-center space-x-1.5 text-xs font-sans"
+                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-200 transform hover:-translate-y-0.5 bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-500/30 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none cursor-pointer flex items-center space-x-1.5 text-xs active:scale-95"
                     >
                       <Check size={14} />
                       <span>Concluir</span>
@@ -4881,12 +5128,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       disabled={isCurrentlyDeactivated}
                       onClick={() => {
                         const lastDay = new Date(calendarYear, calendarMonth + 1, 0).getDate();
-                        const formattedLastDay = String(lastDay).padStart(2, '0');
-                        setReabrirStartDate(`${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-01`);
-                        setReabrirEndDate(`${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${formattedLastDay}`);
+                        const formattedLastDay = String(lastDay).padStart(2, "0");
+                        setReabrirStartDate(`${calendarYear}-${String(calendarMonth + 1).padStart(2, "0")}-01`);
+                        setReabrirEndDate(`${calendarYear}-${String(calendarMonth + 1).padStart(2, "0")}-${formattedLastDay}`);
                         setReabrirModalOpen(true);
                       }}
-                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-300 transform hover:-translate-y-1 bg-amber-600 shadow-lg shadow-amber-500/50 hover:shadow-amber-500/80 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none cursor-pointer flex items-center space-x-1.5 text-xs font-sans"
+                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-200 transform hover:-translate-y-0.5 bg-amber-600 hover:bg-amber-700 shadow-md shadow-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none cursor-pointer flex items-center space-x-1.5 text-xs active:scale-95"
                     >
                       <RotateCcw size={14} />
                       <span>Reabrir</span>
@@ -4897,21 +5144,24 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       disabled={isCurrentlyDeactivated}
                       onClick={() => {
                         const lastDay = new Date(calendarYear, calendarMonth + 1, 0).getDate();
-                        const formattedLastDay = String(lastDay).padStart(2, '0');
-                        setExcluirStartDate(`${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-01`);
-                        setExcluirEndDate(`${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${formattedLastDay}`);
+                        const formattedLastDay = String(lastDay).padStart(2, "0");
+                        setExcluirStartDate(`${calendarYear}-${String(calendarMonth + 1).padStart(2, "0")}-01`);
+                        setExcluirEndDate(`${calendarYear}-${String(calendarMonth + 1).padStart(2, "0")}-${formattedLastDay}`);
                         setExcluirModalOpen(true);
                       }}
-                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-300 transform hover:-translate-y-1 bg-rose-600 shadow-lg shadow-rose-500/50 hover:shadow-rose-500/80 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none cursor-pointer flex items-center space-x-1.5 text-xs font-sans"
+                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-200 transform hover:-translate-y-0.5 bg-rose-600 hover:bg-rose-700 shadow-md shadow-rose-500/30 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none cursor-pointer flex items-center space-x-1.5 text-xs active:scale-95"
                     >
                       <X size={14} />
                       <span>Exclusão</span>
                     </button>
+                  </div>
 
+                  {/* Linha 2: Faturamento e Exportações */}
+                  <div className="flex flex-wrap gap-2.5 items-center justify-start pt-2 border-t border-slate-200/70">
                     <button
                       type="button"
                       onClick={handleBaixarFaturaExcel}
-                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-300 transform hover:-translate-y-1 bg-amber-500 shadow-lg shadow-amber-400/50 hover:shadow-amber-400/80 cursor-pointer flex items-center space-x-1.5 text-xs font-sans"
+                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-200 transform hover:-translate-y-0.5 bg-amber-500 hover:bg-amber-600 shadow-md shadow-amber-500/30 cursor-pointer flex items-center space-x-1.5 text-xs active:scale-95"
                     >
                       <FileSpreadsheet size={14} />
                       <span>Excel (.xlsx)</span>
@@ -4920,7 +5170,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     <button
                       type="button"
                       onClick={handleBaixarFaturaWord}
-                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-300 transform hover:-translate-y-1 bg-blue-600 shadow-lg shadow-blue-500/50 hover:shadow-blue-500/80 cursor-pointer flex items-center space-x-1.5 text-xs font-sans"
+                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-200 transform hover:-translate-y-0.5 bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-500/30 cursor-pointer flex items-center space-x-1.5 text-xs active:scale-95"
                     >
                       <Printer size={14} />
                       <span>Word (.docx)</span>
@@ -4929,12 +5179,29 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     <button
                       type="button"
                       onClick={handleBaixarFaturaPng}
-                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-300 transform hover:-translate-y-1 bg-teal-600 shadow-lg shadow-teal-500/50 hover:shadow-teal-500/80 cursor-pointer flex items-center space-x-1.5 text-xs font-sans"
+                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-200 transform hover:-translate-y-0.5 bg-teal-600 hover:bg-teal-700 shadow-md shadow-teal-500/30 cursor-pointer flex items-center space-x-1.5 text-xs active:scale-95"
                     >
                       <FileText size={14} />
                       <span>Baixar Fatura (PDF)</span>
                     </button>
-                    
+
+                    <button
+                      type="button"
+                      onClick={handleGerarBoletoInter}
+                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-200 transform hover:-translate-y-0.5 bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-500/30 cursor-pointer flex items-center space-x-1.5 text-xs active:scale-95"
+                    >
+                      <Receipt size={14} />
+                      <span>Gerar Boleto</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsFaturaModalOpen(true)}
+                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-200 transform hover:-translate-y-0.5 bg-emerald-700 hover:bg-emerald-800 shadow-md shadow-emerald-700/30 cursor-pointer flex items-center space-x-1.5 text-xs active:scale-95"
+                    >
+                      <Receipt size={14} />
+                      <span>Gerar Fatura</span>
+                    </button>
                   </div>
                 </div>
 
@@ -4966,60 +5233,128 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     <div className="bg-white border border-gray-200 rounded-2xl p-6 md:p-8 shadow-sm space-y-6 animate-in fade-in-30">
                       {/* Navigation control */}
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-100 pb-4">
-                        <div className="flex items-center space-x-3">
-                          <div className="flex bg-slate-100 p-1 border border-slate-200/80 rounded-lg">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <div className="flex items-center space-x-3">
+                            <div className="flex bg-slate-100 p-1 border border-slate-200/80 rounded-lg">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (calendarMonth === 0) {
+                                    setCalendarMonth(11);
+                                    setCalendarYear(calendarYear - 1);
+                                  } else {
+                                    setCalendarMonth(calendarMonth - 1);
+                                  }
+                                }}
+                                className="p-1 hover:bg-white text-slate-700 rounded transition-colors cursor-pointer"
+                              >
+                                <ChevronLeft size={14} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (calendarMonth === 11) {
+                                    setCalendarMonth(0);
+                                    setCalendarYear(calendarYear + 1);
+                                  } else {
+                                    setCalendarMonth(calendarMonth + 1);
+                                  }
+                                }}
+                                className="p-1 hover:bg-white text-slate-700 rounded transition-colors cursor-pointer"
+                              >
+                                <ChevronRight size={14} />
+                              </button>
+                            </div>
+
                             <button
                               type="button"
                               onClick={() => {
-                                if (calendarMonth === 0) {
-                                  setCalendarMonth(11);
-                                  setCalendarYear(calendarYear - 1);
-                                } else {
-                                  setCalendarMonth(calendarMonth - 1);
-                                }
+                                const today = new Date();
+                                setCalendarMonth(today.getMonth());
+                                setCalendarYear(today.getFullYear());
                               }}
-                              className="p-1 hover:bg-white text-slate-700 rounded transition-colors cursor-pointer"
+                              className="px-2.5 py-1 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer"
                             >
-                              <ChevronLeft size={14} />
+                              MÊS
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (calendarMonth === 11) {
-                                  setCalendarMonth(0);
-                                  setCalendarYear(calendarYear + 1);
-                                } else {
-                                  setCalendarMonth(calendarMonth + 1);
-                                }
-                              }}
-                              className="p-1 hover:bg-white text-slate-700 rounded transition-colors cursor-pointer"
-                            >
-                              <ChevronRight size={14} />
-                            </button>
+
+                            <h2 className="text-sm font-black text-slate-800 tracking-tight font-sans">
+                              {["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"][calendarMonth]} {calendarYear}
+                            </h2>
                           </div>
 
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const today = new Date();
-                              setCalendarMonth(today.getMonth());
-                              setCalendarYear(today.getFullYear());
-                            }}
-                            className="px-2.5 py-1 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer"
-                          >
-                            MÊS
-                          </button>
+                          {/* Painel de Status Bancário ao lado do Mês */}
+                          {(() => {
+                            const monthPrefix = `${calendarYear}-${String(calendarMonth + 1).padStart(2, "0")}`;
+                            const matchedFatura: any = (faturasPacientes || []).find((f: any) => {
+                              const matchesPaciente = f.idPaciente === (paciente?.id || "") || f.pacienteId === (paciente?.id || "") || f.nomePaciente?.toLowerCase() === (paciente?.nome || "").toLowerCase();
+                              const matchesPeriodo = f.mesReferencia === monthPrefix || (f.periodoApurado?.inicio && f.periodoApurado.inicio.startsWith(monthPrefix));
+                              return matchesPaciente && matchesPeriodo;
+                            });
 
-                          <h2 className="text-sm font-black text-slate-800 tracking-tight font-sans">
-                            {['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][calendarMonth]} {calendarYear}
-                          </h2>
+                            if (!matchedFatura || (!matchedFatura.codigoSolicitacao && !matchedFatura.linhaDigitavel && !matchedFatura.statusPagamento)) {
+                              return (
+                                <span className="text-[11px] font-bold text-slate-400 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-full flex items-center gap-1.5">
+                                  ⚪ Boleto Pendente
+                                </span>
+                              );
+                            }
+
+                            const localOverride = statusBoletoLocal[monthPrefix] || (matchedFatura?.id ? statusBoletoLocal[matchedFatura.id] : undefined);
+                            const stPag = (matchedFatura.statusPagamento || "").toLowerCase();
+                            const stInter = (matchedFatura.situacaoInter || "").toLowerCase();
+                            const stFat = (matchedFatura.status || "").toLowerCase();
+                            const isPago = localOverride === "pago" || stPag === "pago" || stInter === "pago" || stInter === "recebido" || stInter === "marcado_recebido" || stFat === "pago";
+                            const isVencido = !isPago && (localOverride === "vencido" || stPag === "vencido" || stInter === "vencido" || stInter === "expirado" || stInter === "atrasado" || stFat === "vencido");
+
+                            return (
+                              <div className="flex flex-wrap items-center gap-1.5 animate-in fade-in-30">
+                                {isPago ? (
+                                  <span className="px-2.5 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                                    ✅ PAGO
+                                  </span>
+                                ) : isVencido ? (
+                                  <span className="px-2.5 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1">
+                                    ⛔ VENCIDO
+                                  </span>
+                                ) : (
+                                  <span className="px-2.5 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
+                                    ⏳ EM ABERTO
+                                  </span>
+                                )}
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleVerificarStatusBoleto(matchedFatura.codigoSolicitacao || matchedFatura.nossoNumero, matchedFatura.id, monthPrefix)}
+                                  className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 text-[11px] font-bold rounded-md border border-slate-300 shadow-2xs transition-all cursor-pointer flex items-center gap-1 active:scale-95"
+                                  title="Consultar baixa em tempo real no Banco Inter"
+                                >
+                                  🔄 Sincronizar
+                                </button>
+
+                                {matchedFatura.pixCopiaECola && !isPago && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(matchedFatura.pixCopiaECola);
+                                      toast.success("Pix Copia e Cola copiado!");
+                                    }}
+                                    className="px-2 py-1 bg-teal-50 hover:bg-teal-100 text-teal-800 text-[11px] font-bold rounded-md border border-teal-200 shadow-2xs transition-all cursor-pointer flex items-center gap-1 active:scale-95"
+                                    title="Copiar Pix Copia e Cola"
+                                  >
+                                    ⚡ Copiar Pix
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
 
                       {/* Contêiner Externo (Proteção Mobile) */}
                       <div className="w-full overflow-x-auto shadow-sm">
                         {/* A Grade (O Calendário em si) */}
-                        <div className="min-w-[700px] lg:min-w-0 w-full grid grid-cols-7 gap-px bg-gray-300 border border-gray-300">
+                        <div className="min-w-[700px] lg:min-w-0 w-full grid grid-cols-7 border border-slate-300 rounded-xl overflow-hidden bg-white shadow-xs">
                           {/* Cabeçalho (Dias da Semana) */}
                           {[
                             { label: 'Domingo', color: 'bg-rose-500' },
@@ -5029,14 +5364,23 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                             { label: 'Quinta', color: 'bg-amber-500' },
                             { label: 'Sexta', color: 'bg-blue-600' },
                             { label: 'Sábado', color: 'bg-lime-600' }
-                          ].map((day) => (
-                            <div key={day.label} className={`p-3 text-center text-white font-bold ${day.color}`}>
+                          ].map((day, idx) => (
+                            <div
+                              key={day.label}
+                              className={`p-3 text-center text-white font-bold ${day.color} border-b border-slate-300 ${
+                                idx === 0 || idx === 5
+                                  ? 'border-r-2 border-white/50'
+                                  : idx < 6
+                                  ? 'border-r border-white/25'
+                                  : ''
+                              }`}
+                            >
                               {day.label}
                             </div>
                           ))}
 
                           {/* Células dos Dias (Os Quadrados) */}
-                          {gridDays.map((cell) => {
+                          {gridDays.map((cell, cellIdx) => {
                             const today = new Date();
                             const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
                             const isToday = cell.dateStr === todayStr;
@@ -5086,7 +5430,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                     targetDate: cell.dateStr
                                   });
                                 }}
-                                className={`bg-white min-h-[140px] p-2 flex flex-col hover:bg-gray-50 transition-colors cursor-pointer ${!cell.isCurrentMonth ? 'opacity-40' : ''}`}
+                                className={`bg-white min-h-[140px] p-2 flex flex-col hover:bg-slate-50 transition-colors cursor-pointer border-b border-slate-200 ${
+                                  cellIdx % 7 === 0 || cellIdx % 7 === 5
+                                    ? 'border-r-2 border-r-slate-300'
+                                    : cellIdx % 7 < 6
+                                    ? 'border-r border-slate-200'
+                                    : ''
+                                } ${!cell.isCurrentMonth ? 'opacity-40 bg-slate-50/50' : ''}`}
                               >
                                 {/* Número do Dia isolado no topo à direita com holiday se houver */}
                                 <div className="flex items-center justify-between">
@@ -6367,6 +6717,90 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   </div>
                 )}
               </div>
+
+              {/* Seletor de Modo: Seleção Manual vs Gerador Automático */}
+              <div className="bg-slate-100 p-1 rounded-xl flex items-center border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setAgendamentoModo("manual")}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${agendamentoModo === "manual" ? "bg-white text-blue-700 shadow-xs" : "text-slate-600 hover:text-slate-900"}`}
+                >
+                  🖱️ Seleção Manual
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAgendamentoModo("automatico")}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${agendamentoModo === "automatico" ? "bg-white text-indigo-700 shadow-xs" : "text-slate-600 hover:text-slate-900"}`}
+                >
+                  ⚡ Escala Automática
+                </button>
+              </div>
+
+              {/* Bloco de Configuração da Escala Automática */}
+              {agendamentoModo === "automatico" && (
+                <div className="bg-indigo-50/70 border border-indigo-200 rounded-xl p-3.5 space-y-3 animate-in fade-in-30">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Data Início</label>
+                      <input
+                        type="date"
+                        value={autoDataInicio}
+                        onChange={(e) => setAutoDataInicio(e.target.value)}
+                        className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-indigo-500 font-sans"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Data Fim</label>
+                      <input
+                        type="date"
+                        value={autoDataFim}
+                        onChange={(e) => setAutoDataFim(e.target.value)}
+                        className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-indigo-500 font-sans"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Padrão da Escala</label>
+                      <select
+                        value={autoPadraoEscala}
+                        onChange={(e: any) => setAutoPadraoEscala(e.target.value)}
+                        className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-indigo-500 font-sans font-bold text-indigo-900"
+                      >
+                        <option value="12x36">12 x 36</option>
+                        <option value="24x48">24 x 48</option>
+                        <option value="48x48">48 x 48</option>
+                        <option value="todos">Todos os Dias (Diário)</option>
+                        <option value="uteis">Dias Úteis (Seg a Sex)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {autoPadraoEscala === "48x48" && (
+                    <div className="bg-white/80 p-2.5 rounded-lg border border-indigo-200/80 flex items-center justify-between text-xs">
+                      <div>
+                        <span className="font-bold text-slate-800 block">Regra de Transporte em 48h:</span>
+                        <span className="text-[10px] text-slate-500">O bloco de 48h é dividido em dois plantões de 24h.</span>
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={autoPagarTransporte48hDia2}
+                          onChange={(e) => setAutoPagarTransporte48hDia2(e.target.checked)}
+                          className="rounded text-indigo-600 focus:ring-0 cursor-pointer"
+                        />
+                        <span className="text-xs font-semibold text-slate-700">Pagar transporte também no 2º dia</span>
+                      </label>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleGerarEscalaAutomatica}
+                    className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg shadow-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-98"
+                  >
+                    ⚡ Calcular e Povoar Plantões do Período
+                  </button>
+                </div>
+              )}
 
               {/* Data do(s) Plantão(ões) - Componente de Calendário Inline Multi-Date Picker */}
               <div className="space-y-2.5">
@@ -9410,17 +9844,17 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         const totalSomaPlantoes = plantoesValidos.reduce((acc: number, curr: any) => acc + getFaturaRowVal(curr), 0);
 
         return (
-          <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', width: '210mm', pointerEvents: 'none' }}>
-            <div ref={tempFaturaRef} className="w-[210mm] min-h-[297mm] p-[12mm] bg-white text-slate-800 font-sans border border-slate-200 mx-auto flex flex-col justify-between" style={{ color: '#1e293b' }}>
+          <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', width: '820px', pointerEvents: 'none' }}>
+            <div ref={tempFaturaRef} className="w-[800px] p-7 bg-white text-slate-800 font-sans border border-slate-200 mx-auto flex flex-col justify-between shadow-sm" style={{ color: '#1e293b' }}>
               <div>
-                {/* 1. Cabeçalho Corporativo */}
-                <div className="flex justify-between items-start border-b-2 border-[#1E3A2F] pb-4 mb-5">
+                {/* 1. Cabeçalho Corporativo Limpo */}
+                <div className="flex justify-between items-center border-b-2 border-slate-300 pb-3 mb-4">
                   <div className="flex items-center gap-4">
                     {empresaInfo?.logoUrl ? (
                       <img 
                         src={empresaInfo.logoUrl} 
                         alt="Logo" 
-                        className="h-14 max-h-16 w-auto object-contain max-w-full shrink-0" 
+                        className="h-14 max-h-16 w-auto object-contain max-w-[150px] shrink-0" 
                         style={{ imageRendering: '-webkit-optimize-contrast' }} 
                       />
                     ) : (
@@ -9429,10 +9863,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       </div>
                     )}
                     <div>
-                      <h2 className="text-base font-extrabold text-[#1E3A2F] tracking-tight leading-tight">
+                      <h2 className="text-base font-bold text-slate-900 tracking-tight leading-tight">
                         {empresaInfo?.razaoSocial || 'RH GESTÃO DOMICILIAR LTDA.'}
                       </h2>
-                      <p className="text-xs text-slate-500 font-semibold mt-0.5">
+                      <p className="text-xs text-slate-600 font-medium mt-0.5">
                         CNPJ: {empresaInfo?.cnpj || '00.000.000/0000-00'}
                       </p>
                       <p className="text-xs text-slate-500 mt-0.5">
@@ -9441,22 +9875,22 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     </div>
                   </div>
                   <div className="text-right">
-                    <h1 className="text-2xl font-black text-[#1E3A2F] tracking-wide">FATURA</h1>
+                    <h1 className="text-2xl font-bold text-slate-900 tracking-wide">FATURA</h1>
                     <p className="text-xs font-mono font-bold text-slate-700 mt-1">
                       Nº: {faturaParaBaixar.numeroFatura || 'FAT-0000'}
                     </p>
-                    <p className="text-xs text-slate-500 mt-0.5">
+                    <p className="text-xs text-slate-600 font-medium mt-0.5">
                       Emissão: {faturaParaBaixar.dataEmissao ? (faturaParaBaixar.dataEmissao.includes('T') ? new Date(faturaParaBaixar.dataEmissao).toLocaleDateString('pt-BR') : faturaParaBaixar.dataEmissao) : new Date().toLocaleDateString('pt-BR')}
                     </p>
                   </div>
                 </div>
 
-                {/* 2. Box de Identificação - Dois Cards Informativos */}
-                <div className="grid grid-cols-2 gap-3 mb-5">
-                  {/* Card 1: Paciente & Período de Atendimento */}
-                  <div className="bg-[#F8FAF9] border border-slate-200/80 rounded-xl p-3.5 flex flex-col justify-between">
+                {/* 2. Box de Identificação e Resumo */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  {/* Card 1: Paciente e Período */}
+                  <div className="bg-slate-50/90 border border-slate-200 rounded-lg p-3 flex flex-col justify-between">
                     <div>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
                         Identificação do Atendimento
                       </span>
                       <p className="text-xs text-slate-500 font-medium">Paciente:</p>
@@ -9464,7 +9898,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         {faturaParaBaixar.nomePaciente || paciente?.nome || 'Paciente'}
                       </p>
                     </div>
-                    <div className="mt-2.5 pt-2 border-t border-slate-200/60 text-xs text-slate-600 flex items-center justify-between">
+                    <div className="mt-2 pt-2 border-t border-slate-200 text-xs flex items-center justify-between">
                       <span className="text-slate-500 font-medium">Período:</span>
                       <span className="font-semibold text-slate-800">
                         {plantoesValidos.length > 0
@@ -9474,38 +9908,38 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     </div>
                   </div>
 
-                  {/* Card 2: Status & Valor Previsto */}
-                  <div className="bg-[#F8FAF9] border border-slate-200/80 rounded-xl p-3.5 flex flex-col justify-between">
-                    <div className="flex justify-between items-start">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                        Status e Consolidação
+                  {/* Card 2: Status e Valor Total */}
+                  <div className="bg-slate-50/90 border border-slate-200 rounded-lg p-3 flex flex-col justify-between">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        Status do Pagamento
                       </span>
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-emerald-100/80 text-emerald-800 border border-emerald-300/60">
+                      <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-300">
                         {faturaParaBaixar.status || 'Emitida'}
                       </span>
                     </div>
                     <div className="mt-2 text-right">
-                      <span className="text-[11px] text-slate-500 font-medium block">Valor Total Previsto:</span>
-                      <p className="text-xl font-black text-[#1E3A2F] font-mono leading-none mt-1">
+                      <span className="text-xs text-slate-600 font-bold block">Valor Total:</span>
+                      <p className="text-xl font-bold text-emerald-800 font-mono leading-none mt-1">
                         R$ {(faturaParaBaixar.valorTotal || faturaParaBaixar.valorTotalFatura || totalSomaPlantoes).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </p>
                     </div>
                   </div>
                 </div>
 
-                {/* 3. Tabela de Escalas / Plantões */}
-                <div className="rounded-lg overflow-hidden border border-slate-200 mb-5">
+                {/* 3. Tabela de Escalas / Plantões — Leve, com Fundo Claro e Alto Contraste (+40) */}
+                <div className="rounded-lg overflow-hidden border border-slate-300 mb-4">
                   <table className="w-full text-xs border-collapse">
                     <thead>
-                      <tr className="bg-[#1E3A2F] text-white">
-                        <th className="py-2.5 px-3 text-center font-semibold text-[11px] uppercase tracking-wider w-[90px]">Data</th>
-                        <th className="py-2.5 px-3 text-left font-semibold text-[11px] uppercase tracking-wider min-w-[170px]">Profissional</th>
-                        <th className="py-2.5 px-3 text-center font-semibold text-[11px] uppercase tracking-wider w-[100px]">Carga Horária</th>
-                        <th className="py-2.5 px-3 text-center font-semibold text-[11px] uppercase tracking-wider w-[120px]">Serviço</th>
-                        <th className="py-2.5 px-3 text-right font-semibold text-[11px] uppercase tracking-wider whitespace-nowrap min-w-[110px] w-[120px]">Valor (R$)</th>
+                      <tr className="bg-slate-100 border-b border-slate-300 text-slate-800">
+                        <th className="py-2.5 px-3 text-center font-bold text-xs uppercase tracking-wider w-[100px]">Data</th>
+                        <th className="py-2.5 px-3 text-left font-bold text-xs uppercase tracking-wider min-w-[200px]">Profissional</th>
+                        <th className="py-2.5 px-3 text-center font-bold text-xs uppercase tracking-wider w-[110px]">Carga Horária</th>
+                        <th className="py-2.5 px-3 text-center font-bold text-xs uppercase tracking-wider w-[110px]">Serviço</th>
+                        <th className="py-2.5 px-3 text-right font-bold text-xs uppercase tracking-wider whitespace-nowrap w-[130px]">Valor (R$)</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#E5E7EB]">
+                    <tbody className="divide-y divide-slate-200">
                       {plantoesValidos.map((p: any, i: number) => {
                         const valorLinha = getFaturaRowVal(p);
                         const formatDateBR = (dateStr: string) => {
@@ -9517,14 +9951,14 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         };
 
                         return (
-                          <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-[#F9FAFB]'}>
-                            <td className="py-2 px-3 text-center font-mono text-slate-700">{formatDateBR(p.data)}</td>
-                            <td className="py-2 px-3 text-left font-medium text-slate-800 whitespace-normal break-words">
+                          <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
+                            <td className="py-2.5 px-3 text-center font-mono text-slate-700 font-semibold text-xs">{formatDateBR(p.data)}</td>
+                            <td className="py-2.5 px-3 text-left font-semibold text-slate-900 text-xs whitespace-normal break-words">
                               {formatNomeComEspacos(p.profissional || p.nomeProfissional)}
                             </td>
-                            <td className="py-2 px-3 text-center font-mono text-slate-600 font-medium">{getPlantaoCargaHoraria(p)}</td>
-                            <td className="py-2 px-3 text-center text-slate-600">{p.tipoDia || 'Plantão Normal'}</td>
-                            <td className="py-2 px-3 text-right text-slate-900 font-bold font-mono whitespace-nowrap">
+                            <td className="py-2.5 px-3 text-center font-mono text-slate-700 font-medium text-xs">{getPlantaoCargaHoraria(p)}</td>
+                            <td className="py-2.5 px-3 text-center text-slate-700 text-xs font-medium">{p.tipoDia || 'Plantão Normal'}</td>
+                            <td className="py-2.5 px-3 text-right text-slate-900 font-bold font-mono text-xs whitespace-nowrap">
                               R$ {valorLinha.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
                           </tr>
@@ -9535,20 +9969,20 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 </div>
 
                 {/* 4. Totalizador */}
-                <div className="flex justify-end mb-6">
-                  <div className="bg-[#F8FAF9] border border-slate-200/90 rounded-xl p-4 text-right min-w-[240px] shadow-sm">
-                    <span className="text-[10px] font-extrabold uppercase text-slate-500 tracking-wider block">
+                <div className="flex justify-end mb-4">
+                  <div className="bg-slate-50 border border-slate-300 rounded-lg p-3 text-right min-w-[240px] shadow-2xs">
+                    <span className="text-[11px] font-bold uppercase text-slate-600 tracking-wider block">
                       VALOR TOTAL DA FATURA
                     </span>
-                    <span className="text-2xl font-black text-[#1E3A2F] font-mono block mt-0.5">
+                    <span className="text-2xl font-black text-slate-900 font-mono block mt-0.5">
                       R$ {(faturaParaBaixar.valorTotal || faturaParaBaixar.valorTotalFatura || totalSomaPlantoes).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* 4. Rodapé Corporativo */}
-              <div className="pt-3 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-400">
+              {/* 5. Rodapé Corporativo */}
+              <div className="pt-2 border-t border-slate-300 flex justify-between items-center text-[11px] text-slate-500">
                 <span>Documento gerado eletronicamente pelo Sistema RH Gestão Domiciliar</span>
                 <span>Página 1 de 1</span>
               </div>
