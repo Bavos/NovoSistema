@@ -26,7 +26,7 @@ const firebaseConfig = {
   firestoreDatabaseId: getEnvVal(import.meta.env.VITE_FIREBASE_DATABASE_ID, staticConfig.firestoreDatabaseId || "ai-studio-ec969b01-95ac-467f-b5b7-48efe433d663"),
 };
 
-const app = initializeApp(firebaseConfig);
+export const app = initializeApp(firebaseConfig);
 
 // Apontando explicitamente para o banco nomeado
 export const db = initializeFirestore(app, {

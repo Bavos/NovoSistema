@@ -1,89 +1,113 @@
 import React, { useState } from 'react';
-import { useFirebase } from '../context/FirebaseContext';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../lib/firebase';
 import { Logo } from '../components/Logo';
-import { getSanitizedAuthErrorMessage } from '../types';
 import { toast } from 'react-hot-toast';
 
 interface FirstAccessPageProps {
-  onBackToLogin: () => void;
+  onNavigateToLogin?: () => void;
+  onBack?: () => void;
 }
 
-export const FirstAccessPage: React.FC<FirstAccessPageProps> = ({ onBackToLogin }) => {
+export const FirstAccessPage: React.FC<FirstAccessPageProps> = ({ onNavigateToLogin, onBack }) => {
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const { activateAccount, setNotification } = useFirebase();
+  const [isLoading, setIsLoading] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
 
-  const handleActivate = async (e: React.FormEvent) => {
+  const handleVoltar = () => {
+    if (onNavigateToLogin) onNavigateToLogin();
+    else if (onBack) onBack();
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    if (password !== confirmPassword) {
-      const msg = 'As senhas digitadas não coincidem. Verifique e tente novamente.';
-      setError(msg);
-      toast.error(msg);
+    if (!email.trim()) {
+      toast.error('Informe o seu e-mail cadastrado.');
       return;
     }
+
+    setIsLoading(true);
+
     try {
-      await activateAccount(email, password);
-      // Wait a bit or let context handle notification, then go back
-      onBackToLogin();
-    } catch (err: any) {
-      const friendlyMsg = getSanitizedAuthErrorMessage(err);
-      setError(friendlyMsg);
-      toast.error(friendlyMsg);
+      await sendPasswordResetEmail(auth, email.trim());
+      setEmailSent(true);
+      toast.success('Link de recuperação enviado com sucesso!');
+    } catch (error: any) {
+      setEmailSent(true);
+      toast.success('Se o e-mail estiver cadastrado, as instruções foram enviadas.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="flex justify-center items-center h-screen bg-slate-50">
-        <div className="bg-white p-10 rounded-2xl shadow-xl w-full max-w-sm border border-slate-100">
-            <div className="flex justify-center mb-4">
-                <Logo className="w-full max-w-[250px] h-auto" />
-            </div>
-            <h1 className="text-2xl font-bold text-slate-800 mb-6 text-center">Ativar Conta</h1>
-            {error && (
-                <div className="bg-red-50 text-red-600 p-3 rounded-xl text-xs mb-4 border border-red-100 text-center font-medium">
-                    {error}
-                </div>
-            )}
-            <form onSubmit={handleActivate} className="space-y-4">
-                <input 
-                    type="email" 
-                    value={email} 
-                    onChange={e => setEmail(e.target.value)} 
-                    className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#1A3626]/20 focus:border-[#1A3626] transition-all" 
-                    required 
-                />
-                <input 
-                    type="password" 
-                    value={password} 
-                    onChange={e => setPassword(e.target.value)} 
-                    className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#1A3626]/20 focus:border-[#1A3626] transition-all" 
-                    required 
-                />
-                <input 
-                    type="password" 
-                    value={confirmPassword} 
-                    onChange={e => setConfirmPassword(e.target.value)} 
-                    className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#1A3626]/20 focus:border-[#1A3626] transition-all" 
-                    required 
-                />
-                <button 
-                    type="submit" 
-                    className="w-full bg-[#1A3626] text-white p-3 rounded-xl font-semibold hover:bg-[#254A34] transition-colors shadow-lg shadow-[#1A3626]/20"
-                >
-                    🔐 Ativar Minha Conta
-                </button>
-                <button 
-                    type="button" 
-                    onClick={onBackToLogin}
-                    className="w-full text-slate-500 hover:text-slate-800 text-xs text-center"
-                >
-                    Voltar ao Login
-                </button>
-            </form>
+    <div className="min-h-screen flex items-center justify-center bg-[#f8faf8] px-4 py-12 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-6 bg-white p-8 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center">
+        
+        <div className="flex justify-center mb-2">
+          <Logo />
         </div>
+
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-[#1e3a2b]">Recuperar Acesso</h2>
+          <p className="mt-2 text-sm text-gray-600">
+            Informe seu e-mail cadastrado para receber o link de acesso e redefinição de senha.
+          </p>
+        </div>
+
+        {emailSent ? (
+          <div className="w-full text-center space-y-4 mt-4">
+            <div className="p-4 bg-green-50 border border-green-200 rounded-xl text-sm text-green-800">
+              Enviamos as instruções para <strong>{email}</strong>. Verifique sua caixa de entrada e pasta de spam.
+            </div>
+            <button
+              type="button"
+              onClick={handleVoltar}
+              className="w-full py-3 px-4 rounded-xl text-sm font-semibold text-white bg-[#1e3a2b] hover:bg-[#15281e] transition-colors shadow-sm"
+            >
+              Voltar ao Login
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="mt-4 w-full space-y-5">
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                E-mail Cadastrado
+              </label>
+              <input
+                id="email"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="seu.email@exemplo.com"
+                className="w-full px-4 py-3 rounded-xl border border-gray-300 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1e3a2b] focus:border-transparent transition"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full py-3 px-4 rounded-xl text-sm font-semibold text-white bg-[#1e3a2b] hover:bg-[#15281e] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1e3a2b] transition-colors shadow-sm disabled:opacity-50"
+            >
+              {isLoading ? 'Enviando link...' : 'Enviar Link de Acesso'}
+            </button>
+
+            <div className="text-center pt-2">
+              <button
+                type="button"
+                onClick={handleVoltar}
+                className="text-sm font-medium text-[#1e3a2b] hover:underline"
+              >
+                Voltar ao Login
+              </button>
+            </div>
+          </form>
+        )}
+
+      </div>
     </div>
   );
 };
+
+export default FirstAccessPage;

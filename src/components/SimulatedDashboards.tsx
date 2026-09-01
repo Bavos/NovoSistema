@@ -1,3 +1,58 @@
+
+async function downloadBoletoPdf(base64Data, seuNumero, codigoSolicitacao) {
+  let finalBase64 = base64Data;
+
+  if (!finalBase64 && codigoSolicitacao) {
+    try {
+      toast.loading("Buscando PDF oficial no Banco Inter...", { id: "loading-pdf" });
+      const { getFunctions, httpsCallable } = await import("firebase/functions");
+      const { app } = await import("../lib/firebase");
+      const functions = getFunctions(app, "southamerica-east1");
+      const obterPdf = httpsCallable(functions, "obterPdfBoletoInter");
+      const res = await obterPdf({ codigoSolicitacao });
+      finalBase64 = res.data.pdfBase64;
+      toast.dismiss("loading-pdf");
+    } catch (err) {
+      toast.dismiss("loading-pdf");
+      alert("O Banco Inter ainda está processando o PDF deste boleto. Aguarde 5 segundos e tente clicar novamente.");
+      return;
+    }
+  }
+
+  if (!finalBase64) {
+    alert("Arquivo PDF não disponível no momento. Tente novamente.");
+    return;
+  }
+
+  try {
+    const cleanBase64 = finalBase64.replace(/^data:application\/pdf;base64,/, "").trim();
+    const byteCharacters = atob(cleanBase64);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Boleto_Banco_Inter_${seuNumero || "cobranca"}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success("Download do PDF concluído!");
+  } catch (err) {
+    console.error("Erro ao baixar PDF:", err);
+    alert("Falha ao abrir PDF: " + err.message);
+  }
+}
+
+
+
+
+import { getFunctions, httpsCallable } from "firebase/functions";
+import { app } from "../lib/firebase";
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -1227,7 +1282,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
     setFolhaResultData(null);
     setBoletoResultData(null);
 
-    const loaderToastId = toast.loading('Gerando Boleto de Cobrança v3 na API do Banco Inter...');
+    const loaderToastId = toast.loading("Gerando Boleto de Cobrança v3 no Banco Inter...");
     const seuNum = `BOL-${Date.now().toString().slice(-8)}`;
 
     const payloadBoleto = {
@@ -1236,85 +1291,54 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       dataVencimento: boletoVencimento,
       pagador: {
         cpfCnpj: cleanCpfCnpj,
-        tipoPessoa: cleanCpfCnpj.length > 11 ? 'JURIDICA' : 'FISICA',
-        nome: boletoPagadorNome || 'Pagador Registrado',
+        tipoPessoa: cleanCpfCnpj.length > 11 ? "JURIDICA" : "FISICA",
+        nome: boletoPagadorNome || "Pagador Registrado",
         endereco: boletoEndereco || undefined,
       }
     };
 
-    if (isTestMode) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      toast.dismiss(loaderToastId);
-
-      const valCentavos = Math.round(valNum * 100).toString().padStart(10, '0');
-      const linhaDigitavelMock = `07791.00012 01234.567890 ${seuNum.replace(/\D/g, '').padEnd(10, '0').slice(0, 10)} 1 9876${valCentavos}`;
-      const codigoBarraMock = `0779198760000${valCentavos}0001201234567890`;
-
-      const mockResult = {
-        sucesso: true,
-        seuNumero: seuNum,
-        nossoNumero: `00${Math.floor(10000000 + Math.random() * 90000000)}`,
-        codigoBarra: codigoBarraMock,
-        linhaDigitavel: linhaDigitavelMock,
-        pixCopiaECola: `00020126580014br.gov.bcb.pix0136${seuNum}-inter520400005303986540${valNum.toFixed(2)}5802BR5915${(boletoPagadorNome || 'CUIDARHOME').slice(0, 15).toUpperCase()}6009SAO PAULO62070503***6304E2CA`,
-        valorNominal: valNum,
-        dataVencimento: boletoVencimento,
-        pagador: payloadBoleto.pagador,
-        timestamp: new Date().toISOString()
-      };
-
-      setBoletoResultData(mockResult);
-      setFolhaSuccess(true);
-      toast.success(`Boleto Nº ${seuNum} emitido com sucesso (Modo Sandbox Inter)!`);
-      setIsProcessingFolha(false);
-      return;
-    }
-
     try {
-      const response = await fetch('/api/gerar-boleto-inter', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payloadBoleto),
+      const functions = getFunctions(app, "southamerica-east1");
+      const emitir = httpsCallable(functions, "emitirBoletoInter");
+
+      const response = await emitir({
+        faturaId: seuNum,
+        clienteNome: boletoPagadorNome || "Pagador Registrado",
+        clienteDocumento: cleanCpfCnpj,
+        clienteEmail: (payloadBoleto.pagador && payloadBoleto.pagador.email) || "",
+        valor: valNum,
+        dataVencimento: boletoVencimento,
+        descricao: "Prestação de Serviços de Home Care"
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
+      const realData = response.data;
       toast.dismiss(loaderToastId);
 
-      setBoletoResultData(result);
-      setFolhaSuccess(true);
-      toast.success(`Boleto de R$ ${valNum.toFixed(2)} emitido com sucesso no Banco Inter!`);
-    } catch (err: any) {
-      console.warn('Conexão com a API /api/gerar-boleto-inter falhou. Executando fallback do MockService Banco Inter:', err);
-
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      toast.dismiss(loaderToastId);
-
-      const valCentavos = Math.round(valNum * 100).toString().padStart(10, '0');
-      const linhaDigitavelMock = `07791.00012 01234.567890 ${seuNum.replace(/\D/g, '').padEnd(10, '0').slice(0, 10)} 1 9876${valCentavos}`;
-      const codigoBarraMock = `0779198760000${valCentavos}0001201234567890`;
-
-      const mockResult = {
+      const realResult = {
         sucesso: true,
         seuNumero: seuNum,
-        nossoNumero: `00${Math.floor(10000000 + Math.random() * 90000000)}`,
-        codigoBarra: codigoBarraMock,
-        linhaDigitavel: linhaDigitavelMock,
-        pixCopiaECola: `00020126580014br.gov.bcb.pix0136${seuNum}-inter520400005303986540${valNum.toFixed(2)}5802BR5915${(boletoPagadorNome || 'CUIDARHOME').slice(0, 15).toUpperCase()}6009SAO PAULO62070503***6304E2CA`,
+        codigoSolicitacao: realData.codigoSolicitacao || "",
+        nossoNumero: realData.nossoNumero || realData.codigoSolicitacao,
+        codigoBarra: realData.codigoBarras || realData.codigoBarra || "",
+        linhaDigitavel: realData.linhaDigitavel || "",
+        codigoBarra: realData.codigoBarras || realData.codigoBarra || "",
+        pdfBase64: realData.pdfBase64 || "",
+        pixCopiaECola: realData.pixCopiaECola || "",
         valorNominal: valNum,
         dataVencimento: boletoVencimento,
         pagador: payloadBoleto.pagador,
         timestamp: new Date().toISOString()
       };
 
-      setBoletoResultData(mockResult);
+      setBoletoResultData(realResult);
       setFolhaSuccess(true);
-      toast.success(`Boleto Nº ${seuNum} gerado com sucesso (Simulação Banco Inter)!`);
+      toast.success(`Boleto de R$ ${valNum.toFixed(2)} emitido com sucesso no Banco Inter!`);
+    } catch (err) {
+      console.error("Erro na emissão oficial do Banco Inter:", err);
+      toast.dismiss(loaderToastId);
+      const errMsg = err.message || "Falha na comunicação com o Banco Inter.";
+      setFolhaError(errMsg);
+      toast.error(`Falha no Banco Inter: ${errMsg}`);
     } finally {
       setIsProcessingFolha(false);
     }
@@ -2745,6 +2769,27 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                       </div>
 
                       {/* Linha Digitável / Código de Barras */}
+                      
+                      {/* Botão de Download do PDF Oficial */}
+                      {(boletoResultData.pdfBase64 || boletoResultData.codigoSolicitacao) && (
+                        <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl">📄</span>
+                            <div>
+                              <p className="font-bold text-emerald-950 text-sm">Boleto Bancário Oficial em PDF</p>
+                              <p className="text-emerald-700 text-xs">Documento oficial com código de barras e Pix registrado</p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => downloadBoletoPdf(boletoResultData.pdfBase64, boletoResultData.seuNumero, boletoResultData.codigoSolicitacao)}
+                            className="w-full sm:w-auto px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg shadow transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                          >
+                            <span>📥</span> Baixar Boleto em PDF
+                          </button>
+                        </div>
+                      )}
+
                       <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-xl space-y-3">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                           <span className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
@@ -2767,6 +2812,31 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                       </div>
 
                       {/* Pix Copia e Cola se disponível */}
+                      
+                      {/* Código de Barras Numérico (44 Dígitos) */}
+                      {boletoResultData.codigoBarra && (
+                        <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-slate-700">
+                              📊 Código de Barras Numérico (44 dígitos)
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(boletoResultData.codigoBarra);
+                                toast.success("Código de barras copiado!");
+                              }}
+                              className="px-2.5 py-1 bg-slate-700 text-white text-xs font-bold rounded hover:bg-slate-800 transition-all cursor-pointer shadow-sm active:scale-95"
+                            >
+                              Copiar Código
+                            </button>
+                          </div>
+                          <p className="font-mono text-xs text-slate-700 bg-white p-2.5 rounded border border-slate-200 truncate select-all">
+                            {boletoResultData.codigoBarra}
+                          </p>
+                        </div>
+                      )}
+
                       {boletoResultData.pixCopiaECola && (
                         <div className="bg-emerald-50/50 border border-emerald-100 p-4 rounded-xl space-y-2">
                           <div className="flex justify-between items-center">

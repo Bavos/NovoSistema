@@ -13,6 +13,7 @@
     "test:ui": "vitest --ui"
   },
   "dependencies": {
+    "@emotion/is-prop-valid": "^1.4.0",
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
@@ -33,7 +34,7 @@
     "recharts": "^3.8.1",
     "unzipper": "^0.12.3",
     "vite": "^6.2.3",
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "xlsx": "^0.18.5",
     "zod": "^4.4.3"
   },
   "overrides": {

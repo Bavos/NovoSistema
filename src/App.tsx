@@ -325,7 +325,7 @@ function DashboardContent() {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center space-y-3">
         <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-xs text-slate-500 font-mono tracking-widest font-bold">CARREGANDO BANCO FIRESTORE...</p>
+        <p className="text-xs text-slate-500 font-mono tracking-widest font-bold">Carregando...</p>
       </div>
     );
   }
