@@ -90,3 +90,42 @@ export interface Paciente {
 ### 3.2 Lógica do Coordenador de Escalas (Home Care)
 1. **Regras de Cancelamento:** Plantões agendados não podem ser removidos fisicamente por motivos de auditoria de prontuários. Ao selecionar cancelar, deve ser fornecida uma justificativa predefinida do escopo clínico, afetando o inventário financeiro futuro e o envio automático de avisos ao aplicativo dos profissionais.
 2. **Grau de Dependência Visual:** Classificação que determina a periodicidade dos técnicos em enfermagem (`Grau I` a `Grau III`). Representado visualmente por barras progressivas semânticas.
+
+---
+
+## 4. Integração Segura com a API do Banco Inter (Pix, Boletos e Pagamentos em Lote)
+
+### 4.1 Arquitetura de Segurança (Zero Frontend Secret Exposure)
+O sistema foi concebido sob rigoroso padrão de segurança bancária:
+- **Nenhum certificado mTLS (`.crt` ou `.key`) ou segredo de autenticação (`Client Secret`) é exposto ou trafega no Frontend (SPA).**
+- Todas as transações com a API do Banco Inter são processadas através de **Firebase Cloud Functions (Backend Serverless)** protegidas por autenticação via Firebase Auth.
+- Os certificados digitais e credenciais OAuth 2.0 são injetados exclusivamente no ambiente seguro de execução via **Google Cloud Secret Manager**.
+
+### 4.2 Localização dos Módulos no Código
+1. **Cloud Functions Seguras (Backend):**
+   - `/functions/src/index.ts`: Funções Callables tipadas `gerarCobrancaInter` (Boletos v3 com Pix Copia e Cola) e `processarFolhaInter` (Lotes de pagamentos Pix e TED).
+   - `/functions/inter-api.js` e `/functions/index.js`: Handlers mTLS com suporte a rotas HTTP diretas (`processarFolhaInterHttp`).
+2. **Serviço Client-side (Frontend):**
+   - `/src/services/interService.ts`: Módulo com as funções `emitirBoletoInter()` e `processarFolhaInter()`, com suporte a chamadas diretas via Cloud Function, fallback local e simulação Sandbox (Modo de Testes).
+3. **Interface de Usuário:**
+   - `/src/components/SimulatedDashboards.tsx`: Aba *Financeiro -> Folha de Pagamento* e *Emissão de Cobrança*, integrado aos serviços de emissão e liquidação.
+
+### 4.3 Como Configurar as Credenciais no Ambiente de Produção
+Para habilitar a comunicação real com a API do Banco Inter no Firebase:
+```bash
+# 1. Definir o Client ID da aplicação no Banco Inter
+firebase secrets:set INTER_CLIENT_ID
+
+# 2. Definir o Client Secret da aplicação
+firebase secrets:set INTER_CLIENT_SECRET
+
+# 3. Importar o Certificado mTLS (arquivo .crt ou .pem)
+firebase secrets:set INTER_CERT < caminho/para/certificado.crt
+
+# 4. Importar a Chave Privada mTLS (arquivo .key)
+firebase secrets:set INTER_KEY < caminho/para/chave.key
+
+# 5. Fazer o deploy das Cloud Functions
+firebase deploy --only functions
+```
+

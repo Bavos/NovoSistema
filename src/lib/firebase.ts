@@ -1,10 +1,11 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { initializeFirestore, setLogLevel } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
+import { getFunctions } from 'firebase/functions';
 import { logError } from './diagnostics';
 
 setLogLevel('error');
-import { getStorage } from 'firebase/storage';
 import staticConfig from '../../firebase-applet-config.json';
 
 // Resolvendo as configurações do Firebase a partir de variáveis de ambiente com fallback para o arquivo local
@@ -34,6 +35,7 @@ export const db = initializeFirestore(app, {
 }, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth();
 export const storage = getStorage(app);
+export const functions = getFunctions(app, 'southamerica-east1');
 
 export enum OperationType {
   CREATE = 'create',

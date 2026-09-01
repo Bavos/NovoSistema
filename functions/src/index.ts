@@ -289,3 +289,224 @@ export const gerarCobrancaInter = onCall(
     }
   }
 );
+
+// -----------------------------------------------------------------------------------------
+// CLOUD FUNCTION CALLABLE: processarFolhaInter
+// -----------------------------------------------------------------------------------------
+interface ItemTransferenciaInput {
+  id: string;
+  nome: string;
+  valor: number;
+  formaPagamento: "PIX" | "TED";
+  cpf?: string;
+  chavePix?: string;
+  dadosBancarios?: {
+    codigoBanco?: string;
+    agencia?: string;
+    conta?: string;
+    digito?: string;
+    tipoConta?: string;
+  };
+}
+
+interface ProcessarFolhaData {
+  profissionais: ItemTransferenciaInput[];
+}
+
+export const processarFolhaInter = onCall(
+  {
+    secrets: [INTER_CLIENT_ID, INTER_CLIENT_SECRET, INTER_CERT, INTER_KEY],
+    region: "southamerica-east1",
+    cors: true
+  },
+  async (request) => {
+    // 1. Validação de Autenticação (Firebase Auth)
+    if (!request.auth) {
+      throw new HttpsError(
+        "unauthenticated",
+        "Acesso negado. Esta operação exige que o usuário esteja autenticado no sistema."
+      );
+    }
+
+    const data = request.data as ProcessarFolhaData;
+
+    if (!data || !Array.isArray(data.profissionais) || data.profissionais.length === 0) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Lista de profissionais para pagamento inválida ou vazia."
+      );
+    }
+
+    try {
+      const clientId = INTER_CLIENT_ID.value();
+      const clientSecret = INTER_CLIENT_SECRET.value();
+      const certPem = INTER_CERT.value();
+      const keyPem = INTER_KEY.value();
+
+      if (!clientId || !clientSecret || !certPem || !keyPem) {
+        throw new HttpsError(
+          "failed-precondition",
+          "As credenciais ou certificados mTLS do Banco Inter não estão configurados no Secret Manager."
+        );
+      }
+
+      const httpsAgent = criarAgenteMTLS(certPem, keyPem);
+      const accessToken = await obterTokenOAuthInter(clientId, clientSecret, httpsAgent);
+
+      const resultados: any[] = [];
+      let totalSucesso = 0;
+      let totalErro = 0;
+      let valorTotalLiquidado = 0;
+
+      for (const item of data.profissionais) {
+        if (!item.valor || item.valor <= 0) {
+          resultados.push({
+            profissionalId: item.id,
+            nome: item.nome,
+            tipo: item.formaPagamento,
+            valor: item.valor || 0,
+            sucesso: false,
+            msgErro: "Valor nulo ou inválido."
+          });
+          totalErro++;
+          continue;
+        }
+
+        try {
+          if (item.formaPagamento === "PIX" && item.chavePix) {
+            const payloadPix = {
+              valor: item.valor.toFixed(2),
+              chave: item.chavePix.trim(),
+              infoAdicional: `Pagamento Servicos - ${(item.nome || "").substring(0, 30)}`
+            };
+
+            const pixRes = await axios.post(`${INTER_BASE_URL}/pague/v2/pix`, payloadPix, {
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "Content-Type": "application/json"
+              },
+              httpsAgent,
+              timeout: 15000
+            });
+
+            totalSucesso++;
+            valorTotalLiquidado += item.valor;
+            resultados.push({
+              profissionalId: item.id,
+              nome: item.nome,
+              tipo: "PIX",
+              valor: item.valor,
+              sucesso: true,
+              statusHttp: pixRes.status,
+              resposta: pixRes.data,
+              msgErro: null
+            });
+
+          } else if (item.formaPagamento === "TED" || item.dadosBancarios) {
+            const banco = item.dadosBancarios || {};
+            const cleanCpf = (item.cpf || "").replace(/\D/g, "");
+
+            const payloadTed = {
+              valor: item.valor.toFixed(2),
+              tipoTransferencia: "TED",
+              favorecido: {
+                nome: (item.nome || "").substring(0, 80),
+                cpfCnpj: cleanCpf,
+                instituicaoFinanceira: banco.codigoBanco || "077",
+                agencia: (banco.agencia || "").replace(/\D/g, ""),
+                conta: (banco.conta || "").replace(/\D/g, ""),
+                digitoConta: banco.digito || "0",
+                tipoConta: banco.tipoConta === "Poupança" ? "POUPANCA" : "CORRENTE"
+              },
+              descricao: `Pagamento Servicos - ${(item.nome || "").substring(0, 30)}`
+            };
+
+            const tedRes = await axios.post(`${INTER_BASE_URL}/pague/v2/transferencias`, payloadTed, {
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "Content-Type": "application/json"
+              },
+              httpsAgent,
+              timeout: 15000
+            });
+
+            totalSucesso++;
+            valorTotalLiquidado += item.valor;
+            resultados.push({
+              profissionalId: item.id,
+              nome: item.nome,
+              tipo: "TED",
+              valor: item.valor,
+              sucesso: true,
+              statusHttp: tedRes.status,
+              resposta: tedRes.data,
+              msgErro: null
+            });
+
+          } else {
+            totalErro++;
+            resultados.push({
+              profissionalId: item.id,
+              nome: item.nome,
+              tipo: item.formaPagamento,
+              valor: item.valor,
+              sucesso: false,
+              msgErro: "Dados de pagamento insuficientes (sem Chave Pix ou Conta Bancária cadastrada)."
+            });
+          }
+        } catch (itemErr: any) {
+          totalErro++;
+          resultados.push({
+            profissionalId: item.id,
+            nome: item.nome,
+            tipo: item.formaPagamento,
+            valor: item.valor,
+            sucesso: false,
+            statusHttp: itemErr.response?.status || 500,
+            resposta: itemErr.response?.data || null,
+            msgErro: itemErr.response?.data?.mensagem || itemErr.message
+          });
+        }
+      }
+
+      // Registro de Auditoria no Firestore
+      try {
+        await admin.firestore().collection("logs_auditoria").add({
+          timestamp: new Date().toISOString(),
+          userId: request.auth.uid,
+          userEmail: request.auth.token.email || "desconhecido",
+          action: "PROCESSAR_FOLHA_INTER",
+          totalProfissionais: data.profissionais.length,
+          sucessos: totalSucesso,
+          falhas: totalErro,
+          valorTotal: valorTotalLiquidado
+        });
+      } catch (auditErr) {
+        console.warn("[processarFolhaInter] Falha ao registrar log de auditoria:", auditErr);
+      }
+
+      return {
+        status: "PROCESSADO",
+        timestamp: new Date().toISOString(),
+        resumo: {
+          totalProcessado: data.profissionais.length,
+          sucessos: totalSucesso,
+          falhas: totalErro,
+          valorTotalLiquidado: valorTotalLiquidado.toFixed(2)
+        },
+        detalhes: resultados
+      };
+
+    } catch (error: any) {
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+
+      console.error("[processarFolhaInter Error]:", error.response?.data || error.message);
+      throw new HttpsError(
+        "internal",
+        `Erro ao processar lote na API do Banco Inter: ${error.response?.data?.mensagem || error.message}`
+      );
+    }
+  }
+);
