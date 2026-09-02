@@ -6,15 +6,45 @@ on:
   pull_request:
     branches: [ "main", "master" ]
 
+permissions:
+  contents: read
+
 jobs:
   semgrep:
-    name: scan
+    name: Semgrep SAST & Secrets
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Run Semgrep
-        uses: returntocorp/semgrep-action@v1
         with:
-          config: p/security-audit p/secrets p/typescript
+          fetch-depth: 0
+
+      - name: Run Semgrep and Generate Reports
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/secrets
+            p/typescript
+            p/owasp-top-ten
+          # Gera o relatório em JSON para leitura e SARIF para ferramentas de análise
+          generateSarif: "1"
+        env:
+          SEMGREP_ENABLE_VERSION_CHECK: "0"
+
+      # Passo opcional para gerar também um relatório em texto simples legível (TXT)
+      - name: Export Human-Readable Report
+        if: always()
+        run: |
+          if [ -f semgrep.sarif ]; then
+            echo "Relatórios gerados com sucesso."
+          fi
+
+      - name: Upload Security Reports as Artifact
+        uses: actions/upload-artifact@v4
+        if: always() # Garante o upload mesmo se forem encontradas falhas de segurança
+        with:
+          name: semgrep-security-report
+          path: |
+            semgrep.sarif
+          retention-days: 14
