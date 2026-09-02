@@ -10,7 +10,7 @@ async function downloadBoletoPdf(base64Data, seuNumero, codigoSolicitacao) {
       const functions = getFunctions(app, "southamerica-east1");
       const obterPdf = httpsCallable(functions, "obterPdfBoletoInter");
       const res = await obterPdf({ codigoSolicitacao });
-      finalBase64 = res.data.pdfBase64;
+      finalBase64 = (res.data as any)?.pdfBase64;
       toast.dismiss("loading-pdf");
     } catch (err) {
       toast.dismiss("loading-pdf");
@@ -361,6 +361,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   const [expandedProfissionais, setExpandedProfissionais] = useState<string[]>([]);
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; profName?: string } | null>(null);
 
   // State for Payroll Table Sorting (Folha de Pagamento)
   const [payrollSortConfig, setPayrollSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({
@@ -1305,25 +1306,24 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
         faturaId: seuNum,
         clienteNome: boletoPagadorNome || "Pagador Registrado",
         clienteDocumento: cleanCpfCnpj,
-        clienteEmail: (payloadBoleto.pagador && payloadBoleto.pagador.email) || "",
+        clienteEmail: ((payloadBoleto.pagador as any)?.email) || "",
         valor: valNum,
         dataVencimento: boletoVencimento,
         descricao: "Prestação de Serviços de Home Care"
       });
 
-      const realData = response.data;
+      const realData = response.data as any;
       toast.dismiss(loaderToastId);
 
       const realResult = {
         sucesso: true,
         seuNumero: seuNum,
-        codigoSolicitacao: realData.codigoSolicitacao || "",
-        nossoNumero: realData.nossoNumero || realData.codigoSolicitacao,
-        codigoBarra: realData.codigoBarras || realData.codigoBarra || "",
-        linhaDigitavel: realData.linhaDigitavel || "",
-        codigoBarra: realData.codigoBarras || realData.codigoBarra || "",
-        pdfBase64: realData.pdfBase64 || "",
-        pixCopiaECola: realData.pixCopiaECola || "",
+        codigoSolicitacao: realData?.codigoSolicitacao || "",
+        nossoNumero: realData?.nossoNumero || realData?.codigoSolicitacao || "",
+        codigoBarra: realData?.codigoBarras || realData?.codigoBarra || "",
+        linhaDigitavel: realData?.linhaDigitavel || "",
+        pdfBase64: realData?.pdfBase64 || "",
+        pixCopiaECola: realData?.pixCopiaECola || "",
         valorNominal: valNum,
         dataVencimento: boletoVencimento,
         pagador: payloadBoleto.pagador,
@@ -1606,10 +1606,19 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   };
 
   const processBatchPayroll = async () => {
+    if (!selectedProfissionais || selectedProfissionais.length === 0) {
+      toast.error('Nenhum profissional selecionado para fechamento em lote.');
+      setShowBatchModal(false);
+      return;
+    }
+
+    const totalSelected = selectedProfissionais.length;
     setIsBatchProcessing(true);
+    setBatchProgress({ current: 0, total: totalSelected, profName: '' });
+
     let successCount = 0;
     let skipCount = 0;
-    const skippedProfs: string[] = [];
+    const skippedProfs: { name: string; reason: string }[] = [];
 
     try {
       const parts = dataInicial.split('-');
@@ -1626,84 +1635,100 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       const mesFormatado = String(retroMonth).padStart(2, '0');
       const anoFormatado = retroYear;
       const textoMotivo = `RETENÇÃO DE GUIA MEI - REF. ${mesFormatado}/${anoFormatado}`;
-
-      // Pre-checks for ALL selected professionals beforehand (Scale Fechada and Anti-duplicity)
       const targetMonthYear = getMonthYearString(dataInicial);
-      const readyProfIdList: string[] = [];
+      const valorMeiGlobal = parseFloat(String(valorMei || 0));
 
-      for (const pId of selectedProfissionais) {
-        const pObj = profissionais.find(p => p.id === pId);
-        const name = pObj?.nome || '';
-
-        // Scale Closed Check
-        const closed = await isEscalaFechada(pId, 'profissional', dataInicial, dataFinal);
-        if (!closed) {
-          toast.error(`Ação negada: A escala do período selecionado ainda não foi fechada pela coordenação para o profissional ${name}.`);
-          return;
-        }
-
-        // Patient Scale Closed Check
-        const profAgends = agendamentosGerados.filter(ag => ag.nomeProfissional === name || ag.idProfissional === pId);
-        const uniquePatientIds = Array.from(new Set(
-          profAgends
-            .filter(ag => ag.status !== 'Cancelado')
-            .map(ag => ag.idPaciente)
-            .filter(Boolean)
-        ));
-
-        for (const patientId of uniquePatientIds) {
-          const patientClosed = await isEscalaFechada(patientId, 'paciente', dataInicial, dataFinal);
-          if (!patientClosed) {
-            toast.error('Ação negada: A escala do período selecionado ainda não foi fechada pela coordenação.');
-            return;
-          }
-        }
-
-        // Anti-duplicity Check
-        let folhaExists = folhasPagamento.some(f =>
-          (f.idProfissional === pId || (f as any).profissionalId === pId) &&
-          f.periodoApurado &&
-          getMonthYearString(f.periodoApurado.inicio) === targetMonthYear
-        );
-
-        if (!folhaExists && !isQuotaExceeded && !isTestMode) {
-          try {
-            const folhasQuery = query(
-              collection(db, 'folhas_pagamento'),
-              where('idProfissional', '==', pId)
-            );
-            const folhasSnap = await getDocs(folhasQuery);
-            folhasSnap.forEach(doc => {
-              const folObj = doc.data();
-              if (folObj.periodoApurado && folObj.periodoApurado.inicio) {
-                const existingMonthYear = getMonthYearString(folObj.periodoApurado.inicio);
-                if (existingMonthYear === targetMonthYear) {
-                  folhaExists = true;
-                }
-              }
-            });
-          } catch (e) {
-            console.warn("Quota ou erro ao verificar duplicidade de folha em lote online:", e);
-          }
-        }
-
-        if (folhaExists) {
-          toast.error(`Aviso: A fatura/folha para este período já foi emitida para o profissional ${name}. Para gerar novamente, é necessário excluir o registro atual no Histórico Financeiro.`);
-          return;
-        }
-
-        readyProfIdList.push(pId);
-      }
-
-      // Process batch sequentially to avoid Firestore write congestion and deadlocks
-      for (const pId of readyProfIdList) {
+      // Processamento sequencial e resiliente de cada profissional selecionado
+      for (let i = 0; i < totalSelected; i++) {
+        const pId = selectedProfissionais[i];
         const profissional = profissionais.find(p => p.id === pId);
-        if (!profissional) continue;
+        const profName = profissional?.nome || `Profissional (${pId})`;
 
-        const profName = profissional.nome;
+        // Feedback dinâmico de progresso em tempo real
+        setBatchProgress({
+          current: i + 1,
+          total: totalSelected,
+          profName: profName
+        });
+
         try {
-          const agends = agendamentosGerados.filter(ag => ag.nomeProfissional === profName || ag.idProfissional === pId);
+          if (!profissional) {
+            console.warn(`[processBatchPayroll] Cadastro não localizado para o ID: ${pId}`);
+            skipCount++;
+            skippedProfs.push({ name: profName, reason: 'Cadastro não localizado' });
+            continue;
+          }
 
+          // 1. Verificação de Escala Fechada do Profissional (não bloqueia os outros)
+          const closed = await isEscalaFechada(pId, 'profissional', dataInicial, dataFinal);
+          if (!closed) {
+            console.warn(`[processBatchPayroll] Escala em aberto para o profissional ${profName}`);
+            skipCount++;
+            skippedProfs.push({ name: profName, reason: 'Escala em aberto (não fechada)' });
+            continue;
+          }
+
+          // 2. Verificação de Escala Fechada dos Pacientes do Profissional
+          const agends = agendamentosGerados.filter(ag => ag.nomeProfissional === profName || ag.idProfissional === pId);
+          const uniquePatientIds = Array.from(new Set(
+            agends
+              .filter(ag => ag.status !== 'Cancelado')
+              .map(ag => ag.idPaciente)
+              .filter(Boolean)
+          ));
+
+          let patientScaleOpen = false;
+          for (const patientId of uniquePatientIds) {
+            const patientClosed = await isEscalaFechada(patientId, 'paciente', dataInicial, dataFinal);
+            if (!patientClosed) {
+              patientScaleOpen = true;
+              break;
+            }
+          }
+
+          if (patientScaleOpen) {
+            console.warn(`[processBatchPayroll] Escala de paciente em aberto para o profissional ${profName}`);
+            skipCount++;
+            skippedProfs.push({ name: profName, reason: 'Escala de paciente em aberto' });
+            continue;
+          }
+
+          // 3. Verificação de Anti-duplicidade no Histórico
+          let folhaExists = folhasPagamento.some(f =>
+            (f.idProfissional === pId || (f as any).profissionalId === pId) &&
+            f.periodoApurado &&
+            getMonthYearString(f.periodoApurado.inicio) === targetMonthYear
+          );
+
+          if (!folhaExists && !isQuotaExceeded && !isTestMode) {
+            try {
+              const folhasQuery = query(
+                collection(db, 'folhas_pagamento'),
+                where('idProfissional', '==', pId)
+              );
+              const folhasSnap = await getDocs(folhasQuery);
+              folhasSnap.forEach(d => {
+                const folObj = d.data();
+                if (folObj.periodoApurado && folObj.periodoApurado.inicio) {
+                  const existingMonthYear = getMonthYearString(folObj.periodoApurado.inicio);
+                  if (existingMonthYear === targetMonthYear) {
+                    folhaExists = true;
+                  }
+                }
+              });
+            } catch (e) {
+              console.warn(`[processBatchPayroll] Erro ao consultar duplicidade online para ${profName}:`, e);
+            }
+          }
+
+          if (folhaExists) {
+            console.warn(`[processBatchPayroll] Folha já emitida para ${profName} na referência ${targetMonthYear}`);
+            skipCount++;
+            skippedProfs.push({ name: profName, reason: 'Folha já emitida para este período' });
+            continue;
+          }
+
+          // 4. Apuração de Plantões, Ajudas de Custo e Débitos
           let somaRepasses = 0;
           let somaAjudas = 0;
           agends.forEach(ag => {
@@ -1712,7 +1737,6 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
             somaAjudas += vals.ajudaCusto;
           });
 
-          // Current debits in the period
           const debDocsForProf = debitosNoPeriodo.filter(d => 
             (d.idProfissional === pId || 
             (d.nomeProfissional && d.nomeProfissional.toLowerCase() === profName.toLowerCase())) &&
@@ -1722,16 +1746,13 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
 
           let totalPlantoes = somaRepasses;
           let totalAjudaCusto = somaAjudas;
-
           let valorLiquido = totalPlantoes + totalAjudaCusto - totalDebitos;
-
-          const valorMeiGlobal = parseFloat(String(valorMei || 0));
 
           const listDebs = [...debDocsForProf];
           let finalTotalDebitos = totalDebitos;
 
-          // Deduct MEI value if temMei
-          if (profissional && profissional.temMei && !profissional.meiIrregular && valorMeiGlobal > 0) {
+          // Dedução de taxa MEI quando aplicável
+          if (profissional.temMei && !profissional.meiIrregular && valorMeiGlobal > 0) {
             valorLiquido -= valorMeiGlobal;
 
             const autoDebit = {
@@ -1745,16 +1766,18 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
             const savedDebit = await addDebitoProfissional(autoDebit);
             listDebs.push(savedDebit);
             finalTotalDebitos += valorMeiGlobal;
+            await new Promise(r => setTimeout(r, 30));
           }
 
-          // Bloqueio de Emissão Zerada - Handle gracefully per professional
+          // 5. Bloqueio de Emissão Zerada ou Negativa
           if (valorLiquido <= 0) {
-            console.warn(`[processBatchPayroll] Pulando profissional ${profName} porque o valor líquido é zerado ou negativo: R$ ${valorLiquido}`);
+            console.warn(`[processBatchPayroll] Pulando profissional ${profName}: valor líquido zerado ou negativo (R$ ${valorLiquido})`);
             skipCount++;
-            skippedProfs.push(profName);
+            skippedProfs.push({ name: profName, reason: `Valor líquido zerado ou negativo (R$ ${valorLiquido.toFixed(2)})` });
             continue;
           }
 
+          // 6. Gravação da Folha de Pagamento
           const savedFolha = await addFolhaPagamento({
             idProfissional: pId,
             nomeProfissional: profName,
@@ -1768,16 +1791,19 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
             plantoesCongelados: agends
           });
 
-          // Liquidação (Baixa) Automática de débitos pendentes que entraram no cálculo
+          await new Promise(r => setTimeout(r, 30));
+
+          // 7. Liquidação (Baixa) Automática de débitos pendentes vinculados
           for (const deb of debDocsForProf) {
             await updateDebitoProfissional({
               ...deb,
               status: 'descontado',
               folhaIdVinculada: savedFolha.id
             });
+            await new Promise(r => setTimeout(r, 20));
           }
 
-          // Associa a folha ao débito MEI automático se existir no histórico
+          // Vinculação da folha ao débito MEI gerado
           const meiDebit = listDebs.find(d => d.id !== 'virtual-mei-debit' && d.motivo === textoMotivo);
           if (meiDebit && meiDebit.id) {
             await updateDebitoProfissional({
@@ -1785,31 +1811,54 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
               status: 'descontado',
               folhaIdVinculada: savedFolha.id
             });
+            await new Promise(r => setTimeout(r, 20));
           }
 
           successCount++;
-          console.log(`[processBatchPayroll] Folha de pagamento criada para o profissional ${profName} com ID: ${savedFolha.id}`);
-        } catch (profErr) {
+          console.log(`[processBatchPayroll] Folha criada com sucesso para ${profName} com ID: ${savedFolha.id}`);
+        } catch (profErr: any) {
           console.error(`[processBatchPayroll] Falha ao processar folha do profissional ${profName}:`, profErr);
           skipCount++;
-          skippedProfs.push(profName);
+          skippedProfs.push({ name: profName, reason: profErr?.message || 'Falha na gravação' });
         }
+
+        // Prevenção de timeout: pequeno delay seguro entre profissionais para evitar sobrecarga no Firestore
+        await new Promise(r => setTimeout(r, 80));
       }
 
-      let successMessage = `Folhas fechadas com sucesso para ${successCount} profissional(is).`;
+      // Resumo final amigável ao usuário
+      let summaryMessage = `${successCount} folha(s) fechada(s) com sucesso.`;
       if (skipCount > 0) {
-        successMessage += ` Não foi possível gerar para ${skipCount} profissional(is) devido a valor líquido zerado ou outros erros: (${skippedProfs.join(', ')}).`;
+        summaryMessage += ` ${skipCount} não gerada(s).`;
+        const motivosAmostra = skippedProfs.slice(0, 3).map(p => `${p.name} (${p.reason})`).join(', ');
+        const extraCount = skippedProfs.length > 3 ? ` (+${skippedProfs.length - 3})` : '';
+
+        if (successCount > 0) {
+          toast(`Lote finalizado: ${successCount} geradas com sucesso, ${skipCount} ignoradas.\nMotivos: ${motivosAmostra}${extraCount}`, {
+            duration: 8000,
+            icon: 'ℹ️'
+          });
+        } else {
+          toast.error(`Nenhuma folha gerada (${skipCount} com pendência/erro):\n${motivosAmostra}${extraCount}`, {
+            duration: 8000
+          });
+        }
+      } else {
+        toast.success(`Todas as ${successCount} folhas de pagamento foram fechadas com sucesso!`, {
+          duration: 5000
+        });
       }
-      
-      setNotification(successMessage);
-      toast.success(successMessage);
+
+      setNotification(summaryMessage);
       setSelectedProfissionais([]);
-      setShowBatchModal(false);
     } catch (err: any) {
-      console.error("[processBatchPayroll] Ocorreu um erro ao processar o lote de fechamento das folhas de pagamento:", err);
+      console.error("[processBatchPayroll] Erro crítico no lote de fechamento das folhas:", err);
       toast.error('Ocorreu um erro ao processar o lote de fechamento das folhas de pagamento.');
     } finally {
+      // Garantia absoluta de saída: reseta estados e fecha modal
       setIsBatchProcessing(false);
+      setBatchProgress(null);
+      setShowBatchModal(false);
     }
   };
 
@@ -3423,9 +3472,9 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                             <button
                               id="btn-batch-close-payroll"
                               onClick={() => setShowBatchModal(true)}
-                              disabled={selectedProfissionais.length === 0}
+                              disabled={selectedProfissionais.length === 0 || isBatchProcessing}
                               className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                                selectedProfissionais.length > 0
+                                selectedProfissionais.length > 0 && !isBatchProcessing
                                   ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-100'
                                   : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                               }`}
@@ -3658,7 +3707,33 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                                     </div>
                                   </div>
 
-                                  {numSelectedWithMei > 0 && (
+                                  {/* Feedback de progresso em tempo real */}
+                                  {isBatchProcessing && batchProgress && (
+                                    <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900 space-y-2 animate-in fade-in">
+                                      <div className="flex justify-between items-center text-xs font-bold">
+                                        <span className="flex items-center gap-2">
+                                          <div className="w-3.5 h-3.5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
+                                          Gravando {batchProgress.current} de {batchProgress.total}...
+                                        </span>
+                                        <span className="font-mono text-emerald-700">
+                                          {Math.round((batchProgress.current / (batchProgress.total || 1)) * 100)}%
+                                        </span>
+                                      </div>
+                                      <div className="w-full bg-emerald-200/70 rounded-full h-2 overflow-hidden">
+                                        <div 
+                                          className="bg-emerald-600 h-2 rounded-full transition-all duration-300"
+                                          style={{ width: `${Math.min(100, Math.round((batchProgress.current / (batchProgress.total || 1)) * 100))}%` }}
+                                        ></div>
+                                      </div>
+                                      {batchProgress.profName && (
+                                        <p className="text-[11px] text-emerald-700 truncate font-medium">
+                                          Profissional atual: <span className="font-bold">{batchProgress.profName}</span>
+                                        </p>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {numSelectedWithMei > 0 && !isBatchProcessing && (
                                     <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 flex gap-2.5">
                                       <div className="shrink-0 mt-0.5">
                                         <AlertTriangle className="w-4 h-4 text-amber-600" />
@@ -3690,7 +3765,11 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                                       {isBatchProcessing ? (
                                         <>
                                           <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                          <span>Gravando...</span>
+                                          <span>
+                                            {batchProgress && batchProgress.total > 0
+                                              ? `Gravando ${batchProgress.current} de ${batchProgress.total}...`
+                                              : 'Gravando...'}
+                                          </span>
                                         </>
                                       ) : (
                                         <>

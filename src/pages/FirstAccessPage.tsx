@@ -7,15 +7,17 @@ import { toast } from 'react-hot-toast';
 interface FirstAccessPageProps {
   onNavigateToLogin?: () => void;
   onBack?: () => void;
+  onBackToLogin?: () => void;
 }
 
-export const FirstAccessPage: React.FC<FirstAccessPageProps> = ({ onNavigateToLogin, onBack }) => {
+export const FirstAccessPage: React.FC<FirstAccessPageProps> = ({ onNavigateToLogin, onBack, onBackToLogin }) => {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
 
   const handleVoltar = () => {
-    if (onNavigateToLogin) onNavigateToLogin();
+    if (onBackToLogin) onBackToLogin();
+    else if (onNavigateToLogin) onNavigateToLogin();
     else if (onBack) onBack();
   };
 

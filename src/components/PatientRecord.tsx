@@ -3374,7 +3374,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         toast.error("Boleto vencido sem confirmação de pagamento.");
       } else {
         setStatusBoletoLocal(prev => ({ ...prev, [currentMonthKey]: "pendente", [faturaId]: "pendente" }));
-        toast.info(`Status no Banco Inter: ${res.data?.situacaoInter || "Aguardando Pagamento"}`);
+        toast(`Status no Banco Inter: ${res.data?.situacaoInter || "Aguardando Pagamento"}`, { icon: 'ℹ️' });
       }
     } catch (err: any) {
       toast.dismiss(tId);
