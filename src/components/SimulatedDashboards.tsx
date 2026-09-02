@@ -1318,7 +1318,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       const realResult = {
         sucesso: true,
         seuNumero: seuNum,
-        codigoSolicitacao: realData?.codigoSolicitacao || "",
+codigoSolicitacao: realData?.codigoSolicitacao || "",
         nossoNumero: realData?.nossoNumero || realData?.codigoSolicitacao || "",
         codigoBarra: realData?.codigoBarras || realData?.codigoBarra || "",
         linhaDigitavel: realData?.linhaDigitavel || "",
@@ -1341,6 +1341,92 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       toast.error(`Falha no Banco Inter: ${errMsg}`);
     } finally {
       setIsProcessingFolha(false);
+    }
+  };
+
+  
+  const handleEmitirBoletoPacienteDirect = async (pacId: string, totalVal: number, agends: Agendamento[]) => {
+    const pac = pacientes.find(p => p.id === pacId);
+    if (!pac) {
+      toast.error("Paciente não localizado.");
+      return;
+    }
+
+    const docPagador = (
+      pac.cpf ||
+      (pac as any).documento ||
+      (pac as any).cpfCnpj ||
+      (pac as any).cpfResponsavel ||
+      (pac as any).responsavelCpf ||
+      (pac as any).cnpj ||
+      ""
+    ).replace(/\D/g, "");
+
+    if (!docPagador || docPagador.length < 11) {
+      toast.error("CPF ou CNPJ do paciente/responsável não encontrado no cadastro.");
+      return;
+    }
+
+    if (totalVal <= 0) {
+      toast.error("O valor da fatura deve ser maior que R$ 0,00.");
+      return;
+    }
+
+    setIsSaving(true);
+    const loaderId = toast.loading("Emitindo Boleto Oficial no Banco Inter...");
+    const targetMonthYear = getMonthYearString(dataInicial);
+    const seuNum = `FAT-${Date.now().toString().slice(-6)}`;
+
+    try {
+      const { getFunctions, httpsCallable } = await import("firebase/functions");
+      const { app } = await import("../lib/firebase");
+      const functions = getFunctions(app, "southamerica-east1");
+      const emitir = httpsCallable(functions, "emitirBoletoInter");
+
+      const response: any = await emitir({
+        faturaId: seuNum,
+        clienteNome: (pac as any).nomeResponsavel || (pac as any).responsavel || pac.nome,
+        clienteDocumento: docPagador,
+        clienteEmail: (pac as any).email || (pac as any).emailResponsavel || "",
+        valor: totalVal,
+        dataVencimento: boletoVencimento || new Date(Date.now() + 5 * 86400000).toISOString().split("T")[0],
+        descricao: `Home Care Ref: ${targetMonthYear} - Paciente: ${pac.nome}`
+      });
+
+      const resData = response.data;
+      toast.dismiss(loaderId);
+
+      const numero = await getNextFaturaNumber();
+      await addFaturaPaciente({
+        idPaciente: pacId,
+        pacienteId: pacId,
+        nomePaciente: pac.nome,
+        numeroFatura: numero,
+        dataEmissao: new Date().toISOString(),
+        mesReferencia: targetMonthYear,
+        periodoApurado: { inicio: dataInicial, fim: dataFinal },
+        valorTotal: totalVal,
+        status: "Fechada",
+        codigoSolicitacao: resData.codigoSolicitacao,
+        nossoNumero: resData.nossoNumero,
+        linhaDigitavel: resData.linhaDigitavel,
+        codigoBarras: resData.codigoBarras,
+        pixCopiaECola: resData.pixCopiaECola,
+        pdfBase64: resData.pdfBase64,
+        plantoesCongelados: agends.map(ag => ({
+          ...ag,
+          profissional: ag.nomeProfissional || "Não atribuído",
+          nomeProfissional: ag.nomeProfissional || "Não atribuído"
+        }))
+      });
+
+      toast.success(`Boleto emitido e Fatura Nº ${numero} gerada com sucesso!`);
+    } catch (err: any) {
+      toast.dismiss(loaderId);
+      console.error("Erro ao emitir boleto direto:", err);
+      toast.error(`Falha na emissão: ${err.message || "Erro de comunicação com o Inter"}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -3292,15 +3378,69 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                                 <h3 className="font-bold text-slate-800">{pacNome}</h3>
                                 <p className="text-xs text-slate-500">Total de Plantões: {agends.length}</p>
                               </div>
-                              <div className="flex gap-4 items-center print:hidden">
-                                <p className="text-xs font-black text-blue-700 bg-blue-50 px-2 py-1 rounded">Fatura Nº (Gerada ao salvar)</p>
-                                <button
-                                  onClick={() => handleSalvarFaturaDefinitiva(pacId, agends)}
-                                  disabled={isSaving}
-                                  className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 text-white font-medium rounded-lg shadow-lg shadow-blue-500/40 hover:bg-blue-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                  {isSaving ? 'Salvando...' : '💾 Salvar Fatura Definitiva'}
-                                </button>
+                              <div className="flex gap-2 items-center print:hidden">
+                                {(() => {
+                                  const targetMonthYear = getMonthYearString(dataInicial);
+                                  const faturaExistente = faturasPacientes.find(f => 
+                                    (f.idPaciente === pacId || (f as any).pacienteId === pacId) &&
+                                    f.periodoApurado &&
+                                    getMonthYearString(f.periodoApurado.inicio) === targetMonthYear
+                                  );
+
+                                  if (faturaExistente && ((faturaExistente as any).codigoSolicitacao || (faturaExistente as any).linhaDigitavel)) {
+                                    return (
+                                      <div className="flex items-center gap-2">
+                                        <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-[11px] font-black rounded-md border border-emerald-300">
+                                          ✅ Boleto Ativo
+                                        </span>
+                                        {(faturaExistente as any).pdfBase64 && (
+                                          <button
+                                            type="button"
+                                            onClick={() => downloadBoletoPdf((faturaExistente as any).pdfBase64, (faturaExistente as any).numeroFatura, (faturaExistente as any).codigoSolicitacao)}
+                                            className="px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-md shadow transition-all cursor-pointer flex items-center gap-1 active:scale-95"
+                                            title="Baixar Boleto Oficial em PDF"
+                                          >
+                                            📥 PDF
+                                          </button>
+                                        )}
+                                        {(faturaExistente as any).pixCopiaECola && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              navigator.clipboard.writeText((faturaExistente as any).pixCopiaECola);
+                                              toast.success("Pix Copia e Cola copiado!");
+                                            }}
+                                            className="px-2.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-md shadow transition-all cursor-pointer flex items-center gap-1 active:scale-95"
+                                            title="Copiar Pix"
+                                          >
+                                            ⚡ Pix
+                                          </button>
+                                        )}
+                                      </div>
+                                    );
+                                  }
+
+                                  return (
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleEmitirBoletoPacienteDirect(pacId, totalFatura, agends)}
+                                        disabled={isSaving}
+                                        className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-lg shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+                                      >
+                                        🧾 Emitir Boleto Inter
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSalvarFaturaDefinitiva(pacId, agends)}
+                                        disabled={isSaving}
+                                        className="flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-600 hover:bg-slate-700 text-white text-xs font-bold rounded-lg shadow transition-all active:scale-95 disabled:opacity-50"
+                                      >
+                                        {isSaving ? "Salvando..." : "💾 Salvar Sem Boleto"}
+                                      </button>
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             </div>
                             <table className="w-full text-left text-xs">
@@ -4826,12 +4966,14 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
     };
 
     // Filter states
+    const [historicoSubTab, setHistoricoSubTab] = useState<'faturas' | 'folhas'>('faturas');
     const [searchFaturaPaciente, setSearchFaturaPaciente] = useState('all');
     const [searchFaturaDataInicio, setSearchFaturaDataInicio] = useState('');
     const [searchFaturaDataFim, setSearchFaturaDataFim] = useState('');
     const [searchFaturaText, setSearchFaturaText] = useState('');
     const [searchFolhaProfissional, setSearchFolhaProfissional] = useState('all');
-    const [searchFolhaData, setSearchFolhaData] = useState('');
+    const [searchFolhaDataInicio, setSearchFolhaDataInicio] = useState<string>("");
+  const [searchFolhaDataFim, setSearchFolhaDataFim] = useState<string>("");
     const [searchFolhaText, setSearchFolhaText] = useState('');
 
     // Dynamic Lists from Firestore
@@ -4974,16 +5116,35 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
     }, [filteredFaturas, faturaSortConfig]);
 
     const filteredFolhas = folhasPagamento.filter(f => {
-        const matchesProfissional = !searchFolhaProfissional || searchFolhaProfissional === 'all' || f.nomeProfissional === searchFolhaProfissional;
+    const matchesProfissional = !searchFolhaProfissional || searchFolhaProfissional === "all" || f.nomeProfissional === searchFolhaProfissional;
+    
+    // Normalização da data do documento (emissão ou período)
+    const docDate = (f.dataEmissao || (f.periodoApurado && f.periodoApurado.inicio) || "").substring(0, 10);
+    const docDateFim = (f.dataEmissao || (f.periodoApurado && f.periodoApurado.fim) || docDate).substring(0, 10);
 
-        let matchesDate = true;
-        if (searchFolhaData) {
-            try {
-                const docDate = new Date(f.dataEmissao);
-                const yr = docDate.getFullYear();
-                const mo = String(docDate.getMonth() + 1).padStart(2, '0');
-                const dy = String(docDate.getDate()).padStart(2, '0');
-                const docFormatted = `${yr}-${mo}-${dy}`;
+    let matchesDate = true;
+    if (searchFolhaDataInicio && docDate < searchFolhaDataInicio) {
+      matchesDate = false;
+    }
+    if (searchFolhaDataFim && docDateFim > searchFolhaDataFim) {
+      matchesDate = false;
+    }
+
+    const matchesSearch = !searchFolhaText || 
+      (f.nomeProfissional && f.nomeProfissional.toLowerCase().includes(searchFolhaText.toLowerCase())) ||
+      (f.id && f.id.toLowerCase().includes(searchFolhaText.toLowerCase()));
+
+    return matchesProfissional && matchesDate && matchesSearch;
+  });
+        return d >= searchFolhaDataInicio;
+      });
+    }
+    if (searchFolhaDataFim) {
+      result = result.filter(f => {
+        const d = (f.dataEmissao || (f.periodoApurado && f.periodoApurado.fim) || "").substring(0, 10);
+        return d <= searchFolhaDataFim;
+      });
+    }-${mo}-${dy}`;
                 matchesDate = docFormatted === searchFolhaData;
             } catch (e) {
                 matchesDate = false;
@@ -5002,6 +5163,60 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
 
     return (
       <div className="space-y-6 animate-in fade-in-30">
+        {/* Seletor de Sub-abas em Pílula (Segmentação de Histórico) */}
+        <div className="bg-white p-2.5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:hidden">
+          <div className="flex items-center p-1 bg-slate-100/90 rounded-xl gap-1 w-full sm:w-auto">
+            <button
+              type="button"
+              id="subtab-historico-faturas"
+              onClick={() => setHistoricoSubTab('faturas')}
+              className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer w-full sm:w-auto ${
+                historicoSubTab === 'faturas'
+                  ? 'bg-white text-emerald-800 shadow-sm border border-slate-200/60'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+              }`}
+            >
+              <span className="text-sm">📑</span>
+              <span>Faturas de Clientes (Receitas)</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                historicoSubTab === 'faturas'
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : 'bg-slate-200/80 text-slate-600'
+              }`}>
+                {filteredFaturas.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              id="subtab-historico-folhas"
+              onClick={() => setHistoricoSubTab('folhas')}
+              className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer w-full sm:w-auto ${
+                historicoSubTab === 'folhas'
+                  ? 'bg-white text-emerald-800 shadow-sm border border-slate-200/60'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+              }`}
+            >
+              <span className="text-sm">👥</span>
+              <span>Folhas de Pagamento (Despesas)</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                historicoSubTab === 'folhas'
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : 'bg-slate-200/80 text-slate-600'
+              }`}>
+                {filteredFolhas.length}
+              </span>
+            </button>
+          </div>
+
+          <div className="text-xs text-slate-500 font-medium px-2">
+            {historicoSubTab === 'faturas' 
+              ? 'Contas a receber emitidas para pacientes.' 
+              : 'Demonstrativos e repasses dos profissionais.'}
+          </div>
+        </div>
+
+        {historicoSubTab === 'faturas' && (
         <div className="bg-white p-4 border border-gray-100 rounded-xl shadow-sm">
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 mb-4">
             <div className="flex items-center gap-3">
@@ -5229,6 +5444,9 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
             </table>
           </div>
         </div>
+        )}
+
+        {historicoSubTab === 'folhas' && (
         <div className="bg-white p-4 border border-gray-100 rounded-xl shadow-sm">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
@@ -5291,12 +5509,32 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                     <option key={p.id} value={p.nome}>{p.nome}</option>
                   ))}
                 </select>
-                <input
-                  type="date"
-                  value={searchFolhaData}
-                  onChange={(e) => setSearchFolhaData(e.target.value)}
-                  className="border border-slate-200 rounded-md px-3 py-1 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                />
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-md px-2 py-1 text-xs">
+  <span className="text-slate-500 font-semibold text-[10px] tracking-wider uppercase">DE:</span>
+  <input
+    type="date"
+    value={searchFolhaDataInicio}
+    onChange={(e) => setSearchFolhaDataInicio(e.target.value)}
+    className="bg-transparent border-0 text-slate-700 text-xs focus:ring-0 p-0 cursor-pointer"
+  />
+  <span className="text-slate-500 font-semibold text-[10px] tracking-wider uppercase ml-1">ATÉ:</span>
+  <input
+    type="date"
+    value={searchFolhaDataFim}
+    onChange={(e) => setSearchFolhaDataFim(e.target.value)}
+    className="bg-transparent border-0 text-slate-700 text-xs focus:ring-0 p-0 cursor-pointer"
+  />
+  {(searchFolhaDataInicio || searchFolhaDataFim) && (
+    <button
+      type="button"
+      onClick={() => { setSearchFolhaDataInicio(""); setSearchFolhaDataFim(""); }}
+      className="ml-1 text-slate-400 hover:text-red-500 font-bold px-1 text-xs transition-colors"
+      title="Limpar período"
+    >
+      ✕
+    </button>
+  )}
+</div>
               </div>
             </div>
 
@@ -5368,6 +5606,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
               </table>
             </div>
         </div>
+        )}
 
         {/* Hidden Printable Report for Histórico de Faturas */}
         <div className="fixed -left-[9999px] top-0 pointer-events-none" aria-hidden="true">
