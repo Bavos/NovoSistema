@@ -11,6 +11,7 @@ import { Paciente, Plantao, CancelingReason, EscalacaoPlano, Agendamento } from 
 import { useFirebase } from '../context/FirebaseContext';
 import { usePacienteData } from '../hooks/usePacienteData';
 import { sanitizeClonedDocForHtml2Canvas, exportCanvasToA4PDF } from '../lib/html2canvasSanitizer';
+import { exportFaturaPDF } from '../utils/faturaPdfGenerator';
 import { ModalInserirDebito, DadosAtalhoCuringa } from './ModalInserirDebito';
 import { CardBase, DataGrid, DataField, SoftBadge } from './ui/DesignSystem';
 import { Logo } from './Logo';
@@ -3535,42 +3536,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       // Carrega dados da empresa se necessário
       const emp = empresaInfo || await fetchEmpresaInfo();
 
-      // Ativa renderização offscreen
-      setFaturaParaBaixar(matchedFatura);
-
-      // Dá tempo pro DOM renderizar
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      const printElement = tempFaturaRef.current;
-      if (!printElement) {
-        throw new Error('Elemento de faturamento para PDF não renderizado no DOM.');
-      }
-
-      const html2canvas = (await import('html2canvas-pro')).default;
-      const canvas = await html2canvas(printElement, {
-        backgroundColor: '#ffffff',
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        onclone: (clonedDoc) => {
-          sanitizeClonedDocForHtml2Canvas(clonedDoc, '#ffffff', '#0f172a');
-          if (clonedDoc.body) {
-            clonedDoc.body.style.width = '850px';
-          }
-        }
-      });
-
-      const formattedDate = matchedFatura.dataEmissao?.includes('T') ? matchedFatura.dataEmissao.split('T')[0] : (matchedFatura.dataEmissao?.replace(/\//g, '-') || 'Data');
-      const safeName = (matchedFatura.nomePaciente || paciente.nome || 'Paciente').replace(/\s+/g, '_');
-
-      exportCanvasToA4PDF(canvas, `Fatura_${safeName}_${formattedDate}.pdf`);
+      // Gera e salva a fatura em PDF 100% nativo com jsPDF e autoTable
+      await exportFaturaPDF(matchedFatura, emp);
 
       toast.success('Fatura baixada em PDF com sucesso!', { id: toastId });
     } catch (err: any) {
       console.error('Erro ao gerar PDF da fatura:', err);
       toast.error('Erro ao baixar a fatura em PDF.', { id: toastId });
-    } finally {
-      setFaturaParaBaixar(null);
     }
   };
 

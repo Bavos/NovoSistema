@@ -63,6 +63,7 @@ import React, { useState, useRef } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { sanitizeClonedDocForHtml2Canvas, exportCanvasToA4PDF } from '../lib/html2canvasSanitizer';
+import { exportFaturaPDF } from '../utils/faturaPdfGenerator';
 import {
   Briefcase,
   Calendar,
@@ -5075,7 +5076,26 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
         setSelectedHistorico([]);
     };
 
+    const handleExportFaturaPDF = async (faturaData: any) => {
+        if (!faturaData) return;
+        setLoadingExport(true);
+        const toastId = toast.loading("Gerando PDF oficial da fatura...");
+        try {
+            await exportFaturaPDF(faturaData, empresa);
+            toast.success("Fatura em PDF gerada com sucesso!", { id: toastId });
+        } catch (err: any) {
+            console.error("Erro ao gerar PDF da fatura:", err);
+            toast.error("Erro ao gerar PDF da fatura.", { id: toastId });
+        } finally {
+            setLoadingExport(false);
+        }
+    };
+
     const handleDownloadWordFromCanvas = async (docData: any, type: 'fatura' | 'folha') => {
+        if (type === 'fatura') {
+            await handleExportFaturaPDF(docData);
+            return;
+        }
         setLoadingExport(true);
         const printElement = document.getElementById('print-area') || faturaRef.current;
         if (printElement) {
@@ -5186,7 +5206,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                     }
                 });
                 
-                const nomeAlvo = type === 'fatura' ? docData.nomePaciente : docData.nomeProfissional;
+                const nomeAlvo = docData.nomeProfissional || docData.nomePaciente;
                 const safeNome = (nomeAlvo || 'Documento').replace(/[^a-zA-Z0-9à-úÀ-Ú_]/g, '_');
                 let safeData = 'Data';
                 if (docData.dataEmissao) {
@@ -5196,7 +5216,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                         safeData = docData.dataEmissao.replace(/\//g, '-');
                     }
                 }
-                const fileName = `${type === 'fatura' ? 'Fatura' : 'Folha'}_${safeNome}_${safeData}.pdf`;
+                const fileName = `Folha_${safeNome}_${safeData}.pdf`;
 
                 exportCanvasToA4PDF(canvas, fileName);
 
@@ -5736,6 +5756,13 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                             onClick={() => setViewDoc({ data: f, type: 'fatura' })}
                                         >
                                             <Eye className="w-4 h-4" />
+                                        </button>
+                                        <button 
+                                            className="p-1.5 text-teal-600 hover:text-teal-800 hover:bg-teal-50 rounded transition-colors cursor-pointer" 
+                                            title="Baixar Fatura (PDF)"
+                                            onClick={() => handleExportFaturaPDF(f)}
+                                        >
+                                            <FileText className="w-4 h-4" />
                                         </button>
                                         <button 
                                             className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors cursor-pointer" 
