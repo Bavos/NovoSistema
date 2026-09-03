@@ -723,7 +723,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
       return;
     }
 
-    let empresaNome = 'RH Gestão Domiciliar';
+    let empresaNome = 'Vallidare - Gestão e Consultoria em Saúde';
     let empresaCnpj = '12.345.678/0001-99';
     let empresaEndereco = 'Rua Martins Ferreira, 71';
     try {
@@ -753,11 +753,11 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
         { key: 'E', width: 15 }
       ];
 
-      // Logo block: "RH"
+      // Logo block: "VALLIDARE"
       worksheet.mergeCells('A2:A4');
       const logoCell = worksheet.getCell('A2');
-      logoCell.value = 'RH';
-      logoCell.font = { name: 'Arial', size: 18, bold: true, color: { argb: 'FFFFFFFF' } };
+      logoCell.value = 'VALLIDARE';
+      logoCell.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
       logoCell.alignment = { vertical: 'middle', horizontal: 'center' };
       logoCell.fill = {
         type: 'pattern',
@@ -937,7 +937,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
       return;
     }
 
-    let empresaNome = 'RH Gestão Domiciliar';
+    let empresaNome = 'Vallidare - Gestão e Consultoria em Saúde';
     let empresaCnpj = '12.345.678/0001-99';
     let empresaEndereco = 'Rua Martins Ferreira, 71';
     try {
@@ -1857,13 +1857,9 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                 />
               ) : (
                 <div className="flex items-center gap-2 bg-transparent">
-                  <svg className="w-10 h-10 text-[#C5A059] bg-transparent" viewBox="0 0 100 100" fill="none">
-                    <path d="M 50 18 C 38 8 20 12 16 26 C 10 44 28 58 50 76 C 72 58 90 44 84 26 C 80 12 62 8 50 18 Z" fill="#C5A059" />
-                    <path d="M 50 30 C 42 22 32 24 29 31 C 24 40 36 49 50 60 C 64 49 76 40 71 31 C 68 24 58 22 50 30 Z" fill="#1a3c2e" />
-                  </svg>
                   <div className="flex flex-col text-left bg-transparent">
-                    <span className="text-lg font-extrabold text-[#1a3c2e] leading-none tracking-tight">RH</span>
-                    <span className="text-[9px] font-bold text-[#1a3c2e] tracking-wider uppercase mt-0.5">Gestão Domiciliar</span>
+                    <span className="text-base font-black text-[#1a3c2e] leading-none tracking-tight">VALLIDARE</span>
+                    <span className="text-[8px] font-bold text-[#1a3c2e] tracking-wider uppercase mt-0.5">Gestão e Consultoria em Saúde</span>
                   </div>
                 </div>
               )}
@@ -1911,7 +1907,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
 
             {/* Integração de Dados Corporativos (Canto Inferior Direito) */}
             <div className="absolute bottom-4 right-5 z-10 text-right text-xs leading-tight font-sans">
-              <div className="font-bold text-slate-900">{config.razaoSocial || "RH Gestão Domiciliar"}</div>
+              <div className="font-bold text-slate-900">{config.razaoSocial || "Vallidare - Gestão e Consultoria em Saúde"}</div>
               <div className="text-[11px] text-slate-800 font-semibold">{config.cnpj ? `CNPJ: ${config.cnpj}` : "CNPJ: 68.152.234/0001-98"}</div>
             </div>
 

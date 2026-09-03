@@ -155,7 +155,7 @@ const AccessDeniedView: React.FC = () => (
     </p>
     <div className="pt-2">
       <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest font-bold text-[#b8860b] bg-[#fdfaf2] border border-[#f5ebcf] px-3.5 py-1.5 rounded-full select-none shadow-xs font-mono">
-        🛡️ Segurança Sistêmica RH Gestão Domiciliar
+        🛡️ Segurança Sistêmica Vallidare - Gestão e Consultoria em Saúde
       </span>
     </div>
   </div>
@@ -271,7 +271,7 @@ function DashboardContent() {
 
   // Manter o título da aba do navegador padronizado
   useEffect(() => {
-    document.title = 'RH Gestão Domiciliar';
+    document.title = 'Vallidare - Gestão e Consultoria em Saúde';
   }, []);
 
   const currentUserProfile = (usuariosSistema || []).find(u => {
@@ -318,7 +318,7 @@ function DashboardContent() {
     if (activeSidebarTab === 'financeiro') return 'Financeiro';
     if (activeSidebarTab === 'usuarios') return 'Gestão de Usuários';
     if (activeSidebarTab === 'empresa') return 'Informações Gerais';
-    return 'RH Gestão Domiciliar';
+    return 'Vallidare - Gestão e Consultoria em Saúde';
   };
 
   if (loading) {

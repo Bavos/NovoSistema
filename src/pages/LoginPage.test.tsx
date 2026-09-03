@@ -11,6 +11,11 @@ vi.mock('firebase/app', () => ({
   initializeApp: vi.fn(() => ({})),
 }));
 
+vi.mock('firebase/functions', () => ({
+  getFunctions: vi.fn(() => ({})),
+  httpsCallable: vi.fn(() => vi.fn()),
+}));
+
 vi.mock('firebase/auth', () => ({
   getAuth: vi.fn(() => ({
     currentUser: null,
@@ -180,7 +185,7 @@ describe('LoginPage Component Tests', () => {
     fireEvent.click(submitButton);
 
     await waitFor(() => {
-      const expected = 'Muitas tentativas incorretas. Aguarde alguns instantes e tente novamente.';
+      const expected = 'Muitas tentativas incorretas. Aguarde alguns instantes.';
       expect(screen.queryByText(expected)).not.toBeNull();
       expect(screen.queryByText(/too-many-requests/i)).toBeNull();
       expect(screen.queryByText(/Firebase/i)).toBeNull();

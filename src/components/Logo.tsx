@@ -181,3 +181,4 @@ export const Logo: React.FC<LogoProps> = ({ className = 'w-full h-auto', style }
     </svg>
   );
 };
+

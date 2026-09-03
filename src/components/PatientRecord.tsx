@@ -881,7 +881,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       return;
     }
 
-    let empresaNome = 'RH Gestão Domiciliar';
+    let empresaNome = 'Vallidare - Gestão e Consultoria em Saúde';
     let empresaCnpj = '12.345.678/0001-99';
     let empresaEndereco = 'Rua Martins Ferreira, 71';
     try {
@@ -910,11 +910,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         { key: 'D', width: 50 }
       ];
 
-      // Logo block: "RH"
+      // Logo block: "VALLIDARE"
       worksheet.mergeCells('A2:A4');
       const logoCell = worksheet.getCell('A2');
-      logoCell.value = 'RH';
-      logoCell.font = { name: 'Arial', size: 18, bold: true, color: { argb: 'FFFFFFFF' } };
+      logoCell.value = 'VALLIDARE';
+      logoCell.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
       logoCell.alignment = { vertical: 'middle', horizontal: 'center' };
       logoCell.fill = {
         type: 'pattern',
@@ -1040,7 +1040,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       return;
     }
 
-    let empresaNome = 'RH Gestão Domiciliar';
+    let empresaNome = 'Vallidare - Gestão e Consultoria em Saúde';
     let empresaCnpj = '12.345.678/0001-99';
     let empresaEndereco = 'Rua Martins Ferreira, 71';
     try {
@@ -2774,7 +2774,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
     const faturaMaisRecente = faturaMaisRecenteRaw as any;
 
-    let empresaNome = 'RH Gestão Domiciliar';
+    let empresaNome = 'Vallidare - Gestão e Consultoria em Saúde';
     let empresaCnpj = '12.345.678/0001-99';
     let empresaEndereco = 'Rua Martins Ferreira, 71';
     try {
@@ -2803,11 +2803,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         { key: 'D', width: 18 }
       ];
 
-      // Logo block: "RH"
+      // Logo block: "VALLIDARE"
       worksheet.mergeCells('A2:A4');
       const logoCell = worksheet.getCell('A2');
-      logoCell.value = 'RH';
-      logoCell.font = { name: 'Arial', size: 18, bold: true, color: { argb: 'FFFFFFFF' } };
+      logoCell.value = 'VALLIDARE';
+      logoCell.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
       logoCell.alignment = { vertical: 'middle', horizontal: 'center' };
       logoCell.fill = {
         type: 'pattern',
@@ -3017,7 +3017,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
     const faturaMaisRecente = faturaMaisRecenteRaw as any;
 
-    let empresaNome = 'RH Gestão Domiciliar';
+    let empresaNome = 'Vallidare - Gestão e Consultoria em Saúde';
     let empresaCnpj = '12.345.678/0001-99';
     let empresaEndereco = 'Rua Martins Ferreira, 71';
     try {
@@ -3337,7 +3337,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       console.warn("Erro ao buscar dados da empresa para PNG, usando fallbacks:", err);
     }
     const fallback = {
-      razaoSocial: 'RH Gestão Domiciliar',
+      razaoSocial: 'Vallidare - Gestão e Consultoria em Saúde',
       cnpj: '12.345.678/0001-99',
       endereco: 'Rua Martins Ferreira, 71',
       logoUrl: ''
@@ -5045,7 +5045,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
             {activeTab === 'agendamento' && (
               <div className="w-full max-w-6xl mx-auto bg-white rounded-2xl shadow-xl border border-gray-200 p-6 md:p-8 mt-6 mb-12 space-y-4 animate-in fade-in-30 slide-in-from-right-3">
-                {/* Operations Header Buttons Deck - RH Gestão Domiciliar */}
+                {/* Operations Header Buttons Deck - Vallidare */}
                 <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3 font-sans">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider block font-sans">
@@ -6635,7 +6635,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             </div>
 
             <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
-              Estrutura de dados NoSQL/Firestore homologada para faturamento corporativo no portal RH Gestão Domiciliar S.A.
+              Estrutura de dados NoSQL/Firestore homologada para faturamento corporativo no portal Vallidare - Gestão e Consultoria em Saúde.
             </p>
 
             <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 overflow-x-auto max-h-80 text-[11px] text-violet-300 leading-relaxed scrollbar-thin">
@@ -8461,7 +8461,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 {/* Cabeçalho da Empresa */}
                 <div className="flex justify-between items-start border-b border-slate-300 pb-4">
                   <div>
-                    <h1 className="text-lg font-black text-slate-905 text-slate-900 tracking-tight uppercase leading-none">RH GESTÃO DOMICILIAR LTDA.</h1>
+                    <h1 className="text-lg font-black text-slate-905 text-slate-900 tracking-tight uppercase leading-none">VALLIDARE - GESTÃO E CONSULTORIA EM SAÚDE LTDA.</h1>
                     <p className="text-[10px] text-slate-500 font-mono mt-1">EMPRESA GESTORA DE SERVIÇOS DE ENFERMAGEM & HOME CARE</p>
                     <p className="text-[9px] text-slate-400 mt-0.5">Rua do Acolhimento, 1000 - Belo Horizonte, MG | Contato: (31) 3333-3333</p>
                   </div>
@@ -8648,7 +8648,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 <div className="grid grid-cols-2 gap-8 pt-8 text-[11px]">
                   <div className="space-y-4 text-center">
                     <p className="border-t border-slate-400 pt-1.5 font-bold uppercase font-sans text-slate-800">
-                      Coordenadoria de RH Gestão Domiciliar S.A.
+                      Coordenadoria de Vallidare - Gestão e Consultoria em Saúde S.A.
                     </p>
                     <p className="text-[9px] text-slate-450 text-slate-400 leading-none">Representante Geral Legal Corporativo</p>
                   </div>
@@ -8754,7 +8754,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 {/* Cabeçalho de Identidade Visual da Empresa */}
                 <div className="flex justify-between items-start border-b-2 border-[#b8860b] pb-4">
                   <div>
-                    <h1 className="text-xl font-black text-[#1a3c2e] tracking-tight uppercase leading-none">RH GESTÃO DOMICILIAR</h1>
+                    <h1 className="text-xl font-black text-[#1a3c2e] tracking-tight uppercase leading-none">VALLIDARE - GESTÃO E CONSULTORIA EM SAÚDE</h1>
                     <p className="text-[10px] text-slate-500 font-mono mt-1">SISTEMA INTEGRADO DE GESTÃO DE SAÚDE & HOME CARE</p>
                     <p className="text-[9px] text-slate-400 mt-0.5">Gestão de Escalas, Prontuários Médicos e Repasses Financeiros</p>
                   </div>
@@ -8999,7 +8999,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
                 {/* Termo de Veracidade / Encerramento */}
                 <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[9px] text-slate-400 leading-relaxed font-sans text-left mt-4">
-                  O prontuário acima compreende dados confidenciais e de uso clínico estrito da coordenadoria do RH Gestão Domiciliar Ltda. em conformidade com as diretivas do CFM (Conselho Federal de Medicina), COFEN e a Lei Geral de Proteção de Dados (LGPD). É de inteira obrigação das partes a confidencialidade e zelo no arquivamento deste registro impresso.
+                  O prontuário acima compreende dados confidenciais e de uso clínico estrito da coordenadoria do Vallidare - Gestão e Consultoria em Saúde Ltda. em conformidade com as diretivas do CFM (Conselho Federal de Medicina), COFEN e a Lei Geral de Proteção de Dados (LGPD). É de inteira obrigação das partes a confidencialidade e zelo no arquivamento deste registro impresso.
                 </div>
 
               </div>
@@ -9864,7 +9864,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     )}
                     <div>
                       <h2 className="text-base font-bold text-slate-900 tracking-tight leading-tight">
-                        {empresaInfo?.razaoSocial || 'RH GESTÃO DOMICILIAR LTDA.'}
+                        {empresaInfo?.razaoSocial || 'VALLIDARE - GESTÃO E CONSULTORIA EM SAÚDE LTDA.'}
                       </h2>
                       <p className="text-xs text-slate-600 font-medium mt-0.5">
                         CNPJ: {empresaInfo?.cnpj || '00.000.000/0000-00'}
@@ -9983,7 +9983,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
               {/* 5. Rodapé Corporativo */}
               <div className="pt-2 border-t border-slate-300 flex justify-between items-center text-[11px] text-slate-500">
-                <span>Documento gerado eletronicamente pelo Sistema RH Gestão Domiciliar</span>
+                <span>Documento gerado eletronicamente pelo Sistema Vallidare</span>
                 <span>Página 1 de 1</span>
               </div>
             </div>

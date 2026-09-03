@@ -19,7 +19,7 @@ import {
 import { useFirebase } from '../context/FirebaseContext';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import logo from '../assets/images/rh_logo_1781469900395.jpg';
+import { VallidareIcon } from './VallidareLogo';
 
 interface SidebarProps {
   activeTab: string;
@@ -95,20 +95,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Sidebar Header */}
       <div className="h-16 flex items-center border-b border-[#254A34] px-4 justify-between select-none bg-forest-green">
         <div className="flex items-center space-x-3 overflow-hidden min-w-[150px]">
-          <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center overflow-hidden flex-shrink-0 border border-[#254A34]/20 shadow-xs">
-            <img 
-              src={empresa?.logoUrl || logo} 
-              alt="Logo" 
-              className="w-full h-full object-contain max-w-full" 
-              style={{ imageRendering: '-webkit-optimize-contrast' }}
-            />
+          <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center overflow-hidden flex-shrink-0 border border-[#254A34]/20 shadow-xs p-1">
+            {empresa?.logoUrl ? (
+              <img 
+                src={empresa.logoUrl} 
+                alt="Logo Vallidare" 
+                className="w-full h-full object-contain max-w-full" 
+                style={{ imageRendering: '-webkit-optimize-contrast' }}
+              />
+            ) : (
+              <VallidareIcon className="w-full h-full object-contain" />
+            )}
           </div>
           <motion.div
             animate={{ opacity: effectiveExpanded ? 1 : 0 }}
             transition={{ duration: 0.2 }}
             className="flex flex-col whitespace-nowrap pl-3"
           >
-            <span className="font-extrabold text-off-white text-sm tracking-wide uppercase">RH GD</span>
+            <span className="font-extrabold text-off-white text-sm tracking-wide uppercase">VALLIDARE</span>
             <span className="text-[10px] text-mustard-gold font-mono tracking-widest font-medium">SISTEMA</span>
           </motion.div>
         </div>

@@ -1,6 +1,6 @@
 {
-  "name": "RH Gestão Domiciliar",
-  "description": "Sistema integrado de alta performance para controle de prontuários, alocação de escalas, agendamentos em lote e auditoria financeira de cuidadores.",
+  "name": "Vallidare - Gestão e Consultoria em Saúde",
+  "description": "Sistema integrado de alta performance Vallidare para controle de prontuários, alocação de escalas, agendamentos em lote e auditoria financeira em saúde.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
