@@ -1,5 +1,5 @@
 
-async function downloadBoletoPdf(base64Data, seuNumero, codigoSolicitacao) {
+async function downloadBoletoPdf(base64Data?: string, seuNumero?: string, codigoSolicitacao?: string) {
   let finalBase64 = base64Data;
 
   if (!finalBase64 && codigoSolicitacao) {
@@ -12,7 +12,7 @@ async function downloadBoletoPdf(base64Data, seuNumero, codigoSolicitacao) {
       const res = await obterPdf({ codigoSolicitacao });
       finalBase64 = (res.data as any)?.pdfBase64;
       toast.dismiss("loading-pdf");
-    } catch (err) {
+    } catch (err: any) {
       toast.dismiss("loading-pdf");
       alert("O Banco Inter ainda está processando o PDF deste boleto. Aguarde 5 segundos e tente clicar novamente.");
       return;
@@ -42,9 +42,9 @@ async function downloadBoletoPdf(base64Data, seuNumero, codigoSolicitacao) {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     toast.success("Download do PDF concluído!");
-  } catch (err) {
+  } catch (err: any) {
     console.error("Erro ao baixar PDF:", err);
-    alert("Falha ao abrir PDF: " + err.message);
+    alert("Falha ao abrir PDF: " + (err?.message || err));
   }
 }
 
@@ -63,7 +63,7 @@ import React, { useState, useRef } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { sanitizeClonedDocForHtml2Canvas, exportCanvasToA4PDF } from '../lib/html2canvasSanitizer';
-import { exportFaturaPDF } from '../utils/faturaPdfGenerator';
+import { exportFaturaPDF, exportHistoricoFaturasPDF } from '../utils/faturaPdfGenerator';
 import { exportFolhaPDF } from '../utils/folhaPdfGenerator';
 import {
   Briefcase,
@@ -1337,10 +1337,10 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       setBoletoResultData(realResult);
       setFolhaSuccess(true);
       toast.success(`Boleto de R$ ${valNum.toFixed(2)} emitido com sucesso no Banco Inter!`);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro na emissão oficial do Banco Inter:", err);
       toast.dismiss(loaderToastId);
-      const errMsg = err.message || "Falha na comunicação com o Banco Inter.";
+      const errMsg = err?.message || "Falha na comunicação com o Banco Inter.";
       setFolhaError(errMsg);
       toast.error(`Falha no Banco Inter: ${errMsg}`);
     } finally {
@@ -4570,7 +4570,6 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
     const [empresa, setEmpresa] = useState<any>(null);
 
     const faturaRef = useRef<HTMLDivElement>(null);
-    const historicoFaturasPrintRef = useRef<HTMLDivElement>(null);
     const historicoFolhasPrintRef = useRef<HTMLDivElement>(null);
     const [loadingExport, setLoadingExport] = useState(false);
     const [isExportingFaturasPDF, setIsExportingFaturasPDF] = useState(false);
@@ -4643,35 +4642,11 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
         setIsExportingFaturasPDF(true);
         const toastId = toast.loading("Gerando relatório em PDF das faturas...");
         try {
-            const printElement = historicoFaturasPrintRef.current;
-            if (!printElement) throw new Error("Elemento do relatório de faturas não encontrado.");
+            const filtroTexto = `${searchFaturaPaciente && searchFaturaPaciente !== 'all' ? `Filtro Paciente: ${searchFaturaPaciente}` : 'Todos os Pacientes'}` +
+                `${searchFaturaDataInicio && searchFaturaDataFim ? ` | Período: ${formatDisplayDate(searchFaturaDataInicio)} até ${formatDisplayDate(searchFaturaDataFim)}` : ''}` +
+                `${searchFaturaText.trim() ? ` | Busca: "${searchFaturaText.trim()}"` : ''}`;
 
-            const html2canvasModule = await import('html2canvas-pro');
-            const html2canvas = html2canvasModule.default || html2canvasModule;
-
-            const canvas = await (html2canvas as any)(printElement, {
-                backgroundColor: '#ffffff',
-                scale: 2,
-                useCORS: true,
-                allowTaint: true,
-                logging: false,
-                onclone: (clonedDoc: any) => {
-                    try {
-                        sanitizeClonedDocForHtml2Canvas(clonedDoc, '#ffffff', '#1a3c2e');
-                        if (clonedDoc.body) {
-                            clonedDoc.body.style.width = '1000px';
-                        }
-                        const printHiddenEls = clonedDoc.querySelectorAll('.print\\:hidden');
-                        printHiddenEls.forEach((el: any) => {
-                            (el as HTMLElement).style.display = 'none';
-                        });
-                    } catch (e) {
-                        console.warn("Aviso na sanitização do clone:", e);
-                    }
-                }
-            });
-
-            exportCanvasToA4PDF(canvas, `Relatorio_Historico_Faturas_${new Date().toISOString().slice(0, 10)}.pdf`);
+            await exportHistoricoFaturasPDF(sortedFaturas, empresa, filtroTexto);
 
             toast.success("Relatório de faturas baixado em PDF com sucesso!", { id: toastId });
         } catch (err: any) {
@@ -6062,99 +6037,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
         </div>
         )}
 
-        {/* Hidden Printable Report for Histórico de Faturas */}
-        <div className="fixed -left-[9999px] top-0 pointer-events-none" aria-hidden="true">
-          <div
-            ref={historicoFaturasPrintRef}
-            className="w-[850px] p-8 bg-white text-slate-800 font-sans"
-            style={{ fontFamily: 'Arial, sans-serif' }}
-          >
-            <div className="flex items-center justify-between border-b-2 border-[#1a3c2e] pb-4 mb-6">
-              <div>
-                <h1 className="text-xl font-bold text-[#1a3c2e] uppercase tracking-wide">
-                  {empresa?.razaoSocial || 'SISTEMA DE GESTÃO DE HOME CARE'}
-                </h1>
-                <p className="text-xs text-slate-500 font-medium">
-                  CNPJ: {empresa?.cnpj || 'Não informado'} {empresa?.endereco ? `| ${empresa.endereco}` : ''}
-                </p>
-              </div>
-              <div className="text-right">
-                <span className="inline-block px-3 py-1 bg-[#1a3c2e] text-white font-bold text-xs uppercase rounded">
-                  Relatório Financeiro
-                </span>
-                <p className="text-[10px] text-slate-400 mt-1 font-semibold">
-                  Gerado em: {new Date().toLocaleDateString('pt-BR')} às {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                </p>
-              </div>
-            </div>
 
-            <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-6 flex justify-between items-center">
-              <div>
-                <h2 className="text-base font-black text-slate-800 uppercase">
-                  📜 Histórico de Faturas de Pacientes
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {searchFaturaPaciente && searchFaturaPaciente !== 'all' ? `Filtro Paciente: ${searchFaturaPaciente}` : 'Todos os Pacientes'}
-                  {searchFaturaDataInicio && searchFaturaDataFim 
-                    ? ` | Período: ${formatDisplayDate(searchFaturaDataInicio)} até ${formatDisplayDate(searchFaturaDataFim)}`
-                    : searchFaturaDataInicio 
-                      ? ` | A partir de: ${formatDisplayDate(searchFaturaDataInicio)}`
-                      : searchFaturaDataFim 
-                        ? ` | Até: ${formatDisplayDate(searchFaturaDataFim)}`
-                        : ''
-                  }
-                  {searchFaturaText.trim() ? ` | Busca: "${searchFaturaText.trim()}"` : ''}
-                </p>
-              </div>
-              <div className="text-right">
-                <span className="text-xs text-slate-500 block font-semibold">Total de Registros:</span>
-                <span className="text-sm font-bold text-slate-800">{sortedFaturas.length} faturas</span>
-              </div>
-            </div>
-
-            <table className="w-full text-xs text-left border-collapse mb-6">
-              <thead>
-                <tr className="bg-[#1a3c2e] text-white uppercase text-[11px] font-bold">
-                  <th className="p-2.5 rounded-tl">Número</th>
-                  <th className="p-2.5">Paciente</th>
-                  <th className="p-2.5">Emissão</th>
-                  <th className="p-2.5 text-center">Status</th>
-                  <th className="p-2.5 text-right rounded-tr">Valor Total</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {sortedFaturas.map((f, idx) => (
-                  <tr key={f.id || idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
-                    <td className="p-2.5 font-mono font-semibold text-slate-700">{f.numeroFatura || '-'}</td>
-                    <td className="p-2.5 font-bold text-slate-800">{f.nomePaciente || 'Paciente'}</td>
-                    <td className="p-2.5 text-slate-600">
-                      {formatDisplayDate(f.dataEmissao || f.criadoEm)}
-                    </td>
-                    <td className="p-2.5 text-center font-bold text-emerald-700">{f.status || 'Emitida'}</td>
-                    <td className="p-2.5 text-right font-black text-slate-900">
-                      R$ {(Number(f.valorTotal) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            <div className="flex justify-end pt-2">
-              <div className="w-72 bg-emerald-50 border-2 border-emerald-600 rounded-xl p-4 text-right shadow-sm">
-                <span className="text-xs font-bold uppercase text-emerald-800 block tracking-wider">
-                  Soma Total das Faturas
-                </span>
-                <span className="text-2xl font-black text-emerald-900 block mt-1">
-                  R$ {sortedFaturas.reduce((acc, curr) => acc + (Number(curr.valorTotal) || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              </div>
-            </div>
-
-            <div className="mt-8 pt-4 border-t border-slate-200 text-center text-[10px] text-slate-400 font-medium">
-              Relatório de histórico de faturas emitido automaticamente pelo Sistema de Gestão de Home Care
-            </div>
-          </div>
-        </div>
 
         {/* Hidden Printable Report for Histórico de Folhas de Pagamento */}
         <div className="fixed -left-[9999px] top-0 pointer-events-none" aria-hidden="true">

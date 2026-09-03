@@ -461,3 +461,164 @@ export const exportFaturaPDF = async (faturaData: any, empresaInfo?: any): Promi
   doc.save(fileName);
   return doc;
 };
+
+/**
+ * Gera e exporta o Relatório de Histórico de Faturas de Pacientes em PDF 100% nativo e vetorial usando jsPDF e autoTable.
+ */
+export const exportHistoricoFaturasPDF = async (faturasList: any[], empresaInfo?: any, filtroTexto?: string): Promise<jsPDF> => {
+  if (!faturasList || faturasList.length === 0) {
+    throw new Error('Nenhuma fatura disponível para exportar.');
+  }
+
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  const pageWidth = 210;
+  const marginX = 14;
+  const contentWidth = pageWidth - (marginX * 2); // 182mm
+  const rightX = marginX + contentWidth; // 196mm
+
+  // 1. Cabeçalho Institucional
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.setTextColor(26, 60, 46); // #1a3c2e
+  const razaoSocialEmpresa = (empresaInfo?.razaoSocial && !/VALUDARE|VALLIOARE|EIREU/i.test(empresaInfo.razaoSocial))
+    ? empresaInfo.razaoSocial.replace(/\s+/g, ' ').trim()
+    : 'VALLIDARE GESTÃO MÉDICA E AUDITORIA EIRELI';
+  doc.text(razaoSocialEmpresa.toUpperCase(), marginX, 18);
+
+  const cnpjEmpresa = empresaInfo?.cnpj || '27.770.797/0001-62';
+  const enderecoEmpresa = empresaInfo?.endereco || 'Rua Martins Ferreira, 71 - Botafogo / Rio de Janeiro';
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(71, 85, 105); // #475569
+  doc.text(`CNPJ: ${cnpjEmpresa} • ${enderecoEmpresa}`, marginX, 23);
+
+  // Lado Direito: Data de emissão e Total de registros
+  const dataEmissaoHoje = new Date().toLocaleDateString('pt-BR');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(30, 41, 59);
+  doc.text(`Data de emissão: ${dataEmissaoHoje}`, rightX, 18, { align: 'right' });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text(`Total de registros: ${faturasList.length} faturas`, rightX, 23, { align: 'right' });
+
+  // Linha divisória sutil
+  doc.setDrawColor(226, 232, 240); // #e2e8f0
+  doc.setLineWidth(0.4);
+  doc.line(marginX, 27, rightX, 27);
+
+  // 2. Título da Seção e Filtro Ativo
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(26, 60, 46);
+  doc.text('RELATÓRIO DE HISTÓRICO DE FATURAS DE PACIENTES', marginX, 35);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(100, 116, 139);
+  const scopeText = filtroTexto || 'Todos os Pacientes';
+  doc.text(scopeText, marginX, 40);
+
+  // 3. Tabela Principal (autoTable)
+  const tableRows = faturasList.map((f: any) => {
+    const numero = f.numeroFatura || f.numero || '-';
+    const paciente = formatNomeComEspacos(f.nomePaciente || f.paciente || 'Paciente');
+    const emissao = formatDateBR(f.dataEmissao || f.criadoEm);
+    const status = String(f.status || 'Emitida').trim();
+    const valorTotalNum = Number(f.valorTotal || 0);
+    const valorStr = formatCurrency(valorTotalNum);
+
+    return [numero, paciente, emissao, status, valorStr];
+  });
+
+  const somaTotalFaturas = faturasList.reduce((acc, curr) => acc + (Number(curr.valorTotal) || 0), 0);
+
+  autoTable(doc, {
+    startY: 44,
+    head: [['NÚMERO', 'PACIENTE', 'EMISSÃO', 'STATUS', 'VALOR TOTAL']],
+    body: tableRows,
+    foot: [
+      [
+        {
+          content: 'SOMA TOTAL DAS FATURAS',
+          colSpan: 4,
+          styles: {
+            halign: 'right',
+            fontStyle: 'bold',
+            fontSize: 9,
+            textColor: [26, 60, 46],
+            fillColor: [241, 245, 249],
+            cellPadding: { top: 4, bottom: 4, left: 3, right: 4 },
+          },
+        },
+        {
+          content: formatCurrency(somaTotalFaturas),
+          styles: {
+            halign: 'right',
+            fontStyle: 'bold',
+            fontSize: 9.5,
+            textColor: [26, 60, 46],
+            fillColor: [241, 245, 249],
+            cellPadding: { top: 4, bottom: 4, left: 3, right: 3 },
+          },
+        },
+      ],
+    ],
+    theme: 'plain',
+    styles: {
+      font: 'helvetica',
+      fontSize: 8,
+      cellPadding: { top: 3, bottom: 3, left: 3, right: 3 },
+      textColor: [30, 41, 59],
+      lineColor: [226, 232, 240],
+      lineWidth: { bottom: 0.2 },
+      overflow: 'linebreak',
+    },
+    headStyles: {
+      fillColor: [26, 60, 46], // #1a3c2e
+      textColor: [255, 255, 255],
+      font: 'helvetica',
+      fontStyle: 'bold',
+      fontSize: 8.5,
+      cellPadding: { top: 3.5, bottom: 3.5, left: 3, right: 3 },
+    },
+    columnStyles: {
+      0: { cellWidth: 38, halign: 'left', fontStyle: 'bold' },
+      1: { cellWidth: 64, halign: 'left' },
+      2: { cellWidth: 25, halign: 'center' },
+      3: { cellWidth: 25, halign: 'center', fontStyle: 'bold' },
+      4: { cellWidth: 30, halign: 'right', fontStyle: 'bold' },
+    },
+    margin: { left: marginX, right: marginX, bottom: 18 },
+    alternateRowStyles: {
+      fillColor: [248, 250, 252],
+    },
+  });
+
+  // 4. Rodapé em todas as páginas
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(156, 163, 175); // #9ca3af
+    doc.text(
+      `Relatório Gerado pelo Sistema RH de Gestão • Página ${i} de ${totalPages}`,
+      pageWidth / 2,
+      288,
+      { align: 'center' }
+    );
+  }
+
+  const fileName = `Relatorio_Historico_Faturas_${new Date().toISOString().slice(0, 10)}.pdf`;
+  doc.save(fileName);
+  return doc;
+};
+
