@@ -23,7 +23,8 @@ export const FirstAccessPage: React.FC<FirstAccessPageProps> = ({ onNavigateToLo
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim()) {
+    const emailFormatado = email.trim().toLowerCase();
+    if (!emailFormatado) {
       toast.error('Informe o seu e-mail cadastrado.');
       return;
     }
@@ -31,12 +32,23 @@ export const FirstAccessPage: React.FC<FirstAccessPageProps> = ({ onNavigateToLo
     setIsLoading(true);
 
     try {
-      await sendPasswordResetEmail(auth, email.trim());
+      await sendPasswordResetEmail(auth, emailFormatado);
       setEmailSent(true);
-      toast.success('Link de recuperação enviado com sucesso!');
-    } catch (error: any) {
-      setEmailSent(true);
-      toast.success('Se o e-mail estiver cadastrado, as instruções foram enviadas.');
+      toast.success("E-mail de recuperação enviado! Verifique sua caixa de entrada e o spam.");
+    } catch (err: any) {
+      console.error("Erro Firebase sendPasswordResetEmail:", err?.code, err?.message);
+
+      if (err?.code === 'auth/user-not-found') {
+        toast.error("Nenhum usuário cadastrado com este e-mail.");
+      } else if (err?.code === 'auth/invalid-email') {
+        toast.error("Formato de e-mail inválido.");
+      } else if (err?.code === 'auth/missing-continue-uri') {
+        toast.error("Configuração de redirecionamento ausente no Firebase.");
+      } else if (err?.code === 'auth/too-many-requests') {
+        toast.error("Muitas tentativas. Aguarde alguns minutos antes de tentar novamente.");
+      } else {
+        toast.error(`Falha ao enviar: [${err?.code || 'erro'}] ${err?.message || 'Erro desconhecido'}`);
+      }
     } finally {
       setIsLoading(false);
     }

@@ -244,12 +244,24 @@ export const GestaoAcessos: React.FC = () => {
                               setConfirmingResetId(null);
                               const loadingToast = toast.loading('Enviando e-mail de redefinição...');
                               try {
-                                const emailDoColaborador = user.email;
+                                const emailDoColaborador = user.email?.trim().toLowerCase();
+                                if (!emailDoColaborador) {
+                                  toast.error('Colaborador sem e-mail cadastrado.', { id: loadingToast });
+                                  return;
+                                }
                                 await sendPasswordResetEmail(auth, emailDoColaborador);
-                                toast.success('E-mail enviado!', { id: loadingToast });
-                              } catch (error: any) {
-                                console.error("Erro ao enviar redefinição de senha:", error);
-                                toast.error('Erro ao processar', { id: loadingToast });
+                                toast.success('E-mail de recuperação enviado!', { id: loadingToast });
+                              } catch (err: any) {
+                                console.error("Erro Firebase sendPasswordResetEmail:", err?.code, err?.message);
+                                if (err?.code === 'auth/user-not-found') {
+                                  toast.error("Nenhum usuário cadastrado com este e-mail.", { id: loadingToast });
+                                } else if (err?.code === 'auth/invalid-email') {
+                                  toast.error("Formato de e-mail inválido.", { id: loadingToast });
+                                } else if (err?.code === 'auth/too-many-requests') {
+                                  toast.error("Muitas tentativas. Aguarde alguns minutos.", { id: loadingToast });
+                                } else {
+                                  toast.error(`Falha ao enviar: [${err?.code || 'erro'}] ${err?.message || 'Erro ao processar'}`, { id: loadingToast });
+                                }
                               } finally {
                                 setSendingResetId(null);
                               }

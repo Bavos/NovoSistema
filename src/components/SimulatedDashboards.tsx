@@ -5047,26 +5047,110 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
             try {
                 const html2canvas = (await import('html2canvas-pro')).default;
                 const canvas = await html2canvas(printElement, {
-                    backgroundColor: '#fcf8f2',
+                    backgroundColor: '#ffffff',
                     scale: 2,
                     useCORS: true,
+                    allowTaint: true,
                     logging: false,
+                    windowWidth: 794,
+                    width: 794,
                     onclone: (clonedDoc) => {
-                        sanitizeClonedDocForHtml2Canvas(clonedDoc, '#fcf8f2', '#1a3c2e');
+                        // 1. Sanitiza cores evitando conflitos com oklab/oklch
+                        sanitizeClonedDocForHtml2Canvas(clonedDoc, '#ffffff', '#1e293b');
+
+                        // 2. Força largura fixa de 794px no body e na raiz do documento clonado
                         if (clonedDoc.body) {
-                            clonedDoc.body.style.width = '850px';
+                            clonedDoc.body.style.setProperty('width', '794px', 'important');
+                            clonedDoc.body.style.setProperty('max-width', '794px', 'important');
+                            clonedDoc.body.style.setProperty('min-width', '794px', 'important');
+                            clonedDoc.body.style.setProperty('margin', '0 auto', 'important');
+                            clonedDoc.body.style.setProperty('padding', '0', 'important');
+                            clonedDoc.body.style.setProperty('background-color', '#ffffff', 'important');
+                            clonedDoc.body.style.setProperty('overflow', 'visible', 'important');
+                        }
+                        if (clonedDoc.documentElement) {
+                            clonedDoc.documentElement.style.setProperty('width', '794px', 'important');
+                            clonedDoc.documentElement.style.setProperty('overflow', 'visible', 'important');
+                        }
+
+                        // 3. Localiza e estiliza o elemento de impressão clonado
+                        const clonedPrintArea = clonedDoc.getElementById('print-area');
+                        if (clonedPrintArea) {
+                            clonedPrintArea.style.setProperty('width', '794px', 'important');
+                            clonedPrintArea.style.setProperty('max-width', '794px', 'important');
+                            clonedPrintArea.style.setProperty('min-width', '794px', 'important');
+                            clonedPrintArea.style.setProperty('transform', 'none', 'important');
+                            clonedPrintArea.style.setProperty('box-shadow', 'none', 'important');
+                            clonedPrintArea.style.setProperty('border-radius', '0px', 'important');
+                            clonedPrintArea.style.setProperty('border', 'none', 'important');
+                            clonedPrintArea.style.setProperty('margin', '0 auto', 'important');
+                            clonedPrintArea.style.setProperty('padding', '24px 32px', 'important');
+                            clonedPrintArea.style.setProperty('background-color', '#ffffff', 'important');
+                            clonedPrintArea.style.setProperty('color', '#0f172a', 'important');
+                            clonedPrintArea.style.setProperty('overflow', 'visible', 'important');
+
+                            // Desativa restrições de overflow/max-width de todos os containers ancestrais no clone
+                            let parent = clonedPrintArea.parentElement;
+                            while (parent && parent !== clonedDoc.body) {
+                                parent.style.setProperty('width', '794px', 'important');
+                                parent.style.setProperty('max-width', 'none', 'important');
+                                parent.style.setProperty('min-width', '794px', 'important');
+                                parent.style.setProperty('max-height', 'none', 'important');
+                                parent.style.setProperty('height', 'auto', 'important');
+                                parent.style.setProperty('overflow', 'visible', 'important');
+                                parent.style.setProperty('transform', 'none', 'important');
+                                parent.style.setProperty('box-shadow', 'none', 'important');
+                                parent.style.setProperty('padding', '0', 'important');
+                                parent.style.setProperty('margin', '0', 'important');
+                                parent = parent.parentElement;
+                            }
+
+                            // Garante que divs flexíveis permaneçam em linha (row)
+                            const flexRows = clonedPrintArea.querySelectorAll('.doc-header-row, .doc-cards-row, .grid-cols-2');
+                            flexRows.forEach((fr: any) => {
+                                fr.style.setProperty('display', 'flex', 'important');
+                                fr.style.setProperty('flex-direction', 'row', 'important');
+                                fr.style.setProperty('justify-content', 'space-between', 'important');
+                                fr.style.setProperty('align-items', 'stretch', 'important');
+                                fr.style.setProperty('width', '100%', 'important');
+                            });
+
+                            // Garante que os 2 cards lado a lado fiquem cada um com largura proporcional sem colidir
+                            const cardsRow = clonedPrintArea.querySelector('.doc-cards-row');
+                            if (cardsRow && cardsRow.children.length >= 2) {
+                                (cardsRow.children[0] as HTMLElement).style.setProperty('width', '48.5%', 'important');
+                                (cardsRow.children[0] as HTMLElement).style.setProperty('flex', 'none', 'important');
+                                (cardsRow.children[1] as HTMLElement).style.setProperty('width', '48.5%', 'important');
+                                (cardsRow.children[1] as HTMLElement).style.setProperty('flex', 'none', 'important');
+                            }
+
+                            // Garante que o fundo verde da tabela seja rasterizado como cor sólida #1a3c2e e texto branco
+                            const tableHeaders = clonedPrintArea.querySelectorAll('th');
+                            tableHeaders.forEach((th: any) => {
+                                th.style.setProperty('background-color', '#1a3c2e', 'important');
+                                th.style.setProperty('color', '#ffffff', 'important');
+                                th.style.setProperty('-webkit-print-color-adjust', 'exact', 'important');
+                                th.style.setProperty('print-color-adjust', 'exact', 'important');
+                            });
+
+                            // Evita tags foreignObject que causam barras pretas no html2canvas
+                            const foreignObjects = clonedPrintArea.querySelectorAll('foreignObject');
+                            foreignObjects.forEach((fo: any) => fo.remove());
                         }
                     }
                 });
                 
-                const fatura = {
-                    paciente: type === 'fatura' ? docData.nomePaciente : docData.nomeProfissional,
-                    dataEmissao: docData.dataEmissao && docData.dataEmissao.includes('-')
-                        ? docData.dataEmissao.split('-').reverse().join('/')
-                        : docData.dataEmissao
-                };
-
-                const fileName = `${type === 'fatura' ? 'Fatura' : 'Folha'}_${fatura?.paciente?.replace(/\s+/g, '_') || 'Paciente'}_${fatura?.dataEmissao?.replace(/\//g, '-') || 'Data'}.pdf`;
+                const nomeAlvo = type === 'fatura' ? docData.nomePaciente : docData.nomeProfissional;
+                const safeNome = (nomeAlvo || 'Documento').replace(/[^a-zA-Z0-9à-úÀ-Ú_]/g, '_');
+                let safeData = 'Data';
+                if (docData.dataEmissao) {
+                    if (docData.dataEmissao.includes('T')) {
+                        safeData = docData.dataEmissao.split('T')[0];
+                    } else {
+                        safeData = docData.dataEmissao.replace(/\//g, '-');
+                    }
+                }
+                const fileName = `${type === 'fatura' ? 'Fatura' : 'Folha'}_${safeNome}_${safeData}.pdf`;
 
                 exportCanvasToA4PDF(canvas, fileName);
 
@@ -6478,9 +6562,9 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
 
             return (
               <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 print:absolute print:inset-0 print:p-0 print:h-auto print:overflow-visible print:bg-white print:z-[999999]">
-                  <div className="bg-white p-6 rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto print:p-0 print:max-h-none print:max-w-none print:w-full print:bg-white print:static print:shadow-none print:rounded-none print:overflow-visible">
+                  <div className="bg-white p-6 rounded-2xl w-[860px] max-w-[96vw] max-h-[90vh] overflow-y-auto overflow-x-hidden print:p-0 print:max-h-none print:max-w-none print:w-full print:bg-white print:static print:shadow-none print:rounded-none print:overflow-visible">
                        <div className="flex justify-between items-center mb-4 print:hidden relative z-20 flex-shrink-0">
-                        <h3 className="font-black text-lg text-slate-800">Visualização de {viewDoc.type === 'fatura' ? 'Fatura' : 'Folha'}</h3>
+                        <h3 className="font-black text-lg text-slate-800">Visualização de {viewDoc.type === 'fatura' ? 'Fatura' : 'Folha de Pagamento'}</h3>
                         <div className="flex gap-2 relative z-20 flex-shrink-0">
                             <GlossyButton 
                                 variant="blue"
@@ -6491,7 +6575,17 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                 disabled={loadingExport}
                             >
                                 <FileText size={14} className="inline mr-1" />
-                                {loadingExport ? "Gerando..." : "Baixar Fatura (PDF)"}</GlossyButton>
+                                {loadingExport ? "Gerando..." : viewDoc.type === 'fatura' ? "Baixar Fatura (PDF)" : "Baixar Folha (PDF)"}
+                            </GlossyButton>
+                            <GlossyButton
+                                variant="gray"
+                                className="relative z-20 flex-shrink-0 isolate pointer-events-auto"
+                                onClick={() => window.print()}
+                                title="Imprimir documento via navegador"
+                            >
+                                <Printer size={14} className="inline mr-1" />
+                                Imprimir
+                            </GlossyButton>
                             <GlossyButton variant="yellow"
                                  className="relative z-20 flex-shrink-0 isolate pointer-events-auto"
                                  onClick={() => {
@@ -6582,61 +6676,76 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                             <GlossyButton onClick={() => setViewDoc(null)} variant="gray" className="relative z-20 flex-shrink-0 isolate pointer-events-auto">Fechar</GlossyButton>
                         </div>
                       </div>
-                      <div id="print-area" ref={faturaRef} className="w-[210mm] min-h-[297mm] p-[12mm] bg-white text-slate-800 font-sans border border-slate-200 mx-auto print:w-full print:min-h-0 print:p-0 print:border-none print:shadow-none print:m-0 flex flex-col justify-between" style={{ color: '#1e293b' }}>
+                      <div 
+                        id="print-area" 
+                        ref={faturaRef} 
+                        className="w-full max-w-[794px] min-h-[1123px] p-8 bg-white text-slate-900 font-sans border border-slate-200 rounded-lg mx-auto shadow-sm print:w-full print:max-w-none print:min-h-0 print:p-0 print:border-none print:shadow-none print:m-0 print:rounded-none flex flex-col justify-between" 
+                        style={{ 
+                          width: '794px', 
+                          maxWidth: '100%', 
+                          boxSizing: 'border-box', 
+                          backgroundColor: '#ffffff', 
+                          color: '#0f172a' 
+                        }}
+                      >
                         <div>
                           {/* 1. Cabeçalho Corporativo */}
-                          <div className="flex justify-between items-start border-b-2 border-[#1E3A2F] pb-4 mb-5">
+                          <div className="doc-header-row flex justify-between items-start border-b-2 border-[#1a3c2e] pb-4 mb-5" style={{ borderBottom: '2px solid #1a3c2e' }}>
                             <div className="flex items-center gap-4">
                               {empresa?.logoUrl ? (
-                                <img src={empresa.logoUrl} alt="Logo" className="h-14 max-h-16 w-auto object-contain max-w-full shrink-0" style={{ imageRendering: '-webkit-optimize-contrast' }} />
+                                <img 
+                                  src={empresa.logoUrl} 
+                                  crossOrigin="anonymous" 
+                                  alt="Logo" 
+                                  className="h-14 max-h-16 w-auto object-contain max-w-full shrink-0" 
+                                  style={{ imageRendering: '-webkit-optimize-contrast' }} 
+                                />
                               ) : (
-                                <div className="w-28 shrink-0">
-                                  <Logo className="h-14 w-auto object-contain" />
-                                </div>
+                                <VallidareLogo height={52} className="shrink-0" />
                               )}
                               <div>
-                                <h2 className="text-base font-extrabold text-[#1E3A2F] tracking-tight leading-tight">
-                                  {empresa?.razaoSocial || 'VALLIDARE - GESTÃO E CONSULTORIA EM SAÚDE LTDA.'}
+                                <h2 className="text-base font-extrabold text-[#1a3c2e] tracking-tight leading-tight" style={{ color: '#1a3c2e' }}>
+                                  {empresa?.razaoSocial || 'VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI'}
                                 </h2>
-                                <p className="text-xs text-slate-500 font-semibold mt-0.5">
-                                  CNPJ: {empresa?.cnpj || '00.000.000/0000-00'}
+                                <p className="text-xs text-slate-500 font-semibold mt-0.5" style={{ color: '#64748b' }}>
+                                  CNPJ: {empresa?.cnpj || '27.770.797/0001-62'}
                                 </p>
-                                <p className="text-xs text-slate-500 mt-0.5">
-                                  {empresa?.endereco || 'Atendimento Domiciliar Especializado'}
+                                <p className="text-xs text-slate-500 mt-0.5" style={{ color: '#64748b' }}>
+                                  {empresa?.endereco || 'Rua Martins Ferreira, 71 - Botafogo / Rio de Janeiro'}
                                 </p>
                               </div>
                             </div>
-                            <div className="text-right">
-                              <h1 className="text-2xl font-black text-[#1E3A2F] tracking-wide">
+                            <div className="text-right shrink-0">
+                              <h1 className="text-2xl font-black text-[#1a3c2e] tracking-wide" style={{ color: '#1a3c2e' }}>
                                 {viewDoc.type === 'fatura' ? 'FATURA' : 'FOLHA DE PAGAMENTO'}
                               </h1>
-                              <p className="text-xs font-mono font-bold text-slate-700 mt-1">
+                              <p className="text-xs font-mono font-bold text-slate-700 mt-1" style={{ color: '#334155' }}>
                                 Nº: {viewDoc.data.numeroFatura || (viewDoc.type === 'folha' ? 'FOLHA-' + (viewDoc.data.id ? viewDoc.data.id.substring(0, 6) : 'XXXX') : 'FAT-0000')}
                               </p>
-                              <p className="text-xs text-slate-500 mt-0.5">
+                              <p className="text-xs text-slate-500 mt-0.5" style={{ color: '#64748b' }}>
                                 Emissão: {viewDoc.data.dataEmissao ? (viewDoc.data.dataEmissao.includes('T') ? new Date(viewDoc.data.dataEmissao).toLocaleDateString('pt-BR') : viewDoc.data.dataEmissao) : new Date().toLocaleDateString('pt-BR')}
                               </p>
                             </div>
                           </div>
 
-                          {/* 2. Box de Identificação - Dois Cards Informativos */}
-                          <div className="grid grid-cols-2 gap-3 mb-5">
+                          {/* 2. Box de Identificação - Dois Cards Informativos Lado a Lado */}
+                          <div className="doc-cards-row flex flex-row gap-3 mb-5 w-full" style={{ display: 'flex', flexDirection: 'row', gap: '12px', width: '100%' }}>
                             {/* Card 1: Paciente / Profissional & Período de Atendimento */}
-                            <div className="bg-[#F8FAF9] border border-slate-200/80 rounded-xl p-3.5 flex flex-col justify-between">
+                            <div className="w-1/2 flex-1 bg-[#F8FAF9] border border-slate-200/90 rounded-xl p-3.5 flex flex-col justify-between" style={{ backgroundColor: '#F8FAF9', borderColor: '#e2e8f0', borderRadius: '12px' }}>
                               <div>
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1" style={{ color: '#94a3b8' }}>
                                   Identificação do Atendimento
                                 </span>
-                                <p className="text-xs text-slate-500 font-medium">
+                                <p className="text-xs text-slate-500 font-medium" style={{ color: '#64748b' }}>
                                   {viewDoc.type === 'fatura' ? 'Paciente' : 'Profissional'}:
                                 </p>
-                                <p className="text-sm font-bold text-slate-900 leading-tight">
+                                <p className="text-sm font-bold text-slate-900 leading-tight mt-0.5" style={{ color: '#0f172a' }}>
                                   {viewDoc.type === 'fatura' ? viewDoc.data.nomePaciente : viewDoc.data.nomeProfissional}
                                 </p>
                               </div>
-                              <div className="mt-2.5 pt-2 border-t border-slate-200/60 text-xs text-slate-600 flex items-center justify-between">
-                                <span className="text-slate-500 font-medium">Período:</span>
-                                <span className="font-semibold text-slate-800">
+                              <div className="mt-2.5 pt-2 border-t border-slate-200/60 text-xs text-slate-600 flex items-center justify-between" style={{ borderTop: '1px solid #e2e8f0' }}>
+                                <span className="text-slate-500 font-medium" style={{ color: '#64748b' }}>Período:</span>
+                                <span className="font-semibold text-slate-800" style={{ color: '#1e293b' }}>
                                   {plantoesValidos.length > 0
                                     ? `${formatDateBR(plantoesValidos[0].data)} a ${formatDateBR(plantoesValidos[plantoesValidos.length - 1].data)}`
                                     : 'Período Mensal'}
@@ -6645,18 +6754,25 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                             </div>
 
                             {/* Card 2: Status & Valor Previsto */}
-                            <div className="bg-[#F8FAF9] border border-slate-200/80 rounded-xl p-3.5 flex flex-col justify-between">
+                            <div className="w-1/2 flex-1 bg-[#F8FAF9] border border-slate-200/90 rounded-xl p-3.5 flex flex-col justify-between" style={{ backgroundColor: '#F8FAF9', borderColor: '#e2e8f0', borderRadius: '12px' }}>
                               <div className="flex justify-between items-start">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider" style={{ color: '#94a3b8' }}>
                                   Status e Consolidação
                                 </span>
-                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-emerald-100/80 text-emerald-800 border border-emerald-300/60">
-                                  {viewDoc.data.status || 'Emitida'}
+                                <span 
+                                  className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide inline-block"
+                                  style={{
+                                    backgroundColor: '#d1fae5',
+                                    color: '#065f46',
+                                    border: '1px solid #a7f3d0'
+                                  }}
+                                >
+                                  {viewDoc.data.status || (viewDoc.type === 'folha' ? 'FECHADA' : 'Emitida')}
                                 </span>
                               </div>
                               <div className="mt-2 text-right">
-                                <span className="text-[11px] text-slate-500 font-medium block">Valor Total Previsto:</span>
-                                <p className="text-xl font-black text-[#1E3A2F] font-mono leading-none mt-1">
+                                <span className="text-[11px] text-slate-500 font-medium block" style={{ color: '#64748b' }}>Valor Total Previsto:</span>
+                                <p className="text-xl font-black text-[#1a3c2e] font-mono leading-none mt-1" style={{ color: '#1a3c2e' }}>
                                   R$ {valorTotalCorrigido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </p>
                               </div>
@@ -6664,34 +6780,116 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                           </div>
 
                           {/* 3. Tabela de Escalas / Plantões */}
-                          <div className="rounded-lg overflow-hidden border border-slate-200 mb-5">
-                            <table className="w-full text-xs border-collapse">
+                          <div className="rounded-lg overflow-hidden border border-slate-200 mb-5" style={{ borderRadius: '8px', border: '1px solid #e2e8f0', width: '100%' }}>
+                            <table 
+                              className="w-full text-xs border-collapse table-fixed" 
+                              style={{ 
+                                width: '100%', 
+                                tableLayout: 'fixed', 
+                                borderCollapse: 'collapse' 
+                              }}
+                            >
                               <thead>
-                                <tr className="bg-[#1E3A2F] text-white">
-                                  <th className="py-2.5 px-3 text-center font-semibold text-[11px] uppercase tracking-wider w-[90px]">Data</th>
-                                  <th className="py-2.5 px-3 text-left font-semibold text-[11px] uppercase tracking-wider min-w-[170px]">
+                                <tr style={{ backgroundColor: '#1a3c2e', color: '#ffffff' }}>
+                                  <th 
+                                    style={{ 
+                                      backgroundColor: '#1a3c2e', 
+                                      color: '#ffffff', 
+                                      width: '14%', 
+                                      padding: '10px 8px', 
+                                      textAlign: 'center', 
+                                      fontWeight: 600, 
+                                      fontSize: '11px', 
+                                      textTransform: 'uppercase', 
+                                      letterSpacing: '0.05em' 
+                                    }}
+                                  >
+                                    Data
+                                  </th>
+                                  <th 
+                                    style={{ 
+                                      backgroundColor: '#1a3c2e', 
+                                      color: '#ffffff', 
+                                      width: '36%', 
+                                      padding: '10px 8px', 
+                                      textAlign: 'left', 
+                                      fontWeight: 600, 
+                                      fontSize: '11px', 
+                                      textTransform: 'uppercase', 
+                                      letterSpacing: '0.05em' 
+                                    }}
+                                  >
                                     {viewDoc.type === 'fatura' ? 'Profissional' : 'Paciente'}
                                   </th>
-                                  <th className="py-2.5 px-3 text-center font-semibold text-[11px] uppercase tracking-wider w-[100px]">Carga Horária</th>
-                                  <th className="py-2.5 px-3 text-center font-semibold text-[11px] uppercase tracking-wider w-[120px]">Serviço</th>
-                                  <th className="py-2.5 px-3 text-right font-semibold text-[11px] uppercase tracking-wider whitespace-nowrap min-w-[110px] w-[120px]">Valor (R$)</th>
+                                  <th 
+                                    style={{ 
+                                      backgroundColor: '#1a3c2e', 
+                                      color: '#ffffff', 
+                                      width: '15%', 
+                                      padding: '10px 8px', 
+                                      textAlign: 'center', 
+                                      fontWeight: 600, 
+                                      fontSize: '11px', 
+                                      textTransform: 'uppercase', 
+                                      letterSpacing: '0.05em' 
+                                    }}
+                                  >
+                                    Carga Horária
+                                  </th>
+                                  <th 
+                                    style={{ 
+                                      backgroundColor: '#1a3c2e', 
+                                      color: '#ffffff', 
+                                      width: '17%', 
+                                      padding: '10px 8px', 
+                                      textAlign: 'center', 
+                                      fontWeight: 600, 
+                                      fontSize: '11px', 
+                                      textTransform: 'uppercase', 
+                                      letterSpacing: '0.05em' 
+                                    }}
+                                  >
+                                    Serviço
+                                  </th>
+                                  <th 
+                                    style={{ 
+                                      backgroundColor: '#1a3c2e', 
+                                      color: '#ffffff', 
+                                      width: '18%', 
+                                      padding: '10px 8px', 
+                                      textAlign: 'right', 
+                                      fontWeight: 600, 
+                                      fontSize: '11px', 
+                                      textTransform: 'uppercase', 
+                                      letterSpacing: '0.05em',
+                                      whiteSpace: 'nowrap'
+                                    }}
+                                  >
+                                    Valor (R$)
+                                  </th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-[#E5E7EB]">
                                 {plantoesValidos.map((p: any, i: number) => {
                                   const valorLinha = calculateRowValue(p, viewDoc.type);
                                   return (
-                                    <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-[#F9FAFB]'}>
-                                      <td className="py-2 px-3 text-center font-mono text-slate-700">{formatDateBR(p.data)}</td>
-                                      <td className="py-2 px-3 text-left font-medium text-slate-800 whitespace-normal break-words">
+                                    <tr key={i} style={{ backgroundColor: i % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
+                                      <td style={{ width: '14%', padding: '8px', textAlign: 'center', fontFamily: 'monospace', color: '#334155' }}>
+                                        {formatDateBR(p.data)}
+                                      </td>
+                                      <td style={{ width: '36%', padding: '8px', textAlign: 'left', fontWeight: 500, color: '#1e293b', wordBreak: 'break-word' }}>
                                         {viewDoc.type === 'fatura' 
                                           ? formatNomeComEspacos(p.profissional || p.nomeProfissional) 
                                           : formatNomeComEspacos(p.nomePaciente || 'A Definir')
                                         }
                                       </td>
-                                      <td className="py-2 px-3 text-center font-mono text-slate-600 font-medium">{getPlantaoCargaHoraria(p)}</td>
-                                      <td className="py-2 px-3 text-center text-slate-600">{p.tipoDia || 'Plantão Normal'}</td>
-                                      <td className="py-2 px-3 text-right text-slate-900 font-bold font-mono whitespace-nowrap">
+                                      <td style={{ width: '15%', padding: '8px', textAlign: 'center', fontFamily: 'monospace', color: '#475569', fontWeight: 500 }}>
+                                        {getPlantaoCargaHoraria(p)}
+                                      </td>
+                                      <td style={{ width: '17%', padding: '8px', textAlign: 'center', color: '#475569' }}>
+                                        {p.tipoDia || 'Normal'}
+                                      </td>
+                                      <td style={{ width: '18%', padding: '8px', textAlign: 'right', color: '#0f172a', fontWeight: 700, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
                                         R$ {valorLinha.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                       </td>
                                     </tr>
@@ -6703,24 +6901,24 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
 
                           {/* Seção de Serviços Adicionais / Materiais na Fatura */}
                           {viewDoc.type === 'fatura' && servicosExtrasDoc.length > 0 && (
-                            <div className="rounded-lg overflow-hidden border border-slate-200 mb-5">
-                              <div className="bg-[#1E3A2F] text-white px-3 py-1.5 font-bold text-[11px] uppercase tracking-wider">
+                            <div className="rounded-lg overflow-hidden border border-slate-200 mb-5" style={{ borderRadius: '8px', border: '1px solid #e2e8f0', width: '100%' }}>
+                              <div style={{ backgroundColor: '#1a3c2e', color: '#ffffff', padding: '6px 12px', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                                 Serviços Adicionais / Materiais
                               </div>
-                              <table className="w-full text-xs border-collapse">
+                              <table className="w-full text-xs border-collapse table-fixed" style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
                                 <thead>
-                                  <tr className="bg-slate-100 text-slate-700 text-[10px] uppercase font-bold border-b border-slate-200">
-                                    <th className="py-1.5 px-3 text-center w-[90px]">Data</th>
-                                    <th className="py-1.5 px-3 text-left">Descrição</th>
-                                    <th className="py-1.5 px-3 text-right whitespace-nowrap w-[120px]">Valor (R$)</th>
+                                  <tr style={{ backgroundColor: '#f1f5f9', color: '#334155', borderBottom: '1px solid #e2e8f0' }}>
+                                    <th style={{ padding: '6px 8px', textAlign: 'center', width: '18%', fontSize: '10px', textTransform: 'uppercase', fontWeight: 700 }}>Data</th>
+                                    <th style={{ padding: '6px 8px', textAlign: 'left', width: '58%', fontSize: '10px', textTransform: 'uppercase', fontWeight: 700 }}>Descrição</th>
+                                    <th style={{ padding: '6px 8px', textAlign: 'right', width: '24%', fontSize: '10px', textTransform: 'uppercase', fontWeight: 700, whiteSpace: 'nowrap' }}>Valor (R$)</th>
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-[#E5E7EB]">
                                   {servicosExtrasDoc.map((s: any, idx: number) => (
-                                    <tr key={s.id || idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-[#F9FAFB]'}>
-                                      <td className="py-1.5 px-3 text-center font-mono text-slate-700">{formatDateBR(s.data)}</td>
-                                      <td className="py-1.5 px-3 text-left font-medium text-slate-800">{s.descricao}</td>
-                                      <td className="py-1.5 px-3 text-right text-slate-900 font-bold font-mono whitespace-nowrap">
+                                    <tr key={s.id || idx} style={{ backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
+                                      <td style={{ padding: '6px 8px', textAlign: 'center', fontFamily: 'monospace', color: '#334155' }}>{formatDateBR(s.data)}</td>
+                                      <td style={{ padding: '6px 8px', textAlign: 'left', fontWeight: 500, color: '#1e293b' }}>{s.descricao}</td>
+                                      <td style={{ padding: '6px 8px', textAlign: 'right', color: '#0f172a', fontWeight: 700, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
                                         R$ {(Number(s.valor) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                       </td>
                                     </tr>
@@ -6732,13 +6930,13 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
 
                           {/* Seção de Descontos / Débitos na Folha */}
                           {viewDoc.type === 'folha' && viewDoc.data.valorTotalDebitos > 0 && (
-                            <div className="rounded-lg overflow-hidden border border-red-200 mb-5">
-                              <div className="bg-red-800 text-white px-3 py-1.5 font-bold text-[11px] uppercase tracking-wider">
+                            <div className="rounded-lg overflow-hidden border border-red-200 mb-5" style={{ borderRadius: '8px', border: '1px solid #fecaca', width: '100%' }}>
+                              <div style={{ backgroundColor: '#991b1b', color: '#ffffff', padding: '6px 12px', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                                 Descontos / Débitos Aplicados
                               </div>
-                              <div className="p-3 bg-red-50/50 flex justify-between items-center text-xs">
-                                <span className="text-red-900 font-medium">Total de Débitos / Descontos da Folha:</span>
-                                <span className="font-mono font-bold text-red-700 whitespace-nowrap">
+                              <div className="p-3 flex justify-between items-center text-xs" style={{ backgroundColor: '#fef2f2', padding: '12px' }}>
+                                <span className="font-medium" style={{ color: '#7f1d1d' }}>Total de Débitos / Descontos da Folha:</span>
+                                <span className="font-mono font-bold whitespace-nowrap" style={{ color: '#b91c1c' }}>
                                   - R$ {Number(viewDoc.data.valorTotalDebitos || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </span>
                               </div>
@@ -6747,7 +6945,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
 
                           {/* 4. Totalizador */}
                           <div className="flex justify-end mb-6">
-                            <div className="bg-[#F8FAF9] border border-slate-200/90 rounded-xl p-4 text-right min-w-[240px] shadow-sm">
+                            <div className="bg-[#F8FAF9] border border-slate-200/90 rounded-xl p-4 text-right min-w-[240px]" style={{ backgroundColor: '#F8FAF9', border: '1px solid #e2e8f0', borderRadius: '12px', minWidth: '240px' }}>
                               {viewDoc.type === 'fatura' && servicosExtrasDoc.length > 0 && (
                                 <div className="text-[11px] text-slate-600 mb-1 flex justify-between gap-4">
                                   <span>Soma Plantões:</span>
@@ -6760,18 +6958,18 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                   <span className="font-mono">+ R$ {somaExtrasDoc.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                 </div>
                               )}
-                              <span className="text-[10px] font-extrabold uppercase text-slate-500 tracking-wider block">
+                              <span className="text-[10px] font-extrabold uppercase text-slate-500 tracking-wider block" style={{ color: '#64748b' }}>
                                 VALOR TOTAL {viewDoc.type === 'fatura' ? 'DA FATURA' : 'LÍQUIDO'}
                               </span>
-                              <span className="text-2xl font-black text-[#1E3A2F] font-mono block mt-0.5">
+                              <span className="text-2xl font-black text-[#1a3c2e] font-mono block mt-0.5" style={{ color: '#1a3c2e' }}>
                                 R$ {valorTotalCorrigido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
                             </div>
                           </div>
                         </div>
 
-                        {/* 4. Rodapé Corporativo */}
-                        <div className="pt-3 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-400">
+                        {/* 5. Rodapé Corporativo */}
+                        <div className="pt-3 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-400" style={{ borderTop: '1px solid #e2e8f0', color: '#94a3b8' }}>
                           <span>Documento gerado eletronicamente pelo Sistema Vallidare</span>
                           <span>Página 1 de 1</span>
                         </div>

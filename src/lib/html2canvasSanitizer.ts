@@ -41,8 +41,17 @@ export function sanitizeClonedDocForHtml2Canvas(
     // 2. Inject print-color-adjust and convert colors on elements
     const allEls = Array.from(clonedDoc.querySelectorAll('*')) as HTMLElement[];
     allEls.forEach((el) => {
+      // Remove foreignObject tags that can cause black bars in html2canvas
+      if (el.tagName && el.tagName.toLowerCase() === 'foreignobject') {
+        el.remove();
+        return;
+      }
+
       el.style.setProperty('-webkit-print-color-adjust', 'exact', 'important');
       el.style.setProperty('print-color-adjust', 'exact', 'important');
+
+      const isHeaderCell = el.tagName === 'TH' || (el.classList && el.classList.contains('text-white'));
+      const fallbackTextColor = isHeaderCell ? '#ffffff' : defaultColor;
 
       const inlineStyle = el.getAttribute('style');
       if (inlineStyle && (inlineStyle.includes('oklab') || inlineStyle.includes('oklch'))) {
@@ -61,7 +70,8 @@ export function sanitizeClonedDocForHtml2Canvas(
             el.style.backgroundColor = convertColor(computed.backgroundColor);
           }
           if (computed.color && (computed.color.includes('oklab') || computed.color.includes('oklch'))) {
-            el.style.color = convertColor(computed.color);
+            const converted = convertColor(computed.color);
+            el.style.color = isHeaderCell && (!converted || converted === defaultColor) ? fallbackTextColor : converted;
           }
           if (computed.borderColor && (computed.borderColor.includes('oklab') || computed.borderColor.includes('oklch'))) {
             el.style.borderColor = convertColor(computed.borderColor);

@@ -3,9 +3,11 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { LoginPage } from './LoginPage';
 import { FirebaseProvider } from '../context/FirebaseContext';
+import { toast } from 'react-hot-toast';
 
 // Define mocks first to intercept Firebase modules
 const mockSignInWithEmailAndPassword = vi.fn();
+const mockSendPasswordResetEmail = vi.fn();
 
 vi.mock('firebase/app', () => ({
   initializeApp: vi.fn(() => ({})),
@@ -27,7 +29,7 @@ vi.mock('firebase/auth', () => ({
   }),
   signOut: vi.fn(),
   createUserWithEmailAndPassword: vi.fn(),
-  sendPasswordResetEmail: vi.fn(),
+  sendPasswordResetEmail: (...args: any[]) => mockSendPasswordResetEmail(...args),
   sendEmailVerification: vi.fn(),
 }));
 
@@ -189,6 +191,96 @@ describe('LoginPage Component Tests', () => {
       expect(screen.queryByText(expected)).not.toBeNull();
       expect(screen.queryByText(/too-many-requests/i)).toBeNull();
       expect(screen.queryByText(/Firebase/i)).toBeNull();
+    });
+  });
+
+  describe('Rotina de Recuperação de Senha (sendPasswordResetEmail)', () => {
+    it('deve alertar se tentar redefinir senha sem informar e-mail', async () => {
+      const toastErrorSpy = vi.spyOn(toast, 'error');
+
+      render(
+        <FirebaseProvider>
+          <LoginPage onNavigateToFirstAccess={() => {}} />
+        </FirebaseProvider>
+      );
+
+      const forgotBtn = screen.getByRole('button', { name: 'Esqueceu a senha?' });
+      fireEvent.click(forgotBtn);
+
+      expect(toastErrorSpy).toHaveBeenCalledWith('Informe seu e-mail no campo acima para receber o link de recuperação.');
+    });
+
+    it('deve disparar sendPasswordResetEmail com e-mail formatado (.trim().toLowerCase())', async () => {
+      mockSendPasswordResetEmail.mockResolvedValueOnce(undefined);
+      const toastSuccessSpy = vi.spyOn(toast, 'success');
+
+      render(
+        <FirebaseProvider>
+          <LoginPage onNavigateToFirstAccess={() => {}} />
+        </FirebaseProvider>
+      );
+
+      const emailInput = screen.getByLabelText('E-mail');
+      fireEvent.change(emailInput, { target: { value: '  Colaborador@Vallidare.COM.br  ' } });
+
+      const forgotBtn = screen.getByRole('button', { name: 'Esqueceu a senha?' });
+      fireEvent.click(forgotBtn);
+
+      await waitFor(() => {
+        expect(mockSendPasswordResetEmail).toHaveBeenCalledWith(
+          expect.anything(),
+          'colaborador@vallidare.com.br'
+        );
+        expect(toastSuccessSpy).toHaveBeenCalledWith(
+          'E-mail de recuperação enviado! Verifique sua caixa de entrada e o spam.'
+        );
+      });
+    });
+
+    it('deve exibir erro explícito se o Firebase retornar auth/user-not-found', async () => {
+      const firebaseError: any = new Error('User not found');
+      firebaseError.code = 'auth/user-not-found';
+      mockSendPasswordResetEmail.mockRejectedValueOnce(firebaseError);
+      const toastErrorSpy = vi.spyOn(toast, 'error');
+
+      render(
+        <FirebaseProvider>
+          <LoginPage onNavigateToFirstAccess={() => {}} />
+        </FirebaseProvider>
+      );
+
+      const emailInput = screen.getByLabelText('E-mail');
+      fireEvent.change(emailInput, { target: { value: 'inexistente@empresa.com' } });
+
+      const forgotBtn = screen.getByRole('button', { name: 'Esqueceu a senha?' });
+      fireEvent.click(forgotBtn);
+
+      await waitFor(() => {
+        expect(toastErrorSpy).toHaveBeenCalledWith('Nenhum usuário cadastrado com este e-mail.');
+      });
+    });
+
+    it('deve exibir erro explícito se o Firebase retornar auth/invalid-email', async () => {
+      const firebaseError: any = new Error('Invalid email');
+      firebaseError.code = 'auth/invalid-email';
+      mockSendPasswordResetEmail.mockRejectedValueOnce(firebaseError);
+      const toastErrorSpy = vi.spyOn(toast, 'error');
+
+      render(
+        <FirebaseProvider>
+          <LoginPage onNavigateToFirstAccess={() => {}} />
+        </FirebaseProvider>
+      );
+
+      const emailInput = screen.getByLabelText('E-mail');
+      fireEvent.change(emailInput, { target: { value: 'email-invalido' } });
+
+      const forgotBtn = screen.getByRole('button', { name: 'Esqueceu a senha?' });
+      fireEvent.click(forgotBtn);
+
+      await waitFor(() => {
+        expect(toastErrorSpy).toHaveBeenCalledWith('Formato de e-mail inválido.');
+      });
     });
   });
 });

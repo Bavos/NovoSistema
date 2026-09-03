@@ -814,7 +814,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const forgotPassword = async (email: string) => {
-    await sendPasswordResetEmail(auth, email);
+    const emailFormatado = email.trim().toLowerCase();
+    await sendPasswordResetEmail(auth, emailFormatado);
   };
 
   const [userRole, setUserRole] = useState<'Administrador' | 'Colaborador'>('Administrador');

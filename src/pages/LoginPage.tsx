@@ -5,16 +5,47 @@ import { validarDominioCorporativo } from '../types';
 import { getFriendlyErrorMessage } from '../utils/errorSanitizer';
 import { toast } from 'react-hot-toast';
 import { auth } from '../lib/firebase';
-import { signInWithEmailAndPassword, sendEmailVerification, signOut } from 'firebase/auth';
+import { signInWithEmailAndPassword, sendEmailVerification, signOut, sendPasswordResetEmail } from 'firebase/auth';
 
 export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ onNavigateToFirstAccess }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isResending, setIsResending] = useState(false);
+    const [isSendingReset, setIsSendingReset] = useState(false);
     const [showResendVerification, setShowResendVerification] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const { login } = useFirebase();
+
+    const handleForgotPassword = async () => {
+        const emailFormatado = email.trim().toLowerCase();
+        if (!emailFormatado) {
+            toast.error("Informe seu e-mail no campo acima para receber o link de recuperação.");
+            return;
+        }
+
+        setIsSendingReset(true);
+        try {
+            await sendPasswordResetEmail(auth, emailFormatado);
+            toast.success("E-mail de recuperação enviado! Verifique sua caixa de entrada e o spam.");
+        } catch (err: any) {
+            console.error("Erro Firebase sendPasswordResetEmail:", err?.code, err?.message);
+
+            if (err?.code === 'auth/user-not-found') {
+                toast.error("Nenhum usuário cadastrado com este e-mail.");
+            } else if (err?.code === 'auth/invalid-email') {
+                toast.error("Formato de e-mail inválido.");
+            } else if (err?.code === 'auth/missing-continue-uri') {
+                toast.error("Configuração de redirecionamento ausente no Firebase.");
+            } else if (err?.code === 'auth/too-many-requests') {
+                toast.error("Muitas tentativas. Aguarde alguns minutos antes de tentar novamente.");
+            } else {
+                toast.error(`Falha ao enviar: [${err?.code || 'erro'}] ${err?.message || 'Erro desconhecido'}`);
+            }
+        } finally {
+            setIsSendingReset(false);
+        }
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -22,7 +53,8 @@ export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ o
         setError(null);
         setShowResendVerification(false);
 
-        const domainAllowed = await validarDominioCorporativo(email);
+        const emailFormatado = email.trim().toLowerCase();
+        const domainAllowed = await validarDominioCorporativo(emailFormatado);
         if (!domainAllowed) {
             const domainMsg = 'Acesso restrito. O domínio do seu e-mail não está autorizado nas configurações da empresa.';
             setError(domainMsg);
@@ -32,7 +64,7 @@ export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ o
         }
 
         try {
-            await login(email, password);
+            await login(emailFormatado, password);
         } catch (err: any) {
             const raw = ((err?.code || '') + ' ' + (err?.message || '')).toLowerCase();
             if (raw.includes('email-not-verified')) {
@@ -53,10 +85,11 @@ export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ o
     const handleResendVerification = async () => {
         setIsResending(true);
         try {
+            const emailFormatado = email.trim().toLowerCase();
             if (auth.currentUser) {
                 await sendEmailVerification(auth.currentUser);
-            } else if (email && password) {
-                const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            } else if (emailFormatado && password) {
+                const userCredential = await signInWithEmailAndPassword(auth, emailFormatado, password);
                 if (userCredential.user) {
                     await sendEmailVerification(userCredential.user);
                     await signOut(auth);
@@ -106,9 +139,20 @@ export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ o
                         />
                     </div>
                     <div className="space-y-1">
-                        <label htmlFor="login-password" className="block text-xs font-semibold text-slate-700 tracking-wide">
-                            Senha
-                        </label>
+                        <div className="flex justify-between items-center">
+                            <label htmlFor="login-password" className="block text-xs font-semibold text-slate-700 tracking-wide">
+                                Senha
+                            </label>
+                            <button
+                                id="login-forgot-password-btn"
+                                type="button"
+                                onClick={handleForgotPassword}
+                                disabled={isSendingReset}
+                                className="text-[11px] text-[#1A3626] hover:underline font-semibold cursor-pointer disabled:opacity-50"
+                            >
+                                {isSendingReset ? 'Enviando...' : 'Esqueceu a senha?'}
+                            </button>
+                        </div>
                         <input 
                             id="login-password"
                             type="password" 
