@@ -99,6 +99,7 @@ import { showSuccessToast } from './CustomToast';
 import { GlossyButton } from './GlossyButton';
 import { ModalInserirDebito } from './ModalInserirDebito';
 import { Logo } from './Logo';
+import { VallidareLogo } from './VallidareLogo';
 
 /* ----------------------------------------------------
  * Tab 2: Profissionais Co-curators
@@ -403,9 +404,10 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   };
 
   const isEscalaFechada = async (id: string, type: 'paciente' | 'profissional', start: string, end: string): Promise<boolean> => {
-    if (isQuotaExceeded || isTestMode) {
-      const field = type === 'paciente' ? 'idPaciente' : 'idProfissional';
-      const localAgends = (agendamentos || []).filter(ag => (ag as any)[field] === id && ag.data >= start && ag.data <= end);
+    const field = type === 'paciente' ? 'idPaciente' : 'idProfissional';
+    const pool = (agendamentosGerados && agendamentosGerados.length > 0) ? agendamentosGerados : (agendamentos || []);
+    if (pool.length > 0 || isQuotaExceeded || isTestMode) {
+      const localAgends = pool.filter(ag => (ag as any)[field] === id && ag.data >= start && ag.data <= end);
       let closed = true;
       localAgends.forEach(agObj => {
         if (agObj.status !== 'Cancelado') {
@@ -436,8 +438,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       return closed;
     } catch (e) {
       console.warn("Quota ou erro em isEscalaFechada, utilizando estado local:", e);
-      const field = type === 'paciente' ? 'idPaciente' : 'idProfissional';
-      const localAgends = (agendamentos || []).filter(ag => (ag as any)[field] === id && ag.data >= start && ag.data <= end);
+      const localAgends = pool.filter(ag => (ag as any)[field] === id && ag.data >= start && ag.data <= end);
       let closed = true;
       localAgends.forEach(agObj => {
         if (agObj.status !== 'Cancelado') {
@@ -1318,7 +1319,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       const realResult = {
         sucesso: true,
         seuNumero: seuNum,
-codigoSolicitacao: realData?.codigoSolicitacao || "",
+        codigoSolicitacao: realData?.codigoSolicitacao || "",
         nossoNumero: realData?.nossoNumero || realData?.codigoSolicitacao || "",
         codigoBarra: realData?.codigoBarras || realData?.codigoBarra || "",
         linhaDigitavel: realData?.linhaDigitavel || "",
@@ -1341,92 +1342,6 @@ codigoSolicitacao: realData?.codigoSolicitacao || "",
       toast.error(`Falha no Banco Inter: ${errMsg}`);
     } finally {
       setIsProcessingFolha(false);
-    }
-  };
-
-  
-  const handleEmitirBoletoPacienteDirect = async (pacId: string, totalVal: number, agends: Agendamento[]) => {
-    const pac = pacientes.find(p => p.id === pacId);
-    if (!pac) {
-      toast.error("Paciente não localizado.");
-      return;
-    }
-
-    const docPagador = (
-      pac.cpf ||
-      (pac as any).documento ||
-      (pac as any).cpfCnpj ||
-      (pac as any).cpfResponsavel ||
-      (pac as any).responsavelCpf ||
-      (pac as any).cnpj ||
-      ""
-    ).replace(/\D/g, "");
-
-    if (!docPagador || docPagador.length < 11) {
-      toast.error("CPF ou CNPJ do paciente/responsável não encontrado no cadastro.");
-      return;
-    }
-
-    if (totalVal <= 0) {
-      toast.error("O valor da fatura deve ser maior que R$ 0,00.");
-      return;
-    }
-
-    setIsSaving(true);
-    const loaderId = toast.loading("Emitindo Boleto Oficial no Banco Inter...");
-    const targetMonthYear = getMonthYearString(dataInicial);
-    const seuNum = `FAT-${Date.now().toString().slice(-6)}`;
-
-    try {
-      const { getFunctions, httpsCallable } = await import("firebase/functions");
-      const { app } = await import("../lib/firebase");
-      const functions = getFunctions(app, "southamerica-east1");
-      const emitir = httpsCallable(functions, "emitirBoletoInter");
-
-      const response: any = await emitir({
-        faturaId: seuNum,
-        clienteNome: (pac as any).nomeResponsavel || (pac as any).responsavel || pac.nome,
-        clienteDocumento: docPagador,
-        clienteEmail: (pac as any).email || (pac as any).emailResponsavel || "",
-        valor: totalVal,
-        dataVencimento: boletoVencimento || new Date(Date.now() + 5 * 86400000).toISOString().split("T")[0],
-        descricao: `Home Care Ref: ${targetMonthYear} - Paciente: ${pac.nome}`
-      });
-
-      const resData = response.data;
-      toast.dismiss(loaderId);
-
-      const numero = await getNextFaturaNumber();
-      await addFaturaPaciente({
-        idPaciente: pacId,
-        pacienteId: pacId,
-        nomePaciente: pac.nome,
-        numeroFatura: numero,
-        dataEmissao: new Date().toISOString(),
-        mesReferencia: targetMonthYear,
-        periodoApurado: { inicio: dataInicial, fim: dataFinal },
-        valorTotal: totalVal,
-        status: "Fechada",
-        codigoSolicitacao: resData.codigoSolicitacao,
-        nossoNumero: resData.nossoNumero,
-        linhaDigitavel: resData.linhaDigitavel,
-        codigoBarras: resData.codigoBarras,
-        pixCopiaECola: resData.pixCopiaECola,
-        pdfBase64: resData.pdfBase64,
-        plantoesCongelados: agends.map(ag => ({
-          ...ag,
-          profissional: ag.nomeProfissional || "Não atribuído",
-          nomeProfissional: ag.nomeProfissional || "Não atribuído"
-        }))
-      });
-
-      toast.success(`Boleto emitido e Fatura Nº ${numero} gerada com sucesso!`);
-    } catch (err: any) {
-      toast.dismiss(loaderId);
-      console.error("Erro ao emitir boleto direto:", err);
-      toast.error(`Falha na emissão: ${err.message || "Erro de comunicação com o Inter"}`);
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -1692,21 +1607,20 @@ codigoSolicitacao: realData?.codigoSolicitacao || "",
   };
 
   const processBatchPayroll = async () => {
-    if (!selectedProfissionais || selectedProfissionais.length === 0) {
-      toast.error('Nenhum profissional selecionado para fechamento em lote.');
-      setShowBatchModal(false);
-      return;
-    }
-
-    const totalSelected = selectedProfissionais.length;
     setIsBatchProcessing(true);
-    setBatchProgress({ current: 0, total: totalSelected, profName: '' });
-
     let successCount = 0;
     let skipCount = 0;
     const skippedProfs: { name: string; reason: string }[] = [];
 
     try {
+      if (!selectedProfissionais || selectedProfissionais.length === 0) {
+        toast.error('Nenhum profissional selecionado para fechamento em lote.');
+        return;
+      }
+
+      const totalSelected = selectedProfissionais.length;
+      setBatchProgress({ current: 0, total: totalSelected, profName: '' });
+
       const parts = dataInicial.split('-');
       const month = parts[1] ? parseInt(parts[1], 10) : referenciaMes;
       const year = parts[0] ? parseInt(parts[0], 10) : referenciaAno;
@@ -1724,208 +1638,263 @@ codigoSolicitacao: realData?.codigoSolicitacao || "",
       const targetMonthYear = getMonthYearString(dataInicial);
       const valorMeiGlobal = parseFloat(String(valorMei || 0));
 
-      // Processamento sequencial e resiliente de cada profissional selecionado
-      for (let i = 0; i < totalSelected; i++) {
-        const pId = selectedProfissionais[i];
+      // Validação de escala 100% em memória reaproveitando agendamentos já carregados
+      const checkEscalaFechadaEmMemoria = (
+        targetId: string,
+        type: 'paciente' | 'profissional',
+        start: string,
+        end: string,
+        nameFallback?: string
+      ): boolean => {
+        const pool = (agendamentosGerados && agendamentosGerados.length > 0) ? agendamentosGerados : (agendamentos || []);
+        const field = type === 'paciente' ? 'idPaciente' : 'idProfissional';
+
+        const relevant = pool.filter(ag => {
+          const idMatch = (ag as any)[field] === targetId;
+          const nameMatch = Boolean(
+            type === 'profissional' &&
+            nameFallback &&
+            ag.nomeProfissional &&
+            ag.nomeProfissional.trim().toLowerCase() === nameFallback.trim().toLowerCase()
+          );
+          const dateMatch = ag.data >= start && ag.data <= end;
+          return (idMatch || nameMatch) && dateMatch;
+        });
+
+        for (const ag of relevant) {
+          if (ag.status !== 'Cancelado') {
+            if (!ag.escalaCongelada && ag.status !== 'Concluido' && ag.status !== 'Faturada') {
+              return false;
+            }
+          }
+        }
+        return true;
+      };
+
+      const processSingleProfissional = async (pId: string) => {
         const profissional = profissionais.find(p => p.id === pId);
         const profName = profissional?.nome || `Profissional (${pId})`;
 
-        // Feedback dinâmico de progresso em tempo real
-        setBatchProgress({
-          current: i + 1,
-          total: totalSelected,
-          profName: profName
+        if (!profissional) {
+          console.warn(`[processBatchPayroll] Cadastro não localizado para o ID: ${pId}`);
+          return { success: false, skipped: true, name: profName, reason: 'Cadastro não localizado' };
+        }
+
+        // 1. Verificação de Escala Fechada em memória do Profissional (sem chamadas redundantes ao Firestore)
+        const closed = checkEscalaFechadaEmMemoria(pId, 'profissional', dataInicial, dataFinal, profName);
+        if (!closed) {
+          console.warn(`[processBatchPayroll] Escala em aberto para o profissional ${profName}`);
+          return { success: false, skipped: true, name: profName, reason: 'Escala em aberto' };
+        }
+
+        // 2. Verificação de Escala Fechada em memória dos Pacientes do Profissional
+        const agends = agendamentosGerados.filter(ag =>
+          ag.idProfissional === pId || (ag.nomeProfissional && ag.nomeProfissional.trim().toLowerCase() === profName.trim().toLowerCase())
+        );
+        const uniquePatientIds = Array.from(new Set(
+          agends
+            .filter(ag => ag.status !== 'Cancelado')
+            .map(ag => ag.idPaciente)
+            .filter(Boolean)
+        ));
+
+        let patientScaleOpen = false;
+        for (const patientId of uniquePatientIds) {
+          const patientClosed = checkEscalaFechadaEmMemoria(patientId, 'paciente', dataInicial, dataFinal);
+          if (!patientClosed) {
+            patientScaleOpen = true;
+            break;
+          }
+        }
+
+        if (patientScaleOpen) {
+          console.warn(`[processBatchPayroll] Escala de paciente em aberto para o profissional ${profName}`);
+          return { success: false, skipped: true, name: profName, reason: 'Escala de paciente em aberto' };
+        }
+
+        // 3. Verificação de Anti-duplicidade em Memória
+        const folhaExists = folhasPagamento.some(f => {
+          const matchProf = (
+            (f.idProfissional && f.idProfissional === pId) ||
+            ((f as any).profissionalId && (f as any).profissionalId === pId) ||
+            (f.nomeProfissional && f.nomeProfissional.trim().toLowerCase() === profName.trim().toLowerCase())
+          );
+          if (!matchProf || !f.periodoApurado) return false;
+
+          const folhaMonthYear = getMonthYearString(f.periodoApurado.inicio);
+          const mesmoMes = folhaMonthYear && folhaMonthYear === targetMonthYear;
+          const mesmoPeriodo = f.periodoApurado.inicio === dataInicial && f.periodoApurado.fim === dataFinal;
+          const mesmaRef = (f as any).mesReferencia && (f as any).mesReferencia === targetMonthYear;
+          return mesmoMes || mesmoPeriodo || mesmaRef;
         });
 
-        try {
-          if (!profissional) {
-            console.warn(`[processBatchPayroll] Cadastro não localizado para o ID: ${pId}`);
-            skipCount++;
-            skippedProfs.push({ name: profName, reason: 'Cadastro não localizado' });
-            continue;
-          }
+        if (folhaExists) {
+          console.warn(`[processBatchPayroll] Folha já emitida para ${profName} na referência ${targetMonthYear}`);
+          return { success: false, skipped: true, name: profName, reason: 'Folha já emitida para este período' };
+        }
 
-          // 1. Verificação de Escala Fechada do Profissional (não bloqueia os outros)
-          const closed = await isEscalaFechada(pId, 'profissional', dataInicial, dataFinal);
-          if (!closed) {
-            console.warn(`[processBatchPayroll] Escala em aberto para o profissional ${profName}`);
-            skipCount++;
-            skippedProfs.push({ name: profName, reason: 'Escala em aberto (não fechada)' });
-            continue;
-          }
+        // 4. Apuração de Plantões, Ajudas de Custo e Débitos
+        let somaRepasses = 0;
+        let somaAjudas = 0;
+        agends.forEach(ag => {
+          const vals = getAgendamentoCalculatedValues(ag);
+          somaRepasses += vals.valorRepasseFinal;
+          somaAjudas += vals.ajudaCusto;
+        });
 
-          // 2. Verificação de Escala Fechada dos Pacientes do Profissional
-          const agends = agendamentosGerados.filter(ag => ag.nomeProfissional === profName || ag.idProfissional === pId);
-          const uniquePatientIds = Array.from(new Set(
-            agends
-              .filter(ag => ag.status !== 'Cancelado')
-              .map(ag => ag.idPaciente)
-              .filter(Boolean)
-          ));
+        const debDocsForProf = debitosNoPeriodo.filter(d =>
+          (d.idProfissional === pId ||
+          (d.nomeProfissional && d.nomeProfissional.toLowerCase() === profName.toLowerCase())) &&
+          (d.status === 'pendente' || d.status === undefined)
+        );
+        const totalDebitos = debDocsForProf.reduce((sum, d) => sum + d.valor, 0);
 
-          let patientScaleOpen = false;
-          for (const patientId of uniquePatientIds) {
-            const patientClosed = await isEscalaFechada(patientId, 'paciente', dataInicial, dataFinal);
-            if (!patientClosed) {
-              patientScaleOpen = true;
-              break;
-            }
-          }
+        const totalPlantoes = somaRepasses;
+        const totalAjudaCusto = somaAjudas;
+        let valorLiquido = totalPlantoes + totalAjudaCusto - totalDebitos;
 
-          if (patientScaleOpen) {
-            console.warn(`[processBatchPayroll] Escala de paciente em aberto para o profissional ${profName}`);
-            skipCount++;
-            skippedProfs.push({ name: profName, reason: 'Escala de paciente em aberto' });
-            continue;
-          }
+        const listDebs = [...debDocsForProf];
+        let finalTotalDebitos = totalDebitos;
 
-          // 3. Verificação de Anti-duplicidade no Histórico
-          let folhaExists = folhasPagamento.some(f =>
-            (f.idProfissional === pId || (f as any).profissionalId === pId) &&
-            f.periodoApurado &&
-            getMonthYearString(f.periodoApurado.inicio) === targetMonthYear
-          );
+        // Dedução de taxa MEI quando aplicável
+        let createdMeiDebit: any = null;
+        if (profissional.temMei && !profissional.meiIrregular && valorMeiGlobal > 0) {
+          valorLiquido -= valorMeiGlobal;
 
-          if (!folhaExists && !isQuotaExceeded && !isTestMode) {
-            try {
-              const folhasQuery = query(
-                collection(db, 'folhas_pagamento'),
-                where('idProfissional', '==', pId)
-              );
-              const folhasSnap = await getDocs(folhasQuery);
-              folhasSnap.forEach(d => {
-                const folObj = d.data();
-                if (folObj.periodoApurado && folObj.periodoApurado.inicio) {
-                  const existingMonthYear = getMonthYearString(folObj.periodoApurado.inicio);
-                  if (existingMonthYear === targetMonthYear) {
-                    folhaExists = true;
-                  }
-                }
-              });
-            } catch (e) {
-              console.warn(`[processBatchPayroll] Erro ao consultar duplicidade online para ${profName}:`, e);
-            }
-          }
-
-          if (folhaExists) {
-            console.warn(`[processBatchPayroll] Folha já emitida para ${profName} na referência ${targetMonthYear}`);
-            skipCount++;
-            skippedProfs.push({ name: profName, reason: 'Folha já emitida para este período' });
-            continue;
-          }
-
-          // 4. Apuração de Plantões, Ajudas de Custo e Débitos
-          let somaRepasses = 0;
-          let somaAjudas = 0;
-          agends.forEach(ag => {
-            const vals = getAgendamentoCalculatedValues(ag);
-            somaRepasses += vals.valorRepasseFinal;
-            somaAjudas += vals.ajudaCusto;
-          });
-
-          const debDocsForProf = debitosNoPeriodo.filter(d => 
-            (d.idProfissional === pId || 
-            (d.nomeProfissional && d.nomeProfissional.toLowerCase() === profName.toLowerCase())) &&
-            (d.status === 'pendente' || d.status === undefined)
-          );
-          let totalDebitos = debDocsForProf.reduce((sum, d) => sum + d.valor, 0);
-
-          let totalPlantoes = somaRepasses;
-          let totalAjudaCusto = somaAjudas;
-          let valorLiquido = totalPlantoes + totalAjudaCusto - totalDebitos;
-
-          const listDebs = [...debDocsForProf];
-          let finalTotalDebitos = totalDebitos;
-
-          // Dedução de taxa MEI quando aplicável
-          if (profissional.temMei && !profissional.meiIrregular && valorMeiGlobal > 0) {
-            valorLiquido -= valorMeiGlobal;
-
-            const autoDebit = {
-              idProfissional: pId,
-              nomeProfissional: profName,
-              data: new Date(),
-              valor: valorMeiGlobal,
-              motivo: textoMotivo,
-              status: 'descontado' as const
-            };
-            const savedDebit = await addDebitoProfissional(autoDebit);
-            listDebs.push(savedDebit);
-            finalTotalDebitos += valorMeiGlobal;
-            await new Promise(r => setTimeout(r, 30));
-          }
-
-          // 5. Bloqueio de Emissão Zerada ou Negativa
-          if (valorLiquido <= 0) {
-            console.warn(`[processBatchPayroll] Pulando profissional ${profName}: valor líquido zerado ou negativo (R$ ${valorLiquido})`);
-            skipCount++;
-            skippedProfs.push({ name: profName, reason: `Valor líquido zerado ou negativo (R$ ${valorLiquido.toFixed(2)})` });
-            continue;
-          }
-
-          // 6. Gravação da Folha de Pagamento
-          const savedFolha = await addFolhaPagamento({
+          const autoDebit = {
             idProfissional: pId,
             nomeProfissional: profName,
-            dataEmissao: new Date().toISOString(),
-            periodoApurado: { inicio: dataInicial, fim: dataFinal },
-            valorTotalPlantoes: totalPlantoes + totalAjudaCusto,
-            valorTotalDebitos: finalTotalDebitos,
-            valorLiquidoReceber: valorLiquido,
-            status: 'Fechada',
-            historicoDebitos: listDebs,
-            plantoesCongelados: agends
-          });
+            data: new Date(),
+            valor: valorMeiGlobal,
+            motivo: textoMotivo,
+            status: 'descontado' as const
+          };
+          createdMeiDebit = await addDebitoProfissional(autoDebit);
+          listDebs.push(createdMeiDebit);
+          finalTotalDebitos += valorMeiGlobal;
+        }
 
-          await new Promise(r => setTimeout(r, 30));
+        // 5. Bloqueio de Emissão Zerada ou Negativa
+        if (valorLiquido <= 0) {
+          console.warn(`[processBatchPayroll] Pulando profissional ${profName}: valor líquido zerado ou negativo (R$ ${valorLiquido})`);
+          return {
+            success: false,
+            skipped: true,
+            name: profName,
+            reason: `Valor líquido zerado ou negativo (R$ ${valorLiquido.toFixed(2)})`
+          };
+        }
 
-          // 7. Liquidação (Baixa) Automática de débitos pendentes vinculados
-          for (const deb of debDocsForProf) {
-            await updateDebitoProfissional({
+        // 6. Gravação da Folha de Pagamento
+        const savedFolha = await addFolhaPagamento({
+          idProfissional: pId,
+          nomeProfissional: profName,
+          dataEmissao: new Date().toISOString(),
+          periodoApurado: { inicio: dataInicial, fim: dataFinal },
+          valorTotalPlantoes: totalPlantoes + totalAjudaCusto,
+          valorTotalDebitos: finalTotalDebitos,
+          valorLiquidoReceber: valorLiquido,
+          status: 'Fechada',
+          historicoDebitos: listDebs,
+          plantoesCongelados: agends
+        });
+
+        // 7. Liquidação (Baixa) Automática de débitos pendentes vinculados em paralelo
+        const debUpdates: Promise<any>[] = [];
+        for (const deb of debDocsForProf) {
+          debUpdates.push(
+            updateDebitoProfissional({
               ...deb,
               status: 'descontado',
               folhaIdVinculada: savedFolha.id
-            });
-            await new Promise(r => setTimeout(r, 20));
-          }
-
-          // Vinculação da folha ao débito MEI gerado
-          const meiDebit = listDebs.find(d => d.id !== 'virtual-mei-debit' && d.motivo === textoMotivo);
-          if (meiDebit && meiDebit.id) {
-            await updateDebitoProfissional({
-              ...meiDebit,
-              status: 'descontado',
-              folhaIdVinculada: savedFolha.id
-            });
-            await new Promise(r => setTimeout(r, 20));
-          }
-
-          successCount++;
-          console.log(`[processBatchPayroll] Folha criada com sucesso para ${profName} com ID: ${savedFolha.id}`);
-        } catch (profErr: any) {
-          console.error(`[processBatchPayroll] Falha ao processar folha do profissional ${profName}:`, profErr);
-          skipCount++;
-          skippedProfs.push({ name: profName, reason: profErr?.message || 'Falha na gravação' });
+            })
+          );
         }
 
-        // Prevenção de timeout: pequeno delay seguro entre profissionais para evitar sobrecarga no Firestore
-        await new Promise(r => setTimeout(r, 80));
+        // Vinculação da folha ao débito MEI gerado
+        if (createdMeiDebit && createdMeiDebit.id) {
+          debUpdates.push(
+            updateDebitoProfissional({
+              ...createdMeiDebit,
+              status: 'descontado',
+              folhaIdVinculada: savedFolha.id
+            })
+          );
+        }
+
+        if (debUpdates.length > 0) {
+          await Promise.all(debUpdates);
+        }
+
+        console.log(`[processBatchPayroll] Folha criada com sucesso para ${profName} com ID: ${savedFolha.id}`);
+        return { success: true, skipped: false, name: profName, id: savedFolha.id };
+      };
+
+      // Processamento em lotes paralelos controlados de 5 em 5 com Promise.allSettled
+      const CHUNK_SIZE = 5;
+      const chunks: string[][] = [];
+      for (let i = 0; i < selectedProfissionais.length; i += CHUNK_SIZE) {
+        chunks.push(selectedProfissionais.slice(i, i + CHUNK_SIZE));
+      }
+
+      let completedCount = 0;
+
+      for (const chunk of chunks) {
+        const chunkPromises = chunk.map(async (pId) => {
+          try {
+            const res = await processSingleProfissional(pId);
+            completedCount++;
+            setBatchProgress({
+              current: completedCount,
+              total: totalSelected,
+              profName: res.name || `Profissional`
+            });
+            return res;
+          } catch (err: any) {
+            completedCount++;
+            const profObj = profissionais.find(p => p.id === pId);
+            const profName = profObj?.nome || `Profissional (${pId})`;
+            console.error(`[processBatchPayroll] Falha ao processar folha do profissional ${profName}:`, err);
+            setBatchProgress({
+              current: completedCount,
+              total: totalSelected,
+              profName
+            });
+            return { success: false, skipped: true, name: profName, reason: err?.message || 'Falha na gravação' };
+          }
+        });
+
+        const chunkResults = await Promise.allSettled(chunkPromises);
+        for (const result of chunkResults) {
+          if (result.status === 'fulfilled') {
+            const val = result.value;
+            if (val.success) {
+              successCount++;
+            } else if (val.skipped) {
+              skipCount++;
+              skippedProfs.push({ name: val.name, reason: val.reason });
+            }
+          } else {
+            skipCount++;
+            skippedProfs.push({ name: 'Profissional', reason: result.reason?.message || 'Falha na gravação' });
+          }
+        }
       }
 
       // Resumo final amigável ao usuário
       let summaryMessage = `${successCount} folha(s) fechada(s) com sucesso.`;
       if (skipCount > 0) {
-        summaryMessage += ` ${skipCount} não gerada(s).`;
+        summaryMessage += ` ${skipCount} pulada(s).`;
         const motivosAmostra = skippedProfs.slice(0, 3).map(p => `${p.name} (${p.reason})`).join(', ');
         const extraCount = skippedProfs.length > 3 ? ` (+${skippedProfs.length - 3})` : '';
 
         if (successCount > 0) {
-          toast(`Lote finalizado: ${successCount} geradas com sucesso, ${skipCount} ignoradas.\nMotivos: ${motivosAmostra}${extraCount}`, {
+          toast(`Lote finalizado: ${successCount} fechada(s) com sucesso, ${skipCount} pulada(s).\nMotivos: ${motivosAmostra}${extraCount}`, {
             duration: 8000,
             icon: 'ℹ️'
           });
         } else {
-          toast.error(`Nenhuma folha gerada (${skipCount} com pendência/erro):\n${motivosAmostra}${extraCount}`, {
+          toast.error(`Nenhuma folha gerada (${skipCount} pulada(s)):\n${motivosAmostra}${extraCount}`, {
             duration: 8000
           });
         }
@@ -1936,15 +1905,15 @@ codigoSolicitacao: realData?.codigoSolicitacao || "",
       }
 
       setNotification(summaryMessage);
-      setSelectedProfissionais([]);
     } catch (err: any) {
       console.error("[processBatchPayroll] Erro crítico no lote de fechamento das folhas:", err);
       toast.error('Ocorreu um erro ao processar o lote de fechamento das folhas de pagamento.');
     } finally {
-      // Garantia absoluta de saída: reseta estados e fecha modal
+      // Garantia absoluta de limpeza imediata e destravamento da interface
       setIsBatchProcessing(false);
-      setBatchProgress(null);
       setShowBatchModal(false);
+      setSelectedProfissionais([]);
+      setBatchProgress(null);
     }
   };
 
@@ -3378,69 +3347,15 @@ codigoSolicitacao: realData?.codigoSolicitacao || "",
                                 <h3 className="font-bold text-slate-800">{pacNome}</h3>
                                 <p className="text-xs text-slate-500">Total de Plantões: {agends.length}</p>
                               </div>
-                              <div className="flex gap-2 items-center print:hidden">
-                                {(() => {
-                                  const targetMonthYear = getMonthYearString(dataInicial);
-                                  const faturaExistente = faturasPacientes.find(f => 
-                                    (f.idPaciente === pacId || (f as any).pacienteId === pacId) &&
-                                    f.periodoApurado &&
-                                    getMonthYearString(f.periodoApurado.inicio) === targetMonthYear
-                                  );
-
-                                  if (faturaExistente && ((faturaExistente as any).codigoSolicitacao || (faturaExistente as any).linhaDigitavel)) {
-                                    return (
-                                      <div className="flex items-center gap-2">
-                                        <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-[11px] font-black rounded-md border border-emerald-300">
-                                          ✅ Boleto Ativo
-                                        </span>
-                                        {(faturaExistente as any).pdfBase64 && (
-                                          <button
-                                            type="button"
-                                            onClick={() => downloadBoletoPdf((faturaExistente as any).pdfBase64, (faturaExistente as any).numeroFatura, (faturaExistente as any).codigoSolicitacao)}
-                                            className="px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-md shadow transition-all cursor-pointer flex items-center gap-1 active:scale-95"
-                                            title="Baixar Boleto Oficial em PDF"
-                                          >
-                                            📥 PDF
-                                          </button>
-                                        )}
-                                        {(faturaExistente as any).pixCopiaECola && (
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              navigator.clipboard.writeText((faturaExistente as any).pixCopiaECola);
-                                              toast.success("Pix Copia e Cola copiado!");
-                                            }}
-                                            className="px-2.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-md shadow transition-all cursor-pointer flex items-center gap-1 active:scale-95"
-                                            title="Copiar Pix"
-                                          >
-                                            ⚡ Pix
-                                          </button>
-                                        )}
-                                      </div>
-                                    );
-                                  }
-
-                                  return (
-                                    <div className="flex items-center gap-2">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleEmitirBoletoPacienteDirect(pacId, totalFatura, agends)}
-                                        disabled={isSaving}
-                                        className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-lg shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer disabled:opacity-50"
-                                      >
-                                        🧾 Emitir Boleto Inter
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleSalvarFaturaDefinitiva(pacId, agends)}
-                                        disabled={isSaving}
-                                        className="flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-600 hover:bg-slate-700 text-white text-xs font-bold rounded-lg shadow transition-all active:scale-95 disabled:opacity-50"
-                                      >
-                                        {isSaving ? "Salvando..." : "💾 Salvar Sem Boleto"}
-                                      </button>
-                                    </div>
-                                  );
-                                })()}
+                              <div className="flex gap-4 items-center print:hidden">
+                                <p className="text-xs font-black text-blue-700 bg-blue-50 px-2 py-1 rounded">Fatura Nº (Gerada ao salvar)</p>
+                                <button
+                                  onClick={() => handleSalvarFaturaDefinitiva(pacId, agends)}
+                                  disabled={isSaving}
+                                  className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 text-white font-medium rounded-lg shadow-lg shadow-blue-500/40 hover:bg-blue-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {isSaving ? 'Salvando...' : '💾 Salvar Fatura Definitiva'}
+                                </button>
                               </div>
                             </div>
                             <table className="w-full text-left text-xs">
@@ -3499,73 +3414,119 @@ codigoSolicitacao: realData?.codigoSolicitacao || "",
                     {Object.keys(agendamentosPorProfissional).length === 0 ? (
                       <p className="text-slate-500 italic text-sm">Nenhum plantão ativo neste período.</p>
                     ) : (() => {
-                      const calculatedProfs = (Object.entries(agendamentosPorProfissional) as [string, Agendamento[]][]).map(([profName, agends]) => {
-                        let somaRepasses = 0;
-                        let somaAjudas = 0;
-                        agends.forEach(ag => {
-                          const vals = getAgendamentoCalculatedValues(ag);
-                          somaRepasses += vals.valorRepasseFinal;
-                          somaAjudas += vals.ajudaCusto;
-                        });
-                        
-                        const profObj = profissionais.find(p => p.nome === profName);
-                        const profId = profObj?.id || `dummy-${profName.toLowerCase().replace(/\s/g, '-')}`;
-                        const temMei = profObj?.temMei === true && profObj?.meiIrregular !== true;
-                        const cnpj = profObj?.cnpj || '';
-                        
-                        const debDocsForProf = debitosNoPeriodo.filter(d => 
-                          ((profId && d.idProfissional === profId) || 
-                          d.nomeProfissional.toLowerCase() === profName.toLowerCase()) &&
-                          (d.status === 'pendente' || d.status === undefined)
-                        );
-                        const totalDebitos = debDocsForProf.reduce((sum, d) => sum + d.valor, 0);
-                        
-                        const listDebs = [...debDocsForProf];
-                        let finalTotalDebitos = totalDebitos;
-                        let finalValorLiquidoReceber = (somaRepasses + somaAjudas) - totalDebitos;
+                      const targetMonthYear = getMonthYearString(dataInicial);
 
-                        const valorMeiGlobal = parseFloat(String(valorMei || 0));
+                      // Regra de Exclusão na Tabela de Apuração:
+                      // Profissionais que já possuem folha emitida e salva no banco/estado para esse mesmo período/mês de referência não devem aparecer na listagem
+                      const calculatedProfs = (Object.entries(agendamentosPorProfissional) as [string, Agendamento[]][])
+                        .filter(([profName]) => {
+                          const profObj = profissionais.find(p => p.nome === profName);
+                          const profId = profObj?.id;
 
-                        if (temMei && valorMeiGlobal > 0) {
-                          const parts = dataInicial.split('-');
-                          const month = parts[1] ? parseInt(parts[1], 10) : referenciaMes;
-                          const year = parts[0] ? parseInt(parts[0], 10) : referenciaAno;
-                          let retroMonth = month - 1;
-                          let retroYear = year;
-                          if (retroMonth === 0) {
-                            retroMonth = 12;
-                            retroYear = year - 1;
+                          const jaPossuiFolha = folhasPagamento.some(f => {
+                            const matchProf = 
+                              (profId && (f.idProfissional === profId || (f as any).profissionalId === profId)) ||
+                              (f.nomeProfissional && profName && f.nomeProfissional.trim().toLowerCase() === profName.trim().toLowerCase());
+
+                            if (!matchProf || !f.periodoApurado) return false;
+
+                            const folhaMonthYear = getMonthYearString(f.periodoApurado.inicio);
+                            const mesmoMes = folhaMonthYear && folhaMonthYear === targetMonthYear;
+                            const mesmoPeriodo = f.periodoApurado.inicio === dataInicial && f.periodoApurado.fim === dataFinal;
+                            const mesmaRef = (f as any).mesReferencia && (f as any).mesReferencia === targetMonthYear;
+
+                            return mesmoMes || mesmoPeriodo || mesmaRef;
+                          });
+
+                          return !jaPossuiFolha;
+                        })
+                        .map(([profName, agends]) => {
+                          let somaRepasses = 0;
+                          let somaAjudas = 0;
+                          agends.forEach(ag => {
+                            const vals = getAgendamentoCalculatedValues(ag);
+                            somaRepasses += vals.valorRepasseFinal;
+                            somaAjudas += vals.ajudaCusto;
+                          });
+                          
+                          const profObj = profissionais.find(p => p.nome === profName);
+                          const profId = profObj?.id || `dummy-${profName.toLowerCase().replace(/\s/g, '-')}`;
+                          const temMei = profObj?.temMei === true && profObj?.meiIrregular !== true;
+                          const cnpj = profObj?.cnpj || '';
+                          
+                          const debDocsForProf = debitosNoPeriodo.filter(d => 
+                            ((profId && d.idProfissional === profId) || 
+                            d.nomeProfissional.toLowerCase() === profName.toLowerCase()) &&
+                            (d.status === 'pendente' || d.status === undefined)
+                          );
+                          const totalDebitos = debDocsForProf.reduce((sum, d) => sum + d.valor, 0);
+                          
+                          const listDebs = [...debDocsForProf];
+                          let finalTotalDebitos = totalDebitos;
+                          let finalValorLiquidoReceber = (somaRepasses + somaAjudas) - totalDebitos;
+
+                          const valorMeiGlobal = parseFloat(String(valorMei || 0));
+
+                          if (temMei && valorMeiGlobal > 0) {
+                            const parts = dataInicial.split('-');
+                            const month = parts[1] ? parseInt(parts[1], 10) : referenciaMes;
+                            const year = parts[0] ? parseInt(parts[0], 10) : referenciaAno;
+                            let retroMonth = month - 1;
+                            let retroYear = year;
+                            if (retroMonth === 0) {
+                              retroMonth = 12;
+                              retroYear = year - 1;
+                            }
+                            const mesFormatado = String(retroMonth).padStart(2, '0');
+                            const anoFormatado = retroYear;
+                            const textoMotivo = `RETENÇÃO DE GUIA MEI - REF. ${mesFormatado}/${anoFormatado}`;
+
+                            listDebs.push({
+                              id: 'virtual-mei-debit',
+                              idProfissional: profId,
+                              nomeProfissional: profName,
+                              data: new Date().toISOString(),
+                              valor: valorMeiGlobal,
+                              motivo: textoMotivo
+                            } as any);
+
+                            finalTotalDebitos += valorMeiGlobal;
+                            finalValorLiquidoReceber -= valorMeiGlobal;
                           }
-                          const mesFormatado = String(retroMonth).padStart(2, '0');
-                          const anoFormatado = retroYear;
-                          const textoMotivo = `RETENÇÃO DE GUIA MEI - REF. ${mesFormatado}/${anoFormatado}`;
+                          
+                          return {
+                            profId,
+                            profName,
+                            agends,
+                            somaRepasses,
+                            somaAjudas,
+                            debDocsForProf: listDebs,
+                            totalDebitos: finalTotalDebitos,
+                            valorLiquidoReceber: finalValorLiquidoReceber,
+                            temMei,
+                            cnpj
+                          };
+                        });
 
-                          listDebs.push({
-                            id: 'virtual-mei-debit',
-                            idProfissional: profId,
-                            nomeProfissional: profName,
-                            data: new Date().toISOString(),
-                            valor: valorMeiGlobal,
-                            motivo: textoMotivo
-                          } as any);
+                      if (calculatedProfs.length === 0) {
+                        return (
+                          <div className="p-6 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-900 flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                              <CheckCircle className="w-5 h-5 text-emerald-600" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold">Todas as folhas de pagamento deste período já foram fechadas!</p>
+                              <p className="text-xs text-emerald-700 mt-0.5">
+                                Não há profissionais com pendência de fechamento para o período apurado de {dataInicial.split('-').reverse().join('/')} a {dataFinal.split('-').reverse().join('/')}.
+                                As folhas emitidas estão disponíveis para consulta na aba Histórico Financeiro.
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      }
 
-                          finalTotalDebitos += valorMeiGlobal;
-                          finalValorLiquidoReceber -= valorMeiGlobal;
-                        }
-                        
-                        return {
-                          profId,
-                          profName,
-                          agends,
-                          somaRepasses,
-                          somaAjudas,
-                          debDocsForProf: listDebs,
-                          totalDebitos: finalTotalDebitos,
-                          valorLiquidoReceber: finalValorLiquidoReceber,
-                          temMei,
-                          cnpj
-                        };
-                      });
+                      const availableProfIds = new Set(calculatedProfs.map(p => p.profId));
+                      const activeSelected = selectedProfissionais.filter(id => availableProfIds.has(id));
 
                       const sortedProfs = [...calculatedProfs].sort((a, b) => {
                         if (payrollSortConfig.key === 'profissional') {
@@ -3577,7 +3538,7 @@ codigoSolicitacao: realData?.codigoSolicitacao || "",
                         return 0;
                       });
 
-                      const isAllSelected = calculatedProfs.length > 0 && selectedProfissionais.length === calculatedProfs.length;
+                      const isAllSelected = calculatedProfs.length > 0 && activeSelected.length === calculatedProfs.length;
                       const handleSelectAll = (checked: boolean) => {
                         if (checked) {
                           const allIds = calculatedProfs.map(p => p.profId);
@@ -3588,15 +3549,15 @@ codigoSolicitacao: realData?.codigoSolicitacao || "",
                       };
 
                       const handleToggleSelectProfissional = (id: string) => {
-                        if (selectedProfissionais.includes(id)) {
-                          setSelectedProfissionais(selectedProfissionais.filter(x => x !== id));
+                        if (activeSelected.includes(id)) {
+                          setSelectedProfissionais(activeSelected.filter(x => x !== id));
                         } else {
-                          setSelectedProfissionais([...selectedProfissionais, id]);
+                          setSelectedProfissionais([...activeSelected, id]);
                         }
                       };
 
-                      const numSelected = selectedProfissionais.length;
-                      const numSelectedWithMei = selectedProfissionais.filter(pId => {
+                      const numSelected = activeSelected.length;
+                      const numSelectedWithMei = activeSelected.filter(pId => {
                         const profObj = profissionais.find(p => p.id === pId);
                         return profObj?.temMei === true && profObj?.meiIrregular !== true;
                       }).length;
@@ -3612,14 +3573,14 @@ codigoSolicitacao: realData?.codigoSolicitacao || "",
                             <button
                               id="btn-batch-close-payroll"
                               onClick={() => setShowBatchModal(true)}
-                              disabled={selectedProfissionais.length === 0 || isBatchProcessing}
+                              disabled={activeSelected.length === 0 || isBatchProcessing}
                               className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                                selectedProfissionais.length > 0 && !isBatchProcessing
+                                activeSelected.length > 0 && !isBatchProcessing
                                   ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-100'
                                   : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                               }`}
                             >
-                              💼 Fechar Folha em Lote ({selectedProfissionais.length} selecionados)
+                              💼 Fechar Folha em Lote ({activeSelected.length} selecionados)
                             </button>
                           </div>
 
@@ -3662,7 +3623,7 @@ codigoSolicitacao: realData?.codigoSolicitacao || "",
                               </thead>
                               <tbody className="divide-y divide-slate-100">
                                 {sortedProfs.map((p) => {
-                                  const isSelected = selectedProfissionais.includes(p.profId);
+                                  const isSelected = activeSelected.includes(p.profId);
                                   const isExpanded = expandedProfissionais.includes(p.profId);
 
                                   return (
@@ -4619,6 +4580,10 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
         key: 'emissao',
         direction: 'desc'
     });
+    const [folhaSortConfig, setFolhaSortConfig] = useState<{ key: 'profissional' | 'emissao' | null; direction: 'asc' | 'desc' }>({
+        key: 'emissao',
+        direction: 'desc'
+    });
 
     const handleBatchDelete = async () => {
         if (!batchDeleteConfirm || batchDeleteConfirm.ids.length === 0) return;
@@ -4654,6 +4619,15 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                 return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
             }
             return { key, direction: key === 'paciente' ? 'asc' : 'desc' };
+        });
+    };
+
+    const handleSortFolha = (key: 'profissional' | 'emissao') => {
+        setFolhaSortConfig(prev => {
+            if (prev.key === key) {
+                return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+            }
+            return { key, direction: key === 'profissional' ? 'asc' : 'desc' };
         });
     };
 
@@ -4706,8 +4680,8 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
 
     const handleExportFolhasPDF = async () => {
         const listToExport = selectedHistorico.length > 0 
-            ? filteredFolhas.filter(f => selectedHistorico.includes(f.id))
-            : filteredFolhas;
+            ? sortedFolhas.filter(f => selectedHistorico.includes(f.id))
+            : sortedFolhas;
 
         if (listToExport.length === 0) {
             toast.error("Nenhuma folha de pagamento encontrada para exportar.");
@@ -4757,7 +4731,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
     };
 
     const handleExportWord = () => {
-        const dadosSelecionados = filteredFolhas
+        const dadosSelecionados = sortedFolhas
             .filter(f => selectedHistorico.includes(f.id))
             .map(f => {
                 let mesRef = '';
@@ -4779,24 +4753,24 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
         };
 
         let rows = dadosSelecionados.map(item => `
-          <tr>
-            <td style="border: 1px solid black; padding: 5px;">${item.nomeProfissional}</td>
-            <td style="border: 1px solid black; padding: 5px; text-align: center;">${item.mesReferencia}</td>
-            <td style="border: 1px solid black; padding: 5px; text-align: right;">${formatCurrency(item.valorLiquido)}</td>
+          <tr style="min-height: 28px;">
+            <td style="border: 1px solid #cbd5e1; padding: 8px 10px; font-weight: 600; color: #1e293b; word-break: break-word;">${item.nomeProfissional}</td>
+            <td style="border: 1px solid #cbd5e1; padding: 8px 10px; text-align: center; color: #1e293b;">${item.mesReferencia}</td>
+            <td style="border: 1px solid #cbd5e1; padding: 8px 10px; text-align: right; font-weight: 700; color: #166534;">${formatCurrency(item.valorLiquido)}</td>
           </tr>
         `).join('');
 
         const htmlStr = `
         <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
         <head><meta charset="utf-8"><title>Resumo de Pagamentos</title></head>
-        <body style="font-family: Arial, sans-serif; background-color: #ffffff; color: #000000;">
-          <h3 style="text-align: center;">RESUMO PARA AGENDAMENTO BANCÁRIO</h3>
-          <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+        <body style="font-family: Arial, Helvetica, sans-serif; background-color: #ffffff; color: #1e293b; font-size: 14px;">
+          <h3 style="text-align: center; font-size: 16px; margin-bottom: 20px; color: #1e293b;">RESUMO PARA AGENDAMENTO BANCÁRIO</h3>
+          <table style="width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px;">
             <thead>
-              <tr>
-                <th style="border: 1px solid black; padding: 5px; background-color: #ffffff;">Profissional</th>
-                <th style="border: 1px solid black; padding: 5px; background-color: #ffffff;">Mês Referência</th>
-                <th style="border: 1px solid black; padding: 5px; background-color: #ffffff;">Valor Líquido a Transferir</th>
+              <tr style="background-color: #f1f5f9; font-weight: bold; color: #1e293b;">
+                <th style="border: 1px solid #94a3b8; padding: 8px 10px; text-align: left; width: 45%;">Profissional</th>
+                <th style="border: 1px solid #94a3b8; padding: 8px 10px; text-align: center; width: 25%;">Mês Referência</th>
+                <th style="border: 1px solid #94a3b8; padding: 8px 10px; text-align: right; width: 30%;">Valor Líquido a Transferir</th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>
@@ -4966,14 +4940,13 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
     };
 
     // Filter states
-    const [historicoSubTab, setHistoricoSubTab] = useState<'faturas' | 'folhas'>('faturas');
     const [searchFaturaPaciente, setSearchFaturaPaciente] = useState('all');
     const [searchFaturaDataInicio, setSearchFaturaDataInicio] = useState('');
     const [searchFaturaDataFim, setSearchFaturaDataFim] = useState('');
     const [searchFaturaText, setSearchFaturaText] = useState('');
     const [searchFolhaProfissional, setSearchFolhaProfissional] = useState('all');
-    const [searchFolhaDataInicio, setSearchFolhaDataInicio] = useState<string>("");
-  const [searchFolhaDataFim, setSearchFolhaDataFim] = useState<string>("");
+    const [searchFolhaDataInicio, setSearchFolhaDataInicio] = useState<string>('');
+    const [searchFolhaDataFim, setSearchFolhaDataFim] = useState<string>('');
     const [searchFolhaText, setSearchFolhaText] = useState('');
 
     // Dynamic Lists from Firestore
@@ -5059,26 +5032,16 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
 
         // Extrai a data normalizada YYYY-MM-DD com suporte seguro a múltiplos formatos e timestamps
         const faturaDateStr = extractISODateString(f.dataEmissao) || extractISODateString(f.criadoEm) || extractISODateString((f as any).dataEmissaoTimestamp) || extractISODateString((f as any).createdAt);
+        const faturaInicioStr = f.periodoApurado ? extractISODateString(f.periodoApurado.inicio) : null;
+        const faturaFimStr = f.periodoApurado ? extractISODateString(f.periodoApurado.fim) : null;
 
         let matchesDate = true;
-        if (searchFaturaDataInicio && searchFaturaDataFim) {
-            if (!faturaDateStr) {
-                matchesDate = false;
-            } else {
-                matchesDate = faturaDateStr >= searchFaturaDataInicio && faturaDateStr <= searchFaturaDataFim;
-            }
-        } else if (searchFaturaDataInicio) {
-            if (!faturaDateStr) {
-                matchesDate = false;
-            } else {
-                matchesDate = faturaDateStr >= searchFaturaDataInicio;
-            }
-        } else if (searchFaturaDataFim) {
-            if (!faturaDateStr) {
-                matchesDate = false;
-            } else {
-                matchesDate = faturaDateStr <= searchFaturaDataFim;
-            }
+        if (searchFaturaDataInicio || searchFaturaDataFim) {
+            const emissaoOk = faturaDateStr ? ((!searchFaturaDataInicio || faturaDateStr >= searchFaturaDataInicio) && (!searchFaturaDataFim || faturaDateStr <= searchFaturaDataFim)) : false;
+            const periodoOk = (faturaInicioStr || faturaFimStr)
+                ? ((!searchFaturaDataInicio || (faturaFimStr || faturaInicioStr)! >= searchFaturaDataInicio) && (!searchFaturaDataFim || (faturaInicioStr || faturaFimStr)! <= searchFaturaDataFim))
+                : false;
+            matchesDate = emissaoOk || periodoOk;
         }
 
         let matchesText = true;
@@ -5116,39 +5079,24 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
     }, [filteredFaturas, faturaSortConfig]);
 
     const filteredFolhas = folhasPagamento.filter(f => {
-    const matchesProfissional = !searchFolhaProfissional || searchFolhaProfissional === "all" || f.nomeProfissional === searchFolhaProfissional;
-    
-    // Normalização da data do documento (emissão ou período)
-    const docDate = (f.dataEmissao || (f.periodoApurado && f.periodoApurado.inicio) || "").substring(0, 10);
-    const docDateFim = (f.dataEmissao || (f.periodoApurado && f.periodoApurado.fim) || docDate).substring(0, 10);
+        const matchesProfissional = !searchFolhaProfissional || searchFolhaProfissional === 'all' || f.nomeProfissional === searchFolhaProfissional;
 
-    let matchesDate = true;
-    if (searchFolhaDataInicio && docDate < searchFolhaDataInicio) {
-      matchesDate = false;
-    }
-    if (searchFolhaDataFim && docDateFim > searchFolhaDataFim) {
-      matchesDate = false;
-    }
+        // Data de emissão ou criação
+        const dataEmissaoStr = extractISODateString(f.dataEmissao) || 
+                               extractISODateString((f as any).criadoEm) || 
+                               extractISODateString((f as any).dataEmissaoTimestamp) || 
+                               extractISODateString((f as any).createdAt);
+        // Datas do período apurado (início e fim)
+        const inicioPeriodoStr = f.periodoApurado ? extractISODateString(f.periodoApurado.inicio) : null;
+        const fimPeriodoStr = f.periodoApurado ? extractISODateString(f.periodoApurado.fim) : null;
 
-    const matchesSearch = !searchFolhaText || 
-      (f.nomeProfissional && f.nomeProfissional.toLowerCase().includes(searchFolhaText.toLowerCase())) ||
-      (f.id && f.id.toLowerCase().includes(searchFolhaText.toLowerCase()));
-
-    return matchesProfissional && matchesDate && matchesSearch;
-  });
-        return d >= searchFolhaDataInicio;
-      });
-    }
-    if (searchFolhaDataFim) {
-      result = result.filter(f => {
-        const d = (f.dataEmissao || (f.periodoApurado && f.periodoApurado.fim) || "").substring(0, 10);
-        return d <= searchFolhaDataFim;
-      });
-    }-${mo}-${dy}`;
-                matchesDate = docFormatted === searchFolhaData;
-            } catch (e) {
-                matchesDate = false;
-            }
+        let matchesDate = true;
+        if (searchFolhaDataInicio || searchFolhaDataFim) {
+            const emissaoOk = dataEmissaoStr ? ((!searchFolhaDataInicio || dataEmissaoStr >= searchFolhaDataInicio) && (!searchFolhaDataFim || dataEmissaoStr <= searchFolhaDataFim)) : false;
+            const periodoOk = (inicioPeriodoStr || fimPeriodoStr)
+                ? ((!searchFolhaDataInicio || (fimPeriodoStr || inicioPeriodoStr)! >= searchFolhaDataInicio) && (!searchFolhaDataFim || (inicioPeriodoStr || fimPeriodoStr)! <= searchFolhaDataFim))
+                : false;
+            matchesDate = emissaoOk || periodoOk;
         }
 
         let matchesText = true;
@@ -5161,62 +5109,31 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
         return matchesProfissional && matchesDate && matchesText;
     });
 
+    const sortedFolhas = React.useMemo(() => {
+        return [...filteredFolhas].sort((a, b) => {
+            if (!folhaSortConfig.key) return 0;
+
+            if (folhaSortConfig.key === 'profissional') {
+                const nameA = (a.nomeProfissional || '').toString().toLowerCase();
+                const nameB = (b.nomeProfissional || '').toString().toLowerCase();
+                const cmp = nameA.localeCompare(nameB, 'pt-BR');
+                return folhaSortConfig.direction === 'asc' ? cmp : -cmp;
+            }
+
+            if (folhaSortConfig.key === 'emissao') {
+                const dateStrA = extractISODateString(a.dataEmissao) || extractISODateString((a as any).criadoEm);
+                const dateStrB = extractISODateString(b.dataEmissao) || extractISODateString((b as any).criadoEm);
+                const timeA = dateStrA ? new Date(dateStrA + 'T00:00:00').getTime() : 0;
+                const timeB = dateStrB ? new Date(dateStrB + 'T00:00:00').getTime() : 0;
+                return folhaSortConfig.direction === 'asc' ? timeA - timeB : timeB - timeA;
+            }
+
+            return 0;
+        });
+    }, [filteredFolhas, folhaSortConfig]);
+
     return (
       <div className="space-y-6 animate-in fade-in-30">
-        {/* Seletor de Sub-abas em Pílula (Segmentação de Histórico) */}
-        <div className="bg-white p-2.5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:hidden">
-          <div className="flex items-center p-1 bg-slate-100/90 rounded-xl gap-1 w-full sm:w-auto">
-            <button
-              type="button"
-              id="subtab-historico-faturas"
-              onClick={() => setHistoricoSubTab('faturas')}
-              className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer w-full sm:w-auto ${
-                historicoSubTab === 'faturas'
-                  ? 'bg-white text-emerald-800 shadow-sm border border-slate-200/60'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-              }`}
-            >
-              <span className="text-sm">📑</span>
-              <span>Faturas de Clientes (Receitas)</span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                historicoSubTab === 'faturas'
-                  ? 'bg-emerald-100 text-emerald-800'
-                  : 'bg-slate-200/80 text-slate-600'
-              }`}>
-                {filteredFaturas.length}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              id="subtab-historico-folhas"
-              onClick={() => setHistoricoSubTab('folhas')}
-              className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer w-full sm:w-auto ${
-                historicoSubTab === 'folhas'
-                  ? 'bg-white text-emerald-800 shadow-sm border border-slate-200/60'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-              }`}
-            >
-              <span className="text-sm">👥</span>
-              <span>Folhas de Pagamento (Despesas)</span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                historicoSubTab === 'folhas'
-                  ? 'bg-emerald-100 text-emerald-800'
-                  : 'bg-slate-200/80 text-slate-600'
-              }`}>
-                {filteredFolhas.length}
-              </span>
-            </button>
-          </div>
-
-          <div className="text-xs text-slate-500 font-medium px-2">
-            {historicoSubTab === 'faturas' 
-              ? 'Contas a receber emitidas para pacientes.' 
-              : 'Demonstrativos e repasses dos profissionais.'}
-          </div>
-        </div>
-
-        {historicoSubTab === 'faturas' && (
         <div className="bg-white p-4 border border-gray-100 rounded-xl shadow-sm">
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 mb-4">
             <div className="flex items-center gap-3">
@@ -5444,18 +5361,15 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
             </table>
           </div>
         </div>
-        )}
-
-        {historicoSubTab === 'folhas' && (
         <div className="bg-white p-4 border border-gray-100 rounded-xl shadow-sm">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 mb-4">
+              <div className="flex flex-wrap items-center gap-3">
                 <h2 className="text-md font-black text-slate-800">📜 Histórico de Folhas de Pagamento</h2>
                 <button
                   id="btn-download-resumo-pagamento"
                   onClick={handleExportFolhasPDF}
-                  disabled={isExportingFolhasPDF || filteredFolhas.length === 0}
-                  className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                  disabled={isExportingFolhasPDF || sortedFolhas.length === 0}
+                  className="flex items-center justify-center gap-2 px-3 py-1.5 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50 cursor-pointer text-xs"
                   title="Exportar resumo de pagamento em PDF"
                 >
                   {isExportingFolhasPDF ? 'Gerando PDF...' : 'Baixar Resumo para Pagamento'}
@@ -5472,7 +5386,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
               </div>
               <div className="flex flex-wrap items-center gap-2 print:hidden">
                 {/* Dynamic Real-time Search Input */}
-                <div className="relative w-full sm:w-52">
+                <div className="relative w-full sm:w-44">
                   <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                   <input
                     type="text"
@@ -5491,50 +5405,68 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                     </button>
                   )}
                 </div>
-                <button
-                  onClick={handleExportFolhasPDF}
-                  disabled={isExportingFolhasPDF || filteredFolhas.length === 0}
-                  className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50 cursor-pointer text-xs"
-                  title="Exportar relatório de folhas de pagamento em PDF"
-                >
-                  <Printer className="w-3.5 h-3.5" /> {isExportingFolhasPDF ? 'Gerando PDF...' : 'Imprimir Relatório'}
-                </button>
+
+                {/* Dropdown Profissionais */}
                 <select
                   value={searchFolhaProfissional}
                   onChange={(e) => setSearchFolhaProfissional(e.target.value)}
-                  className="border border-slate-200 rounded-md px-3 py-1 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 w-48 cursor-pointer"
+                  className="border border-slate-200 rounded-md px-2.5 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 w-44 cursor-pointer text-slate-700 font-medium"
                 >
                   <option value="all">Todos os Profissionais</option>
                   {dropdownProfissionais.map(p => (
                     <option key={p.id} value={p.nome}>{p.nome}</option>
                   ))}
                 </select>
-                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-md px-2 py-1 text-xs">
-  <span className="text-slate-500 font-semibold text-[10px] tracking-wider uppercase">DE:</span>
-  <input
-    type="date"
-    value={searchFolhaDataInicio}
-    onChange={(e) => setSearchFolhaDataInicio(e.target.value)}
-    className="bg-transparent border-0 text-slate-700 text-xs focus:ring-0 p-0 cursor-pointer"
-  />
-  <span className="text-slate-500 font-semibold text-[10px] tracking-wider uppercase ml-1">ATÉ:</span>
-  <input
-    type="date"
-    value={searchFolhaDataFim}
-    onChange={(e) => setSearchFolhaDataFim(e.target.value)}
-    className="bg-transparent border-0 text-slate-700 text-xs focus:ring-0 p-0 cursor-pointer"
-  />
-  {(searchFolhaDataInicio || searchFolhaDataFim) && (
-    <button
-      type="button"
-      onClick={() => { setSearchFolhaDataInicio(""); setSearchFolhaDataFim(""); }}
-      className="ml-1 text-slate-400 hover:text-red-500 font-bold px-1 text-xs transition-colors"
-      title="Limpar período"
-    >
-      ✕
-    </button>
-  )}
-</div>
+
+                {/* Filtro por Período de Datas (Data Inicial e Data Final) */}
+                <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200">
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">De:</span>
+                    <input
+                      type="date"
+                      value={searchFolhaDataInicio}
+                      onChange={(e) => setSearchFolhaDataInicio(e.target.value)}
+                      title="Data Inicial"
+                      aria-label="Data Inicial"
+                      className="border border-slate-200 rounded px-1.5 py-0.5 text-xs bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">Até:</span>
+                    <input
+                      type="date"
+                      value={searchFolhaDataFim}
+                      onChange={(e) => setSearchFolhaDataFim(e.target.value)}
+                      title="Data Final"
+                      aria-label="Data Final"
+                      className="border border-slate-200 rounded px-1.5 py-0.5 text-xs bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                    />
+                  </div>
+                  {(searchFolhaDataInicio || searchFolhaDataFim) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchFolhaDataInicio('');
+                        setSearchFolhaDataFim('');
+                      }}
+                      className="flex items-center gap-1 px-1.5 py-0.5 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded transition-colors font-bold cursor-pointer ml-0.5"
+                      title="Limpar filtro por período"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      <span className="text-[10px] hidden sm:inline">Limpar</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Botão Imprimir Relatório */}
+                <button
+                  onClick={handleExportFolhasPDF}
+                  disabled={isExportingFolhasPDF || sortedFolhas.length === 0}
+                  className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50 cursor-pointer text-xs"
+                  title="Exportar relatório de folhas de pagamento em PDF"
+                >
+                  <Printer className="w-3.5 h-3.5" /> {isExportingFolhasPDF ? 'Gerando...' : 'Imprimir Relatório'}
+                </button>
               </div>
             </div>
 
@@ -5546,32 +5478,63 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                               <input 
                                   type="checkbox"
                                   className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                                  checked={filteredFolhas.length > 0 && selectedHistorico.length === filteredFolhas.length}
+                                  checked={sortedFolhas.length > 0 && selectedHistorico.length === sortedFolhas.length}
                                   onChange={(e) => {
                                       if (e.target.checked) {
-                                          setSelectedHistorico(filteredFolhas.map(f => f.id));
+                                          setSelectedHistorico(sortedFolhas.map(f => f.id));
                                       } else {
                                           setSelectedHistorico([]);
                                       }
                                   }}
+                                  title="Selecionar todas as folhas"
                               />
                           </th>
-                          <th className="p-3">Profissional</th>
-                          <th className="p-3">Emissão</th>
-                          <th className="p-3 text-right">Valor Líquido</th>
+                          <th 
+                              className="p-3 cursor-pointer hover:bg-slate-100/70 text-slate-700 hover:text-slate-900 transition-colors select-none group"
+                              onClick={() => handleSortFolha('profissional')}
+                              title="Clique para ordenar por Profissional (A-Z / Z-A)"
+                          >
+                              <div className="flex items-center gap-1.5">
+                                  <span>Profissional</span>
+                                  {folhaSortConfig.key === 'profissional' ? (
+                                      <span className="text-blue-600 font-bold text-xs">
+                                          {folhaSortConfig.direction === 'asc' ? '↑' : '↓'}
+                                      </span>
+                                  ) : (
+                                      <span className="text-slate-300 group-hover:text-slate-400 font-normal text-[11px]">↕</span>
+                                  )}
+                              </div>
+                          </th>
+                          <th 
+                              className="p-3 cursor-pointer hover:bg-slate-100/70 text-slate-700 hover:text-slate-900 transition-colors select-none group"
+                              onClick={() => handleSortFolha('emissao')}
+                              title="Clique para ordenar por Data de Emissão"
+                          >
+                              <div className="flex items-center gap-1.5">
+                                  <span>Emissão</span>
+                                  {folhaSortConfig.key === 'emissao' ? (
+                                      <span className="text-blue-600 font-bold text-xs">
+                                          {folhaSortConfig.direction === 'asc' ? '↑' : '↓'}
+                                      </span>
+                                  ) : (
+                                      <span className="text-slate-300 group-hover:text-slate-400 font-normal text-[11px]">↕</span>
+                                  )}
+                              </div>
+                          </th>
+                          <th className="p-3 text-right font-bold">Valor Líquido</th>
                           <th className="p-3 text-center">Status</th>
                           <th className="p-3 text-center print:hidden">Ações</th>
                       </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                      {filteredFolhas.length === 0 ? (
+                      {sortedFolhas.length === 0 ? (
                           <tr>
                               <td colSpan={6} className="p-8 text-center text-slate-400 font-semibold bg-slate-50/20">
                                   Nenhum registro encontrado para estes filtros.
                               </td>
                           </tr>
                       ) : (
-                          filteredFolhas.map(f => (
+                          sortedFolhas.map(f => (
                               <tr key={f.id}>
                                   <td className="p-3 w-10 print:hidden">
                                       <input 
@@ -5587,9 +5550,9 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                           }}
                                       />
                                   </td>
-                                  <td className="p-3">{f.nomeProfissional}</td>
-                                  <td className="p-3">{new Date(f.dataEmissao).toLocaleDateString('pt-BR')}</td>
-                                  <td className="p-3 text-right font-bold text-slate-700">R$ {f.valorLiquidoReceber.toFixed(2)}</td>
+                                  <td className="p-3 font-semibold text-slate-800 break-words">{f.nomeProfissional}</td>
+                                  <td className="p-3 text-slate-600">{formatDisplayDate(f.dataEmissao)}</td>
+                                  <td className="p-3 text-right font-bold text-slate-700">R$ {Number(f.valorLiquidoReceber || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                   <td className="p-3 text-center"><span className="px-2 py-1 rounded-full text-[10px] bg-blue-100 text-blue-700 font-bold">{f.status}</span></td>
                                   <td className="p-3 text-center print:hidden">
                                       <div className="flex justify-center items-center gap-2">
@@ -5603,10 +5566,23 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                           ))
                       )}
                   </tbody>
+                  {sortedFolhas.length > 0 && (
+                      <tfoot className="border-t-2 border-slate-200 bg-slate-50/80 font-bold text-slate-800">
+                          <tr>
+                              <td className="p-3 print:hidden"></td>
+                              <td colSpan={2} className="p-3 text-slate-700 font-medium">
+                                  Total ({sortedFolhas.length} {sortedFolhas.length === 1 ? 'folha filtrada' : 'folhas filtradas'}):
+                              </td>
+                              <td className="p-3 text-right font-black text-slate-900 text-sm">
+                                  R$ {sortedFolhas.reduce((acc, curr) => acc + (Number(curr.valorLiquidoReceber) || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td colSpan={2} className="p-3"></td>
+                          </tr>
+                      </tfoot>
+                  )}
               </table>
             </div>
         </div>
-        )}
 
         {/* Hidden Printable Report for Histórico de Faturas */}
         <div className="fixed -left-[9999px] top-0 pointer-events-none" aria-hidden="true">
@@ -5706,113 +5682,452 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
         <div className="fixed -left-[9999px] top-0 pointer-events-none" aria-hidden="true">
           <div
             ref={historicoFolhasPrintRef}
-            className="w-[850px] p-6 bg-white text-slate-800 font-sans border border-gray-300"
-            style={{ fontFamily: 'Arial, sans-serif' }}
+            className="w-[960px] p-6 bg-white text-black font-sans"
+            style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
           >
-            {/* Cabeçalho Corporativo de Duas Pontas */}
-            <div className="flex items-center justify-between border-b-2 border-slate-700 pb-3 mb-4">
-              <div className="flex items-center gap-3">
-                {empresa?.logoUrl ? (
-                  <img src={empresa.logoUrl} alt="Logo" className="w-20 h-10 object-contain max-w-full" style={{ imageRendering: '-webkit-optimize-contrast' }} />
-                ) : (
-                  <div className="w-10 h-10 bg-slate-200 border border-slate-300 rounded flex items-center justify-center font-bold text-[10px] text-slate-600">
-                    LOGO
-                  </div>
-                )}
+            {(() => {
+              const listToPrint = selectedHistorico.length > 0 
+                ? sortedFolhas.filter(f => selectedHistorico.includes(f.id)) 
+                : sortedFolhas;
+
+              const firstFolhaItem = listToPrint[0];
+              const numeroFolhaRef = firstFolhaItem
+                ? (firstFolhaItem.numeroFolha || firstFolhaItem.numero || (firstFolhaItem.id ? (firstFolhaItem.id.match(/\d+/) ? firstFolhaItem.id.match(/\d+/)![0].padStart(5, '0') : firstFolhaItem.id.replace(/\D/g, '').slice(-5).padStart(5, '0')) : '00285'))
+                : '00285';
+
+              const dataFechamentoText = searchFolhaDataFim
+                ? formatDisplayDate(searchFolhaDataFim)
+                : (firstFolhaItem?.dataEmissao ? formatDisplayDate(firstFolhaItem.dataEmissao) : new Date().toLocaleDateString('pt-BR'));
+
+              const contratanteText = 'Todos';
+              const jobText = 'Não Informado';
+
+              const totalDebitos = listToPrint.reduce((acc, curr) => acc + (Number(curr.valorTotalDebitos) || 0), 0);
+              const totalLiquido = listToPrint.reduce((acc, curr) => acc + (Number(curr.valorLiquidoReceber) || 0), 0);
+
+              return (
                 <div>
-                  <h1 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
-                    {empresa?.razaoSocial || 'SISTEMA DE GESTÃO DE HOME CARE'}
-                  </h1>
-                  <p className="text-[10px] text-slate-500 font-medium">
-                    CNPJ: {empresa?.cnpj || 'Não informado'} {empresa?.endereco ? `| ${empresa.endereco}` : ''}
-                  </p>
-                </div>
-              </div>
+                  {/* Top Header: Logo on Left + Text on Right */}
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center">
+                      {empresa?.logoUrl ? (
+                        <div className="flex items-center gap-3">
+                          <img 
+                            src={empresa.logoUrl} 
+                            alt="Logo" 
+                            className="h-10 w-auto object-contain max-w-[180px]" 
+                            style={{ imageRendering: '-webkit-optimize-contrast' }} 
+                          />
+                        </div>
+                      ) : (
+                        <VallidareLogo height={38} />
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <span 
+                        className="text-[#475569] text-[13px] font-normal"
+                        style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
+                      >
+                        Vallidare - Gestão e Consultoria em Saúde
+                      </span>
+                    </div>
+                  </div>
 
-              <div className="text-right text-xs">
-                <p className="font-semibold text-slate-700">
-                  Data de Fechamento: <span className="font-bold text-slate-900">{new Date().toLocaleDateString('pt-BR')}</span>
-                </p>
-                <p className="text-[10px] text-slate-500 font-semibold mt-0.5">
-                  Total de Registros: <span className="font-bold text-slate-800">{(selectedHistorico.length > 0 ? filteredFolhas.filter(f => selectedHistorico.includes(f.id)) : filteredFolhas).length} folhas</span>
-                </p>
-              </div>
-            </div>
+                  {/* Title: Fechamento da Folha */}
+                  <div className="text-left mb-1.5">
+                    <h1 
+                      className="text-[17px] font-bold text-[#0f172a] tracking-tight"
+                      style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
+                    >
+                      Fechamento da Folha
+                    </h1>
+                  </div>
 
-            {/* Sub-cabeçalho Informativo */}
-            <div className="mb-3 flex justify-between items-center text-xs">
-              <h2 className="text-xs font-bold text-slate-800 uppercase tracking-tight">
-                RELATÓRIO CORPORATIVO DE FOLHA DE PAGAMENTO DE PROFISSIONAIS
-              </h2>
-              <span className="text-[10px] text-slate-500 italic">
-                {searchFolhaProfissional && searchFolhaProfissional !== 'all' ? `Profissional: ${searchFolhaProfissional}` : 'Todos os Profissionais'}
-              </span>
-            </div>
+                  {/* Divider Line */}
+                  <div className="w-full border-b border-[#cbd5e1] mb-2.5" />
 
-            {/* Tabela Corporativa Densa */}
-            <table className="w-full text-[9px] text-left border-collapse border border-gray-300 mb-4">
-              <thead>
-                <tr className="bg-gray-200 text-slate-900 uppercase font-bold text-[10px]">
-                  <th className="px-2 py-1 border border-gray-300">Profissional</th>
-                  <th className="px-2 py-1 border border-gray-300">DATA EMISSÃO</th>
-                  <th className="px-2 py-1 border border-gray-300">PERÍODO</th>
-                  <th className="px-2 py-1 border border-gray-300 text-center">Status</th>
-                  <th className="px-2 py-1 border border-gray-300 text-right">Débitos</th>
-                  <th className="px-2 py-1 border border-gray-300 text-right">VALOR LÍQUIDO</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(selectedHistorico.length > 0 
-                  ? filteredFolhas.filter(f => selectedHistorico.includes(f.id)) 
-                  : filteredFolhas).map((f, idx) => {
-                    let mesRef = '';
-                    if (f.periodoApurado && f.periodoApurado.inicio) {
-                      const parts = f.periodoApurado.inicio.split('-');
-                      if (parts.length >= 2) {
-                        mesRef = `${parts[1]}/${parts[0]}`;
-                      }
-                    }
+                  {/* Informações de Referência (Duas Colunas) */}
+                  <div 
+                    className="flex items-center justify-between text-[11px] mb-3 text-black"
+                    style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
+                  >
+                    <div className="text-left">
+                      <span className="font-bold">Contratante :</span>{' '}
+                      <span>{contratanteText}</span>{' '}
+                      <span className="font-bold ml-2">JOB:</span>{' '}
+                      <span>{jobText}</span>
+                    </div>
+                    <div className="text-right">
+                      <span>Referente a Fatura: , Folha: </span>
+                      <span className="font-semibold">{numeroFolhaRef}</span>
+                      <span> com fechamento em : </span>
+                      <span className="font-semibold">{dataFechamentoText}</span>
+                    </div>
+                  </div>
 
-                    const valorDebitos = Number(f.valorTotalDebitos) || 0;
-                    const valorLiquido = Number(f.valorLiquidoReceber) || 0;
-
-                    return (
-                      <tr key={f.id || idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/70'}>
-                        <td className="px-2 py-1 border border-gray-300 font-bold text-slate-800">{f.nomeProfissional || 'Profissional'}</td>
-                        <td className="px-2 py-1 border border-gray-300 text-slate-700 whitespace-nowrap">
-                          {f.dataEmissao ? new Date(f.dataEmissao).toLocaleDateString('pt-BR') : '-'}
-                        </td>
-                        <td className="px-2 py-1 border border-gray-300 font-semibold text-slate-700 whitespace-nowrap">{mesRef || 'Referência Atual'}</td>
-                        <td className="px-2 py-1 border border-gray-300 text-center font-bold text-slate-700">{f.status || 'Concluída'}</td>
-                        <td className="px-2 py-1 border border-gray-300 text-right font-semibold text-red-600 whitespace-nowrap">
-                          {valorDebitos > 0 ? `- R$ ${valorDebitos.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'R$ 0,00'}
-                        </td>
-                        <td className="px-2 py-1 border border-gray-300 text-right font-bold text-green-700 whitespace-nowrap">
-                          R$ {valorLiquido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
+                  {/* Tabela do Relatório com Estilo simulacao_novo_layout.png */}
+                  <table 
+                    className="w-full text-[7.5pt] text-left border-collapse"
+                    style={{ 
+                      tableLayout: 'fixed',
+                      fontFamily: 'Arial, Helvetica, sans-serif',
+                      border: 'none',
+                      borderCollapse: 'collapse'
+                    }}
+                  >
+                    <thead>
+                      <tr 
+                        style={{ 
+                          backgroundColor: '#f1f5f9',
+                          borderTop: '1px dotted #94a3b8',
+                          borderBottom: '1px dotted #94a3b8',
+                          height: '24px'
+                        }}
+                      >
+                        <th 
+                          className="font-bold text-[#334155]"
+                          style={{ 
+                            width: '8%', 
+                            textAlign: 'left', 
+                            padding: '3px 4px',
+                            borderLeft: 'none',
+                            borderRight: 'none',
+                            borderTop: 'none',
+                            borderBottom: 'none'
+                          }}
+                        >
+                          Número
+                        </th>
+                        <th 
+                          className="font-bold text-[#334155]"
+                          style={{ 
+                            width: '38%', 
+                            textAlign: 'left', 
+                            padding: '3px 4px',
+                            borderLeft: 'none',
+                            borderRight: 'none',
+                            borderTop: 'none',
+                            borderBottom: 'none'
+                          }}
+                        >
+                          Profissional
+                        </th>
+                        <th 
+                          className="font-bold text-[#334155]"
+                          style={{ 
+                            width: '12%', 
+                            textAlign: 'center', 
+                            padding: '3px 4px',
+                            borderLeft: 'none',
+                            borderRight: 'none',
+                            borderTop: 'none',
+                            borderBottom: 'none'
+                          }}
+                        >
+                          Dta.Emissão
+                        </th>
+                        <th 
+                          className="font-bold text-[#334155]"
+                          style={{ 
+                            width: '10%', 
+                            textAlign: 'center', 
+                            padding: '3px 4px',
+                            borderLeft: 'none',
+                            borderRight: 'none',
+                            borderTop: 'none',
+                            borderBottom: 'none'
+                          }}
+                        >
+                          Período
+                        </th>
+                        <th 
+                          className="font-bold text-[#334155]"
+                          style={{ 
+                            width: '11%', 
+                            textAlign: 'right', 
+                            padding: '3px 4px',
+                            borderLeft: 'none',
+                            borderRight: 'none',
+                            borderTop: 'none',
+                            borderBottom: 'none'
+                          }}
+                        >
+                          Débitos
+                        </th>
+                        <th 
+                          className="font-bold text-[#334155]"
+                          style={{ 
+                            width: '12%', 
+                            textAlign: 'right', 
+                            padding: '3px 4px',
+                            borderLeft: 'none',
+                            borderRight: 'none',
+                            borderTop: 'none',
+                            borderBottom: 'none'
+                          }}
+                        >
+                          Valor Líquido
+                        </th>
+                        <th 
+                          className="font-bold text-[#334155]"
+                          style={{ 
+                            width: '9%', 
+                            textAlign: 'center', 
+                            padding: '3px 4px',
+                            borderLeft: 'none',
+                            borderRight: 'none',
+                            borderTop: 'none',
+                            borderBottom: 'none'
+                          }}
+                        >
+                          Status
+                        </th>
                       </tr>
-                    );
-                })}
-              </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                      {listToPrint.map((f, idx) => {
+                        let mesRef = '';
+                        if (f.periodoApurado && f.periodoApurado.inicio) {
+                          const parts = f.periodoApurado.inicio.split('-');
+                          if (parts.length >= 2) {
+                            mesRef = `${parts[1]}/${parts[0]}`;
+                          }
+                        }
+                        if (!mesRef && f.dataEmissao) {
+                          const parts = f.dataEmissao.split('-');
+                          if (parts.length >= 2) {
+                            mesRef = `${parts[1]}/${parts[0]}`;
+                          }
+                        }
 
-            {/* Sumário Total */}
-            <div className="flex justify-end pt-1">
-              <div className="w-72 bg-gray-50 border border-gray-300 rounded p-2.5 text-right shadow-sm text-xs">
-                <span className="text-[10px] font-bold uppercase text-slate-600 block tracking-wider">
-                  Soma Total da Folha de Pagamento
-                </span>
-                <span className="text-base font-black text-green-700 block mt-0.5">
-                  R$ {(selectedHistorico.length > 0 
-                    ? filteredFolhas.filter(f => selectedHistorico.includes(f.id)) 
-                    : filteredFolhas).reduce((acc, curr) => acc + (Number(curr.valorLiquidoReceber) || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              </div>
-            </div>
+                        const valorDebitos = Number(f.valorTotalDebitos) || 0;
+                        const valorLiquido = Number(f.valorLiquidoReceber) || 0;
 
-            <div className="mt-6 pt-2 border-t border-gray-300 text-center text-[9px] text-slate-400 font-medium">
-              Relatório Corporativo de Folha de Pagamento emitido pelo Sistema de Gestão de Home Care
-            </div>
+                        // Número do item formatado em 5 dígitos
+                        const numeroItem = f.numeroFolha || f.numero || (f.id ? (f.id.match(/\d+/) ? f.id.match(/\d+/)![0].padStart(5, '0') : f.id.replace(/\D/g, '').slice(-5).padStart(5, '0')) : String(idx + 1).padStart(5, '0'));
+
+                        return (
+                          <tr 
+                            key={f.id || idx} 
+                            style={{ 
+                              borderBottom: '1px dotted #cbd5e1',
+                              backgroundColor: '#ffffff',
+                              height: '21px'
+                            }}
+                          >
+                            {/* Número - Verde */}
+                            <td 
+                              style={{ 
+                                padding: '3px 4px',
+                                textAlign: 'left',
+                                borderLeft: 'none',
+                                borderRight: 'none',
+                                borderTop: 'none',
+                                borderBottom: 'none',
+                                color: '#15803d',
+                                fontWeight: '600'
+                              }}
+                            >
+                              {numeroItem}
+                            </td>
+
+                            {/* Profissional - Preto, linha única com truncamento elegante */}
+                            <td 
+                              style={{ 
+                                padding: '3px 4px',
+                                textAlign: 'left',
+                                borderLeft: 'none',
+                                borderRight: 'none',
+                                borderTop: 'none',
+                                borderBottom: 'none'
+                              }}
+                            >
+                              <span 
+                                title={f.nomeProfissional}
+                                style={{ 
+                                  color: '#000000',
+                                  fontWeight: '500',
+                                  fontSize: '7.5pt',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  display: 'block',
+                                  maxWidth: '350px'
+                                }}
+                              >
+                                {f.nomeProfissional || 'Profissional'}
+                              </span>
+                            </td>
+
+                            {/* Dta.Emissão - Verde */}
+                            <td 
+                              style={{ 
+                                padding: '3px 4px',
+                                textAlign: 'center',
+                                borderLeft: 'none',
+                                borderRight: 'none',
+                                borderTop: 'none',
+                                borderBottom: 'none',
+                                color: '#15803d',
+                                fontWeight: '500',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              {f.dataEmissao ? formatDisplayDate(f.dataEmissao) : '-'}
+                            </td>
+
+                            {/* Período - Verde */}
+                            <td 
+                              style={{ 
+                                padding: '3px 4px',
+                                textAlign: 'center',
+                                borderLeft: 'none',
+                                borderRight: 'none',
+                                borderTop: 'none',
+                                borderBottom: 'none',
+                                color: '#15803d',
+                                fontWeight: '500',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              {mesRef || '08/2026'}
+                            </td>
+
+                            {/* Débitos - Vermelho se > 0, Verde/Neutro se 0,00 */}
+                            <td 
+                              style={{ 
+                                padding: '3px 4px',
+                                textAlign: 'right',
+                                borderLeft: 'none',
+                                borderRight: 'none',
+                                borderTop: 'none',
+                                borderBottom: 'none',
+                                color: valorDebitos > 0 ? '#dc2626' : '#15803d',
+                                fontWeight: '600',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              {valorDebitos > 0 
+                                ? `- R$ ${valorDebitos.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
+                                : 'R$ 0,00'}
+                            </td>
+
+                            {/* Valor Líquido - Verde se >= 0, Vermelho se negativo */}
+                            <td 
+                              style={{ 
+                                padding: '3px 4px',
+                                textAlign: 'right',
+                                borderLeft: 'none',
+                                borderRight: 'none',
+                                borderTop: 'none',
+                                borderBottom: 'none',
+                                color: valorLiquido >= 0 ? '#15803d' : '#dc2626',
+                                fontWeight: '700',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              R$ {valorLiquido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+
+                            {/* Status - Verde para 'Fechada' */}
+                            <td 
+                              style={{ 
+                                padding: '3px 4px',
+                                textAlign: 'center',
+                                borderLeft: 'none',
+                                borderRight: 'none',
+                                borderTop: 'none',
+                                borderBottom: 'none',
+                                color: f.status === 'Pendente' ? '#b45309' : '#15803d',
+                                fontWeight: '600',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              {f.status || 'Fechada'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr 
+                        style={{ 
+                          borderTop: '1px dotted #94a3b8',
+                          borderBottom: '1px dotted #94a3b8',
+                          backgroundColor: '#f8fafc',
+                          height: '24px'
+                        }}
+                      >
+                        <td 
+                          colSpan={2}
+                          style={{ 
+                            padding: '4px',
+                            textAlign: 'left',
+                            fontWeight: '700',
+                            color: '#1e293b',
+                            borderLeft: 'none',
+                            borderRight: 'none',
+                            borderTop: 'none',
+                            borderBottom: 'none'
+                          }}
+                        >
+                          Total ({listToPrint.length} {listToPrint.length === 1 ? 'folha' : 'folhas'}):
+                        </td>
+                        <td 
+                          colSpan={2}
+                          style={{ 
+                            padding: '4px',
+                            borderLeft: 'none',
+                            borderRight: 'none',
+                            borderTop: 'none',
+                            borderBottom: 'none'
+                          }}
+                        />
+                        <td 
+                          style={{ 
+                            padding: '4px',
+                            textAlign: 'right',
+                            fontWeight: '700',
+                            color: totalDebitos > 0 ? '#dc2626' : '#15803d',
+                            borderLeft: 'none',
+                            borderRight: 'none',
+                            borderTop: 'none',
+                            borderBottom: 'none',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          {totalDebitos > 0 ? `- R$ ${totalDebitos.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'R$ 0,00'}
+                        </td>
+                        <td 
+                          style={{ 
+                            padding: '4px',
+                            textAlign: 'right',
+                            fontWeight: '800',
+                            color: totalLiquido >= 0 ? '#15803d' : '#dc2626',
+                            borderLeft: 'none',
+                            borderRight: 'none',
+                            borderTop: 'none',
+                            borderBottom: 'none',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          R$ {totalLiquido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td 
+                          style={{ 
+                            padding: '4px',
+                            borderLeft: 'none',
+                            borderRight: 'none',
+                            borderTop: 'none',
+                            borderBottom: 'none'
+                          }}
+                        />
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
         </div>
         {viewDoc && (() => {

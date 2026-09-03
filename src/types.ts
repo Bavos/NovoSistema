@@ -283,6 +283,8 @@ export interface FaturaPaciente {
 
 export interface FolhaPagamento {
   id: string;
+  numeroFolha?: string | number;
+  numero?: string | number;
   idProfissional: string;
   nomeProfissional: string;
   dataEmissao: string;
