@@ -61,6 +61,7 @@ import { app } from "../lib/firebase";
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell } from 'docx';
 import React, { useState, useRef } from 'react';
 import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { sanitizeClonedDocForHtml2Canvas, exportCanvasToA4PDF } from '../lib/html2canvasSanitizer';
 import {
   Briefcase,
@@ -4691,36 +4692,284 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
         setIsExportingFolhasPDF(true);
         const toastId = toast.loading("Gerando PDF do resumo de pagamentos...");
         try {
-            const printElement = historicoFolhasPrintRef.current;
-            if (!printElement) throw new Error("Elemento de impressão de folhas não encontrado.");
-
-            const html2canvasModule = await import('html2canvas-pro');
-            const html2canvas = html2canvasModule.default || html2canvasModule;
-
-            const canvas = await (html2canvas as any)(printElement, {
-                backgroundColor: '#ffffff',
-                scale: 2,
-                useCORS: true,
-                allowTaint: true,
-                logging: false,
-                onclone: (clonedDoc: any) => {
-                    try {
-                        sanitizeClonedDocForHtml2Canvas(clonedDoc, '#ffffff', '#1a3c2e');
-                        if (clonedDoc.body) {
-                            clonedDoc.body.style.width = '1000px';
-                        }
-                        const printHiddenEls = clonedDoc.querySelectorAll('.print\\:hidden');
-                        printHiddenEls.forEach((el: any) => {
-                            (el as HTMLElement).style.display = 'none';
-                        });
-                    } catch (e) {
-                        console.warn("Aviso na sanitização do clone:", e);
-                    }
-                }
+            const doc = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: 'a4',
             });
 
-            exportCanvasToA4PDF(canvas, `Resumo_Folhas_Pagamento_${new Date().toISOString().slice(0, 10)}.pdf`);
+            // 1. Logotipo Corporativo (Empresa ou Vallidare)
+            let logoDataUrl = '';
+            if (empresa?.logoUrl) {
+                try {
+                    logoDataUrl = await new Promise<string>((resolve) => {
+                        const img = new Image();
+                        img.crossOrigin = 'anonymous';
+                        img.onload = () => {
+                            try {
+                                const canvas = document.createElement('canvas');
+                                canvas.width = img.naturalWidth || 300;
+                                canvas.height = img.naturalHeight || 80;
+                                const ctx = canvas.getContext('2d');
+                                if (ctx) {
+                                    ctx.drawImage(img, 0, 0);
+                                    resolve(canvas.toDataURL('image/png'));
+                                } else {
+                                    resolve('');
+                                }
+                            } catch {
+                                resolve('');
+                            }
+                        };
+                        img.onerror = () => resolve('');
+                        img.src = empresa.logoUrl!;
+                    });
+                } catch {
+                    logoDataUrl = '';
+                }
+            }
 
+            if (!logoDataUrl) {
+                try {
+                    logoDataUrl = await new Promise<string>((resolve) => {
+                        const svgString = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="90" viewBox="0 0 400 90">
+                          <defs>
+                            <linearGradient id="valGrad1" x1="0%" y1="100%" x2="100%" y2="0%">
+                              <stop offset="0%" stop-color="#0284c7" />
+                              <stop offset="100%" stop-color="#38bdf8" />
+                            </linearGradient>
+                            <linearGradient id="valGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+                              <stop offset="0%" stop-color="#38bdf8" />
+                              <stop offset="100%" stop-color="#67e8f9" />
+                            </linearGradient>
+                            <linearGradient id="valGrad3" x1="0%" y1="100%" x2="100%" y2="0%">
+                              <stop offset="0%" stop-color="#0f766e" />
+                              <stop offset="100%" stop-color="#14b8a6" />
+                            </linearGradient>
+                            <linearGradient id="valGrad4" x1="100%" y1="0%" x2="0%" y2="100%">
+                              <stop offset="0%" stop-color="#7dd3fc" />
+                              <stop offset="100%" stop-color="#bae6fd" />
+                            </linearGradient>
+                          </defs>
+                          <polygon points="10,80 58,15 72,32 30,80" fill="url(#valGrad4)" opacity="0.9" />
+                          <polygon points="30,80 72,32 98,48 48,80" fill="url(#valGrad2)" />
+                          <polygon points="48,80 98,48 114,64 68,80" fill="url(#valGrad1)" />
+                          <polygon points="68,80 114,64 118,78 84,80" fill="url(#valGrad3)" />
+                          <text x="130" y="52" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="900" fill="#1e293b" letter-spacing="2">VALLIDARE</text>
+                          <text x="130" y="74" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="600" fill="#64748b" letter-spacing="2.5">GESTÃO E CONSULTORIA EM SAÚDE</text>
+                        </svg>`;
+                        const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+                        const url = URL.createObjectURL(blob);
+                        const img = new Image();
+                        img.onload = () => {
+                            const canvas = document.createElement('canvas');
+                            canvas.width = 800;
+                            canvas.height = 180;
+                            const ctx = canvas.getContext('2d');
+                            if (ctx) {
+                                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                                resolve(canvas.toDataURL('image/png'));
+                            } else {
+                                resolve('');
+                            }
+                            URL.revokeObjectURL(url);
+                        };
+                        img.onerror = () => {
+                            URL.revokeObjectURL(url);
+                            resolve('');
+                        };
+                        img.src = url;
+                    });
+                } catch {
+                    logoDataUrl = '';
+                }
+            }
+
+            // 2. Cabeçalho Superior
+            if (logoDataUrl) {
+                try {
+                    doc.addImage(logoDataUrl, 'PNG', 14, 10, 48, 11, undefined, 'FAST');
+                } catch (e) {
+                    console.warn('Aviso ao desenhar logotipo no PDF:', e);
+                }
+            }
+
+            // Nome da empresa no topo à direita
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.setTextColor(100, 116, 139);
+            doc.text(empresa?.razaoSocial || 'Vallidare - Gestão e Consultoria em Saúde', 196, 17, { align: 'right' });
+
+            // Título: Fechamento da Folha
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(14);
+            doc.setTextColor(15, 23, 42);
+            doc.text('Fechamento da Folha', 14, 28);
+
+            // Linha divisória limpa
+            doc.setDrawColor(203, 213, 225);
+            doc.setLineWidth(0.4);
+            doc.line(14, 31, 196, 31);
+
+            // 3. Informações de Referência (Contratante, JOB, Fatura, Folha, Fechamento)
+            const firstFolhaItem = listToExport[0];
+            const numeroFolhaRef = firstFolhaItem
+                ? (firstFolhaItem.numeroFolha || firstFolhaItem.numero || (firstFolhaItem.id ? (firstFolhaItem.id.match(/\d+/) ? firstFolhaItem.id.match(/\d+/)![0].padStart(5, '0') : firstFolhaItem.id.replace(/\D/g, '').slice(-5).padStart(5, '0')) : '00285'))
+                : '00285';
+
+            const dataFechamentoText = searchFolhaDataFim
+                ? formatDisplayDate(searchFolhaDataFim)
+                : (firstFolhaItem?.dataEmissao ? formatDisplayDate(firstFolhaItem.dataEmissao) : new Date().toLocaleDateString('pt-BR'));
+
+            const contratanteText = 'Todos';
+            const jobText = 'Não Informado';
+
+            doc.setFontSize(8.5);
+            doc.setTextColor(15, 23, 42);
+
+            // Esquerda: Contratante e JOB
+            doc.setFont('helvetica', 'bold');
+            doc.text('Contratante : ', 14, 37);
+            const wContr = doc.getTextWidth('Contratante : ');
+            doc.setFont('helvetica', 'normal');
+            doc.text(contratanteText + '  ', 14 + wContr, 37);
+            const wTodos = doc.getTextWidth(contratanteText + '  ');
+            doc.setFont('helvetica', 'bold');
+            doc.text('JOB: ', 14 + wContr + wTodos, 37);
+            const wJob = doc.getTextWidth('JOB: ');
+            doc.setFont('helvetica', 'normal');
+            doc.text(jobText, 14 + wContr + wTodos + wJob, 37);
+
+            // Direita: Referência à fatura/folha e data de fechamento
+            const rightText = `Referente a Fatura: , Folha: ${numeroFolhaRef} com fechamento em: ${dataFechamentoText}`;
+            doc.setFont('helvetica', 'normal');
+            doc.text(rightText, 196, 37, { align: 'right' });
+
+            // 4. Preparação dos Dados da Tabela
+            const totalDebitos = listToExport.reduce((acc, curr) => acc + (Number(curr.valorTotalDebitos) || 0), 0);
+            const totalLiquido = listToExport.reduce((acc, curr) => acc + (Number(curr.valorLiquidoReceber) || 0), 0);
+
+            const linhasDados = listToExport.map((f) => {
+                const profissional = f.nomeProfissional || 'Profissional';
+                const dataEmissao = f.dataEmissao ? formatDisplayDate(f.dataEmissao) : '-';
+
+                let mesRef = '';
+                if (f.periodoApurado && f.periodoApurado.inicio) {
+                    const parts = f.periodoApurado.inicio.split('-');
+                    if (parts.length >= 2) {
+                        mesRef = `${parts[1]}/${parts[0]}`;
+                    }
+                }
+                if (!mesRef && f.dataEmissao) {
+                    const parts = f.dataEmissao.split('-');
+                    if (parts.length >= 2) {
+                        mesRef = `${parts[1]}/${parts[0]}`;
+                    }
+                }
+                const periodo = mesRef || '-';
+                const status = f.status || 'Fechada';
+
+                const valorDebitos = Number(f.valorTotalDebitos) || 0;
+                const debitosStr = valorDebitos > 0 
+                    ? `- R$ ${valorDebitos.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
+                    : 'R$ 0,00';
+
+                const valorLiquido = Number(f.valorLiquidoReceber) || 0;
+                const liquidoStr = `R$ ${valorLiquido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+                return [profissional, dataEmissao, periodo, status, debitosStr, liquidoStr];
+            });
+
+            // 5. Renderização da Tabela Corporativa Limpa via autoTable
+            autoTable(doc, {
+                startY: 42,
+                head: [['Profissional', 'Data Emissão', 'Período', 'Status', 'Débitos', 'Valor Líquido']],
+                body: linhasDados,
+                theme: 'plain', // Sem caixas pesadas
+                styles: {
+                    font: 'helvetica',
+                    fontSize: 9,
+                    cellPadding: { top: 6, bottom: 6, left: 4, right: 4 },
+                    textColor: [30, 41, 59],
+                    lineColor: [226, 232, 240],
+                    lineWidth: { bottom: 0.5 }, // Linha horizontal sutil, sem bordas verticais
+                },
+                headStyles: {
+                    fillColor: [248, 250, 252],
+                    textColor: [71, 85, 105],
+                    fontStyle: 'bold',
+                    fontSize: 9,
+                    lineWidth: { bottom: 1 },
+                    lineColor: [203, 213, 225],
+                },
+                columnStyles: {
+                    0: { cellWidth: 'auto', fontStyle: 'bold' }, // Nome profissional com espaço livre
+                    1: { cellWidth: 25, halign: 'center' },
+                    2: { cellWidth: 20, halign: 'center' },
+                    3: { cellWidth: 22, halign: 'center' },
+                    4: { cellWidth: 25, halign: 'right', textColor: [220, 38, 38] }, // Débitos vermelho
+                    5: { cellWidth: 28, halign: 'right', fontStyle: 'bold', textColor: [22, 101, 52] }, // Líquido verde
+                },
+                foot: [[
+                    `Total (${listToExport.length} ${listToExport.length === 1 ? 'folha' : 'folhas'}):`,
+                    '',
+                    '',
+                    '',
+                    totalDebitos > 0 ? `- R$ ${totalDebitos.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'R$ 0,00',
+                    `R$ ${totalLiquido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                ]],
+                footStyles: {
+                    fillColor: [248, 250, 252],
+                    textColor: [30, 41, 59],
+                    fontStyle: 'bold',
+                    fontSize: 9,
+                    lineWidth: { top: 1, bottom: 1 },
+                    lineColor: [203, 213, 225],
+                },
+                didParseCell: (data) => {
+                    if (data.section === 'body') {
+                        if (data.column.index === 3) {
+                            const val = String(data.cell.raw || '').toLowerCase();
+                            if (val.includes('pendente')) {
+                                data.cell.styles.textColor = [180, 83, 9];
+                            } else {
+                                data.cell.styles.textColor = [22, 101, 52];
+                            }
+                        }
+                        if (data.column.index === 4) {
+                            const raw = String(data.cell.raw || '');
+                            if (raw === 'R$ 0,00') {
+                                data.cell.styles.textColor = [100, 116, 139];
+                            }
+                        }
+                    }
+                    if (data.section === 'foot') {
+                        if (data.column.index === 4) {
+                            data.cell.styles.halign = 'right';
+                            data.cell.styles.textColor = totalDebitos > 0 ? [220, 38, 38] : [100, 116, 139];
+                        }
+                        if (data.column.index === 5) {
+                            data.cell.styles.halign = 'right';
+                            data.cell.styles.textColor = [22, 101, 52];
+                        }
+                    }
+                },
+                margin: { left: 14, right: 14, top: 14, bottom: 14 }
+            });
+
+            // 6. Rodapé em Todas as Páginas
+            const totalPages = doc.getNumberOfPages();
+            for (let i = 1; i <= totalPages; i++) {
+                doc.setPage(i);
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(8);
+                doc.setTextColor(148, 163, 184);
+                doc.text(`Página ${i} de ${totalPages}`, 196, 290, { align: 'right' });
+                doc.text('Vallidare - Gestão e Consultoria em Saúde', 14, 290);
+            }
+
+            // 7. Download do Arquivo PDF
+            doc.save(`Resumo_Folhas_Pagamento_${new Date().toISOString().slice(0, 10)}.pdf`);
             toast.success("Resumo de pagamento baixado em PDF com sucesso!", { id: toastId });
         } catch (err: any) {
             console.error("Erro ao gerar PDF do resumo de pagamentos:", err);
