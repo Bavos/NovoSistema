@@ -64,6 +64,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { sanitizeClonedDocForHtml2Canvas, exportCanvasToA4PDF } from '../lib/html2canvasSanitizer';
 import { exportFaturaPDF } from '../utils/faturaPdfGenerator';
+import { exportFolhaPDF } from '../utils/folhaPdfGenerator';
 import {
   Briefcase,
   Calendar,
@@ -5091,9 +5092,28 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
         }
     };
 
+    const handleExportFolhaIndividualPDF = async (folhaData: any) => {
+        if (!folhaData) return;
+        setLoadingExport(true);
+        const toastId = toast.loading("Gerando PDF oficial da folha de pagamento...");
+        try {
+            await exportFolhaPDF(folhaData, empresa);
+            toast.success("Folha de pagamento em PDF gerada com sucesso!", { id: toastId });
+        } catch (err: any) {
+            console.error("Erro ao gerar PDF da folha:", err);
+            toast.error("Erro ao gerar PDF da folha.", { id: toastId });
+        } finally {
+            setLoadingExport(false);
+        }
+    };
+
     const handleDownloadWordFromCanvas = async (docData: any, type: 'fatura' | 'folha') => {
         if (type === 'fatura') {
             await handleExportFaturaPDF(docData);
+            return;
+        }
+        if (type === 'folha') {
+            await handleExportFolhaIndividualPDF(docData);
             return;
         }
         setLoadingExport(true);
@@ -5993,11 +6013,30 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                   <td className="p-3 text-right font-bold text-slate-700">R$ {Number(f.valorLiquidoReceber || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                   <td className="p-3 text-center"><span className="px-2 py-1 rounded-full text-[10px] bg-blue-100 text-blue-700 font-bold">{f.status}</span></td>
                                   <td className="p-3 text-center print:hidden">
-                                      <div className="flex justify-center items-center gap-2">
-                                          <button className="text-blue-600 hover:text-blue-800 cursor-pointer" onClick={() => setViewDoc({ data: f, type: 'folha' })}>👁️</button>
-                                          <button className="text-red-600 hover:text-red-800 cursor-pointer" onClick={() => {
-                                              setDeleteConfirm({ isOpen: true, id: f.id, type: 'folha' });
-                                          }}>🗑️</button>
+                                      <div className="flex justify-center items-center gap-1.5">
+                                          <button 
+                                              className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors cursor-pointer" 
+                                              title="Visualizar Folha"
+                                              onClick={() => setViewDoc({ data: f, type: 'folha' })}
+                                          >
+                                              <Eye className="w-4 h-4" />
+                                          </button>
+                                          <button 
+                                              className="p-1.5 text-teal-600 hover:text-teal-800 hover:bg-teal-50 rounded transition-colors cursor-pointer" 
+                                              title="Baixar Folha (PDF)"
+                                              onClick={() => handleExportFolhaIndividualPDF(f)}
+                                          >
+                                              <FileText className="w-4 h-4" />
+                                          </button>
+                                          <button 
+                                              className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors cursor-pointer" 
+                                              title="Excluir Folha"
+                                              onClick={() => {
+                                                  setDeleteConfirm({ isOpen: true, id: f.id, type: 'folha' });
+                                              }}
+                                          >
+                                              <Trash2 className="w-4 h-4" />
+                                          </button>
                                       </div>
                                   </td>
                               </tr>

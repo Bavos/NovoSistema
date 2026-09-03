@@ -1826,7 +1826,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
               <rect width="100%" height="100%" fill="url(#heart-leaf-watermark)" />
             </svg>
 
-            {/* Arcos Decorativos Dourados (Top & Bottom Metallic Arches - Perfectly Framing Photo and Text) */}
+            {/* Arcos Decorativos Dourados (Top & Bottom Metallic Arches - Framing Photo and Text with Clean Margins) */}
             <svg className="absolute inset-0 w-full h-full pointer-events-none z-0" viewBox="0 0 580 380" fill="none" xmlns="http://www.w3.org/2000/svg">
               <defs>
                 <linearGradient id="badge-gold-arc-grad" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -1837,10 +1837,10 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                   <stop offset="100%" stopColor="#C5A059" stopOpacity="0.08" />
                 </linearGradient>
               </defs>
-              {/* Arco Superior Reposicionado (Descido para abraçar a foto e harmonizar o espaço negativo) */}
-              <path d="M 45 85 Q 290 35 535 85 Q 290 49 45 85 Z" fill="url(#badge-gold-arc-grad)" />
-              {/* Arco Inferior Sweeping Low Below Details (Subido 2 pontos) */}
-              <path d="M 45 310 Q 290 365 535 310 Q 290 351 45 310 Z" fill="url(#badge-gold-arc-grad)" />
+              {/* Arco Superior Reposicionado: Curvatura elevada próxima à linha do logotipo da Vallidare, garantindo margem limpa e respiro visual antes do topo da foto */}
+              <path d="M 45 42 Q 290 14 535 42 Q 290 22 45 42 Z" fill="url(#badge-gold-arc-grad)" />
+              {/* Arco Inferior Reposicionado: Curvatura estritamente abaixo dos dados do profissional e logo acima do rodapé, atuando como divisor sutil */}
+              <path d="M 45 315 Q 290 328 535 315 Q 290 322 45 315 Z" fill="url(#badge-gold-arc-grad)" />
             </svg>
 
             {/* Logotipo Principal no Canto Superior Esquerdo (bg-transparent + mix-blend-multiply na img) */}
@@ -1866,9 +1866,9 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
             </div>
 
             {/* Layout Central: Foto Centralizada com Moldura Dourada Fina e Dados Dinâmicos - Alinhamento Óptico Perfeito entre os Arcos */}
-            <div className="z-10 flex flex-col items-center justify-center my-auto w-full pt-3 pb-1">
+            <div className="relative z-10 flex flex-col items-center justify-center my-auto w-full pt-1 pb-1">
               {/* Foto do Profissional com Moldura Dourada Fina e Cantos Arredondados */}
-              <div className="w-28 h-36 border-[2.5px] border-[#C5A059] rounded-2xl overflow-hidden bg-slate-50 shadow-md flex items-center justify-center shrink-0">
+              <div className="relative z-10 w-28 h-36 border-[2.5px] border-[#C5A059] rounded-2xl overflow-hidden bg-slate-50 shadow-md flex items-center justify-center shrink-0">
                 {fotoBase64 || profData?.foto ? (
                   <img 
                     src={fotoBase64 || profData.foto} 
@@ -1887,7 +1887,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
               </div>
 
               {/* Informações Organizadas do Profissional (Abaixo da Foto - Flutuando perfeitamente no centro) */}
-              <div className="mt-2.5 text-center space-y-0.5">
+              <div className="relative z-10 my-2 text-center space-y-0.5">
                 <div className="text-sm md:text-base text-slate-800 leading-tight">
                   <span className="font-normal text-slate-700">Nome: </span>
                   <span className="font-bold text-slate-900">{profData?.nome || "Profissional não identificado"}</span>

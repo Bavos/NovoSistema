@@ -41,16 +41,16 @@ export const Logo: React.FC<LogoProps> = ({ className = 'w-full h-auto', style }
         </linearGradient>
       </defs>
 
-      {/* 1. Upper Gold Arcs */}
+      {/* 1. Upper Gold Arcs - Reposicionados com folga e respiro acima do coração e letras RH */}
       <path
-        d="M 65,120 C 180,50 320,50 435,120"
+        d="M 65,80 C 180,24 320,24 435,80"
         fill="none"
         stroke="url(#goldGrad)"
         strokeWidth="4"
         strokeLinecap="round"
       />
       <path
-        d="M 85,103 C 190,40 310,40 415,103"
+        d="M 85,64 C 190,14 310,14 415,64"
         fill="none"
         stroke="url(#goldGrad)"
         strokeWidth="1.5"
@@ -58,16 +58,16 @@ export const Logo: React.FC<LogoProps> = ({ className = 'w-full h-auto', style }
         opacity="0.85"
       />
 
-      {/* 2. Lower Gold Arcs */}
+      {/* 2. Lower Gold Arcs - Envolvendo Gestão Domiciliar harmoniosamente com respiro inferior */}
       <path
-        d="M 65,265 C 180,335 320,335 435,265"
+        d="M 65,255 C 180,298 320,298 435,255"
         fill="none"
         stroke="url(#goldGrad)"
         strokeWidth="4"
         strokeLinecap="round"
       />
       <path
-        d="M 85,282 C 190,345 310,345 415,282"
+        d="M 85,268 C 190,310 310,310 415,268"
         fill="none"
         stroke="url(#goldGrad)"
         strokeWidth="1.5"
