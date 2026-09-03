@@ -1539,7 +1539,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
         }
         const mesFormatado = String(retroMonth).padStart(2, '0');
         const anoFormatado = retroYear;
-        const textoMotivo = `RETENÇÃO DE GUIA MEI - REF. ${mesFormatado}/${anoFormatado}`;
+        const textoMotivo = 'RETENÇÃO DE GUIA MEI';
 
         // Deduct MEI value if temMei
         if (profissional && profissional.temMei && !profissional.meiIrregular && valorMeiGlobal > 0) {
@@ -1589,7 +1589,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
         }
 
         // Associa a folha ao débito MEI automático se existir no histórico
-        const meiDebit = listDebs.find(d => d.id !== 'virtual-mei-debit' && d.motivo === textoMotivo);
+        const meiDebit = listDebs.find(d => d.id !== 'virtual-mei-debit' && (d.motivo === textoMotivo || (d.motivo && d.motivo.startsWith('RETENÇÃO DE GUIA MEI'))));
         if (meiDebit && meiDebit.id) {
           await updateDebitoProfissional({
             ...meiDebit,
@@ -1635,7 +1635,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       }
       const mesFormatado = String(retroMonth).padStart(2, '0');
       const anoFormatado = retroYear;
-      const textoMotivo = `RETENÇÃO DE GUIA MEI - REF. ${mesFormatado}/${anoFormatado}`;
+      const textoMotivo = 'RETENÇÃO DE GUIA MEI';
       const targetMonthYear = getMonthYearString(dataInicial);
       const valorMeiGlobal = parseFloat(String(valorMei || 0));
 
@@ -3480,7 +3480,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                             }
                             const mesFormatado = String(retroMonth).padStart(2, '0');
                             const anoFormatado = retroYear;
-                            const textoMotivo = `RETENÇÃO DE GUIA MEI - REF. ${mesFormatado}/${anoFormatado}`;
+                            const textoMotivo = 'RETENÇÃO DE GUIA MEI';
 
                             listDebs.push({
                               id: 'virtual-mei-debit',
@@ -3743,7 +3743,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                                                         <div className="pl-3 space-y-0.5 text-[10px] text-red-600 font-semibold font-mono">
                                                           {p.debDocsForProf.map(d => (
                                                             <div key={d.id}>
-                                                              • {formatDebitDateDisplay(d.data)} - {d.motivo}: R$ {d.valor.toFixed(2)}
+                                                              • {formatDebitDateDisplay(d.data)} - {d.motivo && d.motivo.toUpperCase().includes('RETENÇÃO DE GUIA MEI') ? 'RETENÇÃO DE GUIA MEI' : d.motivo}: R$ {d.valor.toFixed(2)}
                                                             </div>
                                                           ))}
                                                         </div>
@@ -4431,7 +4431,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                                 d.motivo === 'Passagem' ? 'bg-sky-100 text-sky-800' :
                                 'bg-slate-100 text-slate-700'
                               }`}>
-                                {d.motivo}
+                                {d.motivo && d.motivo.toUpperCase().includes('RETENÇÃO DE GUIA MEI') ? 'RETENÇÃO DE GUIA MEI' : d.motivo}
                               </span>
                             </td>
                             <td className="py-3.5 px-5 text-center">
@@ -4755,8 +4755,8 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                           <polygon points="30,80 72,32 98,48 48,80" fill="url(#valGrad2)" />
                           <polygon points="48,80 98,48 114,64 68,80" fill="url(#valGrad1)" />
                           <polygon points="68,80 114,64 118,78 84,80" fill="url(#valGrad3)" />
-                          <text x="130" y="52" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="900" fill="#1e293b" letter-spacing="2">VALLIDARE</text>
-                          <text x="130" y="74" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="600" fill="#64748b" letter-spacing="2.5">GESTÃO E CONSULTORIA EM SAÚDE</text>
+                          <text x="130" y="52" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="900" fill="#1e293b">VALLIDARE</text>
+                          <text x="130" y="74" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="600" fill="#64748b">GESTÃO E CONSULTORIA EM SAÚDE</text>
                         </svg>`;
                         const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
                         const url = URL.createObjectURL(blob);
@@ -4785,7 +4785,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                 }
             }
 
-            // 2. Cabeçalho Superior
+            // 2. Cabeçalho Superior Institucional
             if (logoDataUrl) {
                 try {
                     doc.addImage(logoDataUrl, 'PNG', 14, 10, 48, 11, undefined, 'FAST');
@@ -4794,22 +4794,39 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                 }
             }
 
-            // Nome da empresa no topo à direita
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(9);
-            doc.setTextColor(100, 116, 139);
-            doc.text(empresa?.razaoSocial || 'Vallidare - Gestão e Consultoria em Saúde', 196, 17, { align: 'right' });
+            // Nome da empresa & CNPJ/Endereço no topo à direita
+            const rawRazao = empresa?.razaoSocial || '';
+            const nomeEmpresa = (rawRazao && !rawRazao.toUpperCase().includes('VALLIOARE'))
+                ? rawRazao.replace(/\s+/g, ' ').trim()
+                : 'VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI';
+            const subEmpresa = 'CNPJ: 27.770.797/0001-62 • Rua Martins Ferreira, 71 - Botafogo / Rio de Janeiro';
 
-            // Título: Fechamento da Folha
             doc.setFont('helvetica', 'bold');
-            doc.setFontSize(14);
+            doc.setFontSize(9);
+            doc.setTextColor(26, 60, 46);
+            doc.text(nomeEmpresa, 196, 14, { align: 'right' });
+
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7.5);
+            doc.setTextColor(100, 116, 139);
+            doc.text(subEmpresa, 196, 19, { align: 'right' });
+
+            // Título da Seção: RELATÓRIO CORPORATIVO DE FOLHA DE PAGAMENTO
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(13);
             doc.setTextColor(15, 23, 42);
-            doc.text('Fechamento da Folha', 14, 28);
+            doc.text('RELATÓRIO CORPORATIVO DE FOLHA DE PAGAMENTO', 14, 27);
+
+            // Subtítulo
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8.5);
+            doc.setTextColor(100, 116, 139);
+            doc.text('Relatório Gerado pelo Sistema RH de Gestão', 14, 32);
 
             // Linha divisória limpa
             doc.setDrawColor(203, 213, 225);
             doc.setLineWidth(0.4);
-            doc.line(14, 31, 196, 31);
+            doc.line(14, 34.5, 196, 34.5);
 
             // 3. Informações de Referência (Contratante, JOB, Fatura, Folha, Fechamento)
             const firstFolhaItem = listToExport[0];
@@ -4829,29 +4846,37 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
 
             // Esquerda: Contratante e JOB
             doc.setFont('helvetica', 'bold');
-            doc.text('Contratante : ', 14, 37);
+            doc.text('Contratante : ', 14, 39.5);
             const wContr = doc.getTextWidth('Contratante : ');
             doc.setFont('helvetica', 'normal');
-            doc.text(contratanteText + '  ', 14 + wContr, 37);
+            doc.text(contratanteText + '  ', 14 + wContr, 39.5);
             const wTodos = doc.getTextWidth(contratanteText + '  ');
             doc.setFont('helvetica', 'bold');
-            doc.text('JOB: ', 14 + wContr + wTodos, 37);
+            doc.text('JOB: ', 14 + wContr + wTodos, 39.5);
             const wJob = doc.getTextWidth('JOB: ');
             doc.setFont('helvetica', 'normal');
-            doc.text(jobText, 14 + wContr + wTodos + wJob, 37);
+            doc.text(jobText, 14 + wContr + wTodos + wJob, 39.5);
 
             // Direita: Referência à fatura/folha e data de fechamento
             const rightText = `Referente a Fatura: , Folha: ${numeroFolhaRef} com fechamento em: ${dataFechamentoText}`;
             doc.setFont('helvetica', 'normal');
-            doc.text(rightText, 196, 37, { align: 'right' });
+            doc.text(rightText, 196, 39.5, { align: 'right' });
 
-            // 4. Preparação dos Dados da Tabela
+            // 4. Preparação e Sanitização dos Dados da Tabela
             const totalDebitos = listToExport.reduce((acc, curr) => acc + (Number(curr.valorTotalDebitos) || 0), 0);
             const totalLiquido = listToExport.reduce((acc, curr) => acc + (Number(curr.valorLiquidoReceber) || 0), 0);
 
+            const sanitizePdfText = (val: any): string => {
+                if (val === null || val === undefined) return '';
+                return String(val)
+                    .replace(/[\u00A0\u1680\u180e\u2000-\u200b\u202f\u205f\u3000\ufeff]/g, ' ')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+            };
+
             const linhasDados = listToExport.map((f) => {
-                const profissional = f.nomeProfissional || 'Profissional';
-                const dataEmissao = f.dataEmissao ? formatDisplayDate(f.dataEmissao) : '-';
+                const profissional = sanitizePdfText(f.nomeProfissional || 'Profissional');
+                const dataEmissao = sanitizePdfText(f.dataEmissao ? formatDisplayDate(f.dataEmissao) : '-');
 
                 let mesRef = '';
                 if (f.periodoApurado && f.periodoApurado.inicio) {
@@ -4866,52 +4891,55 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                         mesRef = `${parts[1]}/${parts[0]}`;
                     }
                 }
-                const periodo = mesRef || '-';
-                const status = f.status || 'Fechada';
+                const periodo = sanitizePdfText(mesRef || '-');
+                const status = sanitizePdfText(f.status || 'Fechada');
 
                 const valorDebitos = Number(f.valorTotalDebitos) || 0;
-                const debitosStr = valorDebitos > 0 
+                const debitosStr = sanitizePdfText(valorDebitos > 0 
                     ? `- R$ ${valorDebitos.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
-                    : 'R$ 0,00';
+                    : 'R$ 0,00');
 
                 const valorLiquido = Number(f.valorLiquidoReceber) || 0;
-                const liquidoStr = `R$ ${valorLiquido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                const liquidoStr = sanitizePdfText(`R$ ${valorLiquido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 
                 return [profissional, dataEmissao, periodo, status, debitosStr, liquidoStr];
             });
 
             // 5. Renderização da Tabela Corporativa Limpa via autoTable
             autoTable(doc, {
-                startY: 42,
-                head: [['Profissional', 'Data Emissão', 'Período', 'Status', 'Débitos', 'Valor Líquido']],
+                startY: 44,
+                head: [['PROFISSIONAL', 'DATA EMISSÃO', 'PERÍODO', 'STATUS', 'DÉBITOS', 'VALOR LÍQUIDO']],
                 body: linhasDados,
                 theme: 'plain', // Sem caixas pesadas
                 styles: {
                     font: 'helvetica',
+                    fontStyle: 'normal',
                     fontSize: 9,
                     cellPadding: { top: 6, bottom: 6, left: 4, right: 4 },
                     textColor: [30, 41, 59],
                     lineColor: [226, 232, 240],
                     lineWidth: { bottom: 0.5 }, // Linha horizontal sutil, sem bordas verticais
+                    overflow: 'linebreak',
                 },
                 headStyles: {
                     fillColor: [248, 250, 252],
                     textColor: [71, 85, 105],
+                    font: 'helvetica',
                     fontStyle: 'bold',
                     fontSize: 9,
                     lineWidth: { bottom: 1 },
                     lineColor: [203, 213, 225],
                 },
                 columnStyles: {
-                    0: { cellWidth: 'auto', fontStyle: 'bold' }, // Nome profissional com espaço livre
-                    1: { cellWidth: 25, halign: 'center' },
-                    2: { cellWidth: 20, halign: 'center' },
-                    3: { cellWidth: 22, halign: 'center' },
-                    4: { cellWidth: 25, halign: 'right', textColor: [220, 38, 38] }, // Débitos vermelho
-                    5: { cellWidth: 28, halign: 'right', fontStyle: 'bold', textColor: [22, 101, 52] }, // Líquido verde
+                    0: { cellWidth: 'auto', font: 'helvetica', fontStyle: 'bold' }, // Nome profissional com espaço livre
+                    1: { cellWidth: 25, halign: 'center', font: 'helvetica', fontStyle: 'normal' },
+                    2: { cellWidth: 20, halign: 'center', font: 'helvetica', fontStyle: 'normal' },
+                    3: { cellWidth: 22, halign: 'center', font: 'helvetica', fontStyle: 'normal' },
+                    4: { cellWidth: 25, halign: 'right', font: 'helvetica', fontStyle: 'normal', textColor: [220, 38, 38] }, // Débitos vermelho
+                    5: { cellWidth: 28, halign: 'right', font: 'helvetica', fontStyle: 'bold', textColor: [22, 101, 52] }, // Líquido verde
                 },
                 foot: [[
-                    `Total (${listToExport.length} ${listToExport.length === 1 ? 'folha' : 'folhas'}):`,
+                    'SOMA TOTAL DA FOLHA DE PAGAMENTO',
                     '',
                     '',
                     '',
@@ -4921,6 +4949,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                 footStyles: {
                     fillColor: [248, 250, 252],
                     textColor: [30, 41, 59],
+                    font: 'helvetica',
                     fontStyle: 'bold',
                     fontSize: 9,
                     lineWidth: { top: 1, bottom: 1 },
@@ -4944,6 +4973,10 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                         }
                     }
                     if (data.section === 'foot') {
+                        if (data.column.index === 0) {
+                            data.cell.styles.fontStyle = 'bold';
+                            data.cell.styles.textColor = [30, 41, 59];
+                        }
                         if (data.column.index === 4) {
                             data.cell.styles.halign = 'right';
                             data.cell.styles.textColor = totalDebitos > 0 ? [220, 38, 38] : [100, 116, 139];
@@ -4965,7 +4998,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                 doc.setFontSize(8);
                 doc.setTextColor(148, 163, 184);
                 doc.text(`Página ${i} de ${totalPages}`, 196, 290, { align: 'right' });
-                doc.text('Vallidare - Gestão e Consultoria em Saúde', 14, 290);
+                doc.text('Relatório Gerado pelo Sistema RH de Gestão', 14, 290);
             }
 
             // 7. Download do Arquivo PDF
@@ -6058,22 +6091,36 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                     </div>
                     <div className="text-right">
                       <span 
-                        className="text-[#475569] text-[13px] font-normal"
+                        className="text-[#1a3c2e] text-[13px] font-bold block"
                         style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
                       >
-                        Vallidare - Gestão e Consultoria em Saúde
+                        {empresa?.razaoSocial && !empresa.razaoSocial.toUpperCase().includes('VALLIOARE')
+                          ? empresa.razaoSocial.replace(/\s+/g, ' ').trim()
+                          : 'VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI'}
+                      </span>
+                      <span 
+                        className="text-[#64748b] text-[10px] font-normal block mt-0.5"
+                        style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
+                      >
+                        CNPJ: {empresa?.cnpj || '27.770.797/0001-62'} • {empresa?.endereco || 'Rua Martins Ferreira, 71 - Botafogo / Rio de Janeiro'}
                       </span>
                     </div>
                   </div>
 
-                  {/* Title: Fechamento da Folha */}
+                  {/* Title & Subtitle: RELATÓRIO CORPORATIVO DE FOLHA DE PAGAMENTO */}
                   <div className="text-left mb-1.5">
                     <h1 
-                      className="text-[17px] font-bold text-[#0f172a] tracking-tight"
+                      className="text-[17px] font-bold text-[#0f172a] tracking-normal"
                       style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
                     >
-                      Fechamento da Folha
+                      RELATÓRIO CORPORATIVO DE FOLHA DE PAGAMENTO
                     </h1>
+                    <p 
+                      className="text-[11px] text-[#64748b] font-normal mt-0.5"
+                      style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
+                    >
+                      Relatório Gerado pelo Sistema RH de Gestão
+                    </p>
                   </div>
 
                   {/* Divider Line */}
@@ -6123,13 +6170,16 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                             width: '8%', 
                             textAlign: 'left', 
                             padding: '3px 4px',
+                            whiteSpace: 'normal',
+                            wordSpacing: 'normal',
+                            letterSpacing: 'normal',
                             borderLeft: 'none',
                             borderRight: 'none',
                             borderTop: 'none',
                             borderBottom: 'none'
                           }}
                         >
-                          Número
+                          Nº
                         </th>
                         <th 
                           className="font-bold text-[#334155]"
@@ -6137,13 +6187,16 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                             width: '38%', 
                             textAlign: 'left', 
                             padding: '3px 4px',
+                            whiteSpace: 'normal',
+                            wordSpacing: 'normal',
+                            letterSpacing: 'normal',
                             borderLeft: 'none',
                             borderRight: 'none',
                             borderTop: 'none',
                             borderBottom: 'none'
                           }}
                         >
-                          Profissional
+                          PROFISSIONAL
                         </th>
                         <th 
                           className="font-bold text-[#334155]"
@@ -6151,13 +6204,16 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                             width: '12%', 
                             textAlign: 'center', 
                             padding: '3px 4px',
+                            whiteSpace: 'normal',
+                            wordSpacing: 'normal',
+                            letterSpacing: 'normal',
                             borderLeft: 'none',
                             borderRight: 'none',
                             borderTop: 'none',
                             borderBottom: 'none'
                           }}
                         >
-                          Dta.Emissão
+                          DATA EMISSÃO
                         </th>
                         <th 
                           className="font-bold text-[#334155]"
@@ -6165,13 +6221,16 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                             width: '10%', 
                             textAlign: 'center', 
                             padding: '3px 4px',
+                            whiteSpace: 'normal',
+                            wordSpacing: 'normal',
+                            letterSpacing: 'normal',
                             borderLeft: 'none',
                             borderRight: 'none',
                             borderTop: 'none',
                             borderBottom: 'none'
                           }}
                         >
-                          Período
+                          PERÍODO
                         </th>
                         <th 
                           className="font-bold text-[#334155]"
@@ -6179,13 +6238,16 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                             width: '11%', 
                             textAlign: 'right', 
                             padding: '3px 4px',
+                            whiteSpace: 'normal',
+                            wordSpacing: 'normal',
+                            letterSpacing: 'normal',
                             borderLeft: 'none',
                             borderRight: 'none',
                             borderTop: 'none',
                             borderBottom: 'none'
                           }}
                         >
-                          Débitos
+                          DÉBITOS
                         </th>
                         <th 
                           className="font-bold text-[#334155]"
@@ -6193,13 +6255,16 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                             width: '12%', 
                             textAlign: 'right', 
                             padding: '3px 4px',
+                            whiteSpace: 'normal',
+                            wordSpacing: 'normal',
+                            letterSpacing: 'normal',
                             borderLeft: 'none',
                             borderRight: 'none',
                             borderTop: 'none',
                             borderBottom: 'none'
                           }}
                         >
-                          Valor Líquido
+                          VALOR LÍQUIDO
                         </th>
                         <th 
                           className="font-bold text-[#334155]"
@@ -6207,13 +6272,16 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                             width: '9%', 
                             textAlign: 'center', 
                             padding: '3px 4px',
+                            whiteSpace: 'normal',
+                            wordSpacing: 'normal',
+                            letterSpacing: 'normal',
                             borderLeft: 'none',
                             borderRight: 'none',
                             borderTop: 'none',
                             borderBottom: 'none'
                           }}
                         >
-                          Status
+                          STATUS
                         </th>
                       </tr>
                     </thead>
@@ -6239,6 +6307,8 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                         // Número do item formatado em 5 dígitos
                         const numeroItem = f.numeroFolha || f.numero || (f.id ? (f.id.match(/\d+/) ? f.id.match(/\d+/)![0].padStart(5, '0') : f.id.replace(/\D/g, '').slice(-5).padStart(5, '0')) : String(idx + 1).padStart(5, '0'));
 
+                        const nomeLimpo = (f.nomeProfissional || 'Profissional').replace(/\s+/g, ' ').trim();
+
                         return (
                           <tr 
                             key={f.id || idx} 
@@ -6253,6 +6323,9 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                               style={{ 
                                 padding: '3px 4px',
                                 textAlign: 'left',
+                                whiteSpace: 'normal',
+                                wordSpacing: 'normal',
+                                letterSpacing: 'normal',
                                 borderLeft: 'none',
                                 borderRight: 'none',
                                 borderTop: 'none',
@@ -6264,11 +6337,14 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                               {numeroItem}
                             </td>
 
-                            {/* Profissional - Preto, linha única com truncamento elegante */}
+                            {/* Profissional - Preto, sem aglutinação */}
                             <td 
                               style={{ 
                                 padding: '3px 4px',
                                 textAlign: 'left',
+                                whiteSpace: 'normal',
+                                wordSpacing: 'normal',
+                                letterSpacing: 'normal',
                                 borderLeft: 'none',
                                 borderRight: 'none',
                                 borderTop: 'none',
@@ -6276,19 +6352,19 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                               }}
                             >
                               <span 
-                                title={f.nomeProfissional}
+                                title={nomeLimpo}
                                 style={{ 
                                   color: '#000000',
                                   fontWeight: '500',
                                   fontSize: '7.5pt',
-                                  whiteSpace: 'nowrap',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'normal',
+                                  wordSpacing: 'normal',
+                                  letterSpacing: 'normal',
                                   display: 'block',
                                   maxWidth: '350px'
                                 }}
                               >
-                                {f.nomeProfissional || 'Profissional'}
+                                {nomeLimpo}
                               </span>
                             </td>
 
@@ -6297,13 +6373,15 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                               style={{ 
                                 padding: '3px 4px',
                                 textAlign: 'center',
+                                whiteSpace: 'normal',
+                                wordSpacing: 'normal',
+                                letterSpacing: 'normal',
                                 borderLeft: 'none',
                                 borderRight: 'none',
                                 borderTop: 'none',
                                 borderBottom: 'none',
                                 color: '#15803d',
-                                fontWeight: '500',
-                                whiteSpace: 'nowrap'
+                                fontWeight: '500'
                               }}
                             >
                               {f.dataEmissao ? formatDisplayDate(f.dataEmissao) : '-'}
@@ -6314,13 +6392,15 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                               style={{ 
                                 padding: '3px 4px',
                                 textAlign: 'center',
+                                whiteSpace: 'normal',
+                                wordSpacing: 'normal',
+                                letterSpacing: 'normal',
                                 borderLeft: 'none',
                                 borderRight: 'none',
                                 borderTop: 'none',
                                 borderBottom: 'none',
                                 color: '#15803d',
-                                fontWeight: '500',
-                                whiteSpace: 'nowrap'
+                                fontWeight: '500'
                               }}
                             >
                               {mesRef || '08/2026'}
@@ -6331,13 +6411,15 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                               style={{ 
                                 padding: '3px 4px',
                                 textAlign: 'right',
+                                whiteSpace: 'normal',
+                                wordSpacing: 'normal',
+                                letterSpacing: 'normal',
                                 borderLeft: 'none',
                                 borderRight: 'none',
                                 borderTop: 'none',
                                 borderBottom: 'none',
                                 color: valorDebitos > 0 ? '#dc2626' : '#15803d',
-                                fontWeight: '600',
-                                whiteSpace: 'nowrap'
+                                fontWeight: '600'
                               }}
                             >
                               {valorDebitos > 0 
@@ -6350,13 +6432,15 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                               style={{ 
                                 padding: '3px 4px',
                                 textAlign: 'right',
+                                whiteSpace: 'normal',
+                                wordSpacing: 'normal',
+                                letterSpacing: 'normal',
                                 borderLeft: 'none',
                                 borderRight: 'none',
                                 borderTop: 'none',
                                 borderBottom: 'none',
                                 color: valorLiquido >= 0 ? '#15803d' : '#dc2626',
-                                fontWeight: '700',
-                                whiteSpace: 'nowrap'
+                                fontWeight: '700'
                               }}
                             >
                               R$ {valorLiquido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -6367,13 +6451,15 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                               style={{ 
                                 padding: '3px 4px',
                                 textAlign: 'center',
+                                whiteSpace: 'normal',
+                                wordSpacing: 'normal',
+                                letterSpacing: 'normal',
                                 borderLeft: 'none',
                                 borderRight: 'none',
                                 borderTop: 'none',
                                 borderBottom: 'none',
                                 color: f.status === 'Pendente' ? '#b45309' : '#15803d',
-                                fontWeight: '600',
-                                whiteSpace: 'nowrap'
+                                fontWeight: '600'
                               }}
                             >
                               {f.status || 'Fechada'}
@@ -6398,13 +6484,16 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                             textAlign: 'left',
                             fontWeight: '700',
                             color: '#1e293b',
+                            whiteSpace: 'normal',
+                            wordSpacing: 'normal',
+                            letterSpacing: 'normal',
                             borderLeft: 'none',
                             borderRight: 'none',
                             borderTop: 'none',
                             borderBottom: 'none'
                           }}
                         >
-                          Total ({listToPrint.length} {listToPrint.length === 1 ? 'folha' : 'folhas'}):
+                          SOMA TOTAL DA FOLHA DE PAGAMENTO
                         </td>
                         <td 
                           colSpan={2}
@@ -6458,6 +6547,15 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                       </tr>
                     </tfoot>
                   </table>
+
+                  {/* Rodapé Corporativo */}
+                  <div 
+                    className="flex items-center justify-between text-[8pt] text-[#94a3b8] mt-4 pt-2 border-t border-[#e2e8f0]"
+                    style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
+                  >
+                    <span>Relatório Gerado pelo Sistema RH de Gestão</span>
+                    <span>Vallidare - Gestão e Consultoria em Saúde</span>
+                  </div>
                 </div>
               );
             })()}

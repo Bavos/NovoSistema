@@ -50,6 +50,15 @@ export function sanitizeClonedDocForHtml2Canvas(
       el.style.setProperty('-webkit-print-color-adjust', 'exact', 'important');
       el.style.setProperty('print-color-adjust', 'exact', 'important');
 
+      // Previne colapso de espaços e aglutinação de palavras no canvas
+      if (el.tagName === 'TD' || el.tagName === 'TH') {
+        el.style.setProperty('white-space', 'normal', 'important');
+        el.style.setProperty('word-spacing', 'normal', 'important');
+        el.style.setProperty('letter-spacing', 'normal', 'important');
+      }
+      el.style.setProperty('text-rendering', 'auto', 'important');
+      el.style.setProperty('font-stretch', 'normal', 'important');
+
       const isHeaderCell = el.tagName === 'TH' || (el.classList && el.classList.contains('text-white'));
       const fallbackTextColor = isHeaderCell ? '#ffffff' : defaultColor;
 

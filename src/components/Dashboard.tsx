@@ -161,6 +161,14 @@ export const Dashboard: React.FC<{
     }
   };
 
+  const formatMotivoDisplay = (motivo: string | undefined): string => {
+    if (!motivo) return '';
+    if (motivo.toUpperCase().includes('RETENÇÃO DE GUIA MEI')) {
+      return 'RETENÇÃO DE GUIA MEI';
+    }
+    return motivo;
+  };
+
   useEffect(() => {
     const list: any[] = [];
     const today = new Date();
@@ -361,7 +369,7 @@ export const Dashboard: React.FC<{
                             d.motivo === 'Passagem' ? 'bg-[#e8e4db] text-forest-green' :
                             'bg-off-white text-forest-green'
                           }`}>
-                            {d.motivo}
+                            {formatMotivoDisplay(d.motivo)}
                           </span>
                         </td>
                         <td className="py-4 px-5 text-right font-black text-red-800 text-sm font-mono">
@@ -413,20 +421,20 @@ export const Dashboard: React.FC<{
             </div>
           )}
 
-          <div className="bg-white p-6 rounded-2xl border border-forest-green/10 shadow-sm flex flex-col h-full">
-            <h3 className="text-md font-bold text-forest-green mb-5 border-b border-forest-green/5 pb-4" id="title-quick-actions">Ações Rápidas</h3>
-            <div className="grid grid-cols-1 gap-4 flex-1">
+          <div className="bg-white p-6 rounded-2xl border border-forest-green/10 shadow-sm flex flex-col">
+            <h3 className="text-md font-bold text-forest-green mb-4 border-b border-forest-green/5 pb-3" id="title-quick-actions">Ações Rápidas</h3>
+            <div className="flex flex-col gap-2.5">
               {quickActions.map(action => (
                 <button
                   id={action.id}
                   key={action.title}
                   onClick={() => setActiveTab(action.tab, (action as any).extra)}
-                  className="w-full text-left py-4 px-5 rounded-full border border-mustard-gold/20 hover:border-mustard-gold bg-white hover:bg-[#e8e4db] hover:shadow-md transition-all duration-300 flex items-center gap-2 group cursor-pointer"
+                  className="w-full text-left py-2.5 px-4 rounded-full border border-mustard-gold/20 hover:border-mustard-gold bg-white hover:bg-[#e8e4db]/50 hover:shadow-xs transition-all duration-200 flex items-center gap-2.5 group cursor-pointer"
                 >
-                  <div className="p-2.5 bg-[#e8e4db] text-mustard-gold rounded-full transition-all flex items-center justify-center shrink-0">
-                    <action.icon size={18} />
+                  <div className="p-2 bg-[#e8e4db] text-mustard-gold rounded-full transition-all flex items-center justify-center shrink-0">
+                    <action.icon size={16} />
                   </div>
-                  <span className="font-bold text-xs uppercase tracking-wider text-forest-green transition-all ml-2">{action.title}</span>
+                  <span className="font-bold text-xs uppercase tracking-wider text-forest-green transition-all ml-1">{action.title}</span>
                 </button>
               ))}
             </div>
