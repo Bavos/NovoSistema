@@ -424,10 +424,10 @@ export const exportFaturaPDF = async (faturaData: any, empresaInfo?: any): Promi
       lineWidth: { top: 0.4, bottom: 0.4 },
     },
     columnStyles: {
-      0: { cellWidth: 25, halign: 'center' },
-      1: { cellWidth: 'auto', halign: 'left' },
+      0: { cellWidth: 26, halign: 'center' },
+      1: { cellWidth: 76, halign: 'left' },
       2: { cellWidth: 45, halign: 'left' },
-      3: { cellWidth: 30, halign: 'right' },
+      3: { cellWidth: 35, halign: 'right' },
     },
     margin: { left: marginX, right: marginX, bottom: 18 },
     alternateRowStyles: {
