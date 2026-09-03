@@ -50,14 +50,21 @@ export function sanitizeClonedDocForHtml2Canvas(
       el.style.setProperty('-webkit-print-color-adjust', 'exact', 'important');
       el.style.setProperty('print-color-adjust', 'exact', 'important');
 
-      // Previne colapso de espaços e aglutinação de palavras no canvas
-      if (el.tagName === 'TD' || el.tagName === 'TH') {
-        el.style.setProperty('white-space', 'normal', 'important');
-        el.style.setProperty('word-spacing', 'normal', 'important');
-        el.style.setProperty('letter-spacing', 'normal', 'important');
-      }
+      // Previne colapso de espaços, aglutinação de palavras e substituição incorreta de caracteres no canvas
+      el.style.setProperty('font-family', 'Arial, Helvetica, sans-serif', 'important');
+      el.style.setProperty('letter-spacing', 'normal', 'important');
+      el.style.setProperty('word-spacing', 'normal', 'important');
       el.style.setProperty('text-rendering', 'auto', 'important');
       el.style.setProperty('font-stretch', 'normal', 'important');
+      el.style.setProperty('font-variant-numeric', 'normal', 'important');
+      el.style.setProperty('font-variant-ligatures', 'none', 'important');
+      el.style.setProperty('font-feature-settings', 'normal', 'important');
+
+      if (el.tagName === 'TD' || el.tagName === 'TH' || el.tagName === 'P' || el.tagName === 'SPAN') {
+        if (!el.classList.contains('whitespace-nowrap') && el.style.whiteSpace !== 'nowrap') {
+          el.style.setProperty('white-space', 'normal', 'important');
+        }
+      }
 
       const isHeaderCell = el.tagName === 'TH' || (el.classList && el.classList.contains('text-white'));
       const fallbackTextColor = isHeaderCell ? '#ffffff' : defaultColor;

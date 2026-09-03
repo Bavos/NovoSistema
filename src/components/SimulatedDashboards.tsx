@@ -4573,6 +4573,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
     const [loadingExport, setLoadingExport] = useState(false);
     const [isExportingFaturasPDF, setIsExportingFaturasPDF] = useState(false);
     const [isExportingFolhasPDF, setIsExportingFolhasPDF] = useState(false);
+    const [historicoSubTab, setHistoricoSubTab] = useState<'faturas' | 'folhas'>('faturas');
     const [selectedHistorico, setSelectedHistorico] = useState<string[]>([]);
     const [selectedFaturas, setSelectedFaturas] = useState<string[]>([]);
     const [batchDeleteConfirm, setBatchDeleteConfirm] = useState<{ isOpen: boolean; type: 'fatura' | 'folha'; ids: string[] } | null>(null);
@@ -4796,9 +4797,10 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
 
             // Nome da empresa & CNPJ/Endereço no topo à direita
             const rawRazao = empresa?.razaoSocial || '';
-            const nomeEmpresa = (rawRazao && !rawRazao.toUpperCase().includes('VALLIOARE'))
+            const isRazaoInvalid = !rawRazao || /VALUDARE|VALLIOARE|EIREU/i.test(rawRazao);
+            const nomeEmpresa = !isRazaoInvalid
                 ? rawRazao.replace(/\s+/g, ' ').trim()
-                : 'VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI';
+                : 'VALLIDARE GESTÃO MÉDICA E AUDITORIA EIRELI';
             const subEmpresa = 'CNPJ: 27.770.797/0001-62 • Rua Martins Ferreira, 71 - Botafogo / Rio de Janeiro';
 
             doc.setFont('helvetica', 'bold');
@@ -4811,11 +4813,11 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
             doc.setTextColor(100, 116, 139);
             doc.text(subEmpresa, 196, 19, { align: 'right' });
 
-            // Título da Seção: RELATÓRIO CORPORATIVO DE FOLHA DE PAGAMENTO
+            // Título da Seção: RELATÓRIO CORPORATIVO DE FOLHA DE PAGAMENTO DE PROFISSIONAIS
             doc.setFont('helvetica', 'bold');
-            doc.setFontSize(13);
+            doc.setFontSize(12);
             doc.setTextColor(15, 23, 42);
-            doc.text('RELATÓRIO CORPORATIVO DE FOLHA DE PAGAMENTO', 14, 27);
+            doc.text('RELATÓRIO CORPORATIVO DE FOLHA DE PAGAMENTO DE PROFISSIONAIS', 14, 27);
 
             // Subtítulo
             doc.setFont('helvetica', 'normal');
@@ -5166,6 +5168,17 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                 th.style.setProperty('print-color-adjust', 'exact', 'important');
                             });
 
+                            // Força fonte padrão Arial, remove ligaduras numéricas e normaliza espaçamento
+                            const allClonedNodes = clonedPrintArea.querySelectorAll('*');
+                            allClonedNodes.forEach((node: any) => {
+                                node.style.setProperty('font-family', 'Arial, Helvetica, sans-serif', 'important');
+                                node.style.setProperty('letter-spacing', 'normal', 'important');
+                                node.style.setProperty('word-spacing', 'normal', 'important');
+                                node.style.setProperty('font-variant-numeric', 'normal', 'important');
+                                node.style.setProperty('font-variant-ligatures', 'none', 'important');
+                                node.style.setProperty('font-feature-settings', 'normal', 'important');
+                            });
+
                             // Evita tags foreignObject que causam barras pretas no html2canvas
                             const foreignObjects = clonedPrintArea.querySelectorAll('foreignObject');
                             foreignObjects.forEach((fo: any) => fo.remove());
@@ -5500,7 +5513,36 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
 
     return (
       <div className="space-y-6 animate-in fade-in-30">
-        <div className="bg-white p-4 border border-gray-100 rounded-xl shadow-sm">
+        {/* Seletor de Sub-abas do Histórico Financeiro */}
+        <div className="flex items-center gap-2 p-1.5 bg-slate-100/90 rounded-xl w-fit border border-slate-200/80 shadow-xs print:hidden mb-1">
+          <button
+            id="subtab-historico-faturas"
+            type="button"
+            onClick={() => setHistoricoSubTab('faturas')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              historicoSubTab === 'faturas'
+                ? 'bg-white text-emerald-800 shadow-xs border border-slate-200/60 font-black'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+            }`}
+          >
+            📑 Faturas de Clientes (Receitas)
+          </button>
+          <button
+            id="subtab-historico-folhas"
+            type="button"
+            onClick={() => setHistoricoSubTab('folhas')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              historicoSubTab === 'folhas'
+                ? 'bg-white text-emerald-800 shadow-xs border border-slate-200/60 font-black'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+            }`}
+          >
+            📋 Histórico de Folhas de Pagamento
+          </button>
+        </div>
+
+        {historicoSubTab === 'faturas' && (
+        <div className="bg-white p-4 border border-gray-100 rounded-xl shadow-sm animate-in fade-in">
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 mb-4">
             <div className="flex items-center gap-3">
               <h2 className="text-md font-black text-slate-800">📜 Histórico de Faturas</h2>
@@ -5727,7 +5769,10 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
             </table>
           </div>
         </div>
-        <div className="bg-white p-4 border border-gray-100 rounded-xl shadow-sm">
+        )}
+
+        {historicoSubTab === 'folhas' && (
+        <div className="bg-white p-4 border border-gray-100 rounded-xl shadow-sm animate-in fade-in">
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 mb-4">
               <div className="flex flex-wrap items-center gap-3">
                 <h2 className="text-md font-black text-slate-800">📜 Histórico de Folhas de Pagamento</h2>
@@ -5949,6 +5994,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
               </table>
             </div>
         </div>
+        )}
 
         {/* Hidden Printable Report for Histórico de Faturas */}
         <div className="fixed -left-[9999px] top-0 pointer-events-none" aria-hidden="true">
@@ -6094,9 +6140,9 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                         className="text-[#1a3c2e] text-[13px] font-bold block"
                         style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
                       >
-                        {empresa?.razaoSocial && !empresa.razaoSocial.toUpperCase().includes('VALLIOARE')
+                        {empresa?.razaoSocial && !/VALUDARE|VALLIOARE|EIREU/i.test(empresa.razaoSocial)
                           ? empresa.razaoSocial.replace(/\s+/g, ' ').trim()
-                          : 'VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI'}
+                          : 'VALLIDARE GESTÃO MÉDICA E AUDITORIA EIRELI'}
                       </span>
                       <span 
                         className="text-[#64748b] text-[10px] font-normal block mt-0.5"
@@ -6107,13 +6153,13 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Title & Subtitle: RELATÓRIO CORPORATIVO DE FOLHA DE PAGAMENTO */}
+                  {/* Title & Subtitle: RELATÓRIO CORPORATIVO DE FOLHA DE PAGAMENTO DE PROFISSIONAIS */}
                   <div className="text-left mb-1.5">
                     <h1 
                       className="text-[17px] font-bold text-[#0f172a] tracking-normal"
                       style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
                     >
-                      RELATÓRIO CORPORATIVO DE FOLHA DE PAGAMENTO
+                      RELATÓRIO CORPORATIVO DE FOLHA DE PAGAMENTO DE PROFISSIONAIS
                     </h1>
                     <p 
                       className="text-[11px] text-[#64748b] font-normal mt-0.5"
@@ -6571,12 +6617,36 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                 else if (p.tipoDia === 'Feriado 50%') mult = 1.5;
                 return (base * mult) + (adm * mult) + ajuda;
             };
-            const formatDateBR = (dateStr: string) => {
-                if (!dateStr) return '';
-                if (dateStr.includes('-')) {
-                    return dateStr.split('-').reverse().join('/');
+            const formatDateBR = (dateVal: any): string => {
+                if (!dateVal) return '';
+                const dateStr = String(dateVal).trim();
+                const isoMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+                if (isoMatch) {
+                    return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`;
                 }
+                const brMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+                if (brMatch) {
+                    return `${brMatch[1].padStart(2, '0')}/${brMatch[2].padStart(2, '0')}/${brMatch[3]}`;
+                }
+                try {
+                    const d = new Date(dateStr);
+                    if (!isNaN(d.getTime())) {
+                        const day = String(d.getDate()).padStart(2, '0');
+                        const month = String(d.getMonth() + 1).padStart(2, '0');
+                        const year = d.getFullYear();
+                        return `${day}/${month}/${year}`;
+                    }
+                } catch {}
                 return dateStr;
+            };
+
+            const formatNomeComEspacos = (nome: any): string => {
+                if (!nome || typeof nome !== 'string') return 'A Definir';
+                return String(nome)
+                    .replace(/[\u0000-\u001F\u007F-\u009F\u00A0\u1680\u180e\u2000-\u200b\u202f\u205f\u3000\ufeff]/g, ' ')
+                    .replace(/([a-zà-ú0-9])([A-ZÀ-Ú])/g, '$1 $2')
+                    .replace(/\s+/g, ' ')
+                    .trim() || 'A Definir';
             };
 
             const parseDate = (dateStr: string): number => {
@@ -6630,14 +6700,6 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                 }
 
                 return '12h';
-            };
-
-            const formatNomeComEspacos = (nome: any): string => {
-                if (!nome || typeof nome !== 'string') return 'A Definir';
-                return nome
-                    .replace(/([a-zà-ú0-9])([A-ZÀ-Ú])/g, '$1 $2')
-                    .replace(/\s+/g, ' ')
-                    .trim() || 'A Definir';
             };
 
             const plantoesValidos = (viewDoc.data.plantoesCongelados || [])
@@ -6802,25 +6864,27 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                 <VallidareLogo height={52} className="shrink-0" />
                               )}
                               <div>
-                                <h2 className="text-base font-extrabold text-[#1a3c2e] tracking-tight leading-tight" style={{ color: '#1a3c2e' }}>
-                                  {empresa?.razaoSocial || 'VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI'}
+                                <h2 className="text-base font-extrabold text-[#1a3c2e] tracking-tight leading-tight" style={{ color: '#1a3c2e', fontFamily: 'Arial, Helvetica, sans-serif' }}>
+                                  {empresa?.razaoSocial && !/VALUDARE|VALLIOARE|EIREU/i.test(empresa.razaoSocial)
+                                    ? empresa.razaoSocial.replace(/\s+/g, ' ').trim()
+                                    : 'VALLIDARE GESTÃO MÉDICA E AUDITORIA EIRELI'}
                                 </h2>
-                                <p className="text-xs text-slate-500 font-semibold mt-0.5" style={{ color: '#64748b' }}>
+                                <p className="text-xs text-slate-500 font-semibold mt-0.5" style={{ color: '#64748b', fontFamily: 'Arial, Helvetica, sans-serif' }}>
                                   CNPJ: {empresa?.cnpj || '27.770.797/0001-62'}
                                 </p>
-                                <p className="text-xs text-slate-500 mt-0.5" style={{ color: '#64748b' }}>
+                                <p className="text-xs text-slate-500 mt-0.5" style={{ color: '#64748b', fontFamily: 'Arial, Helvetica, sans-serif' }}>
                                   {empresa?.endereco || 'Rua Martins Ferreira, 71 - Botafogo / Rio de Janeiro'}
                                 </p>
                               </div>
                             </div>
                             <div className="text-right shrink-0">
-                              <h1 className="text-2xl font-black text-[#1a3c2e] tracking-wide" style={{ color: '#1a3c2e' }}>
+                              <h1 className="text-2xl font-black text-[#1a3c2e] tracking-wide" style={{ color: '#1a3c2e', fontFamily: 'Arial, Helvetica, sans-serif' }}>
                                 {viewDoc.type === 'fatura' ? 'FATURA' : 'FOLHA DE PAGAMENTO'}
                               </h1>
-                              <p className="text-xs font-mono font-bold text-slate-700 mt-1" style={{ color: '#334155' }}>
-                                Nº: {viewDoc.data.numeroFatura || (viewDoc.type === 'folha' ? 'FOLHA-' + (viewDoc.data.id ? viewDoc.data.id.substring(0, 6) : 'XXXX') : 'FAT-0000')}
+                              <p className="text-xs font-bold text-slate-700 mt-1" style={{ color: '#334155', fontFamily: 'Arial, Helvetica, sans-serif', letterSpacing: 'normal' }}>
+                                Nº: {viewDoc.data.numeroFatura || (viewDoc.type === 'folha' ? 'FOLHA-' + (viewDoc.data.id ? viewDoc.data.id.substring(0, 6) : '0000') : 'FAT-0000')}
                               </p>
-                              <p className="text-xs text-slate-500 mt-0.5" style={{ color: '#64748b' }}>
+                              <p className="text-xs text-slate-500 mt-0.5" style={{ color: '#64748b', fontFamily: 'Arial, Helvetica, sans-serif' }}>
                                 Emissão: {viewDoc.data.dataEmissao ? (viewDoc.data.dataEmissao.includes('T') ? new Date(viewDoc.data.dataEmissao).toLocaleDateString('pt-BR') : viewDoc.data.dataEmissao) : new Date().toLocaleDateString('pt-BR')}
                               </p>
                             </div>
@@ -6972,22 +7036,22 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                   const valorLinha = calculateRowValue(p, viewDoc.type);
                                   return (
                                     <tr key={i} style={{ backgroundColor: i % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
-                                      <td style={{ width: '14%', padding: '8px', textAlign: 'center', fontFamily: 'monospace', color: '#334155' }}>
+                                      <td style={{ width: '14%', padding: '8px', textAlign: 'center', fontFamily: 'Arial, Helvetica, sans-serif', color: '#334155', letterSpacing: 'normal' }}>
                                         {formatDateBR(p.data)}
                                       </td>
-                                      <td style={{ width: '36%', padding: '8px', textAlign: 'left', fontWeight: 500, color: '#1e293b', wordBreak: 'break-word' }}>
+                                      <td style={{ width: '36%', padding: '8px', textAlign: 'left', fontWeight: 500, color: '#1e293b', wordBreak: 'break-word', fontFamily: 'Arial, Helvetica, sans-serif', letterSpacing: 'normal' }}>
                                         {viewDoc.type === 'fatura' 
                                           ? formatNomeComEspacos(p.profissional || p.nomeProfissional) 
                                           : formatNomeComEspacos(p.nomePaciente || 'A Definir')
                                         }
                                       </td>
-                                      <td style={{ width: '15%', padding: '8px', textAlign: 'center', fontFamily: 'monospace', color: '#475569', fontWeight: 500 }}>
+                                      <td style={{ width: '15%', padding: '8px', textAlign: 'center', fontFamily: 'Arial, Helvetica, sans-serif', color: '#475569', fontWeight: 500, letterSpacing: 'normal' }}>
                                         {getPlantaoCargaHoraria(p)}
                                       </td>
-                                      <td style={{ width: '17%', padding: '8px', textAlign: 'center', color: '#475569' }}>
+                                      <td style={{ width: '17%', padding: '8px', textAlign: 'center', color: '#475569', fontFamily: 'Arial, Helvetica, sans-serif', letterSpacing: 'normal' }}>
                                         {p.tipoDia || 'Normal'}
                                       </td>
-                                      <td style={{ width: '18%', padding: '8px', textAlign: 'right', color: '#0f172a', fontWeight: 700, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                                      <td style={{ width: '18%', padding: '8px', textAlign: 'right', color: '#0f172a', fontWeight: 700, fontFamily: 'Arial, Helvetica, sans-serif', letterSpacing: 'normal', whiteSpace: 'nowrap' }}>
                                         R$ {valorLinha.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                       </td>
                                     </tr>
@@ -7000,23 +7064,23 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                           {/* Seção de Serviços Adicionais / Materiais na Fatura */}
                           {viewDoc.type === 'fatura' && servicosExtrasDoc.length > 0 && (
                             <div className="rounded-lg overflow-hidden border border-slate-200 mb-5" style={{ borderRadius: '8px', border: '1px solid #e2e8f0', width: '100%' }}>
-                              <div style={{ backgroundColor: '#1a3c2e', color: '#ffffff', padding: '6px 12px', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                              <div style={{ backgroundColor: '#1a3c2e', color: '#ffffff', padding: '6px 12px', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase', letterSpacing: 'normal', fontFamily: 'Arial, Helvetica, sans-serif' }}>
                                 Serviços Adicionais / Materiais
                               </div>
-                              <table className="w-full text-xs border-collapse table-fixed" style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
+                              <table className="w-full text-xs border-collapse table-fixed" style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontFamily: 'Arial, Helvetica, sans-serif' }}>
                                 <thead>
                                   <tr style={{ backgroundColor: '#f1f5f9', color: '#334155', borderBottom: '1px solid #e2e8f0' }}>
-                                    <th style={{ padding: '6px 8px', textAlign: 'center', width: '18%', fontSize: '10px', textTransform: 'uppercase', fontWeight: 700 }}>Data</th>
-                                    <th style={{ padding: '6px 8px', textAlign: 'left', width: '58%', fontSize: '10px', textTransform: 'uppercase', fontWeight: 700 }}>Descrição</th>
-                                    <th style={{ padding: '6px 8px', textAlign: 'right', width: '24%', fontSize: '10px', textTransform: 'uppercase', fontWeight: 700, whiteSpace: 'nowrap' }}>Valor (R$)</th>
+                                    <th style={{ padding: '6px 8px', textAlign: 'center', width: '18%', fontSize: '10px', textTransform: 'uppercase', fontWeight: 700, letterSpacing: 'normal' }}>Data</th>
+                                    <th style={{ padding: '6px 8px', textAlign: 'left', width: '58%', fontSize: '10px', textTransform: 'uppercase', fontWeight: 700, letterSpacing: 'normal' }}>Descrição</th>
+                                    <th style={{ padding: '6px 8px', textAlign: 'right', width: '24%', fontSize: '10px', textTransform: 'uppercase', fontWeight: 700, letterSpacing: 'normal', whiteSpace: 'nowrap' }}>Valor (R$)</th>
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-[#E5E7EB]">
                                   {servicosExtrasDoc.map((s: any, idx: number) => (
                                     <tr key={s.id || idx} style={{ backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
-                                      <td style={{ padding: '6px 8px', textAlign: 'center', fontFamily: 'monospace', color: '#334155' }}>{formatDateBR(s.data)}</td>
-                                      <td style={{ padding: '6px 8px', textAlign: 'left', fontWeight: 500, color: '#1e293b' }}>{s.descricao}</td>
-                                      <td style={{ padding: '6px 8px', textAlign: 'right', color: '#0f172a', fontWeight: 700, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                                      <td style={{ padding: '6px 8px', textAlign: 'center', fontFamily: 'Arial, Helvetica, sans-serif', color: '#334155', letterSpacing: 'normal' }}>{formatDateBR(s.data)}</td>
+                                      <td style={{ padding: '6px 8px', textAlign: 'left', fontWeight: 500, color: '#1e293b', fontFamily: 'Arial, Helvetica, sans-serif', letterSpacing: 'normal' }}>{s.descricao}</td>
+                                      <td style={{ padding: '6px 8px', textAlign: 'right', color: '#0f172a', fontWeight: 700, fontFamily: 'Arial, Helvetica, sans-serif', letterSpacing: 'normal', whiteSpace: 'nowrap' }}>
                                         R$ {(Number(s.valor) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                       </td>
                                     </tr>
@@ -7029,12 +7093,12 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                           {/* Seção de Descontos / Débitos na Folha */}
                           {viewDoc.type === 'folha' && viewDoc.data.valorTotalDebitos > 0 && (
                             <div className="rounded-lg overflow-hidden border border-red-200 mb-5" style={{ borderRadius: '8px', border: '1px solid #fecaca', width: '100%' }}>
-                              <div style={{ backgroundColor: '#991b1b', color: '#ffffff', padding: '6px 12px', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                              <div style={{ backgroundColor: '#991b1b', color: '#ffffff', padding: '6px 12px', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase', letterSpacing: 'normal', fontFamily: 'Arial, Helvetica, sans-serif' }}>
                                 Descontos / Débitos Aplicados
                               </div>
-                              <div className="p-3 flex justify-between items-center text-xs" style={{ backgroundColor: '#fef2f2', padding: '12px' }}>
+                              <div className="p-3 flex justify-between items-center text-xs" style={{ backgroundColor: '#fef2f2', padding: '12px', fontFamily: 'Arial, Helvetica, sans-serif' }}>
                                 <span className="font-medium" style={{ color: '#7f1d1d' }}>Total de Débitos / Descontos da Folha:</span>
-                                <span className="font-mono font-bold whitespace-nowrap" style={{ color: '#b91c1c' }}>
+                                <span className="font-bold whitespace-nowrap" style={{ color: '#b91c1c', fontFamily: 'Arial, Helvetica, sans-serif', letterSpacing: 'normal' }}>
                                   - R$ {Number(viewDoc.data.valorTotalDebitos || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </span>
                               </div>
@@ -7043,23 +7107,23 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
 
                           {/* 4. Totalizador */}
                           <div className="flex justify-end mb-6">
-                            <div className="bg-[#F8FAF9] border border-slate-200/90 rounded-xl p-4 text-right min-w-[240px]" style={{ backgroundColor: '#F8FAF9', border: '1px solid #e2e8f0', borderRadius: '12px', minWidth: '240px' }}>
+                            <div className="bg-[#F8FAF9] border border-slate-200/90 rounded-xl p-4 text-right min-w-[240px]" style={{ backgroundColor: '#F8FAF9', border: '1px solid #e2e8f0', borderRadius: '12px', minWidth: '240px', fontFamily: 'Arial, Helvetica, sans-serif' }}>
                               {viewDoc.type === 'fatura' && servicosExtrasDoc.length > 0 && (
-                                <div className="text-[11px] text-slate-600 mb-1 flex justify-between gap-4">
+                                <div className="text-[11px] text-slate-600 mb-1 flex justify-between gap-4" style={{ fontFamily: 'Arial, Helvetica, sans-serif', letterSpacing: 'normal' }}>
                                   <span>Soma Plantões:</span>
-                                  <span className="font-mono">R$ {totalSomaPlantoes.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                  <span style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontWeight: 600 }}>R$ {totalSomaPlantoes.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                 </div>
                               )}
                               {viewDoc.type === 'fatura' && servicosExtrasDoc.length > 0 && (
-                                <div className="text-[11px] text-slate-600 mb-2 flex justify-between gap-4 pb-1.5 border-b border-slate-200">
+                                <div className="text-[11px] text-slate-600 mb-2 flex justify-between gap-4 pb-1.5 border-b border-slate-200" style={{ fontFamily: 'Arial, Helvetica, sans-serif', letterSpacing: 'normal' }}>
                                   <span>Serviços Extras:</span>
-                                  <span className="font-mono">+ R$ {somaExtrasDoc.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                  <span style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontWeight: 600 }}>+ R$ {somaExtrasDoc.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                 </div>
                               )}
-                              <span className="text-[10px] font-extrabold uppercase text-slate-500 tracking-wider block" style={{ color: '#64748b' }}>
+                              <span className="text-[10px] font-extrabold uppercase text-slate-500 tracking-wider block" style={{ color: '#64748b', fontFamily: 'Arial, Helvetica, sans-serif' }}>
                                 VALOR TOTAL {viewDoc.type === 'fatura' ? 'DA FATURA' : 'LÍQUIDO'}
                               </span>
-                              <span className="text-2xl font-black text-[#1a3c2e] font-mono block mt-0.5" style={{ color: '#1a3c2e' }}>
+                              <span className="text-2xl font-black text-[#1a3c2e] block mt-0.5" style={{ color: '#1a3c2e', fontFamily: 'Arial, Helvetica, sans-serif', letterSpacing: 'normal' }}>
                                 R$ {valorTotalCorrigido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
                             </div>

@@ -9863,30 +9863,32 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       </div>
                     )}
                     <div>
-                      <h2 className="text-base font-bold text-slate-900 tracking-tight leading-tight">
-                        {empresaInfo?.razaoSocial || 'VALLIDARE - GESTÃO E CONSULTORIA EM SAÚDE LTDA.'}
+                      <h2 className="text-base font-bold text-slate-900 tracking-tight leading-tight" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+                        {empresaInfo?.razaoSocial && !/VALUDARE|VALLIOARE|EIREU/i.test(empresaInfo.razaoSocial)
+                          ? empresaInfo.razaoSocial.replace(/\s+/g, ' ').trim()
+                          : 'VALLIDARE GESTÃO MÉDICA E AUDITORIA EIRELI'}
                       </h2>
-                      <p className="text-xs text-slate-600 font-medium mt-0.5">
-                        CNPJ: {empresaInfo?.cnpj || '00.000.000/0000-00'}
+                      <p className="text-xs text-slate-600 font-medium mt-0.5" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+                        CNPJ: {empresaInfo?.cnpj || '27.770.797/0001-62'}
                       </p>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        {empresaInfo?.endereco || 'Atendimento Domiciliar Especializado'}
+                      <p className="text-xs text-slate-500 mt-0.5" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+                        {empresaInfo?.endereco || 'Rua Martins Ferreira, 71 - Botafogo / Rio de Janeiro'}
                       </p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <h1 className="text-2xl font-bold text-slate-900 tracking-wide">FATURA</h1>
-                    <p className="text-xs font-mono font-bold text-slate-700 mt-1">
+                    <h1 className="text-2xl font-bold text-slate-900 tracking-wide" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>FATURA</h1>
+                    <p className="text-xs font-bold text-slate-700 mt-1" style={{ fontFamily: 'Arial, Helvetica, sans-serif', letterSpacing: 'normal' }}>
                       Nº: {faturaParaBaixar.numeroFatura || 'FAT-0000'}
                     </p>
-                    <p className="text-xs text-slate-600 font-medium mt-0.5">
+                    <p className="text-xs text-slate-600 font-medium mt-0.5" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
                       Emissão: {faturaParaBaixar.dataEmissao ? (faturaParaBaixar.dataEmissao.includes('T') ? new Date(faturaParaBaixar.dataEmissao).toLocaleDateString('pt-BR') : faturaParaBaixar.dataEmissao) : new Date().toLocaleDateString('pt-BR')}
                     </p>
                   </div>
                 </div>
 
                 {/* 2. Box de Identificação e Resumo */}
-                <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="grid grid-cols-2 gap-3 mb-4" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
                   {/* Card 1: Paciente e Período */}
                   <div className="bg-slate-50/90 border border-slate-200 rounded-lg p-3 flex flex-col justify-between">
                     <div>
@@ -9920,7 +9922,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     </div>
                     <div className="mt-2 text-right">
                       <span className="text-xs text-slate-600 font-bold block">Valor Total:</span>
-                      <p className="text-xl font-bold text-emerald-800 font-mono leading-none mt-1">
+                      <p className="text-xl font-bold text-emerald-800 leading-none mt-1" style={{ fontFamily: 'Arial, Helvetica, sans-serif', letterSpacing: 'normal' }}>
                         R$ {(faturaParaBaixar.valorTotal || faturaParaBaixar.valorTotalFatura || totalSomaPlantoes).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </p>
                     </div>
@@ -9928,15 +9930,15 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 </div>
 
                 {/* 3. Tabela de Escalas / Plantões — Leve, com Fundo Claro e Alto Contraste (+40) */}
-                <div className="rounded-lg overflow-hidden border border-slate-300 mb-4">
+                <div className="rounded-lg overflow-hidden border border-slate-300 mb-4" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
                   <table className="w-full text-xs border-collapse">
                     <thead>
                       <tr className="bg-slate-100 border-b border-slate-300 text-slate-800">
-                        <th className="py-2.5 px-3 text-center font-bold text-xs uppercase tracking-wider w-[100px]">Data</th>
-                        <th className="py-2.5 px-3 text-left font-bold text-xs uppercase tracking-wider min-w-[200px]">Profissional</th>
-                        <th className="py-2.5 px-3 text-center font-bold text-xs uppercase tracking-wider w-[110px]">Carga Horária</th>
-                        <th className="py-2.5 px-3 text-center font-bold text-xs uppercase tracking-wider w-[110px]">Serviço</th>
-                        <th className="py-2.5 px-3 text-right font-bold text-xs uppercase tracking-wider whitespace-nowrap w-[130px]">Valor (R$)</th>
+                        <th className="py-2.5 px-3 text-center font-bold text-xs uppercase tracking-normal w-[100px]">Data</th>
+                        <th className="py-2.5 px-3 text-left font-bold text-xs uppercase tracking-normal min-w-[200px]">Profissional</th>
+                        <th className="py-2.5 px-3 text-center font-bold text-xs uppercase tracking-normal w-[110px]">Carga Horária</th>
+                        <th className="py-2.5 px-3 text-center font-bold text-xs uppercase tracking-normal w-[110px]">Serviço</th>
+                        <th className="py-2.5 px-3 text-right font-bold text-xs uppercase tracking-normal whitespace-nowrap w-[130px]">Valor (R$)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
@@ -9952,13 +9954,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
                         return (
                           <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
-                            <td className="py-2.5 px-3 text-center font-mono text-slate-700 font-semibold text-xs">{formatDateBR(p.data)}</td>
-                            <td className="py-2.5 px-3 text-left font-semibold text-slate-900 text-xs whitespace-normal break-words">
+                            <td className="py-2.5 px-3 text-center text-slate-700 font-semibold text-xs" style={{ fontFamily: 'Arial, Helvetica, sans-serif', letterSpacing: 'normal' }}>{formatDateBR(p.data)}</td>
+                            <td className="py-2.5 px-3 text-left font-semibold text-slate-900 text-xs whitespace-normal break-words" style={{ fontFamily: 'Arial, Helvetica, sans-serif', letterSpacing: 'normal' }}>
                               {formatNomeComEspacos(p.profissional || p.nomeProfissional)}
                             </td>
-                            <td className="py-2.5 px-3 text-center font-mono text-slate-700 font-medium text-xs">{getPlantaoCargaHoraria(p)}</td>
-                            <td className="py-2.5 px-3 text-center text-slate-700 text-xs font-medium">{p.tipoDia || 'Plantão Normal'}</td>
-                            <td className="py-2.5 px-3 text-right text-slate-900 font-bold font-mono text-xs whitespace-nowrap">
+                            <td className="py-2.5 px-3 text-center text-slate-700 font-medium text-xs" style={{ fontFamily: 'Arial, Helvetica, sans-serif', letterSpacing: 'normal' }}>{getPlantaoCargaHoraria(p)}</td>
+                            <td className="py-2.5 px-3 text-center text-slate-700 text-xs font-medium" style={{ fontFamily: 'Arial, Helvetica, sans-serif', letterSpacing: 'normal' }}>{p.tipoDia || 'Plantão Normal'}</td>
+                            <td className="py-2.5 px-3 text-right text-slate-900 font-bold text-xs whitespace-nowrap" style={{ fontFamily: 'Arial, Helvetica, sans-serif', letterSpacing: 'normal' }}>
                               R$ {valorLinha.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
                           </tr>
@@ -9969,12 +9971,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 </div>
 
                 {/* 4. Totalizador */}
-                <div className="flex justify-end mb-4">
+                <div className="flex justify-end mb-4" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
                   <div className="bg-slate-50 border border-slate-300 rounded-lg p-3 text-right min-w-[240px] shadow-2xs">
                     <span className="text-[11px] font-bold uppercase text-slate-600 tracking-wider block">
                       VALOR TOTAL DA FATURA
                     </span>
-                    <span className="text-2xl font-black text-slate-900 font-mono block mt-0.5">
+                    <span className="text-2xl font-black text-slate-900 block mt-0.5" style={{ fontFamily: 'Arial, Helvetica, sans-serif', letterSpacing: 'normal' }}>
                       R$ {(faturaParaBaixar.valorTotal || faturaParaBaixar.valorTotalFatura || totalSomaPlantoes).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
