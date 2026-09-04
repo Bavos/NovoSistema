@@ -16,6 +16,7 @@ import { ModalInserirDebito, DadosAtalhoCuringa } from './ModalInserirDebito';
 import { CardBase, DataGrid, DataField, SoftBadge } from './ui/DesignSystem';
 import { Logo } from './Logo';
 import { pacienteSchema } from '../schemas/validationSchemas';
+import { getProximoCodigoReferencia } from '../utils/codigoPacienteUtils';
 import { mascaraCPF, mascaraTelefone, mascaraCEP, mascaraMesAno, validarCPF, mascaraAltura, mascaraPeso, mascaraFinanceira, formatarMoeda, converterMascaraParaNumero } from '../lib/masks';
 import {
   Save,
@@ -235,6 +236,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
   const lastLoadedPatientIdRef = useRef<string | null>(null);
   const hasInitializedPlanoTabRef = useRef<string | null>(null);
+  const hasUserManuallyEditedCodigoRef = useRef<boolean>(false);
 
   const handleCopyToClipboard = async (text: string) => {
     if (!text) return;
@@ -1299,7 +1301,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
   // Local state for Patient Forms
   const [nome, setNome] = useState('');
-  const [codigoReferencia, setCodigoReferencia] = useState('');
+  const [codigoReferencia, setCodigoReferencia] = useState<string>(() => {
+    if (paciente) {
+      return paciente.codigoReferencia || '';
+    }
+    return getProximoCodigoReferencia(pacientes);
+  });
   const [dataNascimento, setDataNascimento] = useState('');
   const [cpf, setCpf] = useState('');
   const [nomeResponsavel, setNomeResponsavel] = useState('');
@@ -1615,6 +1622,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         return;
       }
       lastLoadedPatientIdRef.current = paciente.id;
+      hasUserManuallyEditedCodigoRef.current = false;
       setIsNew(false);
       setNome(paciente.nome);
       setCodigoReferencia(paciente.codigoReferencia || '');
@@ -1698,14 +1706,15 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       setPDeactDate(paciente.desativadoEm || null);
       setPDeactReason(paciente.desativadoMotivo || null);
     } else {
-      if (lastLoadedPatientIdRef.current === null) {
+      if (lastLoadedPatientIdRef.current === 'NEW') {
         return;
       }
-      lastLoadedPatientIdRef.current = null;
+      lastLoadedPatientIdRef.current = 'NEW';
+      hasUserManuallyEditedCodigoRef.current = false;
       console.log("[PatientRecord] isNew set to true");
       setIsNew(true);
       setNome('');
-      setCodigoReferencia('');
+      setCodigoReferencia(getProximoCodigoReferencia(pacientes));
       setDataNascimento('1960-01-01');
       setCpf('');
       setNomeResponsavel('');
@@ -1748,7 +1757,15 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       setPDeactDate(null);
       setPDeactReason(null);
     }
-  }, [paciente]);
+  }, [paciente, pacientes]);
+
+  // Se for novo cadastro e o usuário ainda não tiver editado manualmente o código,
+  // atualiza o código sugerido caso a lista de pacientes seja carregada da nuvem após a montagem
+  useEffect(() => {
+    if (!paciente && !hasUserManuallyEditedCodigoRef.current) {
+      setCodigoReferencia(getProximoCodigoReferencia(pacientes));
+    }
+  }, [paciente, pacientes]);
 
   // Carregamento Inicial (useEffect) do Firestore na montagem da sub-aba 'Plano de Atendimento'
   useEffect(() => {
@@ -4209,10 +4226,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       <label className="block text-sm font-medium text-gray-750">Número / Código de Referência</label>
                       <input
                         type="text"
-                        placeholder="Ex: 00195"
+                        placeholder="Ex: 00203"
                         disabled={isCurrentlyDeactivated || isColaborador}
                         value={codigoReferencia}
-                        onChange={(e) => setCodigoReferencia(e.target.value)}
+                        onChange={(e) => {
+                          hasUserManuallyEditedCodigoRef.current = true;
+                          setCodigoReferencia(e.target.value);
+                        }}
                         className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
                       />
                     </div>
