@@ -154,6 +154,7 @@ export interface OcorrenciaPaciente {
 
 export interface Paciente {
   id: string;
+  codigoReferencia?: string;
   nome: string;
   dataNascimento: string;
   cpf: string;

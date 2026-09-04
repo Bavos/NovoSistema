@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export const pacienteSchema = z.object({
+  codigoReferencia: z.string().optional(),
   nome: z.string().min(3, "Nome é obrigatório e deve ter no mínimo 3 caracteres"),
   cpf: z.string().regex(/^\d{11}$/, "CPF deve conter 11 dígitos numéricos"),
   nomeResponsavel: z.string().min(3, "Nome do responsável é obrigatório"),

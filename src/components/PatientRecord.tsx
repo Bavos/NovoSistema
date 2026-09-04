@@ -1299,6 +1299,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
   // Local state for Patient Forms
   const [nome, setNome] = useState('');
+  const [codigoReferencia, setCodigoReferencia] = useState('');
   const [dataNascimento, setDataNascimento] = useState('');
   const [cpf, setCpf] = useState('');
   const [nomeResponsavel, setNomeResponsavel] = useState('');
@@ -1616,6 +1617,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       lastLoadedPatientIdRef.current = paciente.id;
       setIsNew(false);
       setNome(paciente.nome);
+      setCodigoReferencia(paciente.codigoReferencia || '');
       setDataNascimento(paciente.dataNascimento);
       setCpf(paciente.cpf);
       setNomeResponsavel(paciente.nomeResponsavel);
@@ -1703,6 +1705,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       console.log("[PatientRecord] isNew set to true");
       setIsNew(true);
       setNome('');
+      setCodigoReferencia('');
       setDataNascimento('1960-01-01');
       setCpf('');
       setNomeResponsavel('');
@@ -1911,6 +1914,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     }
 
     const patientPayload: Omit<Paciente, 'id' | 'createdAt' | 'status'> = {
+      codigoReferencia: codigoReferencia.trim(),
       nome,
       dataNascimento,
       cpf,
@@ -3983,6 +3987,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         {/* Lado Esquerdo: Identificação do Paciente */}
         <div className="space-y-2 text-left min-w-0">
           <div className="flex flex-wrap items-center gap-2.5">
+            {codigoReferencia?.trim() && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-mono font-bold bg-slate-100 text-slate-700 border border-slate-300 shadow-2xs">
+                [{codigoReferencia.trim()}]
+              </span>
+            )}
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight" id="prontuario-title-novo">
               {nome}
             </h1>
@@ -4184,7 +4193,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     DADOS PRINCIPAIS DO PACIENTE
                   </h4>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="space-y-1 col-span-1 md:col-span-3">
+                    <div className="space-y-1 col-span-1 md:col-span-2">
                       <label className="block text-sm font-medium text-gray-750">Nome Completo *</label>
                       <input
                         type="text"
@@ -4192,6 +4201,18 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         disabled={isCurrentlyDeactivated || isColaborador}
                         value={nome}
                         onChange={(e) => setNome(e.target.value)}
+                        className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
+                      />
+                    </div>
+
+                    <div className="space-y-1 col-span-1 md:col-span-1">
+                      <label className="block text-sm font-medium text-gray-750">Número / Código de Referência</label>
+                      <input
+                        type="text"
+                        placeholder="Ex: 00195"
+                        disabled={isCurrentlyDeactivated || isColaborador}
+                        value={codigoReferencia}
+                        onChange={(e) => setCodigoReferencia(e.target.value)}
                         className="w-full text-sm p-2.5 border border-slate-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#113224] focus:border-[#113224] disabled:bg-slate-100/80 disabled:cursor-not-allowed font-normal"
                       />
                     </div>
@@ -8868,6 +8889,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 <div className="text-left">
                   <h3 className="text-xs font-black text-[#1a3c2e] uppercase border-b border-[#b8860b]/35 pb-1 mb-2 tracking-wider">1. Dados do Paciente e Identificação</h3>
                   <div className="grid grid-cols-2 lg:grid-cols-3 gap-y-3 gap-x-4 text-xs">
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Cód. Referência:</span>
+                      <p className="font-extrabold text-slate-800 mt-1 font-mono">{codigoReferencia || paciente?.codigoReferencia || '---'}</p>
+                    </div>
                     <div>
                       <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Nome Completo:</span>
                       <p className="font-extrabold text-slate-850 text-slate-800 mt-1">{nome || paciente?.nome || '---'}</p>

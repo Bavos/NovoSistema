@@ -109,12 +109,14 @@ export const PatientList: React.FC<PatientListProps> = ({
 
       const matchSearch = !query ||
         normalizeText(p.nome).includes(query) ||
+        (p.codigoReferencia && normalizeText(p.codigoReferencia).includes(query)) ||
         normalizeText(p.cpf).includes(query) ||
         normalizeText(p.bairro).includes(query) ||
         normalizeText(p.nomeResponsavel).includes(query) ||
         normalizeText(p.parentescoResponsavel).includes(query) ||
         (cleanQuery && cleanCpf.includes(cleanQuery)) ||
-        (cleanQuery && cleanPhone.includes(cleanQuery));
+        (cleanQuery && cleanPhone.includes(cleanQuery)) ||
+        (cleanQuery && p.codigoReferencia && p.codigoReferencia.replace(/\D/g, '').includes(cleanQuery));
 
       // Filter logic
       const matchPaciente = filterPacienteId === 'todos' ? true : p.id === filterPacienteId;
@@ -245,7 +247,7 @@ export const PatientList: React.FC<PatientListProps> = ({
               <option value="todos">Todos os Pacientes</option>
               {sortedPacientes.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.nome} ({p.status === 'Ativo' ? 'Ativo' : 'Inativo'})
+                  {p.codigoReferencia?.trim() ? `[${p.codigoReferencia.trim()}] ` : ''}{p.nome} ({p.status === 'Ativo' ? 'Ativo' : 'Inativo'})
                 </option>
               ))}
             </select>
@@ -363,8 +365,17 @@ export const PatientList: React.FC<PatientListProps> = ({
                   </div>
 
                   <div className="min-w-0 flex-1 space-y-2">
-                    {/* Header Info: Name & Status Badge */}
+                    {/* Header Info: Reference Code, Name & Status Badge */}
                     <div className="flex flex-wrap items-center gap-2">
+                      {p.codigoReferencia?.trim() ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-mono font-semibold bg-slate-100 text-slate-700 border border-slate-300 shadow-2xs">
+                          [{p.codigoReferencia.trim()}]
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-1 text-xs font-mono text-slate-400 font-medium select-none" title="Sem código de referência">
+                          -
+                        </span>
+                      )}
                       <button
                         onClick={() => onSelectPatient(p)}
                         className="font-bold text-slate-800 text-base hover:text-emerald-600 transition-colors cursor-pointer text-left focus:outline-none"

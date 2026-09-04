@@ -6,6 +6,7 @@
       "type": "object",
       "properties": {
         "id": { "type": "string" },
+        "codigoReferencia": { "type": "string" },
         "nome": { "type": "string" },
         "dataNascimento": { "type": "string" },
         "cpf": { "type": "string" },
