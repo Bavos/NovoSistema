@@ -676,7 +676,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     confirmText?: string;
     cancelText?: string;
   } | null>(null);
-  const [deleteRecordConfirmInput, setDeleteRecordConfirmInput] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Editable details form fields (synchronized when we enter edit mode):
@@ -1652,14 +1651,42 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       setGrauDependencia(paciente.informacoesMedicas.grauDependencia || 'Médio');
       setObservacoesClinicas(paciente.informacoesMedicas.observacoesClinicas || '');
 
-      setTipoEscala(paciente.planoAtendimento?.tipoEscala || 'Diurno 12h');
-      setHoraInicioPadrao(paciente.planoAtendimento?.horaInicioPadrao || '07:00');
-      setValorSugeridoPlantao(formatarMoeda(paciente.planoAtendimento?.valorSugeridoPlantao || 150));
-      setAjudaCusto(formatarMoeda(paciente.planoAtendimento?.ajudaCusto || 0));
-      setValorTransporte(formatarMoeda(paciente.planoAtendimento?.valorTransporte ?? paciente.planoAtendimento?.ajudaCusto ?? 0));
-      setValorAlimentacao(formatarMoeda(paciente.planoAtendimento?.valorAlimentacao ?? 0));
-      setTaxaAdm(formatarMoeda(paciente.planoAtendimento?.taxaAdm || 0));
-      setTiposPlantao(paciente.planoAtendimento?.tiposPlantao || []);
+      const loadedTipos = paciente.planoAtendimento?.tiposPlantao || [];
+      if (loadedTipos.length > 0) {
+        const hasPrincipal = loadedTipos.some(t => t.isPrincipal);
+        if (!hasPrincipal) {
+          loadedTipos[0].isPrincipal = true;
+        }
+        const principal = loadedTipos.find(t => t.isPrincipal) || loadedTipos[0];
+        setTipoEscala(principal.tipoEscala);
+        setHoraInicioPadrao(principal.horaInicio);
+        setValorSugeridoPlantao(formatarMoeda(principal.valorPlantao));
+        setAjudaCusto(formatarMoeda(principal.ajudaCusto));
+        setValorTransporte(formatarMoeda(principal.valorTransporte ?? principal.ajudaCusto ?? 0));
+        setValorAlimentacao(formatarMoeda(principal.valorAlimentacao ?? 0));
+        setTaxaAdm(formatarMoeda(principal.taxaAdm));
+        setTiposPlantao(loadedTipos);
+      } else {
+        setTipoEscala(paciente.planoAtendimento?.tipoEscala || 'Diurno 12h');
+        setHoraInicioPadrao(paciente.planoAtendimento?.horaInicioPadrao || '07:00');
+        setValorSugeridoPlantao(formatarMoeda(paciente.planoAtendimento?.valorSugeridoPlantao || 150));
+        setAjudaCusto(formatarMoeda(paciente.planoAtendimento?.ajudaCusto || 0));
+        setValorTransporte(formatarMoeda(paciente.planoAtendimento?.valorTransporte ?? paciente.planoAtendimento?.ajudaCusto ?? 0));
+        setValorAlimentacao(formatarMoeda(paciente.planoAtendimento?.valorAlimentacao ?? 0));
+        setTaxaAdm(formatarMoeda(paciente.planoAtendimento?.taxaAdm || 0));
+        const defaultTp: EscalacaoPlano = {
+          id: `tp-${Date.now()}`,
+          tipoEscala: paciente.planoAtendimento?.tipoEscala || 'Diurno 12h',
+          horaInicio: paciente.planoAtendimento?.horaInicioPadrao || '07:00',
+          valorPlantao: paciente.planoAtendimento?.valorSugeridoPlantao || 150,
+          ajudaCusto: paciente.planoAtendimento?.ajudaCusto || 0,
+          valorTransporte: paciente.planoAtendimento?.valorTransporte ?? paciente.planoAtendimento?.ajudaCusto ?? 0,
+          valorAlimentacao: paciente.planoAtendimento?.valorAlimentacao ?? 0,
+          taxaAdm: paciente.planoAtendimento?.taxaAdm || 0,
+          isPrincipal: true,
+        };
+        setTiposPlantao([defaultTp]);
+      }
       
       const val = paciente.planoAtendimento?.valorSugeridoPlantao || 150;
       setNewShiftValor(val);
@@ -1729,14 +1756,42 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       const found = pacientes.find(p => p.id === paciente.id) || paciente;
       if (found && found.planoAtendimento) {
         hasInitializedPlanoTabRef.current = paciente.id;
-        setTipoEscala(found.planoAtendimento.tipoEscala || 'Diurno 12h');
-        setHoraInicioPadrao(found.planoAtendimento.horaInicioPadrao || '07:00');
-        setValorSugeridoPlantao(formatarMoeda(found.planoAtendimento.valorSugeridoPlantao ?? 150));
-        setAjudaCusto(formatarMoeda(found.planoAtendimento.ajudaCusto ?? 0));
-        setValorTransporte(formatarMoeda(found.planoAtendimento.valorTransporte ?? found.planoAtendimento.ajudaCusto ?? 0));
-        setValorAlimentacao(formatarMoeda(found.planoAtendimento.valorAlimentacao ?? 0));
-        setTaxaAdm(formatarMoeda(found.planoAtendimento.taxaAdm ?? 0));
-        setTiposPlantao(found.planoAtendimento.tiposPlantao || []);
+        const loadedTipos = found.planoAtendimento.tiposPlantao || [];
+        if (loadedTipos.length > 0) {
+          const hasPrincipal = loadedTipos.some(t => t.isPrincipal);
+          if (!hasPrincipal) {
+            loadedTipos[0].isPrincipal = true;
+          }
+          const principal = loadedTipos.find(t => t.isPrincipal) || loadedTipos[0];
+          setTipoEscala(principal.tipoEscala);
+          setHoraInicioPadrao(principal.horaInicio);
+          setValorSugeridoPlantao(formatarMoeda(principal.valorPlantao));
+          setAjudaCusto(formatarMoeda(principal.ajudaCusto));
+          setValorTransporte(formatarMoeda(principal.valorTransporte ?? principal.ajudaCusto ?? 0));
+          setValorAlimentacao(formatarMoeda(principal.valorAlimentacao ?? 0));
+          setTaxaAdm(formatarMoeda(principal.taxaAdm));
+          setTiposPlantao(loadedTipos);
+        } else {
+          setTipoEscala(found.planoAtendimento.tipoEscala || 'Diurno 12h');
+          setHoraInicioPadrao(found.planoAtendimento.horaInicioPadrao || '07:00');
+          setValorSugeridoPlantao(formatarMoeda(found.planoAtendimento.valorSugeridoPlantao ?? 150));
+          setAjudaCusto(formatarMoeda(found.planoAtendimento.ajudaCusto ?? 0));
+          setValorTransporte(formatarMoeda(found.planoAtendimento.valorTransporte ?? found.planoAtendimento.ajudaCusto ?? 0));
+          setValorAlimentacao(formatarMoeda(found.planoAtendimento.valorAlimentacao ?? 0));
+          setTaxaAdm(formatarMoeda(found.planoAtendimento.taxaAdm ?? 0));
+          const defaultTp: EscalacaoPlano = {
+            id: `tp-${Date.now()}`,
+            tipoEscala: found.planoAtendimento.tipoEscala || 'Diurno 12h',
+            horaInicio: found.planoAtendimento.horaInicioPadrao || '07:00',
+            valorPlantao: found.planoAtendimento.valorSugeridoPlantao || 150,
+            ajudaCusto: found.planoAtendimento.ajudaCusto || 0,
+            valorTransporte: found.planoAtendimento.valorTransporte ?? found.planoAtendimento.ajudaCusto ?? 0,
+            valorAlimentacao: found.planoAtendimento.valorAlimentacao ?? 0,
+            taxaAdm: found.planoAtendimento.taxaAdm || 0,
+            isPrincipal: true,
+          };
+          setTiposPlantao([defaultTp]);
+        }
       }
     } else if (activeTab !== 'plano') {
       hasInitializedPlanoTabRef.current = null;
@@ -1760,8 +1815,19 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     (pl) => paciente && pl.pacienteId === paciente.id
   ).sort((a, b) => b.data.localeCompare(a.data));
 
-  // Compiled rows representing the default Principal scale plus any additional formats configured
-  const allRows = [
+  // Compiled rows representing configured shifts
+  const allRows = tiposPlantao.length > 0 ? tiposPlantao.map((tp, idx) => {
+    const isThisPrincipal = tp.isPrincipal ?? (idx === 0);
+    return {
+      ...tp,
+      isPrincipal: isThisPrincipal,
+      tipoEscala: isThisPrincipal ? tipoEscala : tp.tipoEscala,
+      horaInicio: isThisPrincipal ? horaInicioPadrao : tp.horaInicio,
+      valorPlantao: isThisPrincipal ? converterMascaraParaNumero(valorSugeridoPlantao) : tp.valorPlantao,
+      ajudaCusto: isThisPrincipal ? converterMascaraParaNumero(ajudaCusto) : tp.ajudaCusto,
+      taxaAdm: isThisPrincipal ? converterMascaraParaNumero(taxaAdm) : tp.taxaAdm,
+    };
+  }) : [
     {
       id: 'principal',
       tipoEscala: tipoEscala,
@@ -1770,11 +1836,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       ajudaCusto: converterMascaraParaNumero(ajudaCusto),
       taxaAdm: converterMascaraParaNumero(taxaAdm),
       isPrincipal: true,
-    },
-    ...tiposPlantao.map((tp) => ({
-      ...tp,
-      isPrincipal: false,
-    })),
+    }
   ];
 
   // Handle Form Save
@@ -1992,7 +2054,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
   // New Handler for deleting a single shift
   const handleDeleteAgendamento = (id: string) => {
-    setDeleteRecordConfirmInput('');
     setDeleteRecordDialog({
       isOpen: true,
       title: 'Confirmar Exclusão',
@@ -2013,6 +2074,32 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     });
   };
 
+  // Function to set any shift format as Principal
+  const handleSetPrincipal = (id: string) => {
+    if (isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador') {
+      toast.error('Acesso Negado: Ação não permitida.');
+      return;
+    }
+    const target = tiposPlantao.find(t => t.id === id);
+    if (!target) return;
+
+    const updated = tiposPlantao.map(t => ({
+      ...t,
+      isPrincipal: t.id === id
+    }));
+
+    setTiposPlantao(updated);
+    setTipoEscala(target.tipoEscala);
+    setHoraInicioPadrao(target.horaInicio);
+    setValorSugeridoPlantao(formatarMoeda(target.valorPlantao));
+    setAjudaCusto(formatarMoeda(target.ajudaCusto));
+    setValorTransporte(formatarMoeda(target.valorTransporte ?? target.ajudaCusto ?? 0));
+    setValorAlimentacao(formatarMoeda(target.valorAlimentacao ?? 0));
+    setTaxaAdm(formatarMoeda(target.taxaAdm));
+
+    toast.success(`Plantão "${target.tipoEscala}" definido como Principal com sucesso!`);
+  };
+
   // Function to delete or clear a configuration/mode of shift (either Principal or Additional) from Plano de Atendimento
   const handleDeletePlantao = (id: string, isPrincipal: boolean) => {
     if (userRole?.toLowerCase() === 'colaborador') {
@@ -2024,7 +2111,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       return;
     }
 
-    setDeleteRecordConfirmInput('');
     setDeleteRecordDialog({
       isOpen: true,
       title: 'Remover Configuração de Plantão',
@@ -3703,7 +3789,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       return;
     }
 
-    setDeleteRecordConfirmInput('');
     setDeleteRecordDialog({
       isOpen: true,
       title: 'Confirmar Exclusão em Lote',
@@ -4937,7 +5022,18 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                             <td className="py-3 px-4 text-right text-slate-600 font-normal">R$ {(Number(tp.ajudaCusto) || 0).toFixed(2).replace('.', ',')}</td>
                             <td className="py-3 px-4 text-right text-slate-600 font-normal">R$ {(Number(tp.taxaAdm) || 0).toFixed(2).replace('.', ',')}</td>
                             <td className="py-3 px-4 text-center">
-                              <div className="flex items-center justify-center space-x-2">
+                              <div className="flex items-center justify-center space-x-1.5 flex-wrap gap-y-1">
+                                {!tp.isPrincipal && (
+                                  <button
+                                    type="button"
+                                    disabled={isCurrentlyDeactivated || userRole?.toLowerCase() === 'colaborador'}
+                                    onClick={() => handleSetPrincipal(tp.id)}
+                                    className="py-1 px-2 border border-emerald-300 text-emerald-700 hover:bg-emerald-50 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-all font-semibold inline-flex items-center space-x-1 cursor-pointer text-xs"
+                                    title="Definir como Plantão Principal"
+                                  >
+                                    <span>⭐ Definir Principal</span>
+                                  </button>
+                                )}
                                 {tp.isPrincipal ? (
                                   <>
                                     <span className="text-xs text-slate-400 italic mr-1">Padrão</span>
@@ -9685,49 +9781,32 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               </p>
             </div>
 
-            {/* Confirmation textbox */}
-            <div className="bg-white border border-slate-250 rounded-xl p-3.5 space-y-2 text-left">
-              <label className="block text-xs font-semibold text-slate-700">
-                Para confirmar, digite <span className="font-extrabold text-red-650 font-mono select-all">'CONFIRMAR'</span> abaixo:
-              </label>
-              <input
-                type="text"
-                value={deleteRecordConfirmInput}
-                onChange={(e) => setDeleteRecordConfirmInput(e.target.value.toUpperCase())}
-                className="w-full text-xs font-mono font-bold tracking-widest px-3 py-2 border border-slate-200 rounded-lg text-slate-800 bg-slate-50 uppercase focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-red-500"
-              />
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                disabled={isDeleting}
-                onClick={() => setDeleteRecordDialog(null)}
-                className="flex-1 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 rounded-full transition-all text-center cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {deleteRecordDialog.cancelText || 'Cancelar'}
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  if (deleteRecordConfirmInput.trim().toUpperCase() !== 'CONFIRMAR') {
-                    toast.error("Por favor, digite 'CONFIRMAR' para prosseguir.");
-                    return;
-                  }
-                  try {
-                    await deleteRecordDialog.onConfirm();
-                  } catch (e) {
-                    console.error(e);
-                  } finally {
-                    setDeleteRecordDialog(null);
-                  }
-                }}
-                disabled={isDeleting || deleteRecordConfirmInput.trim().toUpperCase() !== 'CONFIRMAR'}
-                className="flex-1 py-2 text-xs font-black text-white bg-red-600 hover:bg-red-700 rounded-full transition-all text-center cursor-pointer shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isDeleting ? 'Excluindo...' : 'Confirmar e Excluir'}
-              </button>
-            </div>
+             <div className="flex gap-3 pt-2">
+               <button
+                 type="button"
+                 disabled={isDeleting}
+                 onClick={() => setDeleteRecordDialog(null)}
+                 className="flex-1 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 rounded-full transition-all text-center cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
+               >
+                 {deleteRecordDialog.cancelText || 'Cancelar'}
+               </button>
+               <button
+                 type="button"
+                 onClick={async () => {
+                   try {
+                     await deleteRecordDialog.onConfirm();
+                   } catch (e) {
+                     console.error(e);
+                   } finally {
+                     setDeleteRecordDialog(null);
+                   }
+                 }}
+                 disabled={isDeleting}
+                 className="flex-1 py-2 text-xs font-black text-white bg-red-600 hover:bg-red-700 rounded-full transition-all text-center cursor-pointer shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+               >
+                 {isDeleting ? 'Excluindo...' : 'Confirmar e Excluir'}
+               </button>
+             </div>
           </div>
         </div>
       )}

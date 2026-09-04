@@ -117,6 +117,7 @@ export interface EscalacaoPlano {
   taxaAdm: number | "";
   valorTransporte?: number | "";
   valorAlimentacao?: number | "";
+  isPrincipal?: boolean;
 }
 
 export interface PlanoAtendimento {
