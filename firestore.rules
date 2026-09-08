@@ -83,9 +83,8 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    match /debitos_profissionais/{debitoId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
+    match /debitos_profissionais/{document=**} {
+      allow read, write: if request.auth != null;
     }
 
     match /servicos_extras/{servicoId} {
