@@ -510,3 +510,9 @@ export const processarFolhaInter = onCall(
     }
   }
 );
+
+// -----------------------------------------------------------------------------------------
+// EXPORTAÇÃO DOS SERVIÇOS DE INTELIGÊNCIA ARTIFICIAL (GEMINI BACKEND SEGURO)
+// -----------------------------------------------------------------------------------------
+export { gerarResumoClinico } from "./geminiService";
+

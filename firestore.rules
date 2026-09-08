@@ -2,14 +2,146 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Regra para faturas
-    match /faturas/{faturaId} {
-      allow read, write: if request.auth != null;
+    // Helper: Verifica se o usuário está autenticado
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper: Verifica se o usuário é Administrador Master (bootstrap) ou possui papel de Administrador
+    function isMasterAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.email == 'renatobz@gmail.com' ||
+        request.auth.token.role == 'Administrador' ||
+        request.auth.token.role == 'admin'
+      );
     }
 
-    // Regra padrão para demais coleções autenticadas
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+    // Helper: Verifica se o usuário é Administrador no cadastro do sistema
+    function isAdmin() {
+      return isAuthenticated() && (
+        isMasterAdmin() ||
+        (
+          exists(/databases/$(database)/documents/usuarios_sistema/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/usuarios_sistema/$(request.auth.uid)).data.nivelAcesso == 'Administrador'
+        )
+      );
+    }
+
+    // 1. Gestão de Usuários e Permissões do Sistema
+    match /usuarios_sistema/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin(); // Apenas Admin pode criar, atualizar ou remover perfis de acesso
+    }
+
+    // 2. Prontuários e Dados Clínicos de Pacientes (LGPD Médica)
+    match /pacientes/{pacienteId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin();
+      allow delete: if false; // Proibida exclusão física de registros de saúde para auditoria clínica
+      
+      // Subcoleções aninhadas de escala ou atendimento
+      match /{allSubcollections=**} {
+        allow read: if isAuthenticated();
+        allow write: if isAdmin();
+      }
+    }
+
+    // 3. Profissionais e Ocorrências
+    match /profissionais/{profId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+
+      match /ocorrencias/{ocorrenciaId} {
+        allow read: if isAuthenticated();
+        allow write: if isAdmin();
+      }
+    }
+
+    // 4. Escalas, Plantões e Agendamentos
+    match /plantoes/{plantaoId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /agendamentos/{agendamentoId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // 5. Módulos Financeiros, Faturas e Folhas de Pagamento
+    match /faturas/{faturaId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /faturas_pacientes/{faturaId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /folhas_pagamento/{folhaId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /debitos_profissionais/{debitoId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /servicos_extras/{servicoId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // 6. Configurações da Empresa e Dados Organizacionais
+    match /configuracoes_empresa/{empresaId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // 7. Backups de Prontuários
+    match /backups_prontuarios/{backupId} {
+      allow read, write: if isAdmin();
+    }
+
+    // 8. Trilhas de Auditoria e Logs de Sistema (Imutabilidade de Logs)
+    match /logs_auditoria/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if false; // Logs são imutáveis
+    }
+
+    match /audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if false; // Logs são imutáveis
+    }
+
+    match /LogsAuditoria/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if false; // Logs são imutáveis
+    }
+
+    match /system_errors/{errorId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
+    // 9. Rate Limiting de IA e Propostas de Ajustes (Defesa em Profundidade)
+    match /rate_limits_ia/{uid} {
+      // Bloqueado para clientes web/mobile; manipulado exclusivamente via Cloud Functions com Admin SDK
+      allow read, write: if false;
+    }
+
+    match /propostas_ajustes_ia/{propostaId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAdmin();
+      allow delete: if false;
     }
   }
 }
+
