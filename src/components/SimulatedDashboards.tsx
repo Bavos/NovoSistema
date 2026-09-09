@@ -660,6 +660,69 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
     });
   };
 
+  const [isCleaningMeiDuplicates, setIsCleaningMeiDuplicates] = useState<boolean>(false);
+
+  const handleLimparDebitosMeiDuplicados = () => {
+    const vistos = new Map<string, string>();
+    const duplicadosParaRemover: { id: string; nome: string; chave: string }[] = [];
+
+    (debitosProfissionais || []).forEach(d => {
+      const anyD = d as any;
+      const desc = (anyD.descricao || '').toLowerCase();
+      const tipo = (anyD.tipo || '').toLowerCase();
+      const motivo = (d.motivo || '').toLowerCase();
+
+      // Filtra registros relacionados a MEI
+      if (desc.includes('mei') || tipo.includes('mei') || motivo.includes('mei')) {
+        const profId = d.idProfissional || anyD.profissionalId;
+        const comp = anyD.mesReferencia || anyD.competencia || d.data || 'sem_mes';
+        const chave = `${profId}_${comp}`;
+
+        if (vistos.has(chave)) {
+          duplicadosParaRemover.push({
+            id: d.id,
+            nome: d.nomeProfissional || profId,
+            chave
+          });
+        } else {
+          vistos.set(chave, d.id);
+        }
+      }
+    });
+
+    if (duplicadosParaRemover.length === 0) {
+      toast("Nenhum débito de MEI duplicado foi encontrado.", { icon: 'ℹ️' });
+      return;
+    }
+
+    const count = duplicadosParaRemover.length;
+    setDeleteConfirmDialog({
+      isOpen: true,
+      title: 'Limpar Débitos MEI Duplicados',
+      message: `Foram encontrados ${count} débito(s) de MEI duplicados para o mesmo profissional e competência. Deseja remover essas duplicatas agora?`,
+      onConfirm: async () => {
+        setIsCleaningMeiDuplicates(true);
+        const toastId = toast.loading(`Removendo ${count} débito(s) de MEI duplicado(s)...`);
+        let deletados = 0;
+        try {
+          for (const item of duplicadosParaRemover) {
+            await deleteDebitoProfissional(item.id);
+            deletados++;
+          }
+          toast.success(`Concluído! ${deletados} débito(s) de MEI duplicado(s) removido(s) com sucesso.`, { id: toastId });
+          if (typeof setNotification === 'function') {
+            setNotification(`${deletados} débito(s) de MEI duplicado(s) removido(s).`);
+          }
+        } catch (err: any) {
+          console.error("Erro ao remover duplicatas de MEI:", err);
+          toast.error("Falha ao remover duplicatas: " + (err.message || 'Erro desconhecido'), { id: toastId });
+        } finally {
+          setIsCleaningMeiDuplicates(false);
+        }
+      }
+    });
+  };
+
   const handleExportDebitosPDF = async () => {
     setIsExportingDebitosPDF(true);
     const toastId = toast.loading("Gerando PDF do relatório de débitos...");
@@ -3917,6 +3980,14 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                   {isDeletingDebts ? 'Excluindo...' : `Excluir Selecionados (${selectedDebts.length})`}
                 </button>
               )}
+              <button
+                onClick={handleLimparDebitosMeiDuplicados}
+                disabled={isCleaningMeiDuplicates}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-amber-600 text-white font-medium rounded-lg shadow-lg shadow-amber-500/30 hover:bg-amber-700 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                title="Buscar e remover débitos de MEI duplicados"
+              >
+                <Trash2 size={15} /> {isCleaningMeiDuplicates ? 'Limpando...' : 'Limpar MEI Duplicados'}
+              </button>
               <button
                 onClick={handleExportDebitosPDF}
                 disabled={isExportingDebitosPDF}
