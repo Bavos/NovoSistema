@@ -162,18 +162,8 @@ const AccessDeniedView: React.FC = () => (
 );
 
 function DashboardContent() {
-  const [activeSidebarTab, setActiveSidebarTab] = useState<string>(() => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const tabParam = params.get('tab');
-      if (tabParam && ['dashboard', 'pacientes', 'profissionais', 'financeiro', 'empresa'].includes(tabParam)) {
-        return tabParam;
-      }
-    } catch (e) {
-      console.warn(e);
-    }
-    return 'dashboard';
-  });
+  // O módulo padrão ao entrar, reabrir ou deslogar/logar é sempre "dashboard" (Bem-Vindo)
+  const [activeSidebarTab, setActiveSidebarTab] = useState<string>('dashboard');
   const [financeiroSubTab, setFinanceiroSubTab] = useState<'folhas' | 'debitos'>('folhas');
 
   // Manage Pacientes page inner state routing overrides
@@ -268,6 +258,34 @@ function DashboardContent() {
 
   // Monitorar inatividade do usuário e realizar logout automático com segurança
   useAutoLogout();
+
+  // Reset de estado e garantia de que o módulo inicial padrão seja sempre "Bem-Vindo" (dashboard)
+  useEffect(() => {
+    setActiveSidebarTab('dashboard');
+    try {
+      const keysToClean = [
+        'last_visited_tab',
+        'lastTab',
+        'activeTab',
+        'currentTab',
+        'ultima_aba',
+        'lastRoute',
+        'activeSidebarTab',
+        'selectedTab',
+        'initialTab'
+      ];
+      keysToClean.forEach(key => {
+        window.localStorage.removeItem(key);
+        window.sessionStorage.removeItem(key);
+      });
+      // Limpar parâmetros de rota residual na barra de endereço ao iniciar ou recarregar
+      if (window.location.search || window.location.hash) {
+        window.history.replaceState({}, '', '/');
+      }
+    } catch (err) {
+      console.warn('Erro ao limpar estado de rota inicial:', err);
+    }
+  }, [user?.uid]);
 
   // Manter o título da aba do navegador padronizado
   useEffect(() => {

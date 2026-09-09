@@ -63,7 +63,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   }, [user?.uid, isQuotaExceeded, isTestMode]);
 
   const allMenuItems = [
-    { id: 'dashboard', label: 'Início', icon: Activity },
+    { id: 'dashboard', label: 'Bem-Vindo', icon: Activity },
     { id: 'pacientes', label: 'Pacientes', icon: Users },
     { id: 'profissionais', label: 'Profissionais', icon: Briefcase },
     { id: 'financeiro', label: 'Faturas & Pagamentos', icon: DollarSign },

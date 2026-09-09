@@ -65,6 +65,28 @@ export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ o
 
         try {
             await login(emailFormatado, password);
+            try {
+                const routeKeys = [
+                    'last_visited_tab',
+                    'lastTab',
+                    'activeTab',
+                    'currentTab',
+                    'ultima_aba',
+                    'lastRoute',
+                    'activeSidebarTab',
+                    'selectedTab',
+                    'initialTab'
+                ];
+                routeKeys.forEach(k => {
+                    window.localStorage.removeItem(k);
+                    window.sessionStorage.removeItem(k);
+                });
+                if (window.location.search || window.location.hash || window.location.pathname !== '/') {
+                    window.history.replaceState({}, '', '/');
+                }
+            } catch (storageErr) {
+                console.warn('Erro ao resetar rotas pós-login:', storageErr);
+            }
         } catch (err: any) {
             const raw = ((err?.code || '') + ' ' + (err?.message || '')).toLowerCase();
             if (raw.includes('email-not-verified')) {

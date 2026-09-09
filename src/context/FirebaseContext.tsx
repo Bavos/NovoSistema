@@ -752,9 +752,44 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           }
         }
         setUser(currentUser);
+        // Garantir que sessão ativa/recarregamento inicialize no Bem-Vindo sem resíduos de rota
+        try {
+          const routeKeys = [
+            'last_visited_tab',
+            'lastTab',
+            'activeTab',
+            'currentTab',
+            'ultima_aba',
+            'lastRoute',
+            'activeSidebarTab',
+            'selectedTab',
+            'initialTab'
+          ];
+          routeKeys.forEach(k => {
+            window.localStorage.removeItem(k);
+            window.sessionStorage.removeItem(k);
+          });
+        } catch (e) {
+          console.warn("Erro ao limpar chaves de rota na sessão ativa:", e);
+        }
       } else {
         setUser(null);
         try {
+          const routeKeys = [
+            'last_visited_tab',
+            'lastTab',
+            'activeTab',
+            'currentTab',
+            'ultima_aba',
+            'lastRoute',
+            'activeSidebarTab',
+            'selectedTab',
+            'initialTab'
+          ];
+          routeKeys.forEach(k => {
+            window.localStorage.removeItem(k);
+            window.sessionStorage.removeItem(k);
+          });
           if (window.location.search || window.location.hash || window.location.pathname !== '/') {
             window.history.replaceState({}, '', '/');
           }
@@ -776,6 +811,27 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const err: any = new Error('auth/email-not-verified');
       err.code = 'auth/email-not-verified';
       throw err;
+    }
+    // Redirecionamento e limpeza pós-login forçando módulo Bem-Vindo
+    try {
+      const routeKeys = [
+        'last_visited_tab',
+        'lastTab',
+        'activeTab',
+        'currentTab',
+        'ultima_aba',
+        'lastRoute',
+        'activeSidebarTab',
+        'selectedTab',
+        'initialTab'
+      ];
+      routeKeys.forEach(k => {
+        window.localStorage.removeItem(k);
+        window.sessionStorage.removeItem(k);
+      });
+      window.history.replaceState({}, '', '/');
+    } catch (e) {
+      console.warn("Erro ao resetar rota no login:", e);
     }
   };
 
@@ -806,6 +862,21 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const logout = async () => {
     try {
       window.sessionStorage.removeItem('rh_session_token');
+      const routeKeys = [
+        'last_visited_tab',
+        'lastTab',
+        'activeTab',
+        'currentTab',
+        'ultima_aba',
+        'lastRoute',
+        'activeSidebarTab',
+        'selectedTab',
+        'initialTab'
+      ];
+      routeKeys.forEach(k => {
+        window.localStorage.removeItem(k);
+        window.sessionStorage.removeItem(k);
+      });
       window.history.replaceState({}, '', '/');
     } catch (e) {
       console.warn("Erro ao limpar URL no logout:", e);
