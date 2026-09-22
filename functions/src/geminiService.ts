@@ -385,7 +385,7 @@ O relatório DEVE ser retornado em formato Markdown fluido e profissional, estru
         }
       });
 
-      const relatorioMarkdown = response.text || "";
+      const resultadoDoModelo = response.text || "";
 
       // 6. Trilha de Auditoria
       await admin.firestore().collection("logs_auditoria").add({
@@ -397,13 +397,7 @@ O relatório DEVE ser retornado em formato Markdown fluido e profissional, estru
       });
 
       return {
-        sucesso: true,
-        resposta: relatorioMarkdown,
-        relatorio: relatorioMarkdown,
-        relatorioMarkdown,
-        metricasGerais: dadosAnonimizados.metricasGerais,
-        requisicoesRestantesMinuto,
-        timestamp: new Date().toISOString()
+        resposta: resultadoDoModelo
       };
 
     } catch (error: any) {

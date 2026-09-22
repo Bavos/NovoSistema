@@ -5,7 +5,7 @@
  */
 
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { app, auth } from '../lib/firebase';
+import { app } from '../lib/firebase';
 
 export interface MetricasConsolidadasInput {
   pacientes: any[];
@@ -81,96 +81,29 @@ export async function consultarAssistenteOperacional(
 ): Promise<ResultadoConsultaOperacional> {
   const dadosAnonimizados = sanitizarPayloadAntesDeEnviar(dados);
 
-  // 1. Chamada via SDK Oficial do Firebase Functions (região southamerica-east1)
-  try {
-    const functions = getFunctions(undefined, 'southamerica-east1');
-    const consultarIA = httpsCallable<any, any>(functions, 'analisarMetricasHomeCare');
+  // Chamada exclusiva via SDK Oficial do Firebase Functions (região southamerica-east1)
+  const functions = getFunctions(app, 'southamerica-east1');
+  const consultarIA = httpsCallable<{ pergunta: string; metricas?: any }, { resposta: string }>(
+    functions,
+    'analisarMetricasHomeCare'
+  );
 
-    const result = await consultarIA({
-      pergunta: textoPergunta || '',
-      metricas: dadosAnonimizados
-    });
+  const result = await consultarIA({
+    pergunta: textoPergunta || '',
+    metricas: dadosAnonimizados
+  });
 
-    const data = result?.data;
-    let textoRetornado = '';
+  const textoResposta = result?.data?.resposta;
 
-    if (typeof data === 'string') {
-      textoRetornado = data;
-    } else if (data && typeof data === 'object') {
-      textoRetornado = data.resposta || data.relatorio || data.relatorioMarkdown || '';
-    }
-
-    if (textoRetornado) {
-      return {
-        sucesso: true,
-        resposta: textoRetornado,
-        metricasGerais: data?.metricasGerais,
-        timestamp: data?.timestamp || new Date().toISOString()
-      };
-    }
-  } catch (cloudFnError: any) {
-    console.warn(
-      '[Assistente Operacional] Cloud Function indisponível na nuvem ou emulada, acionando rota local segura:',
-      cloudFnError?.message || cloudFnError
-    );
+  if (!textoResposta) {
+    throw new Error('Nenhuma resposta recebida do Assistente Operacional.');
   }
 
-  // 2. Fallback resiliente: Rota de backend segura (/api/analisar-metricas)
-  try {
-    let idToken = '';
-    if (auth.currentUser) {
-      idToken = await auth.currentUser.getIdToken(false);
-    }
-
-    const response = await fetch('/api/analisar-metricas', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: idToken ? `Bearer ${idToken}` : '',
-      },
-      body: JSON.stringify({
-        pergunta: textoPergunta || '',
-        metricas: dadosAnonimizados
-      }),
-    });
-
-    const responseText = await response.text();
-    let parsedData: any = null;
-
-    try {
-      parsedData = JSON.parse(responseText);
-    } catch {
-      // Se o backend retornou texto puro/markdown diretamente
-      return {
-        sucesso: true,
-        resposta: responseText,
-        timestamp: new Date().toISOString()
-      };
-    }
-
-    if (!response.ok || (parsedData && parsedData.sucesso === false)) {
-      throw new Error(parsedData?.erro || `Erro HTTP ${response.status}`);
-    }
-
-    const textoFinal = 
-      parsedData?.resposta || 
-      parsedData?.relatorio || 
-      parsedData?.relatorioMarkdown || 
-      (typeof parsedData === 'string' ? parsedData : '');
-
-    return {
-      sucesso: true,
-      resposta: textoFinal,
-      metricasGerais: parsedData?.metricasGerais,
-      timestamp: parsedData?.timestamp || new Date().toISOString()
-    };
-  } catch (backendError: any) {
-    console.error('[Assistente Operacional] Erro nos canais de comunicação:', backendError);
-    throw new Error(
-      backendError?.message ||
-      'Não foi possível obter resposta do Assistente Operacional. Por favor, tente novamente.'
-    );
-  }
+  return {
+    sucesso: true,
+    resposta: textoResposta,
+    timestamp: new Date().toISOString()
+  };
 }
 
 // Manter compatibilidade com chamadas existentes

@@ -327,6 +327,8 @@ Estruture o relatório com os seguintes tópicos obrigatórios:
         config: { systemInstruction, temperature: 0.2 }
       });
 
+      const resultadoDoModelo = response.text || "";
+
       await db.collection("logs_auditoria").add({
         acao: "IA_ANALISE_OPERACOES_HOMECARE",
         pergunta: pergunta ? pergunta.substring(0, 200) : "DIAGNOSTICO_COMPLETO",
@@ -335,15 +337,8 @@ Estruture o relatório com os seguintes tópicos obrigatórios:
         timestamp: new Date().toISOString()
       });
 
-      const relTexto = response.text || "";
-
       return {
-        sucesso: true,
-        resposta: relTexto,
-        relatorio: relTexto,
-        relatorioMarkdown: relTexto,
-        metricasGerais: dadosHigienizados.metricasGerais,
-        timestamp: new Date().toISOString()
+        resposta: resultadoDoModelo
       };
     } catch (err) {
       console.error("Erro ao processar consulta:", err);

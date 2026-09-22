@@ -201,17 +201,12 @@ O relatório DEVE ser retornado em formato Markdown fluido, legível e altamente
             }
           });
 
-          const relTexto = response.text || '';
+          const resultadoDoModelo = response.text || '';
 
           res.statusCode = 200;
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify({
-            sucesso: true,
-            resposta: relTexto,
-            relatorio: relTexto,
-            relatorioMarkdown: relTexto,
-            metricasGerais,
-            timestamp: new Date().toISOString()
+            resposta: resultadoDoModelo
           }));
 
         } catch (err: any) {
