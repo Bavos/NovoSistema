@@ -263,6 +263,35 @@ exports.analisarMetricasHomeCare = onCall(
     const pacientesRaw = Array.isArray(source.pacientes) ? source.pacientes : [];
     const profissionaisRaw = Array.isArray(source.profissionais) ? source.profissionais : [];
     const escalasRaw = Array.isArray(source.escalas || source.agendamentos || source.plantoes) ? (source.escalas || source.agendamentos || source.plantoes) : [];
+    const financeiroRaw = Array.isArray(source.financeiro) ? source.financeiro : [];
+
+    const escalasProcessadas = escalasRaw.map(e => ({
+      paciente: anonPac(e.pacienteId || e.pacienteNome || e.idPaciente),
+      profissional: (e.profissionalId || e.profissionalNome || e.idProfissional || e.nomeProfissional) ? anonProf(e.profissionalId || e.profissionalNome || e.idProfissional || e.nomeProfissional) : 'NÃO_ALOCADO (GARGALO)',
+      data: e.data || e.dataPrevista || 'N/D',
+      diaSemana: e.diaSemana || 'N/D',
+      horario: e.horario || e.tipoTurno || e.turno || '12h Diurno',
+      status: e.status || 'Agendado',
+      curinga: Boolean(
+        e.curinga === true ||
+        e.isCuringa === true ||
+        (e.tipoEscala && String(e.tipoEscala).toLowerCase().includes('curinga')) ||
+        (e.observacao && String(e.observacao).toUpperCase().includes('CURINGA')) ||
+        (e.motivoFalta && String(e.motivoFalta).toUpperCase().includes('CURINGA'))
+      )
+    }));
+
+    const financeiroProcessado = financeiroRaw.map(f => ({
+      tipo: f.tipo || 'debito',
+      valor: Number(f.valor || 0),
+      data: f.data || 'N/D',
+      diaSemana: f.diaSemana || 'N/D',
+      motivo: f.motivo || f.numeroFatura || f.descricao || '',
+      paciente: f.pacienteId ? anonPac(f.pacienteId) : undefined,
+      profissional: f.profissionalId ? anonProf(f.profissionalId) : undefined,
+      curinga: Boolean(f.curinga || (f.motivo && String(f.motivo).toLowerCase().includes('curinga'))),
+      status: f.status || 'concluido'
+    }));
 
     const dadosHigienizados = {
       metricasGerais: {
@@ -271,31 +300,36 @@ exports.analisarMetricasHomeCare = onCall(
         totalProfissionais: profissionaisRaw.length,
         profissionaisAtivos: profissionaisRaw.filter(p => (p.status || '').toLowerCase() !== 'inativo').length,
         totalEscalas: escalasRaw.length,
+        escalasCuringa: escalasProcessadas.filter(e => e.curinga).length,
         escalasSemAlocacao: escalasRaw.filter(e => !e.profissionalId && !e.profissionalNome && !e.idProfissional && !e.nomeProfissional).length,
       },
-      pacientesAmostra: pacientesRaw.slice(0, 40).map(p => ({
+      pacientes: pacientesRaw.map(p => ({
         codigo: anonPac(p.id || p.nome),
         status: p.status || 'Ativo',
         complexidade: p.complexidade || p.grauComplexidade || 'Média',
-        planoCuidado: p.planoCuidado || p.tipoPlantao || 'Plantão 12h',
-        especialidadeRequerida: p.especialidade || 'Técnico de Enfermagem'
+        planoCuidado: p.planoCuidado || p.tipoPlantao || 'Plantão 12h'
       })),
-      profissionaisAmostra: profissionaisRaw.slice(0, 40).map(p => ({
+      profissionais: profissionaisRaw.map(p => ({
         codigo: anonProf(p.id || p.nome),
         categoria: p.categoria || p.funcao || 'Cuidador',
         especialidade: p.especialidade || 'Geral',
         status: p.status || 'Disponível'
       })),
-      escalasAmostra: escalasRaw.slice(0, 50).map(e => ({
-        paciente: anonPac(e.pacienteId || e.pacienteNome || e.idPaciente),
-        profissional: (e.profissionalId || e.profissionalNome || e.idProfissional || e.nomeProfissional) ? anonProf(e.profissionalId || e.profissionalNome || e.idProfissional || e.nomeProfissional) : 'NÃO_ALOCADO (GARGALO)',
-        turno: e.tipoTurno || e.turno || e.horario || '12h Diurno',
-        status: e.status || 'Agendado'
-      }))
+      escalas: escalasProcessadas,
+      financeiro: financeiroProcessado
     };
 
     const prompt = `Você é um assistente operacional de gestão de home care. Responda à dúvida do administrador com base estritamente nas seguintes métricas e dados operacionais anonimizados:
-Dados Operacionais:
+
+Dicionário de Regras de Negócio:
+- 'Curinga': Identificado pelo campo booleano 'curinga: true' nos registros de escalas (plantão de cobertura/reserva emergencial) ou em débitos de motivo 'Curinga'.
+- 'Escalas/Plantões': Contêm a data exata da execução ('data' em formato YYYY-MM-DD), turno ('horario') e dia da semana ('diaSemana').
+- 'Financeiro': Contém registros de débito e crédito vinculados aos atendimentos dos pacientes e aos profissionais.
+
+Orientações para o cálculo:
+Analise com precisão os dados filtrando pelo mês de agosto (ou o período solicitado na pergunta) e realize os cálculos estatísticos, contagem de curingas, ordenação crescente dos dias da semana com mais dias e porcentagem mensal de cada dia solicitados pelo administrador. Apresente os resultados detalhados com clareza, valores e porcentagens exatas.
+
+Dados Operacionais Anonimizados:
 ${JSON.stringify(dadosHigienizados, null, 2)}
 
 Pergunta do Administrador:

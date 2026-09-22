@@ -129,6 +129,9 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
         pacientes,
         profissionais,
         escalas: agendamentos,
+        debitosProfissionais,
+        faturasPacientes,
+        folhasPagamento,
         totaisConsolidados: {
           faturamentoMensalConsolidado: metricasSumarizadas.faturamentoConsolidado,
           custoTotalFolhaConsolidado: metricasSumarizadas.custoFolhaConsolidado,
