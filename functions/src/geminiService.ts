@@ -322,6 +322,8 @@ export const analisarMetricasHomeCare = onCall(
     // 3. Sanitização e Anonimização completa conforme LGPD
     const rawData = request.data || {};
     const dadosAnonimizados = sanitizarDadosOperacionaisHomeCare(rawData);
+    const pergunta = String(rawData.pergunta || "").trim();
+    const metricas = dadosAnonimizados;
 
     // 4. Extração segura da chave do Secret Manager
     const apiKey = process.env.GEMINI_API_KEY;
@@ -329,63 +331,35 @@ export const analisarMetricasHomeCare = onCall(
       throw new HttpsError("failed-precondition", "GEMINI_API_KEY não configurada no servidor.");
     }
 
-    // 5. Inicialização do SDK do Gemini com Modelo Atual e Seguro
-    const ai = new GoogleGenAI({ apiKey });
+    const prompt = `Você é um assistente operacional de gestão de home care. Responda à dúvida do administrador com base estritamente nas seguintes métricas e dados operacionais anonimizados:
+Dados Operacionais:
+${JSON.stringify(metricas, null, 2)}
 
-    const systemInstruction =
-      "Você é um assistente de análise de gestão e operações financeiras de home care. " +
-      "Analise exclusivamente os dados anonimizados fornecidos, destacando gargalos de escalas, custos de plantões e projeções de demanda. " +
-      "Nunca deduza nem tente solicitar dados de identificação pessoal.";
+Pergunta do Administrador:
+${pergunta || 'Apresente um resumo geral da operação, gargalos de escalas e capacidade assistencial.'}`;
 
-    const pergunta = String(rawData.pergunta || "").trim();
-
-    const prompt = pergunta
-      ? `O administrador do serviço de Home Care fez a seguinte consulta operacional:
-"${pergunta}"
-
-Por favor, responda de forma analítica, clara e estruturada em Markdown, fundamentando-se rigorosamente nos dados anonimizados abaixo. Se a pergunta for sobre profissionais sem escala, gargalos, médias ou conflitos, verifique detalhadamente a lista de dados e aponte os fatos com precisão:
-
-<DADOS_OPERACIONAIS_ANONIMIZADOS>
-${JSON.stringify(dadosAnonimizados, null, 2)}
-</DADOS_OPERACIONAIS_ANONIMIZADOS>`
-      : `Por favor, elabore um relatório executivo de inteligência e diagnóstico operacional para a diretoria do serviço de Home Care com base estritamente nos dados anonimizados abaixo:
-
-<DADOS_OPERACIONAIS_ANONIMIZADOS>
-${JSON.stringify(dadosAnonimizados, null, 2)}
-</DADOS_OPERACIONAIS_ANONIMIZADOS>
-
-O relatório DEVE ser retornado em formato Markdown fluido e profissional, estruturado obrigatoriamente com os 4 tópicos abaixo:
-
-## Resumo Geral
-- Avaliação do panorama da operação, proporção entre pacientes ativos e capacidade assistencial instalada.
-- Visão macro da eficiência da equipe e volume de horas prestadas.
-
-## Eficiência de Escalas
-- Identificação de gargalos de escalas, turnos sem cobertura ou com desfalque iminente.
-- Concentração de plantões por profissional e risco de fadiga/turnover.
-- Taxa de assertividade no preenchimento de escalas por especialidade.
-
-## Riscos Financeiros
-- Análise de custos de plantões vs faturamento consolidado.
-- Riscos de sobrepreço em plantões de emergência, desequilíbrio de margem e débitos pendentes.
-- Previsibilidade de receita com base no mix de complexidade dos pacientes.
-
-## Recomendações
-- Ações táticas e imediatas para sanar gargalos de escalas.
-- Recomendações estratégicas para contenção de custos e otimização do quadro de profissionais.
-- Sugestões para sustentabilidade operacional de médio/longo prazo.`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
     try {
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: prompt,
-        config: {
-          systemInstruction,
-          temperature: 0.2
-        }
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+        }),
       });
 
-      const resultadoDoModelo = response.text || "";
+      if (!response.ok) {
+        const erroDetalhado = await response.text();
+        console.error('Erro na API do Gemini:', erroDetalhado);
+        throw new HttpsError('internal', `Erro da API Gemini: ${response.status} - ${erroDetalhado}`);
+      }
+
+      const data = await response.json();
+      const respostaTexto = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Nenhuma resposta gerada.';
 
       // 6. Trilha de Auditoria
       await admin.firestore().collection("logs_auditoria").add({
@@ -397,7 +371,7 @@ O relatório DEVE ser retornado em formato Markdown fluido e profissional, estru
       });
 
       return {
-        resposta: resultadoDoModelo
+        resposta: respostaTexto
       };
 
     } catch (error: any) {

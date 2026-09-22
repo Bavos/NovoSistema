@@ -294,41 +294,35 @@ exports.analisarMetricasHomeCare = onCall(
       }))
     };
 
-    const { GoogleGenAI } = require("@google/genai");
-    const ai = new GoogleGenAI({ apiKey });
-
-    const systemInstruction =
-      "Você é um assistente de análise de gestão e operações financeiras de home care. " +
-      "Analise exclusivamente os dados anonimizados fornecidos, destacando gargalos de escalas, custos de plantões e projeções de demanda. " +
-      "Nunca deduza nem tente solicitar dados de identificação pessoal.";
-
-    const prompt = pergunta
-      ? `O administrador do serviço de Home Care fez a seguinte consulta operacional:
-"${pergunta}"
-
-Por favor, responda de forma analítica, clara e estruturada em Markdown, fundamentando-se rigorosamente nos dados operacionais anonimizados abaixo:
-<DADOS_ANONIMIZADOS>
+    const prompt = `Você é um assistente operacional de gestão de home care. Responda à dúvida do administrador com base estritamente nas seguintes métricas e dados operacionais anonimizados:
+Dados Operacionais:
 ${JSON.stringify(dadosHigienizados, null, 2)}
-</DADOS_ANONIMIZADOS>`
-      : `Analise os dados anonimizados da operação de home care e responda em Markdown:
-<DADOS_ANONIMIZADOS>
-${JSON.stringify(dadosHigienizados, null, 2)}
-</DADOS_ANONIMIZADOS>
 
-Estruture o relatório com os seguintes tópicos obrigatórios:
-## Resumo Geral
-## Eficiência de Escalas
-## Riscos Financeiros
-## Recomendações`;
+Pergunta do Administrador:
+${pergunta || 'Apresente um resumo geral da operação, gargalos de escalas e capacidade assistencial.'}`;
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
     try {
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: prompt,
-        config: { systemInstruction, temperature: 0.2 }
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+        }),
       });
 
-      const resultadoDoModelo = response.text || "";
+      if (!response.ok) {
+        const erroDetalhado = await response.text();
+        console.error('Erro na API do Gemini:', erroDetalhado);
+        throw new HttpsError('internal', `Erro da API Gemini: ${response.status} - ${erroDetalhado}`);
+      }
+
+      const data = await response.json();
+      const respostaTexto = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Nenhuma resposta gerada.';
 
       await db.collection("logs_auditoria").add({
         acao: "IA_ANALISE_OPERACOES_HOMECARE",
@@ -339,9 +333,12 @@ Estruture o relatório com os seguintes tópicos obrigatórios:
       });
 
       return {
-        resposta: resultadoDoModelo
+        resposta: respostaTexto
       };
     } catch (err) {
+      if (err instanceof HttpsError) {
+        throw err;
+      }
       console.error("Erro ao processar consulta:", err);
       throw new HttpsError("internal", `Falha no processamento: ${err.message}`);
     }
