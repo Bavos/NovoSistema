@@ -154,7 +154,7 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
 
       setMensagens(prev => [...prev, novaMensagemResposta]);
     } catch (err: any) {
-      console.error('[AssistenteOperacional] Erro ao consultar:', err);
+      console.error('[AssistenteOperacional] Falha na requisição operacional');
       setErro(err?.message || 'Falha ao processar a consulta operacional.');
     } finally {
       setLoading(false);
@@ -236,9 +236,13 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
                   <Lock className="w-3.5 h-3.5" />
                   Anonimização LGPD Ativa
                 </span>
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 border border-purple-200">
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Efemeridade Total (Memória Volátil)
+                </span>
               </div>
               <p className="text-sm text-slate-500 mt-1 max-w-3xl">
-                Consulte métricas operacionais em tempo real, verifique gargalos de escalas, custos de plantões e faça perguntas livres com garantia de sigilo de dados.
+                Consulte métricas operacionais em tempo real, verifique gargalos de escalas, custos de plantões e faça perguntas livres com garantia de sigilo de dados e efemeridade total (nenhum registro é salvo no banco ou navegador).
               </p>
             </div>
           </div>
@@ -248,16 +252,16 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
               <button
                 type="button"
                 onClick={handleLimparConversa}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-xs"
-                title="Limpar histórico da conversa"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 transition-colors shadow-2xs"
+                title="Iniciar nova consulta e limpar memória transitória"
               >
-                <Trash2 className="w-3.5 h-3.5 text-slate-400" />
-                Limpar Conversa
+                <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
+                Iniciar nova consulta
               </button>
               <button
                 type="button"
                 onClick={handleImprimir}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-xs"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-2xs"
                 title="Imprimir relatório"
               >
                 <Printer className="w-3.5 h-3.5 text-slate-400" />

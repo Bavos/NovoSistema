@@ -385,22 +385,14 @@ ${pergunta || 'Apresente um resumo geral da operação, gargalos de escalas e ca
       });
 
       if (!response.ok) {
-        const erroDetalhado = await response.text();
-        console.error('Erro na API do Gemini:', erroDetalhado);
-        throw new HttpsError('internal', `Erro da API Gemini: ${response.status} - ${erroDetalhado}`);
+        console.error('Falha na chamada da API Gemini', response.status);
+        throw new HttpsError('internal', `Erro da API Gemini: ${response.status}`);
       }
 
       const data = await response.json();
       const respostaTexto = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Nenhuma resposta gerada.';
 
-      // 6. Trilha de Auditoria
-      await admin.firestore().collection("logs_auditoria").add({
-        acao: "IA_ANALISE_OPERACOES_HOMECARE",
-        pergunta: pergunta ? pergunta.substring(0, 200) : "DIAGNOSTICO_COMPLETO",
-        executadoPorUid: uid,
-        executadoPorEmail: userEmail,
-        timestamp: new Date().toISOString()
-      });
+      // Efemeridade estrita: Nenhuma conversa, pergunta ou resposta é persistida no banco de dados.
 
       return {
         resposta: respostaTexto
@@ -410,8 +402,8 @@ ${pergunta || 'Apresente um resumo geral da operação, gargalos de escalas e ca
       if (error instanceof HttpsError) {
         throw error;
       }
-      console.error("[analisarMetricasHomeCare Error]:", error);
-      throw new HttpsError("internal", `Falha ao processar análise operacional com IA: ${error.message}`);
+      console.error('Falha na chamada da API Gemini', error?.status || 500);
+      throw new HttpsError('internal', 'Falha ao processar análise operacional com IA.');
     }
   }
 );
