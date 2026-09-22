@@ -1,11 +1,11 @@
 /**
  * @file src/services/geminiOperacoesService.ts
- * @description Serviço seguro para geração de relatórios de inteligência operacional via Gemini.
+ * @description Serviço seguro para consultas de inteligência operacional.
  * Atende aos requisitos de LGPD, zero exposição de chave no cliente e execução restrita a administradores.
  */
 
-import { httpsCallable } from 'firebase/functions';
-import { functions, auth } from '../lib/firebase';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { app, auth } from '../lib/firebase';
 
 export interface MetricasConsolidadasInput {
   pacientes: any[];
@@ -22,20 +22,10 @@ export interface MetricasConsolidadasInput {
   };
 }
 
-export interface ResultadoAnaliseOperacoes {
+export interface ResultadoConsultaOperacional {
   sucesso: boolean;
-  relatorioMarkdown: string;
-  metricasGerais?: {
-    totalPacientesCadastrados: number;
-    pacientesAtivos: number;
-    totalProfissionaisCadastrados: number;
-    profissionaisAtivos: number;
-    totalEscalasRegistradas: number;
-    escalasSemProfissionalAlocado: number;
-    escalasConcluidas: number;
-    totaisConsolidados?: any;
-  };
-  requisicoesRestantesMinuto?: number;
+  resposta: string;
+  metricasGerais?: any;
   timestamp: string;
 }
 
@@ -43,7 +33,7 @@ export interface ResultadoAnaliseOperacoes {
  * Higienização prévia no cliente (Camada 1 de Proteção LGPD).
  * Garante que nenhum CPF, RG, telefone ou endereço físico trafegue na rede.
  */
-function sanitizarPayloadAntesDeEnviar(dados: MetricasConsolidadasInput) {
+export function sanitizarPayloadAntesDeEnviar(dados: MetricasConsolidadasInput) {
   const pacientesLimpos = (dados.pacientes || []).map((p, idx) => ({
     id: `PAC-${String(idx + 1).padStart(3, '0')}`,
     status: p.status || 'Ativo',
@@ -65,9 +55,9 @@ function sanitizarPayloadAntesDeEnviar(dados: MetricasConsolidadasInput) {
 
   const escalasLimpas = (dados.escalas || []).slice(0, 150).map((e, idx) => ({
     id: `ESC-${idx + 1}`,
-    pacienteId: e.pacienteId ? `PAC-REF` : 'PAC-GENERIC',
-    profissionalId: e.profissionalId ? `P-REF` : null,
-    tipoTurno: e.tipoTurno || e.turno || '12h Diurno',
+    idPaciente: e.idPaciente || e.pacienteId ? `PAC-REF` : 'PAC-GENERIC',
+    idProfissional: (e.idProfissional || e.profissionalId) ? `P-REF` : null,
+    tipoTurno: e.tipoTurno || e.turno || e.horario || '12h Diurno',
     status: e.status || 'Agendado',
     data: e.data ? String(e.data).substring(0, 10) : 'N/D'
   }));
@@ -82,31 +72,50 @@ function sanitizarPayloadAntesDeEnviar(dados: MetricasConsolidadasInput) {
 }
 
 /**
- * Dispara a análise de métricas para a rota segura no servidor / Cloud Function
+ * Consulta o Assistente de Inteligência Operacional com pergunta livre ou relatório completo.
+ * Não aplica JSON.parse em respostas que venham como string/texto puro.
  */
-export async function gerarRelatorioInsightsOperacionais(
+export async function consultarAssistenteOperacional(
+  textoPergunta: string,
   dados: MetricasConsolidadasInput
-): Promise<ResultadoAnaliseOperacoes> {
-  const payloadHigienizado = sanitizarPayloadAntesDeEnviar(dados);
+): Promise<ResultadoConsultaOperacional> {
+  const dadosAnonimizados = sanitizarPayloadAntesDeEnviar(dados);
 
-  // 1. Tentar primeiro via Firebase Cloud Function (httpsCallable)
+  // 1. Chamada via SDK Oficial do Firebase Functions (região southamerica-east1)
   try {
-    const chamarAnaliseCloud = httpsCallable<any, ResultadoAnaliseOperacoes>(
-      functions,
-      'analisarMetricasHomeCare'
-    );
-    const resultado = await chamarAnaliseCloud(payloadHigienizado);
-    if (resultado?.data && resultado.data.sucesso) {
-      return resultado.data;
+    const functions = getFunctions(undefined, 'southamerica-east1');
+    const consultarIA = httpsCallable<any, any>(functions, 'analisarMetricasHomeCare');
+
+    const result = await consultarIA({
+      pergunta: textoPergunta || '',
+      metricas: dadosAnonimizados
+    });
+
+    const data = result?.data;
+    let textoRetornado = '';
+
+    if (typeof data === 'string') {
+      textoRetornado = data;
+    } else if (data && typeof data === 'object') {
+      textoRetornado = data.resposta || data.relatorio || data.relatorioMarkdown || '';
+    }
+
+    if (textoRetornado) {
+      return {
+        sucesso: true,
+        resposta: textoRetornado,
+        metricasGerais: data?.metricasGerais,
+        timestamp: data?.timestamp || new Date().toISOString()
+      };
     }
   } catch (cloudFnError: any) {
     console.warn(
-      '[geminiOperacoesService] Cloud Function indisponível ou emulada, acionando endpoint seguro /api/analisar-metricas:',
-      cloudFnError?.message
+      '[Assistente Operacional] Cloud Function indisponível na nuvem ou emulada, acionando rota local segura:',
+      cloudFnError?.message || cloudFnError
     );
   }
 
-  // 2. Fallback resiliente: Endpoint seguro de backend (/api/analisar-metricas)
+  // 2. Fallback resiliente: Rota de backend segura (/api/analisar-metricas)
   try {
     let idToken = '';
     if (auth.currentUser) {
@@ -119,21 +128,53 @@ export async function gerarRelatorioInsightsOperacionais(
         'Content-Type': 'application/json',
         Authorization: idToken ? `Bearer ${idToken}` : '',
       },
-      body: JSON.stringify(payloadHigienizado),
+      body: JSON.stringify({
+        pergunta: textoPergunta || '',
+        metricas: dadosAnonimizados
+      }),
     });
 
-    const data = await response.json();
+    const responseText = await response.text();
+    let parsedData: any = null;
 
-    if (!response.ok || !data.sucesso) {
-      throw new Error(data.erro || `Erro do servidor HTTP ${response.status}`);
+    try {
+      parsedData = JSON.parse(responseText);
+    } catch {
+      // Se o backend retornou texto puro/markdown diretamente
+      return {
+        sucesso: true,
+        resposta: responseText,
+        timestamp: new Date().toISOString()
+      };
     }
 
-    return data as ResultadoAnaliseOperacoes;
+    if (!response.ok || (parsedData && parsedData.sucesso === false)) {
+      throw new Error(parsedData?.erro || `Erro HTTP ${response.status}`);
+    }
+
+    const textoFinal = 
+      parsedData?.resposta || 
+      parsedData?.relatorio || 
+      parsedData?.relatorioMarkdown || 
+      (typeof parsedData === 'string' ? parsedData : '');
+
+    return {
+      sucesso: true,
+      resposta: textoFinal,
+      metricasGerais: parsedData?.metricasGerais,
+      timestamp: parsedData?.timestamp || new Date().toISOString()
+    };
   } catch (backendError: any) {
-    console.error('[geminiOperacoesService] Erro em ambos os canais:', backendError);
+    console.error('[Assistente Operacional] Erro nos canais de comunicação:', backendError);
     throw new Error(
       backendError?.message ||
-        'Não foi possível conectar ao serviço de inteligência operacional. Verifique a conexão ou tente novamente.'
+      'Não foi possível obter resposta do Assistente Operacional. Por favor, tente novamente.'
     );
   }
 }
+
+// Manter compatibilidade com chamadas existentes
+export const gerarRelatorioInsightsOperacionais = (dados: MetricasConsolidadasInput) => {
+  return consultarAssistenteOperacional('', dados);
+};
+

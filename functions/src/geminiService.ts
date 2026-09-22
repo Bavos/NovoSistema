@@ -194,6 +194,7 @@ ${dadosClinicos.trim()}
  * Converte nomes para códigos opacos, remove CPFs, telefones, endereços e mantém apenas métricas operacionais.
  */
 export function sanitizarDadosOperacionaisHomeCare(dados: any) {
+  const source = dados?.metricas || dados || {};
   const pacienteMap = new Map<string, string>();
   const profissionalMap = new Map<string, string>();
 
@@ -220,7 +221,7 @@ export function sanitizarDadosOperacionaisHomeCare(dados: any) {
     return profissionalMap.get(key)!;
   };
 
-  const pacientesRaw = Array.isArray(dados?.pacientes) ? dados.pacientes : [];
+  const pacientesRaw = Array.isArray(source?.pacientes) ? source.pacientes : [];
   const pacientesAnonimizados = pacientesRaw.map((p: any) => ({
     codigoAnonimo: getAnonPac(p.id || p.nome),
     status: p.status || 'Ativo',
@@ -231,7 +232,7 @@ export function sanitizarDadosOperacionaisHomeCare(dados: any) {
     especialidadeNecessaria: p.especialidade || p.categoriaNecessaria || 'Técnico de Enfermagem'
   }));
 
-  const profissionaisRaw = Array.isArray(dados?.profissionais) ? dados.profissionais : [];
+  const profissionaisRaw = Array.isArray(source?.profissionais) ? source.profissionais : [];
   const profissionaisAnonimizados = profissionaisRaw.map((prof: any) => ({
     codigoAnonimo: getAnonProf(prof.id || prof.nome),
     categoria: prof.categoria || prof.funcao || 'Cuidador',
@@ -241,18 +242,20 @@ export function sanitizarDadosOperacionaisHomeCare(dados: any) {
     plantoesRealizadosMes: Number(prof.plantoesRealizadosMes || prof.totalPlantoes || 0)
   }));
 
-  const escalasRaw = Array.isArray(dados?.escalas || dados?.agendamentos || dados?.plantoes)
-    ? (dados.escalas || dados.agendamentos || dados.plantoes)
+  const escalasRaw = Array.isArray(source?.escalas || source?.agendamentos || source?.plantoes)
+    ? (source.escalas || source.agendamentos || source.plantoes)
     : [];
 
   const escalasAnonimizadas = escalasRaw.slice(0, 150).map((e: any) => ({
-    paciente: getAnonPac(e.pacienteId || e.pacienteNome),
-    profissional: (e.profissionalId || e.profissionalNome) ? getAnonProf(e.profissionalId || e.profissionalNome) : 'NÃO_ALOCADO (GARGALO)',
-    tipoTurno: e.tipoTurno || e.turno || '12h Diurno',
+    paciente: getAnonPac(e.pacienteId || e.pacienteNome || e.idPaciente),
+    profissional: (e.profissionalId || e.profissionalNome || e.idProfissional || e.nomeProfissional) 
+      ? getAnonProf(e.profissionalId || e.profissionalNome || e.idProfissional || e.nomeProfissional) 
+      : 'NÃO_ALOCADO (GARGALO)',
+    tipoTurno: e.tipoTurno || e.turno || e.horario || '12h Diurno',
     status: e.status || 'Agendado',
     dataPrevista: e.data ? String(e.data).substring(0, 10) : 'N/D',
     valorRepasseProfissional: Number(e.valorProfissional || e.valorRepasse || 0),
-    valorCobradoCliente: Number(e.valorCobrado || e.valorFaturado || 0)
+    valorCobradoCliente: Number(e.valorCobrado || e.valorFaturado || e.valorPlantao || 0)
   }));
 
   const metricasGerais = {
@@ -261,12 +264,12 @@ export function sanitizarDadosOperacionaisHomeCare(dados: any) {
     totalProfissionaisCadastrados: profissionaisRaw.length,
     profissionaisAtivos: profissionaisRaw.filter((p: any) => (p.status || '').toLowerCase() !== 'inativo').length,
     totalEscalasRegistradas: escalasRaw.length,
-    escalasSemProfissionalAlocado: escalasRaw.filter((e: any) => !e.profissionalId && !e.profissionalNome).length,
+    escalasSemProfissionalAlocado: escalasRaw.filter((e: any) => !e.profissionalId && !e.profissionalNome && !e.idProfissional && !e.nomeProfissional).length,
     escalasConcluidas: escalasRaw.filter((e: any) => (e.status || '').toLowerCase() === 'concluido' || (e.status || '').toLowerCase() === 'realizado').length,
-    totaisConsolidados: dados?.totaisConsolidados || {
-      faturamentoMensalConsolidado: Number(dados?.faturamentoConsolidado || 0),
-      custoTotalFolhaConsolidado: Number(dados?.custoFolhaConsolidado || 0),
-      totalDebitosProfissionais: Number(dados?.totalDebitos || 0)
+    totaisConsolidados: source?.totaisConsolidados || {
+      faturamentoMensalConsolidado: Number(source?.faturamentoConsolidado || 0),
+      custoTotalFolhaConsolidado: Number(source?.custoFolhaConsolidado || 0),
+      totalDebitosProfissionais: Number(source?.totalDebitos || 0)
     }
   };
 
@@ -334,7 +337,18 @@ export const analisarMetricasHomeCare = onCall(
       "Analise exclusivamente os dados anonimizados fornecidos, destacando gargalos de escalas, custos de plantões e projeções de demanda. " +
       "Nunca deduza nem tente solicitar dados de identificação pessoal.";
 
-    const prompt = `Por favor, elabore um relatório executivo de inteligência e diagnóstico operacional para a diretoria do serviço de Home Care com base estritamente nos dados anonimizados abaixo:
+    const pergunta = String(rawData.pergunta || "").trim();
+
+    const prompt = pergunta
+      ? `O administrador do serviço de Home Care fez a seguinte consulta operacional:
+"${pergunta}"
+
+Por favor, responda de forma analítica, clara e estruturada em Markdown, fundamentando-se rigorosamente nos dados anonimizados abaixo. Se a pergunta for sobre profissionais sem escala, gargalos, médias ou conflitos, verifique detalhadamente a lista de dados e aponte os fatos com precisão:
+
+<DADOS_OPERACIONAIS_ANONIMIZADOS>
+${JSON.stringify(dadosAnonimizados, null, 2)}
+</DADOS_OPERACIONAIS_ANONIMIZADOS>`
+      : `Por favor, elabore um relatório executivo de inteligência e diagnóstico operacional para a diretoria do serviço de Home Care com base estritamente nos dados anonimizados abaixo:
 
 <DADOS_OPERACIONAIS_ANONIMIZADOS>
 ${JSON.stringify(dadosAnonimizados, null, 2)}
@@ -376,6 +390,7 @@ O relatório DEVE ser retornado em formato Markdown fluido e profissional, estru
       // 6. Trilha de Auditoria
       await admin.firestore().collection("logs_auditoria").add({
         acao: "IA_ANALISE_OPERACOES_HOMECARE",
+        pergunta: pergunta ? pergunta.substring(0, 200) : "DIAGNOSTICO_COMPLETO",
         executadoPorUid: uid,
         executadoPorEmail: userEmail,
         timestamp: new Date().toISOString()
@@ -383,6 +398,8 @@ O relatório DEVE ser retornado em formato Markdown fluido e profissional, estru
 
       return {
         sucesso: true,
+        resposta: relatorioMarkdown,
+        relatorio: relatorioMarkdown,
         relatorioMarkdown,
         metricasGerais: dadosAnonimizados.metricasGerais,
         requisicoesRestantesMinuto,
@@ -394,7 +411,7 @@ O relatório DEVE ser retornado em formato Markdown fluido e profissional, estru
         throw error;
       }
       console.error("[analisarMetricasHomeCare Error]:", error);
-      throw new HttpsError("internal", `Falha ao processar análise operacional com Gemini: ${error.message}`);
+      throw new HttpsError("internal", `Falha ao processar análise operacional com IA: ${error.message}`);
     }
   }
 );

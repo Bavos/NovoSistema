@@ -236,6 +236,8 @@ exports.analisarMetricasHomeCare = onCall(
     }
 
     const rawData = request.data || {};
+    const source = rawData.metricas || rawData;
+    const pergunta = String(rawData.pergunta || "").trim();
     
     // Sanitização e Anonimização LGPD
     const pacMap = new Map();
@@ -257,9 +259,9 @@ exports.analisarMetricasHomeCare = onCall(
       return profMap.get(k);
     };
 
-    const pacientesRaw = Array.isArray(rawData.pacientes) ? rawData.pacientes : [];
-    const profissionaisRaw = Array.isArray(rawData.profissionais) ? rawData.profissionais : [];
-    const escalasRaw = Array.isArray(rawData.escalas || rawData.agendamentos || rawData.plantoes) ? (rawData.escalas || rawData.agendamentos || rawData.plantoes) : [];
+    const pacientesRaw = Array.isArray(source.pacientes) ? source.pacientes : [];
+    const profissionaisRaw = Array.isArray(source.profissionais) ? source.profissionais : [];
+    const escalasRaw = Array.isArray(source.escalas || source.agendamentos || source.plantoes) ? (source.escalas || source.agendamentos || source.plantoes) : [];
 
     const dadosHigienizados = {
       metricasGerais: {
@@ -268,7 +270,7 @@ exports.analisarMetricasHomeCare = onCall(
         totalProfissionais: profissionaisRaw.length,
         profissionaisAtivos: profissionaisRaw.filter(p => (p.status || '').toLowerCase() !== 'inativo').length,
         totalEscalas: escalasRaw.length,
-        escalasSemAlocacao: escalasRaw.filter(e => !e.profissionalId && !e.profissionalNome).length,
+        escalasSemAlocacao: escalasRaw.filter(e => !e.profissionalId && !e.profissionalNome && !e.idProfissional && !e.nomeProfissional).length,
       },
       pacientesAmostra: pacientesRaw.slice(0, 40).map(p => ({
         codigo: anonPac(p.id || p.nome),
@@ -284,9 +286,9 @@ exports.analisarMetricasHomeCare = onCall(
         status: p.status || 'Disponível'
       })),
       escalasAmostra: escalasRaw.slice(0, 50).map(e => ({
-        paciente: anonPac(e.pacienteId || e.pacienteNome),
-        profissional: (e.profissionalId || e.profissionalNome) ? anonProf(e.profissionalId || e.profissionalNome) : 'NÃO_ALOCADO (GARGALO)',
-        turno: e.tipoTurno || e.turno || '12h Diurno',
+        paciente: anonPac(e.pacienteId || e.pacienteNome || e.idPaciente),
+        profissional: (e.profissionalId || e.profissionalNome || e.idProfissional || e.nomeProfissional) ? anonProf(e.profissionalId || e.profissionalNome || e.idProfissional || e.nomeProfissional) : 'NÃO_ALOCADO (GARGALO)',
+        turno: e.tipoTurno || e.turno || e.horario || '12h Diurno',
         status: e.status || 'Agendado'
       }))
     };
@@ -299,7 +301,15 @@ exports.analisarMetricasHomeCare = onCall(
       "Analise exclusivamente os dados anonimizados fornecidos, destacando gargalos de escalas, custos de plantões e projeções de demanda. " +
       "Nunca deduza nem tente solicitar dados de identificação pessoal.";
 
-    const prompt = `Analise os dados anonimizados da operação de home care e responda em Markdown:
+    const prompt = pergunta
+      ? `O administrador do serviço de Home Care fez a seguinte consulta operacional:
+"${pergunta}"
+
+Por favor, responda de forma analítica, clara e estruturada em Markdown, fundamentando-se rigorosamente nos dados operacionais anonimizados abaixo:
+<DADOS_ANONIMIZADOS>
+${JSON.stringify(dadosHigienizados, null, 2)}
+</DADOS_ANONIMIZADOS>`
+      : `Analise os dados anonimizados da operação de home care e responda em Markdown:
 <DADOS_ANONIMIZADOS>
 ${JSON.stringify(dadosHigienizados, null, 2)}
 </DADOS_ANONIMIZADOS>
@@ -319,21 +329,27 @@ Estruture o relatório com os seguintes tópicos obrigatórios:
 
       await db.collection("logs_auditoria").add({
         acao: "IA_ANALISE_OPERACOES_HOMECARE",
+        pergunta: pergunta ? pergunta.substring(0, 200) : "DIAGNOSTICO_COMPLETO",
         executadoPorUid: uid,
         executadoPorEmail: userEmail,
         timestamp: new Date().toISOString()
       });
 
+      const relTexto = response.text || "";
+
       return {
         sucesso: true,
-        relatorioMarkdown: response.text || "",
+        resposta: relTexto,
+        relatorio: relTexto,
+        relatorioMarkdown: relTexto,
         metricasGerais: dadosHigienizados.metricasGerais,
         timestamp: new Date().toISOString()
       };
     } catch (err) {
-      console.error("Erro ao analisar metricas com Gemini:", err);
+      console.error("Erro ao processar consulta:", err);
       throw new HttpsError("internal", `Falha no processamento: ${err.message}`);
     }
+
   }
 );
 

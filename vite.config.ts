@@ -75,6 +75,9 @@ function apiServerPlugin(): Plugin {
           }
 
           // Higienização e Anonimização de Dados (LGPD)
+          const source = rawData.metricas || rawData;
+          const pergunta = String(rawData.pergunta || '').trim();
+
           const pacMap = new Map();
           const profMap = new Map();
           let pacCount = 1;
@@ -94,10 +97,10 @@ function apiServerPlugin(): Plugin {
             return profMap.get(k);
           };
 
-          const pacientesRaw = Array.isArray(rawData.pacientes) ? rawData.pacientes : [];
-          const profissionaisRaw = Array.isArray(rawData.profissionais) ? rawData.profissionais : [];
-          const escalasRaw = Array.isArray(rawData.escalas || rawData.agendamentos || rawData.plantoes) 
-            ? (rawData.escalas || rawData.agendamentos || rawData.plantoes) 
+          const pacientesRaw = Array.isArray(source.pacientes) ? source.pacientes : [];
+          const profissionaisRaw = Array.isArray(source.profissionais) ? source.profissionais : [];
+          const escalasRaw = Array.isArray(source.escalas || source.agendamentos || source.plantoes) 
+            ? (source.escalas || source.agendamentos || source.plantoes) 
             : [];
 
           const metricasGerais = {
@@ -106,12 +109,12 @@ function apiServerPlugin(): Plugin {
             totalProfissionaisCadastrados: profissionaisRaw.length,
             profissionaisAtivos: profissionaisRaw.filter(p => (p.status || '').toLowerCase() !== 'inativo').length,
             totalEscalasRegistradas: escalasRaw.length,
-            escalasSemProfissionalAlocado: escalasRaw.filter(e => !e.profissionalId && !e.profissionalNome).length,
+            escalasSemProfissionalAlocado: escalasRaw.filter(e => !e.profissionalId && !e.profissionalNome && !e.idProfissional && !e.nomeProfissional).length,
             escalasConcluidas: escalasRaw.filter(e => (e.status || '').toLowerCase() === 'concluido' || (e.status || '').toLowerCase() === 'realizado').length,
-            totaisConsolidados: rawData.totaisConsolidados || {
-              faturamentoMensalConsolidado: Number(rawData.faturamentoConsolidado || 0),
-              custoTotalFolhaConsolidado: Number(rawData.custoFolhaConsolidado || 0),
-              totalDebitosProfissionais: Number(rawData.totalDebitos || 0)
+            totaisConsolidados: source.totaisConsolidados || {
+              faturamentoMensalConsolidado: Number(source.faturamentoConsolidado || 0),
+              custoTotalFolhaConsolidado: Number(source.custoFolhaConsolidado || 0),
+              totalDebitosProfissionais: Number(source.totalDebitos || 0)
             }
           };
 
@@ -136,9 +139,11 @@ function apiServerPlugin(): Plugin {
               status: p.status || 'Disponível'
             })),
             amostraEscalas: escalasRaw.slice(0, 50).map(e => ({
-              paciente: anonPac(e.pacienteId || e.pacienteNome),
-              profissional: (e.profissionalId || e.profissionalNome) ? anonProf(e.profissionalId || e.profissionalNome) : 'NÃO_ALOCADO (GARGALO)',
-              turno: e.tipoTurno || e.turno || '12h Diurno',
+              paciente: anonPac(e.pacienteId || e.pacienteNome || e.idPaciente),
+              profissional: (e.profissionalId || e.profissionalNome || e.idProfissional || e.nomeProfissional) 
+                ? anonProf(e.profissionalId || e.profissionalNome || e.idProfissional || e.nomeProfissional) 
+                : 'NÃO_ALOCADO (GARGALO)',
+              turno: e.tipoTurno || e.turno || e.horario || '12h Diurno',
               status: e.status || 'Agendado'
             }))
           };
@@ -151,7 +156,16 @@ function apiServerPlugin(): Plugin {
             "Analise exclusivamente os dados anonimizados fornecidos, destacando gargalos de escalas, custos de plantões e projeções de demanda. " +
             "Nunca deduza nem tente solicitar dados de identificação pessoal.";
 
-          const prompt = `Por favor, elabore um relatório executivo de inteligência e diagnóstico operacional para a diretoria do serviço de Home Care com base estritamente nos dados anonimizados abaixo:
+          const prompt = pergunta
+            ? `O administrador do serviço de Home Care fez a seguinte consulta operacional:
+"${pergunta}"
+
+Por favor, responda de forma analítica, clara e estruturada em Markdown, fundamentando-se rigorosamente nos dados anonimizados abaixo:
+
+<DADOS_OPERACIONAIS_ANONIMIZADOS>
+${JSON.stringify(dadosAnonimizados, null, 2)}
+</DADOS_OPERACIONAIS_ANONIMIZADOS>`
+            : `Por favor, elabore um relatório executivo de inteligência e diagnóstico operacional para a diretoria do serviço de Home Care com base estritamente nos dados anonimizados abaixo:
 
 <DADOS_OPERACIONAIS_ANONIMIZADOS>
 ${JSON.stringify(dadosAnonimizados, null, 2)}
@@ -187,22 +201,26 @@ O relatório DEVE ser retornado em formato Markdown fluido, legível e altamente
             }
           });
 
+          const relTexto = response.text || '';
+
           res.statusCode = 200;
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify({
             sucesso: true,
-            relatorioMarkdown: response.text || '',
+            resposta: relTexto,
+            relatorio: relTexto,
+            relatorioMarkdown: relTexto,
             metricasGerais,
             timestamp: new Date().toISOString()
           }));
 
         } catch (err: any) {
-          console.error('[API Gemini Server Error]:', err);
+          console.error('[API Server Error]:', err);
           res.statusCode = 500;
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify({
             sucesso: false,
-            erro: `Falha no processamento da análise com Gemini: ${err?.message || err}`
+            erro: `Falha no processamento da consulta de inteligência operacional: ${err?.message || err}`
           }));
         }
       });
