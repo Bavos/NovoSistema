@@ -370,7 +370,7 @@ ${JSON.stringify(metricas, null, 2)}
 Pergunta do Administrador:
 ${pergunta || 'Apresente um resumo geral da operação, gargalos de escalas e capacidade assistencial.'}`;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
 
     try {
       const response = await fetch(url, {
