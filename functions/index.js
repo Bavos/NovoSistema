@@ -205,3 +205,135 @@ exports.obterPdfBoletoInter = onCall(
     }
   }
 );
+
+exports.analisarMetricasHomeCare = onCall(
+  {
+    secrets: ["GEMINI_API_KEY"],
+    region: "southamerica-east1",
+    timeoutSeconds: 60,
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Usuário não autenticado.");
+    }
+
+    const uid = request.auth.uid;
+    const userEmail = (request.auth.token.email || "").toLowerCase();
+    const userRole = String(request.auth.token.role || request.auth.token.nivelAcesso || "").toLowerCase();
+    const isMasterAdmin = userEmail === "renatobz@gmail.com" || userEmail === "rhgestaodomiciliar@gmail.com";
+
+    if (!isMasterAdmin && userRole !== "administrador" && userRole !== "admin") {
+      const userDoc = await db.collection("usuarios_sistema").doc(uid).get();
+      const nivel = String(userDoc.data()?.nivelAcesso || userDoc.data()?.role || "").toLowerCase();
+      if (nivel !== "administrador" && nivel !== "admin") {
+        throw new HttpsError("permission-denied", "Acesso restrito exclusivamente a administradores.");
+      }
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new HttpsError("failed-precondition", "A chave GEMINI_API_KEY não está configurada no Secret Manager.");
+    }
+
+    const rawData = request.data || {};
+    
+    // Sanitização e Anonimização LGPD
+    const pacMap = new Map();
+    const profMap = new Map();
+    let pacNum = 1;
+    let profNum = 1;
+
+    const anonPac = (id) => {
+      const k = String(id || '').trim();
+      if (!k) return 'Paciente [PAC-000]';
+      if (!pacMap.has(k)) pacMap.set(k, `Paciente [PAC-${String(pacNum++).padStart(3, '0')}]`);
+      return pacMap.get(k);
+    };
+
+    const anonProf = (id) => {
+      const k = String(id || '').trim();
+      if (!k) return 'Profissional [P-00]';
+      if (!profMap.has(k)) profMap.set(k, `Profissional [P-${String(profNum++).padStart(2, '0')}]`);
+      return profMap.get(k);
+    };
+
+    const pacientesRaw = Array.isArray(rawData.pacientes) ? rawData.pacientes : [];
+    const profissionaisRaw = Array.isArray(rawData.profissionais) ? rawData.profissionais : [];
+    const escalasRaw = Array.isArray(rawData.escalas || rawData.agendamentos || rawData.plantoes) ? (rawData.escalas || rawData.agendamentos || rawData.plantoes) : [];
+
+    const dadosHigienizados = {
+      metricasGerais: {
+        totalPacientes: pacientesRaw.length,
+        pacientesAtivos: pacientesRaw.filter(p => (p.status || '').toLowerCase() === 'ativo').length,
+        totalProfissionais: profissionaisRaw.length,
+        profissionaisAtivos: profissionaisRaw.filter(p => (p.status || '').toLowerCase() !== 'inativo').length,
+        totalEscalas: escalasRaw.length,
+        escalasSemAlocacao: escalasRaw.filter(e => !e.profissionalId && !e.profissionalNome).length,
+      },
+      pacientesAmostra: pacientesRaw.slice(0, 40).map(p => ({
+        codigo: anonPac(p.id || p.nome),
+        status: p.status || 'Ativo',
+        complexidade: p.complexidade || p.grauComplexidade || 'Média',
+        planoCuidado: p.planoCuidado || p.tipoPlantao || 'Plantão 12h',
+        especialidadeRequerida: p.especialidade || 'Técnico de Enfermagem'
+      })),
+      profissionaisAmostra: profissionaisRaw.slice(0, 40).map(p => ({
+        codigo: anonProf(p.id || p.nome),
+        categoria: p.categoria || p.funcao || 'Cuidador',
+        especialidade: p.especialidade || 'Geral',
+        status: p.status || 'Disponível'
+      })),
+      escalasAmostra: escalasRaw.slice(0, 50).map(e => ({
+        paciente: anonPac(e.pacienteId || e.pacienteNome),
+        profissional: (e.profissionalId || e.profissionalNome) ? anonProf(e.profissionalId || e.profissionalNome) : 'NÃO_ALOCADO (GARGALO)',
+        turno: e.tipoTurno || e.turno || '12h Diurno',
+        status: e.status || 'Agendado'
+      }))
+    };
+
+    const { GoogleGenAI } = require("@google/genai");
+    const ai = new GoogleGenAI({ apiKey });
+
+    const systemInstruction =
+      "Você é um assistente de análise de gestão e operações financeiras de home care. " +
+      "Analise exclusivamente os dados anonimizados fornecidos, destacando gargalos de escalas, custos de plantões e projeções de demanda. " +
+      "Nunca deduza nem tente solicitar dados de identificação pessoal.";
+
+    const prompt = `Analise os dados anonimizados da operação de home care e responda em Markdown:
+<DADOS_ANONIMIZADOS>
+${JSON.stringify(dadosHigienizados, null, 2)}
+</DADOS_ANONIMIZADOS>
+
+Estruture o relatório com os seguintes tópicos obrigatórios:
+## Resumo Geral
+## Eficiência de Escalas
+## Riscos Financeiros
+## Recomendações`;
+
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-3.8-flash",
+        contents: prompt,
+        config: { systemInstruction, temperature: 0.2 }
+      });
+
+      await db.collection("logs_auditoria").add({
+        acao: "IA_ANALISE_OPERACOES_HOMECARE",
+        executadoPorUid: uid,
+        executadoPorEmail: userEmail,
+        timestamp: new Date().toISOString()
+      });
+
+      return {
+        sucesso: true,
+        relatorioMarkdown: response.text || "",
+        metricasGerais: dadosHigienizados.metricasGerais,
+        timestamp: new Date().toISOString()
+      };
+    } catch (err) {
+      console.error("Erro ao analisar metricas com Gemini:", err);
+      throw new HttpsError("internal", `Falha no processamento: ${err.message}`);
+    }
+  }
+);
+

@@ -188,3 +188,214 @@ ${dadosClinicos.trim()}
     }
   }
 );
+
+/**
+ * Função de higienização e anonimização de dados sensíveis (LGPD / Sigilo de Saúde).
+ * Converte nomes para códigos opacos, remove CPFs, telefones, endereços e mantém apenas métricas operacionais.
+ */
+export function sanitizarDadosOperacionaisHomeCare(dados: any) {
+  const pacienteMap = new Map<string, string>();
+  const profissionalMap = new Map<string, string>();
+
+  let pacCounter = 1;
+  let profCounter = 1;
+
+  const getAnonPac = (idOrName: string) => {
+    const key = String(idOrName || '').trim();
+    if (!key) return 'Paciente [PAC-000]';
+    if (!pacienteMap.has(key)) {
+      const code = `Paciente [PAC-${String(pacCounter++).padStart(3, '0')}]`;
+      pacienteMap.set(key, code);
+    }
+    return pacienteMap.get(key)!;
+  };
+
+  const getAnonProf = (idOrName: string) => {
+    const key = String(idOrName || '').trim();
+    if (!key) return 'Profissional [P-00]';
+    if (!profissionalMap.has(key)) {
+      const code = `Profissional [P-${String(profCounter++).padStart(2, '0')}]`;
+      profissionalMap.set(key, code);
+    }
+    return profissionalMap.get(key)!;
+  };
+
+  const pacientesRaw = Array.isArray(dados?.pacientes) ? dados.pacientes : [];
+  const pacientesAnonimizados = pacientesRaw.map((p: any) => ({
+    codigoAnonimo: getAnonPac(p.id || p.nome),
+    status: p.status || 'Ativo',
+    complexidade: p.complexidade || p.grauComplexidade || 'Média',
+    planoCuidado: p.planoCuidado || p.tipoPlantao || 'Plantão 12h',
+    quantidadePlantoesMes: Number(p.quantidadePlantoesMes || p.plantoesMes || 0),
+    valorMensalEstimado: Number(p.valorMensal || p.mensalidade || p.valorTotal || 0),
+    especialidadeNecessaria: p.especialidade || p.categoriaNecessaria || 'Técnico de Enfermagem'
+  }));
+
+  const profissionaisRaw = Array.isArray(dados?.profissionais) ? dados.profissionais : [];
+  const profissionaisAnonimizados = profissionaisRaw.map((prof: any) => ({
+    codigoAnonimo: getAnonProf(prof.id || prof.nome),
+    categoria: prof.categoria || prof.funcao || 'Cuidador',
+    especialidade: prof.especialidade || 'Geral',
+    status: prof.status || 'Disponível',
+    valorHoraOuPlantaoMedio: Number(prof.valorHora || prof.valorPlantao || 0),
+    plantoesRealizadosMes: Number(prof.plantoesRealizadosMes || prof.totalPlantoes || 0)
+  }));
+
+  const escalasRaw = Array.isArray(dados?.escalas || dados?.agendamentos || dados?.plantoes)
+    ? (dados.escalas || dados.agendamentos || dados.plantoes)
+    : [];
+
+  const escalasAnonimizadas = escalasRaw.slice(0, 150).map((e: any) => ({
+    paciente: getAnonPac(e.pacienteId || e.pacienteNome),
+    profissional: (e.profissionalId || e.profissionalNome) ? getAnonProf(e.profissionalId || e.profissionalNome) : 'NÃO_ALOCADO (GARGALO)',
+    tipoTurno: e.tipoTurno || e.turno || '12h Diurno',
+    status: e.status || 'Agendado',
+    dataPrevista: e.data ? String(e.data).substring(0, 10) : 'N/D',
+    valorRepasseProfissional: Number(e.valorProfissional || e.valorRepasse || 0),
+    valorCobradoCliente: Number(e.valorCobrado || e.valorFaturado || 0)
+  }));
+
+  const metricasGerais = {
+    totalPacientesCadastrados: pacientesRaw.length,
+    pacientesAtivos: pacientesRaw.filter((p: any) => (p.status || '').toLowerCase() === 'ativo').length,
+    totalProfissionaisCadastrados: profissionaisRaw.length,
+    profissionaisAtivos: profissionaisRaw.filter((p: any) => (p.status || '').toLowerCase() !== 'inativo').length,
+    totalEscalasRegistradas: escalasRaw.length,
+    escalasSemProfissionalAlocado: escalasRaw.filter((e: any) => !e.profissionalId && !e.profissionalNome).length,
+    escalasConcluidas: escalasRaw.filter((e: any) => (e.status || '').toLowerCase() === 'concluido' || (e.status || '').toLowerCase() === 'realizado').length,
+    totaisConsolidados: dados?.totaisConsolidados || {
+      faturamentoMensalConsolidado: Number(dados?.faturamentoConsolidado || 0),
+      custoTotalFolhaConsolidado: Number(dados?.custoFolhaConsolidado || 0),
+      totalDebitosProfissionais: Number(dados?.totalDebitos || 0)
+    }
+  };
+
+  return {
+    metadadosLGPD: {
+      anonimizacaoAplicada: true,
+      identificadoresPessoaisRemovidos: ["CPF", "Telefones", "Endereços", "E-mails", "Dados Bancários", "Nomes Reais"],
+      dataAnonimizacao: new Date().toISOString()
+    },
+    metricasGerais,
+    pacientesAnonimizados: pacientesAnonimizados.slice(0, 50),
+    profissionaisAnonimizados: profissionaisAnonimizados.slice(0, 50),
+    escalasAnonimizadas: escalasAnonimizadas.slice(0, 60)
+  };
+}
+
+/**
+ * Cloud Function Callable: analisarMetricasHomeCare
+ * Endpoint seguro e restrito a administradores para análise de inteligência operacional via Gemini.
+ */
+export const analisarMetricasHomeCare = onCall(
+  {
+    secrets: [GEMINI_API_KEY],
+    region: "southamerica-east1",
+    cors: true,
+    timeoutSeconds: 60
+  },
+  async (request) => {
+    // 1. Validação de autenticação obrigatória
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Usuário não autenticado no sistema.");
+    }
+
+    const uid = request.auth.uid;
+    const userEmail = (request.auth.token.email || "").toLowerCase();
+    const userRole = String(request.auth.token.role || request.auth.token.nivelAcesso || "").toLowerCase();
+    const isMasterAdmin = userEmail === "renatobz@gmail.com" || userEmail === "rhgestaodomiciliar@gmail.com";
+
+    if (!isMasterAdmin && userRole !== "administrador" && userRole !== "admin") {
+      const userDoc = await admin.firestore().collection("usuarios_sistema").doc(uid).get();
+      const nivelAcesso = String(userDoc.data()?.nivelAcesso || userDoc.data()?.role || "").toLowerCase();
+      if (nivelAcesso !== "administrador" && nivelAcesso !== "admin") {
+        throw new HttpsError("permission-denied", "Apenas administradores do sistema têm permissão para executar a Análise de Inteligência Operacional.");
+      }
+    }
+
+    // 2. Rate Limiting no Firestore
+    const { requisicoesRestantesMinuto } = await validarLimiteRequisicoesIA(uid);
+
+    // 3. Sanitização e Anonimização completa conforme LGPD
+    const rawData = request.data || {};
+    const dadosAnonimizados = sanitizarDadosOperacionaisHomeCare(rawData);
+
+    // 4. Extração segura da chave do Secret Manager
+    const apiKey = GEMINI_API_KEY.value();
+    if (!apiKey) {
+      throw new HttpsError("failed-precondition", "A chave GEMINI_API_KEY não está configurada no Secret Manager.");
+    }
+
+    // 5. Inicialização do SDK do Gemini com Modelo Atual e Seguro
+    const ai = new GoogleGenAI({ apiKey });
+
+    const systemInstruction =
+      "Você é um assistente de análise de gestão e operações financeiras de home care. " +
+      "Analise exclusivamente os dados anonimizados fornecidos, destacando gargalos de escalas, custos de plantões e projeções de demanda. " +
+      "Nunca deduza nem tente solicitar dados de identificação pessoal.";
+
+    const prompt = `Por favor, elabore um relatório executivo de inteligência e diagnóstico operacional para a diretoria do serviço de Home Care com base estritamente nos dados anonimizados abaixo:
+
+<DADOS_OPERACIONAIS_ANONIMIZADOS>
+${JSON.stringify(dadosAnonimizados, null, 2)}
+</DADOS_OPERACIONAIS_ANONIMIZADOS>
+
+O relatório DEVE ser retornado em formato Markdown fluido e profissional, estruturado obrigatoriamente com os 4 tópicos abaixo:
+
+## Resumo Geral
+- Avaliação do panorama da operação, proporção entre pacientes ativos e capacidade assistencial instalada.
+- Visão macro da eficiência da equipe e volume de horas prestadas.
+
+## Eficiência de Escalas
+- Identificação de gargalos de escalas, turnos sem cobertura ou com desfalque iminente.
+- Concentração de plantões por profissional e risco de fadiga/turnover.
+- Taxa de assertividade no preenchimento de escalas por especialidade.
+
+## Riscos Financeiros
+- Análise de custos de plantões vs faturamento consolidado.
+- Riscos de sobrepreço em plantões de emergência, desequilíbrio de margem e débitos pendentes.
+- Previsibilidade de receita com base no mix de complexidade dos pacientes.
+
+## Recomendações
+- Ações táticas e imediatas para sanar gargalos de escalas.
+- Recomendações estratégicas para contenção de custos e otimização do quadro de profissionais.
+- Sugestões para sustentabilidade operacional de médio/longo prazo.`;
+
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-3.8-flash",
+        contents: prompt,
+        config: {
+          systemInstruction,
+          temperature: 0.2
+        }
+      });
+
+      const relatorioMarkdown = response.text || "";
+
+      // 6. Trilha de Auditoria
+      await admin.firestore().collection("logs_auditoria").add({
+        acao: "IA_ANALISE_OPERACOES_HOMECARE",
+        executadoPorUid: uid,
+        executadoPorEmail: userEmail,
+        timestamp: new Date().toISOString()
+      });
+
+      return {
+        sucesso: true,
+        relatorioMarkdown,
+        metricasGerais: dadosAnonimizados.metricasGerais,
+        requisicoesRestantesMinuto,
+        timestamp: new Date().toISOString()
+      };
+
+    } catch (error: any) {
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+      console.error("[analisarMetricasHomeCare Error]:", error);
+      throw new HttpsError("internal", `Falha ao processar análise operacional com Gemini: ${error.message}`);
+    }
+  }
+);
+

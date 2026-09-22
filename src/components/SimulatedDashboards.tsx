@@ -7213,10 +7213,12 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
  * ---------------------------------------------------- */
 import { GestaoAcessos } from './GestaoAcessos';
 import { BackupProntuarios } from './BackupProntuarios';
+import { AnaliseInteligenteOperacoes } from './AnaliseInteligenteOperacoes';
 
 export const EmpresaDashboard: React.FC = () => {
-  const { userRole, setNotification, uploadLogo } = useFirebase();
-  const isAdmin = userRole?.toLowerCase() === 'administrador';
+  const { user, userRole, setNotification, uploadLogo } = useFirebase();
+  const isAdmin = userRole?.toLowerCase() === 'administrador' || user?.email === 'renatobz@gmail.com' || user?.email === 'rhgestaodomiciliar@gmail.com';
+
 
   const [razaoSocial, setRazaoSocial] = useState('Vallidare - Gestão e Consultoria em Saúde');
   const [cnpj, setCnpj] = useState('12.345.678/0001-99');
@@ -7721,6 +7723,8 @@ export const EmpresaDashboard: React.FC = () => {
       {isAdmin && <GestaoAcessos />}
       
       {isAdmin && <BackupProntuarios />}
+
+      {isAdmin && <AnaliseInteligenteOperacoes />}
 
       {/* Danger Zone / Área de Risco */}
       {isAdmin && (
