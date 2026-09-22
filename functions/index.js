@@ -208,9 +208,10 @@ exports.obterPdfBoletoInter = onCall(
 
 exports.analisarMetricasHomeCare = onCall(
   {
-    secrets: ["GEMINI_API_KEY"],
     region: "southamerica-east1",
-    timeoutSeconds: 60,
+    secrets: ["GEMINI_API_KEY"],
+    timeoutSeconds: 120,
+    memory: "512MiB",
   },
   async (request) => {
     if (!request.auth) {
@@ -232,7 +233,7 @@ exports.analisarMetricasHomeCare = onCall(
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      throw new HttpsError("failed-precondition", "A chave GEMINI_API_KEY não está configurada no Secret Manager.");
+      throw new HttpsError("failed-precondition", "GEMINI_API_KEY não configurada no servidor.");
     }
 
     const rawData = request.data || {};
@@ -322,7 +323,7 @@ Estruture o relatório com os seguintes tópicos obrigatórios:
 
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-3.8-flash",
+        model: "gemini-2.5-flash",
         contents: prompt,
         config: { systemInstruction, temperature: 0.2 }
       });

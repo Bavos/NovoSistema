@@ -39,7 +39,7 @@ export type ResumoClinico = z.infer<typeof ResumoClinicoSchema>;
  */
 export const gerarResumoClinico = onCall(
   {
-    secrets: [GEMINI_API_KEY],
+    secrets: ["GEMINI_API_KEY"],
     region: "southamerica-east1",
     cors: true
   },
@@ -79,9 +79,9 @@ export const gerarResumoClinico = onCall(
     const { pacienteId, nomePaciente, dadosClinicos, tipoAnalise } = validacaoInput.data;
 
     // E. Extração da Chave do Secret Manager
-    const apiKey = GEMINI_API_KEY.value();
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      throw new HttpsError("failed-precondition", "A chave GEMINI_API_KEY não está configurada no Secret Manager.");
+      throw new HttpsError("failed-precondition", "GEMINI_API_KEY não configurada no servidor.");
     }
 
     // F. Inicialização isolada do SDK do Gemini no Backend
@@ -292,10 +292,10 @@ export function sanitizarDadosOperacionaisHomeCare(dados: any) {
  */
 export const analisarMetricasHomeCare = onCall(
   {
-    secrets: [GEMINI_API_KEY],
     region: "southamerica-east1",
-    cors: true,
-    timeoutSeconds: 60
+    secrets: ["GEMINI_API_KEY"],
+    timeoutSeconds: 120,
+    memory: "512MiB"
   },
   async (request) => {
     // 1. Validação de autenticação obrigatória
@@ -324,9 +324,9 @@ export const analisarMetricasHomeCare = onCall(
     const dadosAnonimizados = sanitizarDadosOperacionaisHomeCare(rawData);
 
     // 4. Extração segura da chave do Secret Manager
-    const apiKey = GEMINI_API_KEY.value();
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      throw new HttpsError("failed-precondition", "A chave GEMINI_API_KEY não está configurada no Secret Manager.");
+      throw new HttpsError("failed-precondition", "GEMINI_API_KEY não configurada no servidor.");
     }
 
     // 5. Inicialização do SDK do Gemini com Modelo Atual e Seguro
@@ -377,7 +377,7 @@ O relatório DEVE ser retornado em formato Markdown fluido e profissional, estru
 
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-3.8-flash",
+        model: "gemini-2.5-flash",
         contents: prompt,
         config: {
           systemInstruction,
