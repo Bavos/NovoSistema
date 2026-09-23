@@ -253,9 +253,9 @@ export function sanitizarDadosOperacionaisHomeCare(dados: any) {
     : [];
 
   const escalasAnonimizadas = escalasRaw.map((e: any) => ({
-    paciente: getAnonPac(e.pacienteId || e.pacienteNome || e.idPaciente),
-    profissional: (e.profissionalId || e.profissionalNome || e.idProfissional || e.nomeProfissional) 
-      ? getAnonProf(e.profissionalId || e.profissionalNome || e.idProfissional || e.nomeProfissional) 
+    paciente: getAnonPac(e.pacienteId || e.pacienteNome || e.idPaciente || e.nomePaciente || e.paciente),
+    profissional: (e.profissionalId || e.profissionalNome || e.idProfissional || e.nomeProfissional || e.cuidadorId || e.funcionarioId || e.idCuidador || e.idFuncionario || e.profissional) 
+      ? getAnonProf(e.profissionalId || e.profissionalNome || e.idProfissional || e.nomeProfissional || e.cuidadorId || e.funcionarioId || e.idCuidador || e.idFuncionario || e.profissional) 
       : 'NÃO_ALOCADO (GARGALO)',
     data: e.data || e.dataPrevista || 'N/D',
     diaSemana: e.diaSemana || 'N/D',

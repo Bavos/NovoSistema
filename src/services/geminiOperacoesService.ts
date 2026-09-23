@@ -87,7 +87,7 @@ export function sanitizarPayloadAntesDeEnviar(dados: MetricasConsolidadasInput) 
     if (/^PAC[_-]\d+/i.test(kId)) return kId;
     if (kId && pacMap.has(kId)) return pacMap.get(kId)!;
     if (kNome && pacMap.has(kNome)) return pacMap.get(kNome)!;
-    const anon = `PAC_${String(pacCount++).padStart(2, '0')}`;
+    const anon = `PAC-${String(pacCount++).padStart(3, '0')}`;
     if (kId) pacMap.set(kId, anon);
     if (kNome) pacMap.set(kNome, anon);
     return anon;
@@ -99,7 +99,7 @@ export function sanitizarPayloadAntesDeEnviar(dados: MetricasConsolidadasInput) 
     if (/^PROF[_-]\d+/i.test(kId) || /^P-\d+/i.test(kId)) return kId;
     if (kId && profMap.has(kId)) return profMap.get(kId)!;
     if (kNome && profMap.has(kNome)) return profMap.get(kNome)!;
-    const anon = `PROF_${String(profCount++).padStart(2, '0')}`;
+    const anon = `P-${String(profCount++).padStart(2, '0')}`;
     if (kId) profMap.set(kId, anon);
     if (kNome) profMap.set(kNome, anon);
     return anon;
@@ -133,10 +133,14 @@ export function sanitizarPayloadAntesDeEnviar(dados: MetricasConsolidadasInput) 
   // Mapeamento das escalas com data completa ISO, dia da semana e caixinha Curinga
   const escalasLimpas = (dados.escalas || []).map((e, idx) => {
     const dataInfo = formatarDataParaISOEDiaSemana(e.data || e.dataInicio);
-    const pacAnonId = getAnonPacId(e.idPaciente || e.pacienteId, e.pacienteNome || e.nomePaciente);
-    const profAnonId = (e.idProfissional || e.profissionalId || e.nomeProfissional || e.profissionalNome)
-      ? getAnonProfId(e.idProfissional || e.profissionalId, e.nomeProfissional || e.profissionalNome)
-      : null;
+    const eAny = e as any;
+    const pacRawId = e.idPaciente || eAny.pacienteId || eAny.idClient || eAny.clientId || eAny.paciente;
+    const pacRawNome = eAny.pacienteNome || eAny.nomePaciente;
+    const pacAnonId = getAnonPacId(pacRawId, pacRawNome);
+
+    const profRawId = e.idProfissional || eAny.profissionalId || eAny.cuidadorId || eAny.funcionarioId || eAny.idCuidador || eAny.idFuncionario || eAny.profissional;
+    const profRawNome = e.nomeProfissional || eAny.profissionalNome || eAny.nomeCuidador || eAny.nomeFuncionario || eAny.cuidadorNome || eAny.funcionarioNome;
+    const profAnonId = (profRawId || profRawNome) ? getAnonProfId(profRawId, profRawNome) : null;
 
     // Regra de Negócio 1: Caixinha Curinga marcada no cadastro/edição
     const isCuringa = Boolean(

@@ -268,8 +268,10 @@ exports.analisarMetricasHomeCare = onCall(
     const financeiroRaw = Array.isArray(source.financeiro) ? source.financeiro : [];
 
     const escalasProcessadas = escalasRaw.map(e => ({
-      paciente: anonPac(e.pacienteId || e.pacienteNome || e.idPaciente),
-      profissional: (e.profissionalId || e.profissionalNome || e.idProfissional || e.nomeProfissional) ? anonProf(e.profissionalId || e.profissionalNome || e.idProfissional || e.nomeProfissional) : 'NÃO_ALOCADO (GARGALO)',
+      paciente: anonPac(e.pacienteId || e.pacienteNome || e.idPaciente || e.nomePaciente || e.paciente),
+      profissional: (e.profissionalId || e.profissionalNome || e.idProfissional || e.nomeProfissional || e.cuidadorId || e.funcionarioId || e.idCuidador || e.idFuncionario || e.profissional) 
+        ? anonProf(e.profissionalId || e.profissionalNome || e.idProfissional || e.nomeProfissional || e.cuidadorId || e.funcionarioId || e.idCuidador || e.idFuncionario || e.profissional) 
+        : 'NÃO_ALOCADO (GARGALO)',
       data: e.data || e.dataPrevista || 'N/D',
       diaSemana: e.diaSemana || 'N/D',
       horario: e.horario || e.tipoTurno || e.turno || '12h Diurno',

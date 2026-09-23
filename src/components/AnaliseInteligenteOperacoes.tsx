@@ -21,6 +21,9 @@ import {
 import ReactMarkdown from 'react-markdown';
 import { useFirebase } from '../context/FirebaseContext';
 import { consultarAssistenteOperacional } from '../services/geminiOperacoesService';
+import { db } from '../lib/firebase';
+import { collection, query, limit, getDocs, getDoc, doc } from 'firebase/firestore';
+import { Profissional, Paciente } from '../types';
 
 interface MensagemInterativa {
   id: string;
@@ -125,8 +128,187 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
     }, 700);
 
     try {
-      // 1. Dicionário temporário em memória para resolução reversível no cliente (Privacy by Design / LGPD)
-      const mapaIdentificadores: Record<string, string> = {};
+      // 1. Garantir lista completa de profissionais cadastrados em memória
+      let listaProfissionais: Profissional[] = [...(profissionais || [])];
+      try {
+        if (listaProfissionais.length === 0) {
+          const profsSnap = await getDocs(query(collection(db, 'profissionais'), limit(1000)));
+          const docsProfs: Profissional[] = [];
+          profsSnap.forEach(d => docsProfs.push({ ...d.data(), id: d.id } as Profissional));
+          if (docsProfs.length > 0) {
+            listaProfissionais = docsProfs;
+          }
+        }
+      } catch (err) {
+        console.warn('[AnaliseInteligente] Busca de profissionais em fallback:', err);
+      }
+
+      // Buscar por ID eventuais profissionais citados nas escalas que não constem na lista em memória
+      const profIdsConhecidos = new Set(listaProfissionais.map(p => p.id));
+      const profIdsFaltantes: string[] = [];
+      (agendamentos || []).forEach(e => {
+        const eAny = e as any;
+        const pId = e.idProfissional || eAny.profissionalId || eAny.cuidadorId || eAny.funcionarioId || eAny.idCuidador || eAny.idFuncionario;
+        if (pId && !profIdsConhecidos.has(pId) && !profIdsFaltantes.includes(pId)) {
+          profIdsFaltantes.push(pId);
+        }
+      });
+
+      if (profIdsFaltantes.length > 0) {
+        try {
+          for (const pId of profIdsFaltantes) {
+            const docSnap = await getDoc(doc(db, 'profissionais', pId));
+            if (docSnap.exists()) {
+              const profDoc = { ...docSnap.data(), id: docSnap.id } as Profissional;
+              listaProfissionais.push(profDoc);
+              profIdsConhecidos.add(pId);
+            }
+          }
+        } catch (err) {
+          console.warn('[AnaliseInteligente] Busca de profissionais faltantes por ID:', err);
+        }
+      }
+
+      let listaPacientes: Paciente[] = [...(pacientes || [])];
+      try {
+        if (listaPacientes.length === 0) {
+          const pacsSnap = await getDocs(query(collection(db, 'pacientes'), limit(1000)));
+          const docsPacs: Paciente[] = [];
+          pacsSnap.forEach(d => docsPacs.push({ ...d.data(), id: d.id } as Paciente));
+          if (docsPacs.length > 0) {
+            listaPacientes = docsPacs;
+          }
+        }
+      } catch (err) {
+        console.warn('[AnaliseInteligente] Busca de pacientes em fallback:', err);
+      }
+
+      // Mapeamento rápido de profissionais e pacientes cadastrados (ID, código, CPF -> nomeReal)
+      const mapaProfissionaisCadastrados = new Map<string, string>();
+      listaProfissionais.forEach(p => {
+        const pAny = p as any;
+        const nomeReal = String(p.nome || pAny.nomeCompleto || pAny.nomeProfissional || pAny.name || '').trim();
+        if (!nomeReal) return;
+        if (p.id) {
+          mapaProfissionaisCadastrados.set(String(p.id).trim(), nomeReal);
+          mapaProfissionaisCadastrados.set(String(p.id).trim().toLowerCase(), nomeReal);
+        }
+        if (pAny.uid) {
+          mapaProfissionaisCadastrados.set(String(pAny.uid).trim(), nomeReal);
+          mapaProfissionaisCadastrados.set(String(pAny.uid).trim().toLowerCase(), nomeReal);
+        }
+        if (pAny.cuidadorId) {
+          mapaProfissionaisCadastrados.set(String(pAny.cuidadorId).trim(), nomeReal);
+        }
+        if (pAny.funcionarioId) {
+          mapaProfissionaisCadastrados.set(String(pAny.funcionarioId).trim(), nomeReal);
+        }
+        if (pAny.codigo) {
+          mapaProfissionaisCadastrados.set(String(pAny.codigo).trim().toLowerCase(), nomeReal);
+        }
+        if (p.cpf) {
+          mapaProfissionaisCadastrados.set(p.cpf.replace(/\D/g, ''), nomeReal);
+        }
+      });
+
+      const mapaPacientesCadastrados = new Map<string, string>();
+      listaPacientes.forEach(p => {
+        const pAny = p as any;
+        const nomeReal = String(p.nome || pAny.nomeCompleto || pAny.name || '').trim();
+        if (!nomeReal) return;
+        if (p.id) {
+          mapaPacientesCadastrados.set(String(p.id).trim(), nomeReal);
+          mapaPacientesCadastrados.set(String(p.id).trim().toLowerCase(), nomeReal);
+        }
+        if (pAny.uid) {
+          mapaPacientesCadastrados.set(String(pAny.uid).trim(), nomeReal);
+          mapaPacientesCadastrados.set(String(pAny.uid).trim().toLowerCase(), nomeReal);
+        }
+        if (pAny.codigo) {
+          mapaPacientesCadastrados.set(String(pAny.codigo).trim().toLowerCase(), nomeReal);
+        }
+        if (p.cpf) {
+          mapaPacientesCadastrados.set(p.cpf.replace(/\D/g, ''), nomeReal);
+        }
+      });
+
+      // Tabela de-para em memória para reversão no cliente (Privacy by Design / LGPD)
+      const mapaDePara: Record<string, string> = {};
+
+      const registrarVariacoesProfissional = (indice: number, nomeReal: string, idOriginal?: string) => {
+        if (!nomeReal) return;
+        const nomeLimpo = nomeReal.trim();
+        const pad2 = String(indice).padStart(2, '0');
+        const numStr = String(indice);
+
+        // Variações com P-XX (ex: [P-01], [P-1], P-01, P-1)
+        mapaDePara[`[P-${pad2}]`] = nomeLimpo;
+        mapaDePara[`[P-${numStr}]`] = nomeLimpo;
+        mapaDePara[`P-${pad2}`] = nomeLimpo;
+        mapaDePara[`P-${numStr}`] = nomeLimpo;
+
+        // Variações com PROF_XX e PROF-XX
+        mapaDePara[`[PROF_${pad2}]`] = nomeLimpo;
+        mapaDePara[`[PROF-${pad2}]`] = nomeLimpo;
+        mapaDePara[`PROF_${pad2}`] = nomeLimpo;
+        mapaDePara[`PROF-${pad2}`] = nomeLimpo;
+        mapaDePara[`[PROF_${numStr}]`] = nomeLimpo;
+        mapaDePara[`[PROF-${numStr}]`] = nomeLimpo;
+        mapaDePara[`PROF_${numStr}`] = nomeLimpo;
+        mapaDePara[`PROF-${numStr}`] = nomeLimpo;
+
+        // Variações com prefixo literal "Profissional"
+        mapaDePara[`Profissional [P-${pad2}]`] = nomeLimpo;
+        mapaDePara[`Profissional [P-${numStr}]`] = nomeLimpo;
+        mapaDePara[`Profissional P-${pad2}`] = nomeLimpo;
+        mapaDePara[`Profissional P-${numStr}`] = nomeLimpo;
+        mapaDePara[`Profissional [PROF_${pad2}]`] = nomeLimpo;
+        mapaDePara[`Profissional PROF_${pad2}`] = nomeLimpo;
+        mapaDePara[`Profissional [PROF-${pad2}]`] = nomeLimpo;
+        mapaDePara[`Profissional PROF-${pad2}`] = nomeLimpo;
+
+        if (idOriginal && idOriginal.length >= 4) {
+          mapaDePara[idOriginal] = nomeLimpo;
+        }
+      };
+
+      const registrarVariacoesPaciente = (indice: number, nomeReal: string, idOriginal?: string) => {
+        if (!nomeReal) return;
+        const nomeLimpo = nomeReal.trim();
+        const pad3 = String(indice).padStart(3, '0');
+        const pad2 = String(indice).padStart(2, '0');
+        const numStr = String(indice);
+
+        // Variações com PAC-XXX e PAC-XX (ex: [PAC-016], [PAC-01], [PAC-1], PAC-016, PAC-01)
+        mapaDePara[`[PAC-${pad3}]`] = nomeLimpo;
+        mapaDePara[`[PAC-${pad2}]`] = nomeLimpo;
+        mapaDePara[`[PAC-${numStr}]`] = nomeLimpo;
+        mapaDePara[`PAC-${pad3}`] = nomeLimpo;
+        mapaDePara[`PAC-${pad2}`] = nomeLimpo;
+        mapaDePara[`PAC-${numStr}`] = nomeLimpo;
+
+        // Variações com PAC_XX
+        mapaDePara[`[PAC_${pad3}]`] = nomeLimpo;
+        mapaDePara[`[PAC_${pad2}]`] = nomeLimpo;
+        mapaDePara[`[PAC_${numStr}]`] = nomeLimpo;
+        mapaDePara[`PAC_${pad3}`] = nomeLimpo;
+        mapaDePara[`PAC_${pad2}`] = nomeLimpo;
+        mapaDePara[`PAC_${numStr}`] = nomeLimpo;
+
+        // Variações com prefixo literal "Paciente"
+        mapaDePara[`Paciente [PAC-${pad3}]`] = nomeLimpo;
+        mapaDePara[`Paciente [PAC-${pad2}]`] = nomeLimpo;
+        mapaDePara[`Paciente [PAC-${numStr}]`] = nomeLimpo;
+        mapaDePara[`Paciente PAC-${pad3}`] = nomeLimpo;
+        mapaDePara[`Paciente PAC-${pad2}`] = nomeLimpo;
+        mapaDePara[`Paciente PAC-${numStr}`] = nomeLimpo;
+        mapaDePara[`Paciente [PAC_${pad2}]`] = nomeLimpo;
+        mapaDePara[`Paciente PAC_${pad2}`] = nomeLimpo;
+
+        if (idOriginal && idOriginal.length >= 4) {
+          mapaDePara[idOriginal] = nomeLimpo;
+        }
+      };
 
       let profCounter = 1;
       const profIdParaPseudonimo = new Map<string, string>();
@@ -138,27 +320,18 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
         if (kId && profIdParaPseudonimo.has(kId)) return profIdParaPseudonimo.get(kId)!;
         if (kNome && profNomeParaPseudonimo.has(kNome)) return profNomeParaPseudonimo.get(kNome)!;
 
-        const pseudonimo = `PROF_${String(profCounter++).padStart(2, '0')}`;
+        const indice = profCounter++;
+        const pseudonimo = `P-${String(indice).padStart(2, '0')}`;
         if (kId) profIdParaPseudonimo.set(kId, pseudonimo);
         if (kNome) profNomeParaPseudonimo.set(kNome, pseudonimo);
 
         const nomeReal = String(nome || '').trim();
         if (nomeReal) {
-          mapaIdentificadores[pseudonimo] = nomeReal;
+          registrarVariacoesProfissional(indice, nomeReal, kId);
         }
         return pseudonimo;
       };
 
-      // Mapear profissionais da base
-      (profissionais || []).forEach(p => {
-        const pseudonimo = obterPseudonimoProf(p.id, p.nome || (p as any).nomeCompleto);
-        const nomeReal = String(p.nome || (p as any).nomeCompleto || '').trim();
-        if (nomeReal) {
-          mapaIdentificadores[pseudonimo] = nomeReal;
-        }
-      });
-
-      // Mapear pacientes da base
       let pacCounter = 1;
       const pacIdParaPseudonimo = new Map<string, string>();
       const pacNomeParaPseudonimo = new Map<string, string>();
@@ -169,27 +342,48 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
         if (kId && pacIdParaPseudonimo.has(kId)) return pacIdParaPseudonimo.get(kId)!;
         if (kNome && pacNomeParaPseudonimo.has(kNome)) return pacNomeParaPseudonimo.get(kNome)!;
 
-        const pseudonimo = `PAC_${String(pacCounter++).padStart(2, '0')}`;
+        const indice = pacCounter++;
+        const pseudonimo = `PAC-${String(indice).padStart(3, '0')}`;
         if (kId) pacIdParaPseudonimo.set(kId, pseudonimo);
         if (kNome) pacNomeParaPseudonimo.set(kNome, pseudonimo);
 
         const nomeReal = String(nome || '').trim();
         if (nomeReal) {
-          mapaIdentificadores[pseudonimo] = nomeReal;
+          registrarVariacoesPaciente(indice, nomeReal, kId);
         }
         return pseudonimo;
       };
 
-      (pacientes || []).forEach(p => {
-        const pseudonimo = obterPseudonimoPac(p.id, p.nome || (p as any).nomeCompleto);
-        const nomeReal = String(p.nome || (p as any).nomeCompleto || '').trim();
+      // Mapear todos os profissionais da base para garantir de-para completo de todos os códigos [P-XX]
+      listaProfissionais.forEach(p => {
+        const pAny = p as any;
+        const nomeReal = String(p.nome || pAny.nomeCompleto || pAny.nomeProfissional || pAny.name || '').trim();
+        const pseudonimo = obterPseudonimoProf(p.id, nomeReal);
         if (nomeReal) {
-          mapaIdentificadores[pseudonimo] = nomeReal;
+          const match = pseudonimo.match(/\d+/);
+          const idx = match ? parseInt(match[0], 10) : 0;
+          if (idx > 0) {
+            registrarVariacoesProfissional(idx, nomeReal, p.id);
+          }
         }
       });
 
-      // Montar profissionais pseudonimizados (apenas o pseudônimo PROF_XX, sem dados de contato)
-      const profissionaisPseudonimizados = (profissionais || []).map(prof => {
+      // Mapear todos os pacientes da base
+      listaPacientes.forEach(p => {
+        const pAny = p as any;
+        const nomeReal = String(p.nome || pAny.nomeCompleto || pAny.name || '').trim();
+        const pseudonimo = obterPseudonimoPac(p.id, nomeReal);
+        if (nomeReal) {
+          const match = pseudonimo.match(/\d+/);
+          const idx = match ? parseInt(match[0], 10) : 0;
+          if (idx > 0) {
+            registrarVariacoesPaciente(idx, nomeReal, p.id);
+          }
+        }
+      });
+
+      // Montar profissionais pseudonimizados
+      const profissionaisPseudonimizados = listaProfissionais.map(prof => {
         const pAny = prof as any;
         const pseudonimo = obterPseudonimoProf(prof.id, prof.nome || pAny.nomeCompleto);
         return {
@@ -204,7 +398,7 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
       });
 
       // Montar pacientes pseudonimizados
-      const pacientesPseudonimizados = (pacientes || []).map(pac => {
+      const pacientesPseudonimizados = listaPacientes.map(pac => {
         const pAny = pac as any;
         const pseudonimo = obterPseudonimoPac(pac.id, pac.nome || pAny.nomeCompleto);
         return {
@@ -219,27 +413,73 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
         };
       });
 
-      // Montar escalas pseudonimizadas
+      // Montar escalas pseudonimizadas verificando todas as propriedades de identificação do profissional
       const agendamentosPseudonimizados = (agendamentos || []).map(e => {
         const eAny = e as any;
-        const profId = e.idProfissional || eAny.profissionalId;
-        const profNome = e.nomeProfissional || eAny.profissionalNome;
-        const pseudonimoProf = (profId || profNome) ? obterPseudonimoProf(profId, profNome) : null;
-        if (profNome && pseudonimoProf && !mapaIdentificadores[pseudonimoProf]) {
-          mapaIdentificadores[pseudonimoProf] = String(profNome).trim();
+        const profId = 
+          e.idProfissional || 
+          eAny.profissionalId || 
+          eAny.cuidadorId || 
+          eAny.funcionarioId || 
+          eAny.idCuidador || 
+          eAny.idFuncionario ||
+          (typeof eAny.profissional === 'string' && eAny.profissional.length > 5 ? eAny.profissional : undefined);
+
+        let profNome = 
+          e.nomeProfissional || 
+          eAny.profissionalNome || 
+          eAny.nomeCuidador || 
+          eAny.nomeFuncionario || 
+          eAny.cuidadorNome || 
+          eAny.funcionarioNome ||
+          (typeof eAny.profissional === 'string' && !e.idProfissional && !eAny.profissionalId ? eAny.profissional : undefined);
+
+        if (!profNome && profId) {
+          profNome = mapaProfissionaisCadastrados.get(String(profId).trim()) 
+            || mapaProfissionaisCadastrados.get(String(profId).trim().toLowerCase());
         }
 
-        const pacId = e.idPaciente || eAny.pacienteId;
-        const pacNome = eAny.nomePaciente || eAny.pacienteNome;
-        const pseudonimoPac = (pacId || pacNome) ? obterPseudonimoPac(pacId, pacNome) : 'PAC_00';
-        if (pacNome && pseudonimoPac && !mapaIdentificadores[pseudonimoPac]) {
-          mapaIdentificadores[pseudonimoPac] = String(pacNome).trim();
+        const pseudonimoProf = (profId || profNome) ? obterPseudonimoProf(profId, profNome) : null;
+        if (profNome && pseudonimoProf) {
+          const match = pseudonimoProf.match(/\d+/);
+          const idx = match ? parseInt(match[0], 10) : 0;
+          if (idx > 0) {
+            registrarVariacoesProfissional(idx, profNome, profId);
+          }
+        }
+
+        const pacId = 
+          e.idPaciente || 
+          eAny.pacienteId || 
+          eAny.idClient || 
+          eAny.clientId ||
+          (typeof eAny.paciente === 'string' && eAny.paciente.length > 5 ? eAny.paciente : undefined);
+
+        let pacNome = 
+          eAny.nomePaciente || 
+          eAny.pacienteNome || 
+          (typeof eAny.paciente === 'string' && !e.idPaciente && !eAny.pacienteId ? eAny.paciente : undefined);
+
+        if (!pacNome && pacId) {
+          pacNome = mapaPacientesCadastrados.get(String(pacId).trim()) 
+            || mapaPacientesCadastrados.get(String(pacId).trim().toLowerCase());
+        }
+
+        const pseudonimoPac = (pacId || pacNome) ? obterPseudonimoPac(pacId, pacNome) : 'PAC-000';
+        if (pacNome && pseudonimoPac) {
+          const match = pseudonimoPac.match(/\d+/);
+          const idx = match ? parseInt(match[0], 10) : 0;
+          if (idx > 0) {
+            registrarVariacoesPaciente(idx, pacNome, pacId);
+          }
         }
 
         return {
           ...e,
           idProfissional: pseudonimoProf,
           profissionalId: pseudonimoProf,
+          cuidadorId: pseudonimoProf,
+          funcionarioId: pseudonimoProf,
           nomeProfissional: pseudonimoProf,
           profissionalNome: pseudonimoProf,
           idPaciente: pseudonimoPac,
@@ -251,28 +491,65 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
 
       // Montar débitos pseudonimizados
       const debitosPseudonimizados = (debitosProfissionais || []).map(deb => {
-        const profPseudonimo = obterPseudonimoProf(deb.idProfissional, deb.nomeProfissional);
-        const pacPseudonimo = (deb.idPaciente || deb.nomePaciente) 
-          ? obterPseudonimoPac(deb.idPaciente, deb.nomePaciente) 
-          : undefined;
+        const debAny = deb as any;
+        const profId = deb.idProfissional || debAny.profissionalId || debAny.cuidadorId || debAny.funcionarioId;
+        let profNome = deb.nomeProfissional || debAny.profissionalNome || debAny.nomeCuidador;
+        if (!profNome && profId) {
+          profNome = mapaProfissionaisCadastrados.get(String(profId).trim());
+        }
+        const profPseudonimo = (profId || profNome) ? obterPseudonimoProf(profId, profNome) : undefined;
+
+        const pacId = deb.idPaciente || debAny.pacienteId;
+        let pacNome = deb.nomePaciente || debAny.pacienteNome;
+        if (!pacNome && pacId) {
+          pacNome = mapaPacientesCadastrados.get(String(pacId).trim());
+        }
+        const pacPseudonimo = (pacId || pacNome) ? obterPseudonimoPac(pacId, pacNome) : undefined;
 
         return {
           ...deb,
           idProfissional: profPseudonimo,
           nomeProfissional: profPseudonimo,
+          profissionalId: profPseudonimo,
+          cuidadorId: profPseudonimo,
+          funcionarioId: profPseudonimo,
           idPaciente: pacPseudonimo,
-          nomePaciente: pacPseudonimo
+          nomePaciente: pacPseudonimo,
+          pacienteId: pacPseudonimo
         };
       });
 
       // Montar faturas pseudonimizadas
       const faturasPseudonimizadas = (faturasPacientes || []).map(fat => {
-        const pacPseudonimo = obterPseudonimoPac(fat.idPaciente || (fat as any).pacienteId, fat.nomePaciente);
+        const fatAny = fat as any;
+        const pacId = fat.idPaciente || fatAny.pacienteId;
+        let pacNome = fat.nomePaciente || fatAny.pacienteNome;
+        if (!pacNome && pacId) {
+          pacNome = mapaPacientesCadastrados.get(String(pacId).trim());
+        }
+        const pacPseudonimo = (pacId || pacNome) ? obterPseudonimoPac(pacId, pacNome) : 'PAC-000';
         return {
           ...fat,
           idPaciente: pacPseudonimo,
           pacienteId: pacPseudonimo,
           nomePaciente: pacPseudonimo
+        };
+      });
+
+      // Montar folhas de pagamento pseudonimizadas
+      const folhasPseudonimizadas = (folhasPagamento || []).map(folha => {
+        const fAny = folha as any;
+        const profId = folha.idProfissional || fAny.profissionalId || fAny.cuidadorId || fAny.funcionarioId;
+        let profNome = folha.nomeProfissional || fAny.profissionalNome;
+        if (!profNome && profId) {
+          profNome = mapaProfissionaisCadastrados.get(String(profId).trim());
+        }
+        const profPseudonimo = (profId || profNome) ? obterPseudonimoProf(profId, profNome) : undefined;
+        return {
+          ...folha,
+          idProfissional: profPseudonimo,
+          nomeProfissional: profPseudonimo,
+          profissionalId: profPseudonimo
         };
       });
 
@@ -282,7 +559,7 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
         escalas: agendamentosPseudonimizados,
         debitosProfissionais: debitosPseudonimizados,
         faturasPacientes: faturasPseudonimizadas,
-        folhasPagamento,
+        folhasPagamento: folhasPseudonimizadas,
         totaisConsolidados: {
           faturamentoMensalConsolidado: metricasSumarizadas.faturamentoConsolidado,
           custoTotalFolhaConsolidado: metricasSumarizadas.custoFolhaConsolidado,
@@ -297,37 +574,20 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
       const resultado = await consultarAssistenteOperacional(textoParaEnviar, dadosParaEnvio);
 
       // 2. Reversão Local ao Exibir a Resposta (Privacy by Design / Client-side Resolution)
-      let respostaLegivel = resultado.resposta || 'Não foi possível gerar uma resposta para os dados informados.';
+      let textoFinal = resultado.resposta || 'Não foi possível gerar uma resposta para os dados informados.';
 
-      const substituirTexto = (textoBase: string, termoBusca: string, substituto: string): string => {
-        if (!termoBusca) return textoBase;
-        return textoBase.split(termoBusca).join(substituto);
-      };
-
-      // Ordenar por tamanho decrescente do código para evitar substituições parciais
-      const entradasOrdenadas = Object.entries(mapaIdentificadores).sort((a, b) => b[0].length - a[0].length);
-
-      entradasOrdenadas.forEach(([codigo, nomeReal]) => {
-        if (codigo && nomeReal) {
-          // Substituição do pseudônimo exato (ex: PROF_01)
-          respostaLegivel = substituirTexto(respostaLegivel, codigo, nomeReal);
-
-          // Variações com hífen (ex: PROF-01)
-          const codigoHifen = codigo.replace('_', '-');
-          if (codigoHifen !== codigo) {
-            respostaLegivel = substituirTexto(respostaLegivel, codigoHifen, nomeReal);
-          }
-
-          // Variações entre colchetes (ex: [PROF_01] ou [PROF-01])
-          respostaLegivel = substituirTexto(respostaLegivel, `[${codigo}]`, nomeReal);
-          respostaLegivel = substituirTexto(respostaLegivel, `[${codigoHifen}]`, nomeReal);
+      // Ordenação das chaves pelo comprimento em ordem decrescente para evitar substituições parciais (ex: [PAC-016] e [PAC-01])
+      const chavesOrdenadas = Object.keys(mapaDePara).sort((a, b) => b.length - a.length);
+      chavesOrdenadas.forEach((codigo) => {
+        if (codigo && mapaDePara[codigo]) {
+          textoFinal = textoFinal.split(codigo).join(mapaDePara[codigo]);
         }
       });
 
       const novaMensagemResposta: MensagemInterativa = {
         id: `resp-${Date.now()}`,
         tipo: 'resposta',
-        texto: respostaLegivel,
+        texto: textoFinal,
         timestamp: resultado.timestamp || new Date().toISOString()
       };
 
