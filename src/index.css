@@ -233,5 +233,14 @@ body {
   --shadow-3: rgba(253, 230, 138, 0.5); --shadow-4: rgba(180, 83, 9, 0.35);
 }
 
+/* Hide scrollbar utility for clean mobile horizontal scrolling */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 
 

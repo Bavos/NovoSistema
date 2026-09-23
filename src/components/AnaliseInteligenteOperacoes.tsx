@@ -656,55 +656,60 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden" id="card-assistente-operacional">
       {/* Cabeçalho da Seção */}
-      <div className="p-6 border-b border-slate-100 bg-gradient-to-r from-slate-50 via-white to-blue-50/20">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <div className="p-2.5 bg-blue-600 text-white rounded-lg shadow-sm">
-              <Bot className="w-6 h-6" />
+      <div className="p-3.5 sm:p-6 border-b border-slate-100 bg-gradient-to-r from-slate-50 via-white to-blue-50/20">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
+          <div className="flex items-start gap-2.5 sm:gap-3">
+            <div className="p-2 sm:p-2.5 bg-blue-600 text-white rounded-lg shadow-sm shrink-0">
+              <Bot className="w-5 h-5 sm:w-6 h-6" />
             </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-lg font-bold text-slate-800">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-col gap-1.5">
+                <h3 className="text-base sm:text-lg font-bold text-slate-800 leading-tight">
                   Assistente de Inteligência Operacional
                 </h3>
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  Restrito a Administradores
-                </span>
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200" title="A IA recebe apenas pseudônimos opacos e o navegador reverte para os nomes reais localmente na sua máquina">
-                  <Lock className="w-3.5 h-3.5" />
-                  Pseudonimização Reversível no Cliente (LGPD)
-                </span>
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 border border-purple-200">
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Efemeridade Total (Memória Volátil)
-                </span>
+                {/* Badges de conformidade: formato horizontal rolável em telas pequenas */}
+                <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto whitespace-nowrap pb-1 no-scrollbar sm:flex-wrap">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs sm:text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200 shrink-0">
+                    <ShieldCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                    Restrito
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs sm:text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200 shrink-0" title="A IA recebe apenas pseudônimos opacos e o navegador reverte para os nomes reais localmente na sua máquina">
+                    <Lock className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                    <span className="sm:hidden">LGPD Reversível</span>
+                    <span className="hidden sm:inline">Pseudonimização Reversível no Cliente (LGPD)</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs sm:text-xs font-semibold bg-purple-100 text-purple-800 border border-purple-200 shrink-0">
+                    <Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                    <span className="sm:hidden">Efêmero</span>
+                    <span className="hidden sm:inline">Efemeridade Total (Memória Volátil)</span>
+                  </span>
+                </div>
               </div>
-              <p className="text-sm text-slate-500 mt-1 max-w-3xl">
+              <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-3xl leading-relaxed">
                 Consulte métricas operacionais em tempo real, verifique gargalos de escalas, custos de plantões e faça perguntas livres com garantia de sigilo de dados e efemeridade total (nenhum registro é salvo no banco ou navegador).
               </p>
             </div>
           </div>
 
           {mensagens.length > 0 && (
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 shrink-0 self-start md:self-center pt-1 md:pt-0">
               <button
                 type="button"
                 onClick={handleLimparConversa}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 transition-colors shadow-2xs"
+                className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 transition-colors shadow-2xs"
                 title="Iniciar nova consulta e limpar memória transitória"
               >
                 <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
-                Iniciar nova consulta
+                <span>Nova consulta</span>
               </button>
               <button
                 type="button"
                 onClick={handleImprimir}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-2xs"
+                className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-2xs"
                 title="Imprimir relatório"
               >
                 <Printer className="w-3.5 h-3.5 text-slate-400" />
-                Imprimir
+                <span className="hidden sm:inline">Imprimir</span>
               </button>
             </div>
           )}
@@ -712,79 +717,79 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
       </div>
 
       {/* Painel de Métricas Rápidas (Contexto da Operação) */}
-      <div className="p-5 bg-slate-50/60 border-b border-slate-200">
-        <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+      <div className="p-3 sm:p-5 bg-slate-50/60 border-b border-slate-200">
+        <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
           <TrendingUp className="w-3.5 h-3.5 text-blue-500" />
           Dados Operacionais Carregados para Consulta
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
-            <div className="flex items-center gap-1.5 text-slate-500 text-xs font-medium">
-              <Users className="w-3.5 h-3.5 text-blue-500" />
-              Pacientes
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+          <div className="bg-white py-2 px-2.5 sm:p-3 rounded-lg border border-slate-200 shadow-2xs">
+            <div className="flex items-center gap-1.5 text-slate-500 text-xs font-medium truncate">
+              <Users className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+              <span>Pacientes</span>
             </div>
-            <div className="text-lg font-bold text-slate-800 mt-1">
+            <div className="text-lg sm:text-xl font-bold text-slate-800 mt-0.5 sm:mt-1">
               {metricasSumarizadas.totalPac}
             </div>
-            <div className="text-2xs text-emerald-600 font-medium">
+            <div className="text-2xs sm:text-xs text-emerald-600 font-medium truncate">
               {metricasSumarizadas.pacAtivos} ativos
             </div>
           </div>
 
-          <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
-            <div className="flex items-center gap-1.5 text-slate-500 text-xs font-medium">
-              <Users className="w-3.5 h-3.5 text-indigo-500" />
-              Profissionais
+          <div className="bg-white py-2 px-2.5 sm:p-3 rounded-lg border border-slate-200 shadow-2xs">
+            <div className="flex items-center gap-1.5 text-slate-500 text-xs font-medium truncate">
+              <Users className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+              <span>Profissionais</span>
             </div>
-            <div className="text-lg font-bold text-slate-800 mt-1">
+            <div className="text-lg sm:text-xl font-bold text-slate-800 mt-0.5 sm:mt-1">
               {metricasSumarizadas.totalProf}
             </div>
-            <div className="text-2xs text-indigo-600 font-medium">
+            <div className="text-2xs sm:text-xs text-indigo-600 font-medium truncate">
               {metricasSumarizadas.profAtivos} disponíveis
             </div>
           </div>
 
-          <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
-            <div className="flex items-center gap-1.5 text-slate-500 text-xs font-medium">
-              <Calendar className="w-3.5 h-3.5 text-emerald-500" />
-              Escalas Cadastradas
+          <div className="bg-white py-2 px-2.5 sm:p-3 rounded-lg border border-slate-200 shadow-2xs">
+            <div className="flex items-center gap-1.5 text-slate-500 text-xs font-medium truncate">
+              <Calendar className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+              <span>Escalas</span>
             </div>
-            <div className="text-lg font-bold text-slate-800 mt-1">
+            <div className="text-lg sm:text-xl font-bold text-slate-800 mt-0.5 sm:mt-1">
               {metricasSumarizadas.totalEsc}
             </div>
-            <div className="text-2xs text-slate-500">
+            <div className="text-2xs sm:text-xs text-slate-500 truncate">
               plantões registrados
             </div>
           </div>
 
-          <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
-            <div className="flex items-center gap-1.5 text-slate-500 text-xs font-medium">
-              <AlertTriangle className={`w-3.5 h-3.5 ${metricasSumarizadas.escalasSemAlocacao > 0 ? 'text-amber-500' : 'text-slate-400'}`} />
-              Gargalos de Escala
+          <div className="bg-white py-2 px-2.5 sm:p-3 rounded-lg border border-slate-200 shadow-2xs">
+            <div className="flex items-center gap-1.5 text-slate-500 text-xs font-medium truncate">
+              <AlertTriangle className={`w-3.5 h-3.5 shrink-0 ${metricasSumarizadas.escalasSemAlocacao > 0 ? 'text-amber-500' : 'text-slate-400'}`} />
+              <span>Gargalos</span>
             </div>
-            <div className={`text-lg font-bold mt-1 ${metricasSumarizadas.escalasSemAlocacao > 0 ? 'text-amber-600' : 'text-slate-700'}`}>
+            <div className={`text-lg sm:text-xl font-bold mt-0.5 sm:mt-1 ${metricasSumarizadas.escalasSemAlocacao > 0 ? 'text-amber-600' : 'text-slate-700'}`}>
               {metricasSumarizadas.escalasSemAlocacao}
             </div>
-            <div className="text-2xs text-slate-500">
-              sem profissional alocado
+            <div className="text-2xs sm:text-xs text-slate-500 truncate">
+              sem alocação
             </div>
           </div>
         </div>
 
         {/* Atalhos Rápidos com Perguntas Frequentes */}
-        <div className="mt-4">
+        <div className="mt-3 sm:mt-4">
           <div className="text-xs font-medium text-slate-600 mb-2 flex items-center gap-1">
             <Sparkles className="w-3 h-3 text-blue-500" />
             <span>Consultas Rápidas Recomendadas:</span>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex gap-2 overflow-x-auto pb-1.5 sm:pb-0 sm:flex-wrap no-scrollbar">
             {atalhosRapidos.map((atalho, index) => (
               <button
                 key={index}
                 type="button"
                 disabled={loading}
                 onClick={() => handleConsultar(atalho.pergunta)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 hover:border-blue-300 rounded-lg shadow-2xs transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 hover:border-blue-300 rounded-lg shadow-2xs transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap shrink-0 sm:shrink"
                 title={atalho.descricao}
               >
                 <span>{atalho.rotulo}</span>
@@ -796,7 +801,7 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
 
       {/* Alerta de Erro */}
       {erro && (
-        <div className="m-6 p-4 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 flex items-start gap-3">
+        <div className="m-3.5 sm:m-6 p-3.5 sm:p-4 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
           <div className="flex-1">
             <h4 className="text-sm font-semibold text-rose-900">Falha ao processar a consulta</h4>
@@ -814,7 +819,7 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
       )}
 
       {/* Área de Conversa / Histórico */}
-      <div className="p-6 space-y-6 min-h-[160px] max-h-[600px] overflow-y-auto">
+      <div className="p-3.5 sm:p-6 space-y-4 sm:space-y-6 min-h-[160px] max-h-[600px] overflow-y-auto">
         {mensagens.length === 0 && !loading && (
           <div className="py-8 text-center bg-white rounded-lg border border-dashed border-slate-200 p-6">
             <div className="inline-flex items-center justify-center p-3 bg-blue-50 text-blue-600 rounded-full mb-2.5">
@@ -835,7 +840,7 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
             className={`flex flex-col ${msg.tipo === 'pergunta' ? 'items-end' : 'items-start'}`}
           >
             {msg.tipo === 'pergunta' ? (
-              <div className="max-w-[85%] bg-blue-600 text-white rounded-2xl rounded-tr-xs px-4 py-3 shadow-xs">
+              <div className="max-w-[90%] sm:max-w-[85%] bg-blue-600 text-white rounded-2xl rounded-tr-xs px-3.5 sm:px-4 py-2.5 sm:py-3 shadow-xs">
                 <div className="text-xs text-blue-100 font-medium mb-1 flex items-center gap-1">
                   <span>Você (Administrador)</span>
                   <span>•</span>
@@ -846,7 +851,7 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <div className="w-full max-w-[95%] bg-slate-50 border border-slate-200 rounded-2xl rounded-tl-xs p-5 shadow-xs">
+              <div className="w-full max-w-full sm:max-w-[95%] bg-slate-50 border border-slate-200 rounded-2xl rounded-tl-xs p-3.5 sm:p-5 shadow-xs">
                 <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-200">
                   <div className="flex items-center gap-2">
                     <div className="p-1 bg-blue-600 text-white rounded-md">
@@ -948,7 +953,7 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
       </div>
 
       {/* Barra de Entrada de Mensagens / Perguntas */}
-      <div className="p-4 bg-slate-50 border-t border-slate-200">
+      <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200">
         <div className="flex items-end gap-2">
           <div className="flex-1 relative">
             <textarea
@@ -959,9 +964,9 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
               onKeyDown={handleKeyDown}
               disabled={loading}
               placeholder="Digite sua pergunta operacional (ex.: Quais profissionais estão sem escalas? Identifique gargalos e riscos de sobrecarga...)"
-              className="w-full text-sm p-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white resize-none shadow-2xs placeholder:text-slate-400 disabled:bg-slate-100 disabled:cursor-not-allowed"
+              className="w-full text-sm p-3 sm:pb-6 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white resize-none shadow-2xs placeholder:text-slate-400 disabled:bg-slate-100 disabled:cursor-not-allowed leading-relaxed"
             />
-            <div className="absolute bottom-2.5 right-3 text-2xs text-slate-400">
+            <div className="hidden sm:block absolute bottom-2 right-3 text-2xs text-slate-400 pointer-events-none select-none">
               Pressione Enter para enviar
             </div>
           </div>
@@ -970,7 +975,7 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
             type="button"
             disabled={loading || !perguntaInput.trim()}
             onClick={() => handleConsultar()}
-            className="inline-flex items-center justify-center gap-1.5 px-4 py-3 bg-blue-600 hover:bg-blue-700 active:scale-95 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl shadow-xs transition-all h-[54px]"
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-3 bg-blue-600 hover:bg-blue-700 active:scale-95 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl shadow-xs transition-all h-[54px] shrink-0"
             title="Enviar pergunta"
           >
             {loading ? (
@@ -984,16 +989,16 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
           </button>
         </div>
 
-        <div className="mt-2.5 flex items-center justify-between text-2xs text-slate-500">
-          <div className="flex items-center gap-1.5">
-            <Lock className="w-3 h-3 text-slate-400" />
+        <div className="mt-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 text-[11px] text-gray-500">
+          <div className="flex items-center gap-1.5 leading-tight">
+            <Lock className="w-3 h-3 text-gray-400 shrink-0" />
             <span>Privacy by Design: Dados pessoais substituídos por pseudônimos no envio e restaurados localmente no seu navegador.</span>
           </div>
           {mensagens.length > 0 && (
             <button
               type="button"
               onClick={handleLimparConversa}
-              className="text-slate-500 hover:text-slate-700 underline cursor-pointer"
+              className="text-gray-500 hover:text-gray-700 underline cursor-pointer shrink-0 self-start sm:self-auto font-medium"
             >
               Iniciar nova consulta
             </button>
