@@ -84,9 +84,10 @@ export function sanitizarPayloadAntesDeEnviar(dados: MetricasConsolidadasInput) 
   const getAnonPacId = (id?: string, nome?: string): string => {
     const kId = String(id || '').trim();
     const kNome = String(nome || '').trim().toLowerCase();
+    if (/^PAC[_-]\d+/i.test(kId)) return kId;
     if (kId && pacMap.has(kId)) return pacMap.get(kId)!;
     if (kNome && pacMap.has(kNome)) return pacMap.get(kNome)!;
-    const anon = `PAC-${String(pacCount++).padStart(3, '0')}`;
+    const anon = `PAC_${String(pacCount++).padStart(2, '0')}`;
     if (kId) pacMap.set(kId, anon);
     if (kNome) pacMap.set(kNome, anon);
     return anon;
@@ -95,9 +96,10 @@ export function sanitizarPayloadAntesDeEnviar(dados: MetricasConsolidadasInput) 
   const getAnonProfId = (id?: string, nome?: string): string => {
     const kId = String(id || '').trim();
     const kNome = String(nome || '').trim().toLowerCase();
+    if (/^PROF[_-]\d+/i.test(kId) || /^P-\d+/i.test(kId)) return kId;
     if (kId && profMap.has(kId)) return profMap.get(kId)!;
     if (kNome && profMap.has(kNome)) return profMap.get(kNome)!;
-    const anon = `P-${String(profCount++).padStart(2, '0')}`;
+    const anon = `PROF_${String(profCount++).padStart(2, '0')}`;
     if (kId) profMap.set(kId, anon);
     if (kNome) profMap.set(kNome, anon);
     return anon;

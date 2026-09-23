@@ -248,15 +248,17 @@ exports.analisarMetricasHomeCare = onCall(
 
     const anonPac = (id) => {
       const k = String(id || '').trim();
-      if (!k) return 'Paciente [PAC-000]';
-      if (!pacMap.has(k)) pacMap.set(k, `Paciente [PAC-${String(pacNum++).padStart(3, '0')}]`);
+      if (!k) return 'PAC_00';
+      if (/^PAC[_-]\d+/i.test(k)) return k;
+      if (!pacMap.has(k)) pacMap.set(k, `PAC_${String(pacNum++).padStart(2, '0')}`);
       return pacMap.get(k);
     };
 
     const anonProf = (id) => {
       const k = String(id || '').trim();
-      if (!k) return 'Profissional [P-00]';
-      if (!profMap.has(k)) profMap.set(k, `Profissional [P-${String(profNum++).padStart(2, '0')}]`);
+      if (!k) return 'NÃO_ALOCADO (GARGALO)';
+      if (/^PROF[_-]\d+/i.test(k) || /^P-\d+/i.test(k)) return k;
+      if (!profMap.has(k)) profMap.set(k, `PROF_${String(profNum++).padStart(2, '0')}`);
       return profMap.get(k);
     };
 
@@ -325,6 +327,7 @@ Dicionário de Regras de Negócio:
 - 'Curinga': Identificado pelo campo booleano 'curinga: true' nos registros de escalas (plantão de cobertura/reserva emergencial) ou em débitos de motivo 'Curinga'.
 - 'Escalas/Plantões': Contêm a data exata da execução ('data' em formato YYYY-MM-DD), turno ('horario') e dia da semana ('diaSemana').
 - 'Financeiro': Contém registros de débito e crédito vinculados aos atendimentos dos pacientes e aos profissionais.
+- 'Identificadores de Profissionais e Pacientes': Os colaboradores e pacientes são identificados por pseudônimos no formato PROF_01, PROF_02, etc. (e pacientes por PAC_01, PAC_02). Ao citar colaboradores, rankings de plantões/curingas, escalas ou faltas, utilize SEMPRE e EXATAMENTE o código literal do profissional (ex.: PROF_01, PROF_02), para que a interface decodifique os nomes localmente.
 
 Orientações para o cálculo:
 Analise com precisão os dados filtrando pelo mês de agosto (ou o período solicitado na pergunta) e realize os cálculos estatísticos, contagem de curingas, ordenação crescente dos dias da semana com mais dias e porcentagem mensal de cada dia solicitados pelo administrador. Apresente os resultados detalhados com clareza, valores e porcentagens exatas.

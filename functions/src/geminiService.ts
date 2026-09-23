@@ -203,9 +203,12 @@ export function sanitizarDadosOperacionaisHomeCare(dados: any) {
 
   const getAnonPac = (idOrName: string) => {
     const key = String(idOrName || '').trim();
-    if (!key) return 'Paciente [PAC-000]';
+    if (!key) return 'PAC_00';
+    if (/^PAC[_-]\d+/i.test(key)) {
+      return key;
+    }
     if (!pacienteMap.has(key)) {
-      const code = `Paciente [PAC-${String(pacCounter++).padStart(3, '0')}]`;
+      const code = `PAC_${String(pacCounter++).padStart(2, '0')}`;
       pacienteMap.set(key, code);
     }
     return pacienteMap.get(key)!;
@@ -213,9 +216,12 @@ export function sanitizarDadosOperacionaisHomeCare(dados: any) {
 
   const getAnonProf = (idOrName: string) => {
     const key = String(idOrName || '').trim();
-    if (!key) return 'Profissional [P-00]';
+    if (!key) return 'NÃO_ALOCADO (GARGALO)';
+    if (/^PROF[_-]\d+/i.test(key) || /^P-\d+/i.test(key)) {
+      return key;
+    }
     if (!profissionalMap.has(key)) {
-      const code = `Profissional [P-${String(profCounter++).padStart(2, '0')}]`;
+      const code = `PROF_${String(profCounter++).padStart(2, '0')}`;
       profissionalMap.set(key, code);
     }
     return profissionalMap.get(key)!;
@@ -360,6 +366,7 @@ Dicionário de Regras de Negócio:
 - 'Curinga': Identificado pelo campo booleano 'curinga: true' nos registros de escalas (plantão de cobertura/reserva emergencial) ou em débitos de motivo 'Curinga'.
 - 'Escalas/Plantões': Contêm a data exata da execução ('data' em formato YYYY-MM-DD), turno ('horario') e dia da semana ('diaSemana').
 - 'Financeiro': Contém registros de débito e crédito vinculados aos atendimentos dos pacientes e aos profissionais.
+- 'Identificadores de Profissionais e Pacientes': Os colaboradores e pacientes são identificados por pseudônimos no formato PROF_01, PROF_02, etc. (e pacientes por PAC_01, PAC_02). Ao citar colaboradores, rankings de plantões/curingas, escalas ou faltas, utilize SEMPRE e EXATAMENTE o código literal do profissional (ex.: PROF_01, PROF_02), para que a interface decodifique os nomes localmente.
 
 Orientações para o cálculo:
 Analise com precisão os dados filtrando pelo mês de agosto (ou o período solicitado na pergunta) e realize os cálculos estatísticos, contagem de curingas, ordenação crescente dos dias da semana com mais dias e porcentagem mensal de cada dia solicitados pelo administrador. Apresente os resultados detalhados com clareza, valores e porcentagens exatas.

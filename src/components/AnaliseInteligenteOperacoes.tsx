@@ -125,12 +125,163 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
     }, 700);
 
     try {
+      // 1. Dicionário temporário em memória para resolução reversível no cliente (Privacy by Design / LGPD)
+      const mapaIdentificadores: Record<string, string> = {};
+
+      let profCounter = 1;
+      const profIdParaPseudonimo = new Map<string, string>();
+      const profNomeParaPseudonimo = new Map<string, string>();
+
+      const obterPseudonimoProf = (id?: string, nome?: string): string => {
+        const kId = String(id || '').trim();
+        const kNome = String(nome || '').trim().toLowerCase();
+        if (kId && profIdParaPseudonimo.has(kId)) return profIdParaPseudonimo.get(kId)!;
+        if (kNome && profNomeParaPseudonimo.has(kNome)) return profNomeParaPseudonimo.get(kNome)!;
+
+        const pseudonimo = `PROF_${String(profCounter++).padStart(2, '0')}`;
+        if (kId) profIdParaPseudonimo.set(kId, pseudonimo);
+        if (kNome) profNomeParaPseudonimo.set(kNome, pseudonimo);
+
+        const nomeReal = String(nome || '').trim();
+        if (nomeReal) {
+          mapaIdentificadores[pseudonimo] = nomeReal;
+        }
+        return pseudonimo;
+      };
+
+      // Mapear profissionais da base
+      (profissionais || []).forEach(p => {
+        const pseudonimo = obterPseudonimoProf(p.id, p.nome || (p as any).nomeCompleto);
+        const nomeReal = String(p.nome || (p as any).nomeCompleto || '').trim();
+        if (nomeReal) {
+          mapaIdentificadores[pseudonimo] = nomeReal;
+        }
+      });
+
+      // Mapear pacientes da base
+      let pacCounter = 1;
+      const pacIdParaPseudonimo = new Map<string, string>();
+      const pacNomeParaPseudonimo = new Map<string, string>();
+
+      const obterPseudonimoPac = (id?: string, nome?: string): string => {
+        const kId = String(id || '').trim();
+        const kNome = String(nome || '').trim().toLowerCase();
+        if (kId && pacIdParaPseudonimo.has(kId)) return pacIdParaPseudonimo.get(kId)!;
+        if (kNome && pacNomeParaPseudonimo.has(kNome)) return pacNomeParaPseudonimo.get(kNome)!;
+
+        const pseudonimo = `PAC_${String(pacCounter++).padStart(2, '0')}`;
+        if (kId) pacIdParaPseudonimo.set(kId, pseudonimo);
+        if (kNome) pacNomeParaPseudonimo.set(kNome, pseudonimo);
+
+        const nomeReal = String(nome || '').trim();
+        if (nomeReal) {
+          mapaIdentificadores[pseudonimo] = nomeReal;
+        }
+        return pseudonimo;
+      };
+
+      (pacientes || []).forEach(p => {
+        const pseudonimo = obterPseudonimoPac(p.id, p.nome || (p as any).nomeCompleto);
+        const nomeReal = String(p.nome || (p as any).nomeCompleto || '').trim();
+        if (nomeReal) {
+          mapaIdentificadores[pseudonimo] = nomeReal;
+        }
+      });
+
+      // Montar profissionais pseudonimizados (apenas o pseudônimo PROF_XX, sem dados de contato)
+      const profissionaisPseudonimizados = (profissionais || []).map(prof => {
+        const pAny = prof as any;
+        const pseudonimo = obterPseudonimoProf(prof.id, prof.nome || pAny.nomeCompleto);
+        return {
+          id: pseudonimo,
+          nome: pseudonimo,
+          categoria: pAny.categoria || pAny.funcao || pAny.profissao || 'Cuidador',
+          especialidade: prof.especialidade || 'Geral',
+          status: prof.status || 'Disponível',
+          valorHora: Number(pAny.valorHora || pAny.valorPlantao || 0),
+          plantoesRealizadosMes: Number(pAny.plantoesRealizadosMes || pAny.totalPlantoes || 0)
+        };
+      });
+
+      // Montar pacientes pseudonimizados
+      const pacientesPseudonimizados = (pacientes || []).map(pac => {
+        const pAny = pac as any;
+        const pseudonimo = obterPseudonimoPac(pac.id, pac.nome || pAny.nomeCompleto);
+        return {
+          id: pseudonimo,
+          nome: pseudonimo,
+          status: pac.status || 'Ativo',
+          complexidade: pAny.complexidade || pAny.grauComplexidade || pAny.informacoesMedicas?.grauDependencia || 'Média',
+          planoCuidado: pAny.planoCuidado || pAny.tipoPlantao || pAny.planoAtendimento?.tipoEscala || 'Plantão 12h',
+          quantidadePlantoesMes: Number(pAny.quantidadePlantoesMes || pAny.plantoesMes || 0),
+          valorMensal: Number(pAny.valorMensal || pAny.mensalidade || pAny.valorTotal || 0),
+          especialidade: pAny.especialidade || pAny.categoriaNecessaria || 'Técnico de Enfermagem'
+        };
+      });
+
+      // Montar escalas pseudonimizadas
+      const agendamentosPseudonimizados = (agendamentos || []).map(e => {
+        const eAny = e as any;
+        const profId = e.idProfissional || eAny.profissionalId;
+        const profNome = e.nomeProfissional || eAny.profissionalNome;
+        const pseudonimoProf = (profId || profNome) ? obterPseudonimoProf(profId, profNome) : null;
+        if (profNome && pseudonimoProf && !mapaIdentificadores[pseudonimoProf]) {
+          mapaIdentificadores[pseudonimoProf] = String(profNome).trim();
+        }
+
+        const pacId = e.idPaciente || eAny.pacienteId;
+        const pacNome = eAny.nomePaciente || eAny.pacienteNome;
+        const pseudonimoPac = (pacId || pacNome) ? obterPseudonimoPac(pacId, pacNome) : 'PAC_00';
+        if (pacNome && pseudonimoPac && !mapaIdentificadores[pseudonimoPac]) {
+          mapaIdentificadores[pseudonimoPac] = String(pacNome).trim();
+        }
+
+        return {
+          ...e,
+          idProfissional: pseudonimoProf,
+          profissionalId: pseudonimoProf,
+          nomeProfissional: pseudonimoProf,
+          profissionalNome: pseudonimoProf,
+          idPaciente: pseudonimoPac,
+          pacienteId: pseudonimoPac,
+          nomePaciente: pseudonimoPac,
+          pacienteNome: pseudonimoPac
+        };
+      });
+
+      // Montar débitos pseudonimizados
+      const debitosPseudonimizados = (debitosProfissionais || []).map(deb => {
+        const profPseudonimo = obterPseudonimoProf(deb.idProfissional, deb.nomeProfissional);
+        const pacPseudonimo = (deb.idPaciente || deb.nomePaciente) 
+          ? obterPseudonimoPac(deb.idPaciente, deb.nomePaciente) 
+          : undefined;
+
+        return {
+          ...deb,
+          idProfissional: profPseudonimo,
+          nomeProfissional: profPseudonimo,
+          idPaciente: pacPseudonimo,
+          nomePaciente: pacPseudonimo
+        };
+      });
+
+      // Montar faturas pseudonimizadas
+      const faturasPseudonimizadas = (faturasPacientes || []).map(fat => {
+        const pacPseudonimo = obterPseudonimoPac(fat.idPaciente || (fat as any).pacienteId, fat.nomePaciente);
+        return {
+          ...fat,
+          idPaciente: pacPseudonimo,
+          pacienteId: pacPseudonimo,
+          nomePaciente: pacPseudonimo
+        };
+      });
+
       const dadosParaEnvio = {
-        pacientes,
-        profissionais,
-        escalas: agendamentos,
-        debitosProfissionais,
-        faturasPacientes,
+        pacientes: pacientesPseudonimizados,
+        profissionais: profissionaisPseudonimizados,
+        escalas: agendamentosPseudonimizados,
+        debitosProfissionais: debitosPseudonimizados,
+        faturasPacientes: faturasPseudonimizadas,
         folhasPagamento,
         totaisConsolidados: {
           faturamentoMensalConsolidado: metricasSumarizadas.faturamentoConsolidado,
@@ -145,10 +296,38 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
 
       const resultado = await consultarAssistenteOperacional(textoParaEnviar, dadosParaEnvio);
 
+      // 2. Reversão Local ao Exibir a Resposta (Privacy by Design / Client-side Resolution)
+      let respostaLegivel = resultado.resposta || 'Não foi possível gerar uma resposta para os dados informados.';
+
+      const substituirTexto = (textoBase: string, termoBusca: string, substituto: string): string => {
+        if (!termoBusca) return textoBase;
+        return textoBase.split(termoBusca).join(substituto);
+      };
+
+      // Ordenar por tamanho decrescente do código para evitar substituições parciais
+      const entradasOrdenadas = Object.entries(mapaIdentificadores).sort((a, b) => b[0].length - a[0].length);
+
+      entradasOrdenadas.forEach(([codigo, nomeReal]) => {
+        if (codigo && nomeReal) {
+          // Substituição do pseudônimo exato (ex: PROF_01)
+          respostaLegivel = substituirTexto(respostaLegivel, codigo, nomeReal);
+
+          // Variações com hífen (ex: PROF-01)
+          const codigoHifen = codigo.replace('_', '-');
+          if (codigoHifen !== codigo) {
+            respostaLegivel = substituirTexto(respostaLegivel, codigoHifen, nomeReal);
+          }
+
+          // Variações entre colchetes (ex: [PROF_01] ou [PROF-01])
+          respostaLegivel = substituirTexto(respostaLegivel, `[${codigo}]`, nomeReal);
+          respostaLegivel = substituirTexto(respostaLegivel, `[${codigoHifen}]`, nomeReal);
+        }
+      });
+
       const novaMensagemResposta: MensagemInterativa = {
         id: `resp-${Date.now()}`,
         tipo: 'resposta',
-        texto: resultado.resposta || 'Não foi possível gerar uma resposta para os dados informados.',
+        texto: respostaLegivel,
         timestamp: resultado.timestamp || new Date().toISOString()
       };
 
@@ -232,9 +411,9 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
                   <ShieldCheck className="w-3.5 h-3.5" />
                   Restrito a Administradores
                 </span>
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200" title="A IA recebe apenas pseudônimos opacos e o navegador reverte para os nomes reais localmente na sua máquina">
                   <Lock className="w-3.5 h-3.5" />
-                  Anonimização LGPD Ativa
+                  Pseudonimização Reversível no Cliente (LGPD)
                 </span>
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 border border-purple-200">
                   <Trash2 className="w-3.5 h-3.5" />
@@ -548,7 +727,7 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
         <div className="mt-2.5 flex items-center justify-between text-2xs text-slate-500">
           <div className="flex items-center gap-1.5">
             <Lock className="w-3 h-3 text-slate-400" />
-            <span>Dados protegidos por anonimização prévia (LGPD). Nomes, CPFs e telefones não são transmitidos.</span>
+            <span>Privacy by Design: Dados pessoais substituídos por pseudônimos no envio e restaurados localmente no seu navegador.</span>
           </div>
           {mensagens.length > 0 && (
             <button
