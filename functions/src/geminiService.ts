@@ -307,17 +307,30 @@ export function sanitizarDadosOperacionaisHomeCare(dados: any) {
     }
   };
 
+  const resumoFinanceiroRaw = Array.isArray(source?.resumoFinanceiro) ? source.resumoFinanceiro : [];
+  const resumoFinanceiro = resumoFinanceiroRaw.map((rf: any) => ({
+    id: getAnonPac(rf.id || rf.codigo || rf.pacienteId),
+    faturamento: Number(rf.faturamento ?? rf.faturamentoTotal ?? 0),
+    custoProf: Number(rf.custoProf ?? rf.custoProfissionaisTotal ?? 0),
+    ajudaCusto: Number(rf.ajudaCusto ?? rf.ajudaCustoTotal ?? 0),
+    totalCustos: Number(rf.totalCustos ?? rf.custosTotais ?? 0),
+    lucro: Number(rf.lucro ?? rf.lucroOperacional ?? 0),
+    margem: Number(rf.margem ?? rf.margemPercentual ?? 0)
+  }));
+
   return {
     metadadosLGPD: {
       anonimizacaoAplicada: true,
       identificadoresPessoaisRemovidos: ["CPF", "Telefones", "Endereços", "E-mails", "Dados Bancários", "Nomes Reais"],
       dataAnonimizacao: new Date().toISOString()
     },
+    periodoReferencia: source?.periodoReferencia || 'Período solicitado',
+    resumoFinanceiro,
     metricasGerais,
-    pacientes: pacientesAnonimizados,
-    profissionais: profissionaisAnonimizados,
-    escalas: escalasAnonimizadas,
-    financeiro: financeiroAnonimizado
+    pacientes: pacientesAnonimizados.slice(0, 30),
+    profissionais: profissionaisAnonimizados.slice(0, 30),
+    escalas: escalasAnonimizadas.slice(0, 20),
+    financeiro: financeiroAnonimizado.slice(0, 20)
   };
 }
 
@@ -329,7 +342,7 @@ export const analisarMetricasHomeCare = onCall(
   {
     region: "southamerica-east1",
     secrets: ["GEMINI_API_KEY"],
-    timeoutSeconds: 120,
+    timeoutSeconds: 180,
     memory: "512MiB"
   },
   async (request) => {
@@ -366,34 +379,44 @@ export const analisarMetricasHomeCare = onCall(
       throw new HttpsError("failed-precondition", "GEMINI_API_KEY não configurada no servidor.");
     }
 
-    const prompt = `Você é um assistente operacional e financeiro de gestão de home care. Responda à dúvida do administrador com base estritamente nas seguintes métricas e dados operacionais anonimizados:
+    const prompt = `Você é um assistente operacional e financeiro de gestão de home care de alto desempenho.
+Responda com agilidade, concisão e fundamentação estritamente nos dados operacionais e financeiros anonimizados abaixo:
 
+${metricas.resumoFinanceiro && metricas.resumoFinanceiro.length > 0 ? `
+DIRETRIZ OBRIGATÓRIA DE RENTABILIDADE E MARGEM DE LUCRO (RESUMO PRÉ-CALCULADO):
+Você recebeu uma lista financeira pré-calculada no campo 'resumoFinanceiro' com faturamento, custos e margem por paciente.
+Para responder a consultas de rentabilidade ou margem de lucro por paciente:
+1. LEIA DIRETAMENTE o 'resumoFinanceiro'. Não tente recalcular ou alterar esses valores matemáticos consolidados.
+2. RENDERIZE DIRETAMENTE a tabela em Markdown ordenada obrigatoriamente da MAIOR para a MENOR margem percentual, com a seguinte estrutura de colunas:
+| Paciente | Faturamento Total | Custo Cuidadores | Ajuda de Custo | Custos Totais | Lucro Operacional (R$) | Margem (%) |
+Formate os valores monetários como moeda brasileira (ex: R$ 4.480,00) e a margem com uma casa decimal e símbolo % (ex: 30,8%).
+3. APRESENTE UM RESUMO EXECUTIVO CURTO logo após a tabela destacando:
+   - Os 3 pacientes de maior rentabilidade (maior margem %).
+   - Os 3 pacientes de menor margem (ou em prejuízo).
+   - Conclusão rápida e objetiva (máximo 2 a 3 frases) com foco em tomada de decisão da diretoria, sem enrolação.
+4. Mantenha os códigos dos pacientes (ex: PAC-01, PAC-02) exatamente como fornecidos para que a aplicação decodifique e restaure os nomes reais no navegador do administrador.
+` : `
 Dicionário Financeiro e Operacional de Pacientes:
-- Cada paciente possui sua estrutura de custos unitários por plantão: [valorPlantaoProfissional] (valor repassado ao cuidador/técnico), [valorAjudaCusto] (transporte, alimentação ou adicionais) e [taxaAdministrativa] (taxa administrativa / margem de gestão). O [valorTotalCobradoPlantao] representa o valor unitário cobrado por plantão.
-- Ao analisar rentabilidade ou margem de lucro por paciente (mês atual, mês anterior ou período solicitado):
-  1. Multiplique os custos unitários pela quantidade de plantões realizados no período solicitado, ou cruze a quantidade de escalas realizadas no período com os lançamentos de débitos e folhas de pagamento correspondentes.
-  2. Utilize obrigatoriamente as seguintes fórmulas de cálculo:
-     * Custos Totais = Custo Profissionais + Ajuda de Custo.
-     * Lucro Operacional = Faturamento Total - Custos Totais.
-     * Margem (%) = (Lucro Operacional / Faturamento Total) * 100.
-  3. Formate a resposta em Markdown com a seguinte estrutura de colunas em tabela:
-     | Paciente | Faturamento Total | Custo Profissionais | Ajuda de Custo | Custos Totais | Lucro Operacional (R$) | Margem (%) |
-  4. Ordene os pacientes da maior para a menor margem de lucro percentual.
+- Cada paciente possui sua estrutura de custos unitários por plantão: [valorPlantaoProfissional], [valorAjudaCusto] e [taxaAdministrativa].
+- Fórmulas de cálculo:
+  * Custos Totais = Custo Profissionais + Ajuda de Custo.
+  * Lucro Operacional = Faturamento Total - Custos Totais.
+  * Margem (%) = (Lucro Operacional / Faturamento Total) * 100.
+- Formate em Markdown com colunas:
+  | Paciente | Faturamento Total | Custo Cuidadores | Ajuda de Custo | Custos Totais | Lucro Operacional (R$) | Margem (%) |
+- Ordene os pacientes da maior para a menor margem de lucro percentual.
+`}
 
 Dicionário de Regras de Negócio:
-- 'Curinga': Identificado pelo campo booleano 'curinga: true' nos registros de escalas (plantão de cobertura/reserva emergencial) ou em débitos de motivo 'Curinga'.
-- 'Escalas/Plantões': Contêm a data exata da execução ('data' em formato YYYY-MM-DD), turno ('horario') e dia da semana ('diaSemana').
-- 'Financeiro': Contém registros de débito e crédito vinculados aos atendimentos dos pacientes e aos profissionais.
-- 'Identificadores de Profissionais e Pacientes': Os colaboradores e pacientes são identificados por pseudônimos no formato PROF_01, PROF_02, etc. (e pacientes por PAC_01, PAC_02, PAC-001, etc.). Ao citar colaboradores, pacientes, rankings de plantões/curingas, escalas ou rentabilidade, utilize SEMPRE e EXATAMENTE o código literal informado (ex.: PAC_01, PAC-001, PROF_01), para que a interface decodifique e restaure os nomes reais localmente.
-
-Orientações para o cálculo:
-Analise com precisão os dados filtrando pelo período solicitado na pergunta (ex.: agosto) e realize os cálculos estatísticos, rentabilidade, contagem de curingas, ordenação crescente dos dias da semana com mais dias e porcentagem mensal de cada dia solicitados pelo administrador. Apresente os resultados detalhados com clareza, valores e porcentagens exatas.
+- 'Curinga': Identificado pelo campo booleano 'curinga: true' nos registros de escalas ou em débitos de motivo 'Curinga'.
+- 'Escalas/Plantões': Contêm data ('data'), turno ('horario') e dia da semana ('diaSemana').
+- 'Identificadores de Profissionais e Pacientes': Os colaboradores e pacientes são identificados por pseudônimos no formato PROF_01, PROF_02, etc. (e pacientes por PAC-01, PAC-02, PAC_01, etc.). Ao citar colaboradores, pacientes, rankings de plantões/curingas, escalas ou rentabilidade, utilize SEMPRE e EXATAMENTE o código literal informado, para que a interface decodifique e restaure os nomes reais localmente.
 
 Dados Operacionais Anonimizados:
 ${JSON.stringify(metricas, null, 2)}
 
 Pergunta do Administrador:
-${pergunta || 'Apresente um resumo geral da operação, gargalos de escalas e capacidade assistencial.'}`;
+${pergunta || 'Apresente uma análise detalhada da margem de lucro por paciente ativo com tabela ordenada e resumo executivo.'}`;
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
 

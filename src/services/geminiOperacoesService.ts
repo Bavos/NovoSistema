@@ -7,7 +7,20 @@
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { app } from '../lib/firebase';
 
+export interface ResumoFinanceiroItem {
+  id: string;
+  faturamento: number;
+  custoProf: number;
+  ajudaCusto: number;
+  totalCustos: number;
+  lucro: number;
+  margem: number;
+  quantidadePlantoes?: number;
+}
+
 export interface MetricasConsolidadasInput {
+  periodoReferencia?: string;
+  resumoFinanceiro?: ResumoFinanceiroItem[];
   pacientes: any[];
   profissionais: any[];
   escalas: any[];
@@ -216,10 +229,12 @@ export function sanitizarPayloadAntesDeEnviar(dados: MetricasConsolidadasInput) 
   });
 
   return {
-    pacientes: pacientesLimpos,
-    profissionais: profissionaisLimpos,
-    escalas: escalasLimpas,
-    financeiro: lancamentosAnonimizados,
+    periodoReferencia: dados.periodoReferencia,
+    resumoFinanceiro: dados.resumoFinanceiro,
+    pacientes: pacientesLimpos.slice(0, 30),
+    profissionais: profissionaisLimpos.slice(0, 30),
+    escalas: (dados.resumoFinanceiro && dados.resumoFinanceiro.length > 0) ? [] : escalasLimpas.slice(0, 30),
+    financeiro: (dados.resumoFinanceiro && dados.resumoFinanceiro.length > 0) ? [] : lancamentosAnonimizados.slice(0, 30),
     totaisConsolidados: dados.totaisConsolidados,
     user: dados.user
   };
@@ -235,11 +250,12 @@ export async function consultarAssistenteOperacional(
 ): Promise<ResultadoConsultaOperacional> {
   const dadosAnonimizados = sanitizarPayloadAntesDeEnviar(dados);
 
-  // Chamada exclusiva via SDK Oficial do Firebase Functions (região southamerica-east1)
+  // Chamada exclusiva via SDK Oficial do Firebase Functions (região southamerica-east1) com timeout de 180s
   const functions = getFunctions(app, 'southamerica-east1');
   const consultarIA = httpsCallable<{ pergunta: string; metricas?: any }, { resposta: string }>(
     functions,
-    'analisarMetricasHomeCare'
+    'analisarMetricasHomeCare',
+    { timeout: 180000 }
   );
 
   const result = await consultarIA({

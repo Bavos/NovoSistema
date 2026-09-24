@@ -25,6 +25,185 @@ import { db } from '../lib/firebase';
 import { collection, query, limit, getDocs, getDoc, doc } from 'firebase/firestore';
 import { Profissional, Paciente } from '../types';
 
+interface PeriodoDetectado {
+  descricao: string;
+  meses: Array<{ ano: number; mes: number }>;
+}
+
+const MESES_NOMES = [
+  '', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+];
+
+const MESES_MAP: Record<string, number> = {
+  janeiro: 1, jan: 1,
+  fevereiro: 2, fev: 2,
+  marco: 3, março: 3, mar: 3,
+  abril: 4, abr: 4,
+  maio: 5, mai: 5,
+  junho: 6, jun: 6,
+  julho: 7, jul: 7,
+  agosto: 8, ago: 8,
+  setembro: 9, set: 9,
+  outubro: 10, out: 10,
+  novembro: 11, nov: 11,
+  dezembro: 12, dez: 12
+};
+
+function extrairAnoMes(dateVal: any, mesRefVal?: string): { ano: number; mes: number } | null {
+  if (mesRefVal && typeof mesRefVal === 'string') {
+    const s = mesRefVal.trim().toLowerCase();
+    const matchIso = s.match(/(\d{4})-(\d{1,2})/);
+    if (matchIso) return { ano: parseInt(matchIso[1], 10), mes: parseInt(matchIso[2], 10) };
+    const matchBr = s.match(/(\d{1,2})\/(\d{4})/);
+    if (matchBr) return { ano: parseInt(matchBr[2], 10), mes: parseInt(matchBr[1], 10) };
+    for (const [nome, num] of Object.entries(MESES_MAP)) {
+      if (s.includes(nome)) {
+        const anoMatch = s.match(/20\d{2}/);
+        return { ano: anoMatch ? parseInt(anoMatch[0], 10) : 2026, mes: num };
+      }
+    }
+  }
+  if (!dateVal) return null;
+  if (dateVal instanceof Date) {
+    return { ano: dateVal.getFullYear(), mes: dateVal.getMonth() + 1 };
+  }
+  if (dateVal?.seconds) {
+    const d = new Date(dateVal.seconds * 1000);
+    return { ano: d.getFullYear(), mes: d.getMonth() + 1 };
+  }
+  if (typeof dateVal === 'string') {
+    const s = dateVal.trim();
+    const matchIso = s.match(/^(\d{4})-(\d{2})/);
+    if (matchIso) return { ano: parseInt(matchIso[1], 10), mes: parseInt(matchIso[2], 10) };
+    const matchBr = s.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    if (matchBr) return { ano: parseInt(matchBr[3], 10), mes: parseInt(matchBr[2], 10) };
+    const matchBrMesAno = s.match(/^(\d{2})\/(\d{4})/);
+    if (matchBrMesAno) return { ano: parseInt(matchBrMesAno[2], 10), mes: parseInt(matchBrMesAno[1], 10) };
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return { ano: d.getFullYear(), mes: d.getMonth() + 1 };
+  }
+  return null;
+}
+
+function obterUltimoMesComFaturas(faturas: any[], agendamentos: any[]): { ano: number; mes: number } {
+  let ultAno = 2026;
+  let ultMes = 8;
+  let achou = false;
+
+  (faturas || []).forEach(f => {
+    const fatAny = f as any;
+    const info = extrairAnoMes(f.dataEmissao || f.periodoApurado?.fim || fatAny.createdAt, f.mesReferencia);
+    if (info) {
+      if (!achou || info.ano > ultAno || (info.ano === ultAno && info.mes > ultMes)) {
+        ultAno = info.ano;
+        ultMes = info.mes;
+        achou = true;
+      }
+    }
+  });
+
+  if (!achou) {
+    (agendamentos || []).forEach(a => {
+      const aAny = a as any;
+      const info = extrairAnoMes(a.data || aAny.dataInicio);
+      if (info) {
+        if (!achou || info.ano > ultAno || (info.ano === ultAno && info.mes > ultMes)) {
+          ultAno = info.ano;
+          ultMes = info.mes;
+          achou = true;
+        }
+      }
+    });
+  }
+
+  return { ano: ultAno, mes: ultMes };
+}
+
+function detectarPeriodoConsulta(pergunta: string, faturas: any[], agendamentos: any[]): PeriodoDetectado {
+  const pLower = (pergunta || '').toLowerCase();
+  const ult = obterUltimoMesComFaturas(faturas, agendamentos);
+
+  // 1. Detectar ano específico (ex: 2025, 2026, 2024)
+  const anoMatch = pLower.match(/\b(20\d{2})\b/);
+  const anoPadrao = anoMatch ? parseInt(anoMatch[1], 10) : ult.ano;
+
+  // 2. Verificar se pede "mês atual e no mês anterior" ou variações
+  if (
+    pLower.includes('mês atual e no mês anterior') ||
+    pLower.includes('mes atual e no mes anterior') ||
+    pLower.includes('mês atual e mês anterior') ||
+    pLower.includes('mes atual e mes anterior') ||
+    pLower.includes('mês atual e anterior') ||
+    pLower.includes('mes atual e anterior')
+  ) {
+    const mesAtual = ult.mes;
+    const anoAtual = ult.ano;
+    const mesAnt = mesAtual === 1 ? 12 : mesAtual - 1;
+    const anoAnt = mesAtual === 1 ? anoAtual - 1 : anoAtual;
+    return {
+      descricao: `${MESES_NOMES[mesAnt]}/${anoAnt} e ${MESES_NOMES[mesAtual]}/${anoAtual}`,
+      meses: [
+        { ano: anoAnt, mes: mesAnt },
+        { ano: anoAtual, mes: mesAtual }
+      ]
+    };
+  }
+
+  // 3. Verificar menções a meses individuais em português
+  const mesesEncontrados: number[] = [];
+  for (const [nomeMes, numMes] of Object.entries(MESES_MAP)) {
+    const regex = new RegExp(`\\b${nomeMes}\\b`, 'i');
+    if (regex.test(pLower) && !mesesEncontrados.includes(numMes)) {
+      mesesEncontrados.push(numMes);
+    }
+  }
+
+  if (mesesEncontrados.length > 0) {
+    const meses = mesesEncontrados.map(m => ({ ano: anoPadrao, mes: m }));
+    const nomes = meses.map(m => `${MESES_NOMES[m.mes]}/${m.ano}`).join(' e ');
+    return {
+      descricao: nomes,
+      meses
+    };
+  }
+
+  // 4. Se mencionou apenas o ano (ex: "ano de 2026", "em 2026")
+  if (anoMatch) {
+    const meses = Array.from({ length: 12 }, (_, i) => ({ ano: anoPadrao, mes: i + 1 }));
+    return {
+      descricao: `Ano de ${anoPadrao}`,
+      meses
+    };
+  }
+
+  // 5. Se mencionou apenas "mês anterior"
+  if (pLower.includes('mês anterior') || pLower.includes('mes anterior')) {
+    const mesAnt = ult.mes === 1 ? 12 : ult.mes - 1;
+    const anoAnt = ult.mes === 1 ? ult.ano - 1 : ult.ano;
+    return {
+      descricao: `${MESES_NOMES[mesAnt]} de ${anoAnt}`,
+      meses: [{ ano: anoAnt, mes: mesAnt }]
+    };
+  }
+
+  // 6. Se nenhum for especificado, utiliza o último mês com faturas consolidadas
+  return {
+    descricao: `${MESES_NOMES[ult.mes]} de ${ult.ano} (último mês consolidado)`,
+    meses: [{ ano: ult.ano, mes: ult.mes }]
+  };
+}
+
+function dataPertenceAoPeriodo(
+  dateVal: any,
+  mesRefVal: string | undefined,
+  mesesAlvo: Array<{ ano: number; mes: number }>
+): boolean {
+  const info = extrairAnoMes(dateVal, mesRefVal);
+  if (!info) return false;
+  return mesesAlvo.some(m => m.ano === info.ano && m.mes === info.mes);
+}
+
 interface MensagemInterativa {
   id: string;
   tipo: 'pergunta' | 'resposta';
@@ -344,7 +523,7 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
         if (kNome && pacNomeParaPseudonimo.has(kNome)) return pacNomeParaPseudonimo.get(kNome)!;
 
         const indice = pacCounter++;
-        const pseudonimo = `PAC-${String(indice).padStart(3, '0')}`;
+        const pseudonimo = `PAC-${String(indice).padStart(2, '0')}`;
         if (kId) pacIdParaPseudonimo.set(kId, pseudonimo);
         if (kNome) pacNomeParaPseudonimo.set(kNome, pseudonimo);
 
@@ -494,164 +673,222 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
         };
       });
 
-      // Montar escalas pseudonimizadas verificando todas as propriedades de identificação do profissional
-      const agendamentosPseudonimizados = (agendamentos || []).map(e => {
+      // Garantir de-para para nomes e IDs presentes em agendamentos e faturas
+      (agendamentos || []).forEach(e => {
         const eAny = e as any;
-        const profId = 
-          e.idProfissional || 
-          eAny.profissionalId || 
-          eAny.cuidadorId || 
-          eAny.funcionarioId || 
-          eAny.idCuidador || 
-          eAny.idFuncionario ||
-          (typeof eAny.profissional === 'string' && eAny.profissional.length > 5 ? eAny.profissional : undefined);
-
-        let profNome = 
-          e.nomeProfissional || 
-          eAny.profissionalNome || 
-          eAny.nomeCuidador || 
-          eAny.nomeFuncionario || 
-          eAny.cuidadorNome || 
-          eAny.funcionarioNome ||
-          (typeof eAny.profissional === 'string' && !e.idProfissional && !eAny.profissionalId ? eAny.profissional : undefined);
-
-        if (!profNome && profId) {
-          profNome = mapaProfissionaisCadastrados.get(String(profId).trim()) 
-            || mapaProfissionaisCadastrados.get(String(profId).trim().toLowerCase());
-        }
-
-        const pseudonimoProf = (profId || profNome) ? obterPseudonimoProf(profId, profNome) : null;
-        if (profNome && pseudonimoProf) {
-          const match = pseudonimoProf.match(/\d+/);
-          const idx = match ? parseInt(match[0], 10) : 0;
-          if (idx > 0) {
-            registrarVariacoesProfissional(idx, profNome, profId);
-          }
-        }
-
-        const pacId = 
-          e.idPaciente || 
-          eAny.pacienteId || 
-          eAny.idClient || 
-          eAny.clientId ||
-          (typeof eAny.paciente === 'string' && eAny.paciente.length > 5 ? eAny.paciente : undefined);
-
-        let pacNome = 
-          eAny.nomePaciente || 
-          eAny.pacienteNome || 
-          (typeof eAny.paciente === 'string' && !e.idPaciente && !eAny.pacienteId ? eAny.paciente : undefined);
-
-        if (!pacNome && pacId) {
-          pacNome = mapaPacientesCadastrados.get(String(pacId).trim()) 
-            || mapaPacientesCadastrados.get(String(pacId).trim().toLowerCase());
-        }
-
-        const pseudonimoPac = (pacId || pacNome) ? obterPseudonimoPac(pacId, pacNome) : 'PAC-000';
-        if (pacNome && pseudonimoPac) {
-          const match = pseudonimoPac.match(/\d+/);
-          const idx = match ? parseInt(match[0], 10) : 0;
-          if (idx > 0) {
-            registrarVariacoesPaciente(idx, pacNome, pacId);
-          }
-        }
-
-        const valorPlantaoNum = Number(e.valorPlantao || eAny.valorProfissional || eAny.repasseProfissional || eAny.valorDiaria || 0);
-        const valorRepasseNum = Number(e.valorRepasse || e.valorPlantao || eAny.valorProfissional || 0);
-        const ajudaCustoNum = Number(e.ajudaCusto || eAny.valorTransporte || eAny.transporte || eAny.adicional || 0);
-        const taxaAdmNum = Number(e.taxaAdm || eAny.taxaAdministrativa || 0);
-        const valorCobradoNum = Number(eAny.valorCobrado || eAny.valorFaturado || eAny.valorTotalCobradoPlantao || (valorPlantaoNum + ajudaCustoNum + taxaAdmNum) || 0);
-
-        return {
-          ...e,
-          idProfissional: pseudonimoProf,
-          profissionalId: pseudonimoProf,
-          cuidadorId: pseudonimoProf,
-          funcionarioId: pseudonimoProf,
-          nomeProfissional: pseudonimoProf,
-          profissionalNome: pseudonimoProf,
-          idPaciente: pseudonimoPac,
-          pacienteId: pseudonimoPac,
-          nomePaciente: pseudonimoPac,
-          pacienteNome: pseudonimoPac,
-          valorPlantao: valorPlantaoNum,
-          valorRepasse: valorRepasseNum,
-          ajudaCusto: ajudaCustoNum,
-          taxaAdm: taxaAdmNum,
-          valorCobrado: valorCobradoNum
-        };
-      });
-
-      // Montar débitos pseudonimizados
-      const debitosPseudonimizados = (debitosProfissionais || []).map(deb => {
-        const debAny = deb as any;
-        const profId = deb.idProfissional || debAny.profissionalId || debAny.cuidadorId || debAny.funcionarioId;
-        let profNome = deb.nomeProfissional || debAny.profissionalNome || debAny.nomeCuidador;
+        const profId = e.idProfissional || eAny.profissionalId || eAny.cuidadorId || eAny.funcionarioId;
+        let profNome = e.nomeProfissional || eAny.profissionalNome || eAny.nomeCuidador || eAny.nomeFuncionario;
         if (!profNome && profId) {
           profNome = mapaProfissionaisCadastrados.get(String(profId).trim());
         }
-        const profPseudonimo = (profId || profNome) ? obterPseudonimoProf(profId, profNome) : undefined;
+        if (profNome || profId) {
+          obterPseudonimoProf(profId, profNome);
+        }
 
-        const pacId = deb.idPaciente || debAny.pacienteId;
-        let pacNome = deb.nomePaciente || debAny.pacienteNome;
+        const pacId = e.idPaciente || eAny.pacienteId || eAny.idClient;
+        let pacNome = eAny.nomePaciente || eAny.pacienteNome;
         if (!pacNome && pacId) {
           pacNome = mapaPacientesCadastrados.get(String(pacId).trim());
         }
-        const pacPseudonimo = (pacId || pacNome) ? obterPseudonimoPac(pacId, pacNome) : undefined;
-
-        return {
-          ...deb,
-          idProfissional: profPseudonimo,
-          nomeProfissional: profPseudonimo,
-          profissionalId: profPseudonimo,
-          cuidadorId: profPseudonimo,
-          funcionarioId: profPseudonimo,
-          idPaciente: pacPseudonimo,
-          nomePaciente: pacPseudonimo,
-          pacienteId: pacPseudonimo
-        };
-      });
-
-      // Montar faturas pseudonimizadas
-      const faturasPseudonimizadas = (faturasPacientes || []).map(fat => {
-        const fatAny = fat as any;
-        const pacId = fat.idPaciente || fatAny.pacienteId;
-        let pacNome = fat.nomePaciente || fatAny.pacienteNome;
-        if (!pacNome && pacId) {
-          pacNome = mapaPacientesCadastrados.get(String(pacId).trim());
+        if (pacNome || pacId) {
+          obterPseudonimoPac(pacId, pacNome);
         }
-        const pacPseudonimo = (pacId || pacNome) ? obterPseudonimoPac(pacId, pacNome) : 'PAC-000';
-        return {
-          ...fat,
-          idPaciente: pacPseudonimo,
-          pacienteId: pacPseudonimo,
-          nomePaciente: pacPseudonimo
-        };
       });
 
-      // Montar folhas de pagamento pseudonimizadas
-      const folhasPseudonimizadas = (folhasPagamento || []).map(folha => {
-        const fAny = folha as any;
-        const profId = folha.idProfissional || fAny.profissionalId || fAny.cuidadorId || fAny.funcionarioId;
-        let profNome = folha.nomeProfissional || fAny.profissionalNome;
-        if (!profNome && profId) {
-          profNome = mapaProfissionaisCadastrados.get(String(profId).trim());
+      // 1. Agregação Matemática Prévia no Frontend (Ultrarrápida, escalável e segura)
+      // a) Detectar período solicitado na pergunta (ex: "agosto", "julho", "2026" ou último mês com faturas consolidadas)
+      const periodoDetectado = detectarPeriodoConsulta(textoParaEnviar, faturasPacientes || [], agendamentos || []);
+
+      // b) Filtrar faturas e agendamentos pelo período detectado
+      const faturasDoPeriodo = (faturasPacientes || []).filter(f => {
+        const fatAny = f as any;
+        return dataPertenceAoPeriodo(
+          f.dataEmissao || f.periodoApurado?.fim || fatAny.createdAt || fatAny.criadoEm,
+          f.mesReferencia,
+          periodoDetectado.meses
+        );
+      });
+
+      const agendamentosDoPeriodo = (agendamentos || []).filter(e => {
+        const eAny = e as any;
+        return dataPertenceAoPeriodo(
+          e.data || eAny.dataInicio || eAny.dataPrevista,
+          undefined,
+          periodoDetectado.meses
+        );
+      });
+
+      // c) Filtrar pacientes ativos
+      const pacientesAtivos = listaPacientes.filter(p => {
+        const st = String(p.status || 'Ativo').toLowerCase();
+        return st !== 'inativo' && st !== 'cancelado';
+      });
+      const pacientesAlvo = pacientesAtivos.length > 0 ? pacientesAtivos : listaPacientes;
+
+      // d) Calcular faturamento, custos e margem por paciente
+      const resumoFinanceiro: Array<{
+        id: string;
+        faturamento: number;
+        custoProf: number;
+        ajudaCusto: number;
+        totalCustos: number;
+        lucro: number;
+        margem: number;
+      }> = [];
+
+      pacientesAlvo.forEach(pac => {
+        const pAny = pac as any;
+        const pacIdStr = String(pac.id || '').trim();
+        const pacNomeStr = String(pac.nome || pAny.nomeCompleto || '').trim().toLowerCase();
+        const pseudonimo = obterPseudonimoPac(pac.id, pac.nome || pAny.nomeCompleto);
+
+        const pertenceAoPaciente = (idTest?: any, nomeTest?: any) => {
+          const id = String(idTest || '').trim();
+          if (id && pacIdStr && id === pacIdStr) return true;
+          const nome = String(nomeTest || '').trim().toLowerCase();
+          if (nome && pacNomeStr && (nome === pacNomeStr || nome.includes(pacNomeStr) || pacNomeStr.includes(nome))) return true;
+          return false;
+        };
+
+        // Custos unitários cadastrados na ficha do paciente
+        const plano = pac.planoAtendimento || pAny.planoAtendimento || {};
+        const tipos = Array.isArray(plano.tiposPlantao) ? plano.tiposPlantao : [];
+        const principal = tipos.find((t: any) => t.isPrincipal) || tipos[0] || {};
+
+        const valorPlantaoUnitario = Number(
+          principal.valorPlantao ||
+          principal.repasseProfissional ||
+          principal.valorDiaria ||
+          principal.valorProfissional ||
+          plano.valorSugeridoPlantao ||
+          plano.valorPlantao ||
+          pAny.valorPlantaoProfissional ||
+          pAny.repasseProfissional ||
+          pAny.valorPlantao ||
+          0
+        );
+
+        const valorAjudaCustoUnitario = Number(
+          principal.ajudaCusto ||
+          principal.valorTransporte ||
+          principal.transporte ||
+          principal.adicional ||
+          plano.ajudaCusto ||
+          plano.valorTransporte ||
+          pAny.valorAjudaCusto ||
+          pAny.ajudaCusto ||
+          pAny.valorTransporte ||
+          0
+        );
+
+        const taxaAdmUnitario = Number(
+          principal.taxaAdm ||
+          principal.taxaAdministrativa ||
+          plano.taxaAdm ||
+          plano.taxaAdministrativa ||
+          pAny.taxaAdministrativa ||
+          pAny.taxaAdm ||
+          0
+        );
+
+        const valorCobradoUnitario = Number(
+          principal.valorCobrado ||
+          principal.valorHora ||
+          plano.valorTotalCobradoPlantao ||
+          plano.valorCobrado ||
+          pAny.valorTotalCobradoPlantao ||
+          pAny.valorCobrado ||
+          (valorPlantaoUnitario + valorAjudaCustoUnitario + taxaAdmUnitario)
+        );
+
+        // Faturamento Total: soma das faturas do paciente no período selecionado
+        const faturasDoPac = faturasDoPeriodo.filter(f => pertenceAoPaciente(f.idPaciente || f.pacienteId, f.nomePaciente));
+        let faturamentoTotal = faturasDoPac.reduce((sum, f) => sum + (Number(f.valorTotal) || 0), 0);
+
+        // Escalas do paciente no período
+        const agendamentosDoPac = agendamentosDoPeriodo.filter(e => {
+          const eAny = e as any;
+          return pertenceAoPaciente(e.idPaciente || eAny.pacienteId || eAny.idClient, eAny.nomePaciente || eAny.pacienteNome || eAny.paciente);
+        });
+
+        let custoProfissionaisTotal = 0;
+        let ajudaCustoTotal = 0;
+
+        if (agendamentosDoPac.length > 0) {
+          agendamentosDoPac.forEach(e => {
+            const eAny = e as any;
+            const repasse = Number(
+              e.valorRepasse ||
+              e.valorPlantao ||
+              eAny.valorProfissional ||
+              eAny.repasseProfissional ||
+              valorPlantaoUnitario ||
+              0
+            );
+            const ajuda = Number(
+              e.ajudaCusto ||
+              eAny.valorTransporte ||
+              eAny.transporte ||
+              eAny.adicional ||
+              valorAjudaCustoUnitario ||
+              0
+            );
+            custoProfissionaisTotal += repasse;
+            ajudaCustoTotal += ajuda;
+          });
+
+          // Se faturamentoTotal nas faturas estiver zerado, apurar pelos plantões realizados
+          if (faturamentoTotal === 0) {
+            faturamentoTotal = agendamentosDoPac.reduce((sum, e) => {
+              const eAny = e as any;
+              const cobrado = Number(
+                eAny.valorCobrado ||
+                eAny.valorFaturado ||
+                valorCobradoUnitario ||
+                (Number(e.valorPlantao || 0) + Number(e.ajudaCusto || 0) + Number(e.taxaAdm || 0))
+              );
+              return sum + cobrado;
+            }, 0);
+          }
+        } else {
+          // Paciente ativo sem escalas específicas no período: usa quantidade estimada mensal
+          const qtdPlantoes = Number(pAny.quantidadePlantoesMes || pAny.plantoesMes || 0);
+          if (qtdPlantoes > 0) {
+            custoProfissionaisTotal = qtdPlantoes * valorPlantaoUnitario;
+            ajudaCustoTotal = qtdPlantoes * valorAjudaCustoUnitario;
+            if (faturamentoTotal === 0) {
+              faturamentoTotal = qtdPlantoes * valorCobradoUnitario;
+            }
+          } else if (faturamentoTotal === 0) {
+            faturamentoTotal = Number(pAny.valorMensal || pAny.mensalidade || pAny.valorTotal || 0);
+          }
         }
-        const profPseudonimo = (profId || profNome) ? obterPseudonimoProf(profId, profNome) : undefined;
-        return {
-          ...folha,
-          idProfissional: profPseudonimo,
-          nomeProfissional: profPseudonimo,
-          profissionalId: profPseudonimo
-        };
+
+        const custosTotais = custoProfissionaisTotal + ajudaCustoTotal;
+        const lucroOperacional = faturamentoTotal - custosTotais;
+        const margemPercentual = faturamentoTotal > 0 ? (lucroOperacional / faturamentoTotal) * 100 : 0;
+
+        resumoFinanceiro.push({
+          id: pseudonimo,
+          faturamento: Math.round(faturamentoTotal * 100) / 100,
+          custoProf: Math.round(custoProfissionaisTotal * 100) / 100,
+          ajudaCusto: Math.round(ajudaCustoTotal * 100) / 100,
+          totalCustos: Math.round(custosTotais * 100) / 100,
+          lucro: Math.round(lucroOperacional * 100) / 100,
+          margem: Math.round(margemPercentual * 10) / 10
+        });
       });
 
+      // 2. Envio Ultraleve para a Cloud Function (elimina timeout / deadline-exceeded)
       const dadosParaEnvio = {
-        pacientes: pacientesPseudonimizados,
-        profissionais: profissionaisPseudonimizados,
-        escalas: agendamentosPseudonimizados,
-        debitosProfissionais: debitosPseudonimizados,
-        faturasPacientes: faturasPseudonimizadas,
-        folhasPagamento: folhasPseudonimizadas,
+        periodoReferencia: periodoDetectado.descricao,
+        resumoFinanceiro,
+        pacientes: pacientesPseudonimizados.slice(0, 30),
+        profissionais: profissionaisPseudonimizados.slice(0, 30),
+        escalas: [],
+        debitosProfissionais: [],
+        faturasPacientes: [],
+        folhasPagamento: [],
         totaisConsolidados: {
           faturamentoMensalConsolidado: metricasSumarizadas.faturamentoConsolidado,
           custoTotalFolhaConsolidado: metricasSumarizadas.custoFolhaConsolidado,
