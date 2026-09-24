@@ -408,30 +408,55 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
         const tipos = Array.isArray(plano.tiposPlantao) ? plano.tiposPlantao : [];
         const principal = tipos.find((t: any) => t.isPrincipal) || tipos[0] || {};
 
+        // Repasse ao cuidador/profissional por plantão
         const valorPlantaoProfissional = Number(
           principal.valorPlantao ||
+          principal.repasseProfissional ||
+          principal.valorDiaria ||
+          principal.valorProfissional ||
           plano.valorSugeridoPlantao ||
           plano.valorPlantao ||
+          plano.repasseProfissional ||
+          plano.valorDiaria ||
+          plano.valorProfissional ||
           pAny.valorPlantaoProfissional ||
-          pAny.valorSugeridoPlantao ||
+          pAny.repasseProfissional ||
+          pAny.valorDiaria ||
           pAny.valorPlantao ||
+          pAny.valorSugeridoPlantao ||
+          pAny.valorProfissional ||
+          pAny.repasse ||
           0
         );
 
+        // Ajuda de custo de transporte/alimentação
         const valorAjudaCusto = Number(
           principal.ajudaCusto ||
           principal.valorTransporte ||
+          principal.valorAlimentacao ||
+          principal.transporte ||
+          principal.adicional ||
           plano.ajudaCusto ||
           plano.valorTransporte ||
+          plano.valorAlimentacao ||
+          plano.transporte ||
+          plano.adicional ||
           plano.valorAjudaCusto ||
           pAny.ajudaCusto ||
           pAny.valorAjudaCusto ||
           pAny.ajudaDeCusto ||
+          pAny.transporte ||
+          pAny.valorTransporte ||
+          pAny.alimentacao ||
+          pAny.valorAlimentacao ||
+          pAny.adicional ||
           0
         );
 
+        // Taxa administrativa / margem de gestão
         const taxaAdministrativa = Number(
           principal.taxaAdm ||
+          principal.taxaAdministrativa ||
           plano.taxaAdm ||
           plano.taxaAdministrativa ||
           pAny.taxaAdm ||
@@ -439,11 +464,17 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
           0
         );
 
+        // Valor total cobrado por plantão
         const valorTotalCobradoPlantao = Number(
+          principal.valorCobrado ||
+          principal.valorHora ||
           plano.valorTotalCobradoPlantao ||
           plano.valorCobrado ||
+          plano.valorHora ||
           pAny.valorTotalCobradoPlantao ||
           pAny.valorCobradoPlantao ||
+          pAny.valorCobrado ||
+          pAny.valorHora ||
           (valorPlantaoProfissional + valorAjudaCusto + taxaAdministrativa)
         );
 
@@ -524,6 +555,12 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
           }
         }
 
+        const valorPlantaoNum = Number(e.valorPlantao || eAny.valorProfissional || eAny.repasseProfissional || eAny.valorDiaria || 0);
+        const valorRepasseNum = Number(e.valorRepasse || e.valorPlantao || eAny.valorProfissional || 0);
+        const ajudaCustoNum = Number(e.ajudaCusto || eAny.valorTransporte || eAny.transporte || eAny.adicional || 0);
+        const taxaAdmNum = Number(e.taxaAdm || eAny.taxaAdministrativa || 0);
+        const valorCobradoNum = Number(eAny.valorCobrado || eAny.valorFaturado || eAny.valorTotalCobradoPlantao || (valorPlantaoNum + ajudaCustoNum + taxaAdmNum) || 0);
+
         return {
           ...e,
           idProfissional: pseudonimoProf,
@@ -535,7 +572,12 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
           idPaciente: pseudonimoPac,
           pacienteId: pseudonimoPac,
           nomePaciente: pseudonimoPac,
-          pacienteNome: pseudonimoPac
+          pacienteNome: pseudonimoPac,
+          valorPlantao: valorPlantaoNum,
+          valorRepasse: valorRepasseNum,
+          ajudaCusto: ajudaCustoNum,
+          taxaAdm: taxaAdmNum,
+          valorCobrado: valorCobradoNum
         };
       });
 
@@ -677,9 +719,9 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
   // Atalhos rápidos solicitados
   const atalhosRapidos = [
     {
-      rotulo: 'Análise de Margem',
-      descricao: 'Rentabilidade e custos unitários por paciente',
-      pergunta: 'Realize uma análise detalhada de rentabilidade e margem de lucro por paciente, decompondo os custos unitários de cada um (valor profissional, ajuda de custo e taxa administrativa), calculando o lucro bruto e a margem percentual, e ordenando do mais rentável para o menos rentável.'
+      rotulo: 'Margem de Lucro por Paciente',
+      descricao: 'Análise detalhada de rentabilidade e margem de lucro por paciente em tabela',
+      pergunta: 'Apresente uma análise detalhada da margem de lucro por paciente ativo no mês atual e no mês anterior. Exiba em tabela separando faturamento, custo com cuidadores, ajuda de custo total, custos totais, lucro operacional em R$ e margem percentual, ordenando da maior para a menor margem.'
     },
     {
       rotulo: 'Gargalos de Escala',
@@ -843,7 +885,10 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
                 key={index}
                 type="button"
                 disabled={loading}
-                onClick={() => handleConsultar(atalho.pergunta)}
+                onClick={() => {
+                  setPerguntaInput(atalho.pergunta);
+                  handleConsultar(atalho.pergunta);
+                }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 hover:border-blue-300 rounded-lg shadow-2xs transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap shrink-0 sm:shrink"
                 title={atalho.descricao}
               >

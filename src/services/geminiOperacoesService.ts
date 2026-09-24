@@ -165,8 +165,11 @@ export function sanitizarPayloadAntesDeEnviar(dados: MetricasConsolidadasInput) 
       diaSemana: dataInfo.diaSemana, // ex: Segunda-feira, Domingo, etc.
       horario: e.horario || e.tipoTurno || e.turno || '12h Diurno',
       status: e.status || 'Agendado',
-      valorPlantao: Number(e.valorPlantao || 0),
-      valorRepasse: Number(e.valorRepasse || 0),
+      valorPlantao: Number(e.valorPlantao || eAny.valorProfissional || eAny.repasseProfissional || eAny.valorDiaria || 0),
+      valorRepasse: Number(e.valorRepasse || e.valorPlantao || eAny.valorProfissional || 0),
+      ajudaCusto: Number(e.ajudaCusto || eAny.valorTransporte || eAny.transporte || eAny.adicional || 0),
+      taxaAdm: Number(e.taxaAdm || eAny.taxaAdministrativa || 0),
+      valorCobrado: Number(e.valorCobrado || eAny.valorFaturado || eAny.valorTotalCobradoPlantao || (Number(e.valorPlantao || eAny.valorProfissional || 0) + Number(e.ajudaCusto || eAny.valorTransporte || 0) + Number(e.taxaAdm || eAny.taxaAdministrativa || 0)) || 0),
       curinga: isCuringa
     };
   });

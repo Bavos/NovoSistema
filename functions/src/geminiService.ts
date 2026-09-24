@@ -272,8 +272,10 @@ export function sanitizarDadosOperacionaisHomeCare(dados: any) {
       (e.observacao && String(e.observacao).toUpperCase().includes('CURINGA')) ||
       (e.motivoFalta && String(e.motivoFalta).toUpperCase().includes('CURINGA'))
     ),
-    valorRepasseProfissional: Number(e.valorProfissional || e.valorRepasse || 0),
-    valorCobradoCliente: Number(e.valorCobrado || e.valorFaturado || e.valorPlantao || 0)
+    valorRepasseProfissional: Number(e.valorProfissional || e.valorRepasse || e.valorPlantao || 0),
+    ajudaCusto: Number(e.ajudaCusto || e.valorTransporte || e.transporte || e.adicional || 0),
+    taxaAdm: Number(e.taxaAdm || e.taxaAdministrativa || 0),
+    valorCobradoCliente: Number(e.valorCobrado || e.valorFaturado || e.valorTotalCobradoPlantao || (Number(e.valorPlantao || e.valorProfissional || 0) + Number(e.ajudaCusto || e.valorTransporte || 0) + Number(e.taxaAdm || e.taxaAdministrativa || 0)) || 0)
   }));
 
   const financeiroRaw = Array.isArray(source?.financeiro) ? source.financeiro : [];
@@ -368,11 +370,15 @@ export const analisarMetricasHomeCare = onCall(
 
 Dicionário Financeiro e Operacional de Pacientes:
 - Cada paciente possui sua estrutura de custos unitários por plantão: [valorPlantaoProfissional] (valor repassado ao cuidador/técnico), [valorAjudaCusto] (transporte, alimentação ou adicionais) e [taxaAdministrativa] (taxa administrativa / margem de gestão). O [valorTotalCobradoPlantao] representa o valor unitário cobrado por plantão.
-- Ao analisar rentabilidade ou margem de lucro:
-  1. Multiplique os custos unitários pela quantidade de plantões realizados no período solicitado.
-  2. Cruze com o valor total faturado/recebido.
-  3. Calcule o Lucro Bruto e a Margem Percentual ((Lucro / Faturamento Total) * 100).
-  4. Ordene os pacientes do mais rentável para o menos rentável conforme solicitado.
+- Ao analisar rentabilidade ou margem de lucro por paciente (mês atual, mês anterior ou período solicitado):
+  1. Multiplique os custos unitários pela quantidade de plantões realizados no período solicitado, ou cruze a quantidade de escalas realizadas no período com os lançamentos de débitos e folhas de pagamento correspondentes.
+  2. Utilize obrigatoriamente as seguintes fórmulas de cálculo:
+     * Custos Totais = Custo Profissionais + Ajuda de Custo.
+     * Lucro Operacional = Faturamento Total - Custos Totais.
+     * Margem (%) = (Lucro Operacional / Faturamento Total) * 100.
+  3. Formate a resposta em Markdown com a seguinte estrutura de colunas em tabela:
+     | Paciente | Faturamento Total | Custo Profissionais | Ajuda de Custo | Custos Totais | Lucro Operacional (R$) | Margem (%) |
+  4. Ordene os pacientes da maior para a menor margem de lucro percentual.
 
 Dicionário de Regras de Negócio:
 - 'Curinga': Identificado pelo campo booleano 'curinga: true' nos registros de escalas (plantão de cobertura/reserva emergencial) ou em débitos de motivo 'Curinga'.

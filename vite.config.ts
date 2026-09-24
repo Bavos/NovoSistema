@@ -125,12 +125,16 @@ function apiServerPlugin(): Plugin {
               dataProcessamento: new Date().toISOString()
             },
             metricasGerais,
-            amostraPacientes: pacientesRaw.slice(0, 40).map(p => ({
+            amostraPacientes: pacientesRaw.slice(0, 50).map(p => ({
               codigo: anonPac(p.id || p.nome),
               status: p.status || 'Ativo',
               complexidade: p.complexidade || p.grauComplexidade || 'Média',
               planoCuidado: p.planoCuidado || p.tipoPlantao || 'Plantão 12h',
-              especialidadeNecessaria: p.especialidade || 'Técnico de Enfermagem'
+              especialidadeNecessaria: p.especialidade || 'Técnico de Enfermagem',
+              valorPlantaoProfissional: Number(p.valorPlantaoProfissional || 0),
+              valorAjudaCusto: Number(p.valorAjudaCusto || 0),
+              taxaAdministrativa: Number(p.taxaAdministrativa || 0),
+              valorTotalCobradoPlantao: Number(p.valorTotalCobradoPlantao || 0)
             })),
             amostraProfissionais: profissionaisRaw.slice(0, 40).map(p => ({
               codigo: anonProf(p.id || p.nome),
@@ -144,7 +148,10 @@ function apiServerPlugin(): Plugin {
                 ? anonProf(e.profissionalId || e.profissionalNome || e.idProfissional || e.nomeProfissional) 
                 : 'NÃO_ALOCADO (GARGALO)',
               turno: e.tipoTurno || e.turno || e.horario || '12h Diurno',
-              status: e.status || 'Agendado'
+              status: e.status || 'Agendado',
+              valorRepasse: Number(e.valorRepasse || e.valorPlantao || 0),
+              ajudaCusto: Number(e.ajudaCusto || 0),
+              valorCobrado: Number(e.valorCobrado || 0)
             }))
           };
 
@@ -153,7 +160,9 @@ function apiServerPlugin(): Plugin {
 
           const systemInstruction =
             "Você é um assistente de análise de gestão e operações financeiras de home care. " +
-            "Analise exclusivamente os dados anonimizados fornecidos, destacando gargalos de escalas, custos de plantões e projeções de demanda. " +
+            "Analise exclusivamente os dados anonimizados fornecidos, destacando margem de lucro por paciente, custos de plantões, repasses e escalas. " +
+            "Ao calcular margem de lucro: Custos Totais = Custo Profissionais + Ajuda de Custo; Lucro Operacional = Faturamento Total - Custos Totais; Margem (%) = (Lucro Operacional / Faturamento Total) * 100. " +
+            "Se solicitado tabela de margem, estruture em Markdown: | Paciente | Faturamento Total | Custo Profissionais | Ajuda de Custo | Custos Totais | Lucro Operacional (R$) | Margem (%) | ordenando da maior para menor margem. " +
             "Nunca deduza nem tente solicitar dados de identificação pessoal.";
 
           const prompt = pergunta
