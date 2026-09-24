@@ -171,7 +171,8 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
 
       let listaPacientes: Paciente[] = [...(pacientes || [])];
       try {
-        if (listaPacientes.length === 0) {
+        const precisaCarregarDoBanco = listaPacientes.length === 0 || !listaPacientes.some(p => p.planoAtendimento);
+        if (precisaCarregarDoBanco) {
           const pacsSnap = await getDocs(query(collection(db, 'pacientes'), limit(1000)));
           const docsPacs: Paciente[] = [];
           pacsSnap.forEach(d => docsPacs.push({ ...d.data(), id: d.id } as Paciente));
@@ -397,10 +398,55 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
         };
       });
 
-      // Montar pacientes pseudonimizados
+      // Montar pacientes pseudonimizados com decomposição detalhada de custos unitários por plantão
       const pacientesPseudonimizados = listaPacientes.map(pac => {
         const pAny = pac as any;
         const pseudonimo = obterPseudonimoPac(pac.id, pac.nome || pAny.nomeCompleto);
+
+        // Decomposição de custos unitários cadastrados na ficha do paciente (coleção 'pacientes')
+        const plano = pac.planoAtendimento || pAny.planoAtendimento || {};
+        const tipos = Array.isArray(plano.tiposPlantao) ? plano.tiposPlantao : [];
+        const principal = tipos.find((t: any) => t.isPrincipal) || tipos[0] || {};
+
+        const valorPlantaoProfissional = Number(
+          principal.valorPlantao ||
+          plano.valorSugeridoPlantao ||
+          plano.valorPlantao ||
+          pAny.valorPlantaoProfissional ||
+          pAny.valorSugeridoPlantao ||
+          pAny.valorPlantao ||
+          0
+        );
+
+        const valorAjudaCusto = Number(
+          principal.ajudaCusto ||
+          principal.valorTransporte ||
+          plano.ajudaCusto ||
+          plano.valorTransporte ||
+          plano.valorAjudaCusto ||
+          pAny.ajudaCusto ||
+          pAny.valorAjudaCusto ||
+          pAny.ajudaDeCusto ||
+          0
+        );
+
+        const taxaAdministrativa = Number(
+          principal.taxaAdm ||
+          plano.taxaAdm ||
+          plano.taxaAdministrativa ||
+          pAny.taxaAdm ||
+          pAny.taxaAdministrativa ||
+          0
+        );
+
+        const valorTotalCobradoPlantao = Number(
+          plano.valorTotalCobradoPlantao ||
+          plano.valorCobrado ||
+          pAny.valorTotalCobradoPlantao ||
+          pAny.valorCobradoPlantao ||
+          (valorPlantaoProfissional + valorAjudaCusto + taxaAdministrativa)
+        );
+
         return {
           id: pseudonimo,
           nome: pseudonimo,
@@ -409,7 +455,11 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
           planoCuidado: pAny.planoCuidado || pAny.tipoPlantao || pAny.planoAtendimento?.tipoEscala || 'Plantão 12h',
           quantidadePlantoesMes: Number(pAny.quantidadePlantoesMes || pAny.plantoesMes || 0),
           valorMensal: Number(pAny.valorMensal || pAny.mensalidade || pAny.valorTotal || 0),
-          especialidade: pAny.especialidade || pAny.categoriaNecessaria || 'Técnico de Enfermagem'
+          especialidade: pAny.especialidade || pAny.categoriaNecessaria || 'Técnico de Enfermagem',
+          valorPlantaoProfissional,
+          valorAjudaCusto,
+          taxaAdministrativa,
+          valorTotalCobradoPlantao
         };
       });
 
@@ -626,6 +676,11 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
 
   // Atalhos rápidos solicitados
   const atalhosRapidos = [
+    {
+      rotulo: 'Análise de Margem',
+      descricao: 'Rentabilidade e custos unitários por paciente',
+      pergunta: 'Realize uma análise detalhada de rentabilidade e margem de lucro por paciente, decompondo os custos unitários de cada um (valor profissional, ajuda de custo e taxa administrativa), calculando o lucro bruto e a margem percentual, e ordenando do mais rentável para o menos rentável.'
+    },
     {
       rotulo: 'Gargalos de Escala',
       descricao: 'Turnos sem alocação ou com risco',

@@ -107,6 +107,7 @@ export function sanitizarPayloadAntesDeEnviar(dados: MetricasConsolidadasInput) 
 
   const pacientesLimpos = (dados.pacientes || []).map((p) => {
     const anonId = getAnonPacId(p.id, p.nome);
+    const pAny = p as any;
     return {
       id: anonId,
       status: p.status || 'Ativo',
@@ -114,7 +115,11 @@ export function sanitizarPayloadAntesDeEnviar(dados: MetricasConsolidadasInput) 
       planoCuidado: p.planoCuidado || p.tipoPlantao || p.planoAtendimento?.tipoEscala || 'Plantão 12h',
       quantidadePlantoesMes: Number(p.quantidadePlantoesMes || p.plantoesMes || 0),
       valorMensal: Number(p.valorMensal || p.mensalidade || p.valorTotal || 0),
-      especialidade: p.especialidade || p.categoriaNecessaria || 'Técnico de Enfermagem'
+      especialidade: p.especialidade || p.categoriaNecessaria || 'Técnico de Enfermagem',
+      valorPlantaoProfissional: Number(pAny.valorPlantaoProfissional || 0),
+      valorAjudaCusto: Number(pAny.valorAjudaCusto || 0),
+      taxaAdministrativa: Number(pAny.taxaAdministrativa || 0),
+      valorTotalCobradoPlantao: Number(pAny.valorTotalCobradoPlantao || 0)
     };
   });
 

@@ -235,7 +235,11 @@ export function sanitizarDadosOperacionaisHomeCare(dados: any) {
     planoCuidado: p.planoCuidado || p.tipoPlantao || 'Plantão 12h',
     quantidadePlantoesMes: Number(p.quantidadePlantoesMes || p.plantoesMes || 0),
     valorMensalEstimado: Number(p.valorMensal || p.mensalidade || p.valorTotal || 0),
-    especialidadeNecessaria: p.especialidade || p.categoriaNecessaria || 'Técnico de Enfermagem'
+    especialidadeNecessaria: p.especialidade || p.categoriaNecessaria || 'Técnico de Enfermagem',
+    valorPlantaoProfissional: Number(p.valorPlantaoProfissional || 0),
+    valorAjudaCusto: Number(p.valorAjudaCusto || 0),
+    taxaAdministrativa: Number(p.taxaAdministrativa || 0),
+    valorTotalCobradoPlantao: Number(p.valorTotalCobradoPlantao || 0)
   }));
 
   const profissionaisRaw = Array.isArray(source?.profissionais) ? source.profissionais : [];
@@ -360,16 +364,24 @@ export const analisarMetricasHomeCare = onCall(
       throw new HttpsError("failed-precondition", "GEMINI_API_KEY não configurada no servidor.");
     }
 
-    const prompt = `Você é um assistente operacional de gestão de home care. Responda à dúvida do administrador com base estritamente nas seguintes métricas e dados operacionais anonimizados:
+    const prompt = `Você é um assistente operacional e financeiro de gestão de home care. Responda à dúvida do administrador com base estritamente nas seguintes métricas e dados operacionais anonimizados:
+
+Dicionário Financeiro e Operacional de Pacientes:
+- Cada paciente possui sua estrutura de custos unitários por plantão: [valorPlantaoProfissional] (valor repassado ao cuidador/técnico), [valorAjudaCusto] (transporte, alimentação ou adicionais) e [taxaAdministrativa] (taxa administrativa / margem de gestão). O [valorTotalCobradoPlantao] representa o valor unitário cobrado por plantão.
+- Ao analisar rentabilidade ou margem de lucro:
+  1. Multiplique os custos unitários pela quantidade de plantões realizados no período solicitado.
+  2. Cruze com o valor total faturado/recebido.
+  3. Calcule o Lucro Bruto e a Margem Percentual ((Lucro / Faturamento Total) * 100).
+  4. Ordene os pacientes do mais rentável para o menos rentável conforme solicitado.
 
 Dicionário de Regras de Negócio:
 - 'Curinga': Identificado pelo campo booleano 'curinga: true' nos registros de escalas (plantão de cobertura/reserva emergencial) ou em débitos de motivo 'Curinga'.
 - 'Escalas/Plantões': Contêm a data exata da execução ('data' em formato YYYY-MM-DD), turno ('horario') e dia da semana ('diaSemana').
 - 'Financeiro': Contém registros de débito e crédito vinculados aos atendimentos dos pacientes e aos profissionais.
-- 'Identificadores de Profissionais e Pacientes': Os colaboradores e pacientes são identificados por pseudônimos no formato PROF_01, PROF_02, etc. (e pacientes por PAC_01, PAC_02). Ao citar colaboradores, rankings de plantões/curingas, escalas ou faltas, utilize SEMPRE e EXATAMENTE o código literal do profissional (ex.: PROF_01, PROF_02), para que a interface decodifique os nomes localmente.
+- 'Identificadores de Profissionais e Pacientes': Os colaboradores e pacientes são identificados por pseudônimos no formato PROF_01, PROF_02, etc. (e pacientes por PAC_01, PAC_02, PAC-001, etc.). Ao citar colaboradores, pacientes, rankings de plantões/curingas, escalas ou rentabilidade, utilize SEMPRE e EXATAMENTE o código literal informado (ex.: PAC_01, PAC-001, PROF_01), para que a interface decodifique e restaure os nomes reais localmente.
 
 Orientações para o cálculo:
-Analise com precisão os dados filtrando pelo mês de agosto (ou o período solicitado na pergunta) e realize os cálculos estatísticos, contagem de curingas, ordenação crescente dos dias da semana com mais dias e porcentagem mensal de cada dia solicitados pelo administrador. Apresente os resultados detalhados com clareza, valores e porcentagens exatas.
+Analise com precisão os dados filtrando pelo período solicitado na pergunta (ex.: agosto) e realize os cálculos estatísticos, rentabilidade, contagem de curingas, ordenação crescente dos dias da semana com mais dias e porcentagem mensal de cada dia solicitados pelo administrador. Apresente os resultados detalhados com clareza, valores e porcentagens exatas.
 
 Dados Operacionais Anonimizados:
 ${JSON.stringify(metricas, null, 2)}
