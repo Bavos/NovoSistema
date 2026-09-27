@@ -16,7 +16,8 @@ import {
   Calendar, 
   AlertTriangle,
   HelpCircle,
-  MessageSquare
+  MessageSquare,
+  ChevronDown
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { useFirebase } from '../context/FirebaseContext';
@@ -24,6 +25,209 @@ import { consultarAssistenteOperacional } from '../services/geminiOperacoesServi
 import { db } from '../lib/firebase';
 import { collection, query, limit, getDocs, getDoc, doc } from 'firebase/firestore';
 import { Profissional, Paciente } from '../types';
+
+const NOMES_DIAS_SEMANA_COMPLETOS = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+
+function extrairDataIsoEDiaSemana(dateVal: any): { data: string; diaSemana: string } {
+  if (!dateVal) return { data: 'N/D', diaSemana: 'N/D' };
+  let str = '';
+  if (typeof dateVal === 'string') {
+    str = dateVal.trim();
+    if (str.includes('/')) {
+      const parts = str.split('/');
+      if (parts.length === 3) {
+        if (parts[0].length === 4) {
+          str = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+        } else {
+          str = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+        }
+      }
+    } else if (str.includes('T')) {
+      str = str.split('T')[0];
+    }
+  } else if (dateVal instanceof Date) {
+    str = dateVal.toISOString().split('T')[0];
+  } else if (dateVal?.toDate && typeof dateVal.toDate === 'function') {
+    str = dateVal.toDate().toISOString().split('T')[0];
+  } else if (dateVal?.seconds) {
+    str = new Date(dateVal.seconds * 1000).toISOString().split('T')[0];
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    const [ano, mes, dia] = str.split('-').map(Number);
+    const dObj = new Date(ano, mes - 1, dia);
+    const diaSemana = NOMES_DIAS_SEMANA_COMPLETOS[dObj.getDay()] || 'N/D';
+    return { data: str, diaSemana };
+  }
+
+  return { data: str || 'N/D', diaSemana: 'N/D' };
+}
+
+/**
+ * Camada de Agregação Determinística:
+ * Processa matematicamente todas as métricas operacionais antes do envio à IA para eliminar alucinações.
+ */
+function calcularAgregacaoOperacional(
+  escalas: any[],
+  pacientes: any[],
+  profissionais: any[],
+  faturas: any[],
+  debitos: any[]
+) {
+  const diasSemanaOrdem = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'];
+  
+  // 1. Resumo Geral
+  const totalPacientes = pacientes.filter((p: any) => (p.status || '').toLowerCase() === 'ativo').length || pacientes.length;
+  const totalProfissionais = profissionais.filter((p: any) => (p.status || '').toLowerCase() !== 'inativo').length || profissionais.length;
+  const totalEscalas = escalas.length;
+
+  // 2. Escalas por Dia da Semana
+  const escalasPorDiaSemana: Record<string, { total: number; completas: number; vagas: number; curingas: number }> = {};
+  diasSemanaOrdem.forEach(dia => {
+    escalasPorDiaSemana[dia] = { total: 0, completas: 0, vagas: 0, curingas: 0 };
+  });
+
+  const sabadoPacientesMap = new Map<string, Set<string>>();
+  const domingoPacientesMap = new Map<string, Set<string>>();
+  let sabadoCompletas = 0;
+  let sabadoVagas = 0;
+  let domingoCompletas = 0;
+  let domingoVagas = 0;
+
+  const vagasPorPaciente: Record<string, number> = {};
+  let totalCuringas = 0;
+  const curingasPorDia: Record<string, number> = {};
+  diasSemanaOrdem.forEach(dia => { curingasPorDia[dia] = 0; });
+
+  escalas.forEach(e => {
+    const diaRaw = String(e.diaSemana || '').trim();
+    let dia = 'N/D';
+    if (diaRaw.includes('Seg')) dia = 'Segunda-feira';
+    else if (diaRaw.includes('Ter')) dia = 'Terça-feira';
+    else if (diaRaw.includes('Qua')) dia = 'Quarta-feira';
+    else if (diaRaw.includes('Qui')) dia = 'Quinta-feira';
+    else if (diaRaw.includes('Sex')) dia = 'Sexta-feira';
+    else if (diaRaw.includes('Sáb') || diaRaw.includes('Sab')) dia = 'Sábado';
+    else if (diaRaw.includes('Dom')) dia = 'Domingo';
+
+    const isCompleta = e.statusAlocacao === 'completa';
+    const isCuringa = Boolean(e.curinga);
+
+    if (escalasPorDiaSemana[dia]) {
+      escalasPorDiaSemana[dia].total++;
+      if (isCompleta) escalasPorDiaSemana[dia].completas++;
+      else escalasPorDiaSemana[dia].vagas++;
+      if (isCuringa) escalasPorDiaSemana[dia].curingas++;
+    }
+
+    if (isCuringa) {
+      totalCuringas++;
+      if (curingasPorDia[dia] !== undefined) curingasPorDia[dia]++;
+    }
+
+    if (!isCompleta) {
+      const pacCod = e.pacienteCodigo || 'PAC_ND';
+      vagasPorPaciente[pacCod] = (vagasPorPaciente[pacCod] || 0) + 1;
+    }
+
+    // Fim de Semana
+    if (dia === 'Sábado') {
+      if (isCompleta) sabadoCompletas++;
+      else sabadoVagas++;
+      const pacCod = e.pacienteCodigo || 'PAC_ND';
+      const turno = e.turno || '12h Diurno';
+      if (!sabadoPacientesMap.has(pacCod)) sabadoPacientesMap.set(pacCod, new Set());
+      sabadoPacientesMap.get(pacCod)!.add(turno);
+    } else if (dia === 'Domingo') {
+      if (isCompleta) domingoCompletas++;
+      else domingoVagas++;
+      const pacCod = e.pacienteCodigo || 'PAC_ND';
+      const turno = e.turno || '12h Diurno';
+      if (!domingoPacientesMap.has(pacCod)) domingoPacientesMap.set(pacCod, new Set());
+      domingoPacientesMap.get(pacCod)!.add(turno);
+    }
+  });
+
+  const sabadoPacientesAtendidos: string[] = [];
+  sabadoPacientesMap.forEach((turnos, pac) => {
+    turnos.forEach(t => sabadoPacientesAtendidos.push(`${pac} (${t})`));
+  });
+  sabadoPacientesAtendidos.sort();
+
+  const domingoPacientesAtendidos: string[] = [];
+  domingoPacientesMap.forEach((turnos, pac) => {
+    turnos.forEach(t => domingoPacientesAtendidos.push(`${pac} (${t})`));
+  });
+  domingoPacientesAtendidos.sort();
+
+  // 3. Fim de Semana Estruturado
+  const escalasFimDeSemana = {
+    sabado: {
+      total: (escalasPorDiaSemana['Sábado']?.total || 0),
+      completas: sabadoCompletas,
+      vagas: sabadoVagas,
+      pacientesAtendidos: sabadoPacientesAtendidos
+    },
+    domingo: {
+      total: (escalasPorDiaSemana['Domingo']?.total || 0),
+      completas: domingoCompletas,
+      vagas: domingoVagas,
+      pacientesAtendidos: domingoPacientesAtendidos
+    }
+  };
+
+  // 4. Gargalos de Escala
+  const totalCompletas = escalas.filter(e => e.statusAlocacao === 'completa').length;
+  const totalVagas = escalas.filter(e => e.statusAlocacao !== 'completa').length;
+  const taxaOcupacao = totalEscalas > 0 ? Number(((totalCompletas / totalEscalas) * 100).toFixed(1)) : 100;
+  const pacientesAfetados = Object.entries(vagasPorPaciente)
+    .sort((a, b) => b[1] - a[1])
+    .map(([pac, qtd]) => `${pac} (${qtd} ${qtd > 1 ? 'vagas em aberto' : 'vaga em aberto'})`);
+
+  const gargalosEscala = {
+    escalasVagasTotal: totalVagas,
+    escalasCompletasTotal: totalCompletas,
+    taxaOcupacaoPercentual: taxaOcupacao,
+    pacientesAfetados
+  };
+
+  // 5. Estatísticas de Curingas
+  const distribuicaoPercentual: Record<string, string> = {};
+  diasSemanaOrdem.forEach(dia => {
+    const qtd = curingasPorDia[dia] || 0;
+    const perc = totalCuringas > 0 ? ((qtd / totalCuringas) * 100).toFixed(1) + '%' : '0%';
+    distribuicaoPercentual[dia] = perc;
+  });
+
+  const estatisticasCuringas = {
+    total: totalCuringas,
+    percentualDoTotal: totalEscalas > 0 ? Number(((totalCuringas / totalEscalas) * 100).toFixed(1)) : 0,
+    distribuicaoDias: curingasPorDia,
+    distribuicaoPercentual
+  };
+
+  // 6. Financeiro Consolidado
+  const totalDebitos = (debitos || []).reduce((acc: number, d: any) => acc + (Number(d.valor) || 0), 0);
+  const totalCreditos = (faturas || []).reduce((acc: number, f: any) => acc + (Number(f.valorTotal) || 0), 0);
+  const financeiroConsolidado = {
+    totalDebitos: Math.round(totalDebitos * 100) / 100,
+    totalCreditos: Math.round(totalCreditos * 100) / 100,
+    saldoOperacional: Math.round((totalCreditos - totalDebitos) * 100) / 100
+  };
+
+  return {
+    resumoGeral: {
+      totalPacientes,
+      totalProfissionais,
+      totalEscalas
+    },
+    escalasPorDiaSemana,
+    escalasFimDeSemana,
+    gargalosEscala,
+    estatisticasCuringas,
+    financeiroConsolidado
+  };
+}
 
 interface PeriodoDetectado {
   descricao: string;
@@ -241,9 +445,33 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
   const [loadingStep, setLoadingStep] = useState<string>('');
   const [erro, setErro] = useState<string | null>(null);
   const [copiadoId, setCopiadoId] = useState<string | null>(null);
+  const [dropdownAberto, setDropdownAberto] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mensagensEndRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Fechar dropdown ao clicar fora ou pressionar ESC
+  useEffect(() => {
+    function handleClickFora(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setDropdownAberto(false);
+      }
+    }
+    function handleKeyDownEsc(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setDropdownAberto(false);
+      }
+    }
+    if (dropdownAberto) {
+      document.addEventListener('mousedown', handleClickFora);
+      window.addEventListener('keydown', handleKeyDownEsc);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickFora);
+      window.removeEventListener('keydown', handleKeyDownEsc);
+    };
+  }, [dropdownAberto]);
 
   // Cálculos prévios das métricas operacionais para transparência e contexto
   const metricasSumarizadas = useMemo(() => {
@@ -699,6 +927,31 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
       // a) Detectar período solicitado na pergunta (ex: "agosto", "julho", "2026" ou último mês com faturas consolidadas)
       const periodoDetectado = detectarPeriodoConsulta(textoParaEnviar, faturasPacientes || [], agendamentos || []);
 
+      // Carregar todas as escalas do mês/período ativo para que o conjunto contenha a visão real de todos os pacientes
+      let todosAgendamentos: any[] = [...(agendamentos || [])];
+      try {
+        const mesesNecessarios = periodoDetectado.meses;
+        const temMesesFaltantes = mesesNecessarios.some(m => 
+          !todosAgendamentos.some(e => dataPertenceAoPeriodo(e.data || (e as any).dataInicio, undefined, [m]))
+        );
+        
+        if (todosAgendamentos.length === 0 || temMesesFaltantes) {
+          const agSnap = await getDocs(query(collection(db, 'agendamentos'), limit(3000)));
+          const docsAg: any[] = [];
+          const idsExistentes = new Set(todosAgendamentos.map(a => a.id));
+          agSnap.forEach(d => {
+            if (!idsExistentes.has(d.id)) {
+              docsAg.push({ ...d.data(), id: d.id });
+            }
+          });
+          if (docsAg.length > 0) {
+            todosAgendamentos = [...todosAgendamentos, ...docsAg];
+          }
+        }
+      } catch (err) {
+        console.warn('[AnaliseInteligente] Busca de agendamentos para o período ativo:', err);
+      }
+
       // b) Filtrar faturas e agendamentos pelo período detectado
       const faturasDoPeriodo = (faturasPacientes || []).filter(f => {
         const fatAny = f as any;
@@ -709,13 +962,59 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
         );
       });
 
-      const agendamentosDoPeriodo = (agendamentos || []).filter(e => {
+      let agendamentosDoPeriodo = todosAgendamentos.filter(e => {
         const eAny = e as any;
         return dataPertenceAoPeriodo(
           e.data || eAny.dataInicio || eAny.dataPrevista,
           undefined,
           periodoDetectado.meses
         );
+      });
+
+      if (agendamentosDoPeriodo.length === 0 && todosAgendamentos.length > 0) {
+        agendamentosDoPeriodo = todosAgendamentos;
+      }
+
+      // Montar array de escalas estruturado com pacienteCodigo, data, diaSemana, turno, statusAlocacao e curinga
+      const escalasParaEnvio = agendamentosDoPeriodo.map(e => {
+        const eAny = e as any;
+        const pacId = e.idPaciente || eAny.pacienteId || eAny.idClient;
+        let pacNome = eAny.nomePaciente || eAny.pacienteNome || eAny.paciente;
+        if (!pacNome && pacId) {
+          pacNome = mapaPacientesCadastrados.get(String(pacId).trim());
+        }
+        const pacienteCodigo = obterPseudonimoPac(pacId, pacNome);
+
+        const { data: dataIso, diaSemana } = extrairDataIsoEDiaSemana(e.data || eAny.dataInicio || eAny.dataPrevista);
+
+        const profId = e.idProfissional || eAny.profissionalId || eAny.cuidadorId || eAny.funcionarioId || eAny.idCuidador || eAny.idFuncionario;
+        const profNome = e.nomeProfissional || eAny.profissionalNome || eAny.nomeCuidador || eAny.nomeFuncionario || eAny.profissional;
+        const temProfissional = Boolean(
+          (profId && String(profId).trim() !== '' && !String(profId).toLowerCase().includes('não_alocado')) ||
+          (profNome && String(profNome).trim() !== '' && !String(profNome).toLowerCase().includes('não_alocado') && !String(profNome).toLowerCase().includes('sem profissional') && !String(profNome).toLowerCase().includes('vago'))
+        );
+
+        const statusAlocacao = temProfissional ? 'completa' : 'incompleta';
+
+        const isCuringa = Boolean(
+          e.curinga === true ||
+          e.isCuringa === true ||
+          (e.tipoEscala && String(e.tipoEscala).toLowerCase().includes('curinga')) ||
+          (e.observacao && String(e.observacao).toUpperCase().includes('CURINGA')) ||
+          (e.motivoFalta && String(e.motivoFalta).toUpperCase().includes('CURINGA')) ||
+          (eAny.motivo && String(eAny.motivo).toUpperCase().includes('CURINGA'))
+        );
+
+        const turno = String(e.horario || eAny.tipoTurno || eAny.turno || '12h Diurno').trim();
+
+        return {
+          pacienteCodigo,
+          data: dataIso,
+          diaSemana,
+          turno,
+          statusAlocacao,
+          curinga: isCuringa
+        };
       });
 
       // c) Filtrar pacientes ativos
@@ -879,13 +1178,28 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
         });
       });
 
-      // 2. Envio Ultraleve para a Cloud Function (elimina timeout / deadline-exceeded)
+      // 2. Camada de Agregação Determinística Prévia (Elimina alucinações e otimiza tokens)
+      const agregacaoOperacional = calcularAgregacaoOperacional(
+        escalasParaEnvio,
+        pacientesAlvo,
+        profissionaisPseudonimizados,
+        faturasDoPeriodo,
+        debitosProfissionais || []
+      );
+
+      // 3. Envio Estruturado e Agregado para a Cloud Function
       const dadosParaEnvio = {
         periodoReferencia: periodoDetectado.descricao,
         resumoFinanceiro,
+        resumoGeral: agregacaoOperacional.resumoGeral,
+        escalasPorDiaSemana: agregacaoOperacional.escalasPorDiaSemana,
+        escalasFimDeSemana: agregacaoOperacional.escalasFimDeSemana,
+        gargalosEscala: agregacaoOperacional.gargalosEscala,
+        estatisticasCuringas: agregacaoOperacional.estatisticasCuringas,
+        financeiroConsolidado: agregacaoOperacional.financeiroConsolidado,
         pacientes: pacientesPseudonimizados.slice(0, 30),
         profissionais: profissionaisPseudonimizados.slice(0, 30),
-        escalas: [],
+        escalas: escalasParaEnvio.slice(0, 60),
         debitosProfissionais: [],
         faturasPacientes: [],
         folhasPagamento: [],
@@ -953,39 +1267,73 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
     window.print();
   };
 
-  // Atalhos rápidos solicitados
-  const atalhosRapidos = [
+  // Categorias de Consultas Rápidas para o Menu Dropdown
+  const CATEGORIAS_CONSULTAS_RAPIDAS = [
     {
-      rotulo: 'Margem de Lucro por Paciente',
-      descricao: 'Análise detalhada de rentabilidade e margem de lucro por paciente em tabela',
-      pergunta: 'Apresente uma análise detalhada da margem de lucro por paciente ativo no mês atual e no mês anterior. Exiba em tabela separando faturamento, custo com cuidadores, ajuda de custo total, custos totais, lucro operacional em R$ e margem percentual, ordenando da maior para a menor margem.'
+      categoria: 'Escalas e Plantões',
+      icone: Calendar,
+      itens: [
+        {
+          rotulo: 'Gargalos de Escala',
+          descricao: 'Identificar turnos sem alocação e lacunas de cobertura',
+          pergunta: 'Identifique os principais gargalos de escalas e aponte os turnos ou plantões sem profissional alocado.'
+        },
+        {
+          rotulo: 'Plantões de Fim de Semana',
+          descricao: 'Pacientes com escalas aos sábados e domingos e respectivos turnos',
+          pergunta: 'Quais pacientes têm plantão aos sábados e domingos? Apresente a lista com seus respectivos turnos e o status de alocação.'
+        },
+        {
+          rotulo: 'Conflitos de Horários',
+          descricao: 'Verificar sobreposições de turnos e riscos de sobrecarga assistencial',
+          pergunta: 'Identifique possíveis conflitos de horários, turnos consecutivos e riscos de sobrecarga assistencial.'
+        }
+      ]
     },
     {
-      rotulo: 'Gargalos de Escala',
-      descricao: 'Turnos sem alocação ou com risco',
-      pergunta: 'Identifique os principais gargalos de escalas e aponte os turnos ou plantões sem profissional alocado.'
+      categoria: 'Substituições',
+      icone: Users,
+      itens: [
+        {
+          rotulo: 'Métricas de Curingas no Mês',
+          descricao: 'Volume de plantões curingas e distribuição percentual por dia da semana',
+          pergunta: 'Apresente as métricas de plantões curingas no período, quantidade total e a distribuição percentual por dia da semana.'
+        },
+        {
+          rotulo: 'Dias de Maior Demanda',
+          descricao: 'Concentração e ranking de plantões por dia da semana',
+          pergunta: 'Apresente a distribuição e o ranking dos dias da semana com maior volume de plantões e escalas ativas.'
+        }
+      ]
     },
     {
-      rotulo: 'Resumo Geral',
-      descricao: 'Visão macro e capacidade assistencial',
-      pergunta: 'Apresente um resumo geral da operação de Home Care, volume de atendimentos e capacidade da equipe.'
-    },
-    {
-      rotulo: 'Análise de Custos e Plantões',
-      descricao: 'Repasses e controle financeiro',
-      pergunta: 'Faça uma análise de custos dos plantões, relação com repasses a profissionais e previsão de margem.'
-    },
-    {
-      rotulo: 'Profissionais sem Escalas',
-      descricao: 'Identificar profissionais ociosos',
-      pergunta: 'Quais profissionais estão cadastrados no sistema mas não possuem escalas ativas no período?'
-    },
-    {
-      rotulo: 'Conflitos de Horários',
-      descricao: 'Verificar sobreposições e sobrecarga',
-      pergunta: 'Identifique possíveis conflitos de horários, turnos consecutivos e riscos de sobrecarga assistencial.'
+      categoria: 'Financeiro e Visão Geral',
+      icone: TrendingUp,
+      itens: [
+        {
+          rotulo: 'Resumo Geral Operacional',
+          descricao: 'Visão macro da operação de Home Care e capacidade da equipe',
+          pergunta: 'Apresente um resumo geral da operação de Home Care, volume de atendimentos e capacidade da equipe.'
+        },
+        {
+          rotulo: 'Análise de Custos e Plantões',
+          descricao: 'Repasses a profissionais e custos operacionais dos plantões',
+          pergunta: 'Faça uma análise de custos dos plantões, relação com repasses a profissionais e previsão de margem.'
+        },
+        {
+          rotulo: 'Margem de Lucro por Paciente',
+          descricao: 'Tabela de faturamento, custos e margem percentual ordenada',
+          pergunta: 'Apresente uma análise detalhada da margem de lucro por paciente ativo no mês atual e no mês anterior. Exiba em tabela separando faturamento, custo com cuidadores, ajuda de custo total, custos totais, lucro operacional em R$ e margem percentual, ordenando da maior para a menor margem.'
+        }
+      ]
     }
   ];
+
+  const handleSelecionarConsultaRapida = (pergunta: string) => {
+    setDropdownAberto(false);
+    setPerguntaInput(pergunta);
+    handleConsultar(pergunta);
+  };
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden" id="card-assistente-operacional">
@@ -1110,28 +1458,82 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
           </div>
         </div>
 
-        {/* Atalhos Rápidos com Perguntas Frequentes */}
-        <div className="mt-3 sm:mt-4">
-          <div className="text-xs font-medium text-slate-600 mb-2 flex items-center gap-1">
-            <Sparkles className="w-3 h-3 text-blue-500" />
-            <span>Consultas Rápidas Recomendadas:</span>
-          </div>
-          <div className="flex gap-2 overflow-x-auto pb-1.5 sm:pb-0 sm:flex-wrap no-scrollbar">
-            {atalhosRapidos.map((atalho, index) => (
-              <button
-                key={index}
-                type="button"
-                disabled={loading}
-                onClick={() => {
-                  setPerguntaInput(atalho.pergunta);
-                  handleConsultar(atalho.pergunta);
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 hover:border-blue-300 rounded-lg shadow-2xs transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap shrink-0 sm:shrink"
-                title={atalho.descricao}
+        {/* Menu Dropdown de Consultas Rápidas Categorizadas */}
+        <div className="mt-3 sm:mt-4 flex items-center justify-between">
+          <div className="relative inline-block text-left" ref={dropdownRef}>
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => setDropdownAberto(prev => !prev)}
+              aria-expanded={dropdownAberto}
+              aria-haspopup="true"
+              className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all shadow-2xs ${
+                dropdownAberto
+                  ? 'bg-blue-50 text-blue-700 border-blue-300 ring-2 ring-blue-100'
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:border-slate-300'
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
+              title="Abrir menu de consultas prontas e diagnósticos rápidos"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+              <span>Consultas Rápidas</span>
+              <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${dropdownAberto ? 'rotate-180 text-blue-600' : ''}`} />
+            </button>
+
+            {dropdownAberto && (
+              <div 
+                className="absolute left-0 mt-1.5 w-80 sm:w-96 rounded-xl bg-white shadow-xl border border-slate-200 py-2 z-50 focus:outline-none animate-in fade-in slide-in-from-top-1 duration-150"
+                role="menu"
               >
-                <span>{atalho.rotulo}</span>
-              </button>
-            ))}
+                <div className="px-3.5 py-1.5 border-b border-slate-100 flex items-center justify-between">
+                  <span className="text-2xs font-bold uppercase tracking-wider text-slate-500">
+                    Selecione uma Consulta Pronta
+                  </span>
+                  <span className="text-2xs text-slate-400">
+                    Clique para executar
+                  </span>
+                </div>
+
+                <div className="max-h-[360px] overflow-y-auto divide-y divide-slate-100">
+                  {CATEGORIAS_CONSULTAS_RAPIDAS.map((cat, idx) => {
+                    const IconeCat = cat.icone;
+                    return (
+                      <div key={idx} className="p-1.5">
+                        <div className="px-2 py-1 text-2xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                          <IconeCat className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                          <span>{cat.categoria}</span>
+                        </div>
+                        <div className="mt-0.5 space-y-0.5">
+                          {cat.itens.map((item, itemIdx) => (
+                            <button
+                              key={itemIdx}
+                              type="button"
+                              onClick={() => handleSelecionarConsultaRapida(item.pergunta)}
+                              disabled={loading}
+                              className="w-full text-left px-2.5 py-2 text-xs rounded-lg hover:bg-blue-50/80 group transition-colors flex flex-col gap-0.5 disabled:opacity-50"
+                              role="menuitem"
+                            >
+                              <div className="flex items-center justify-between font-semibold text-slate-700 group-hover:text-blue-700">
+                                <span>{item.rotulo}</span>
+                                <span className="text-2xs font-normal text-slate-400 group-hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  Executar ↵
+                                </span>
+                              </div>
+                              <span className="text-2xs text-slate-500 group-hover:text-blue-600/80 line-clamp-1">
+                                {item.descricao}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="text-2xs text-slate-400 hidden sm:block">
+            Selecione uma consulta ou pergunte livremente abaixo
           </div>
         </div>
       </div>

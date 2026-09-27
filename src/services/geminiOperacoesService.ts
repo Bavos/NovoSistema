@@ -21,6 +21,12 @@ export interface ResumoFinanceiroItem {
 export interface MetricasConsolidadasInput {
   periodoReferencia?: string;
   resumoFinanceiro?: ResumoFinanceiroItem[];
+  resumoGeral?: any;
+  escalasPorDiaSemana?: any;
+  escalasFimDeSemana?: any;
+  gargalosEscala?: any;
+  estatisticasCuringas?: any;
+  financeiroConsolidado?: any;
   pacientes: any[];
   profissionais: any[];
   escalas: any[];
@@ -148,17 +154,17 @@ export function sanitizarPayloadAntesDeEnviar(dados: MetricasConsolidadasInput) 
     };
   });
 
-  // Mapeamento das escalas com data completa ISO, dia da semana e caixinha Curinga
+  // Mapeamento das escalas com data completa ISO, dia da semana, turno, status de alocação e caixinha Curinga
   const escalasLimpas = (dados.escalas || []).map((e, idx) => {
     const dataInfo = formatarDataParaISOEDiaSemana(e.data || e.dataInicio);
     const eAny = e as any;
     const pacRawId = e.idPaciente || eAny.pacienteId || eAny.idClient || eAny.clientId || eAny.paciente;
     const pacRawNome = eAny.pacienteNome || eAny.nomePaciente;
-    const pacAnonId = getAnonPacId(pacRawId, pacRawNome);
+    const pacAnonId = e.pacienteCodigo || getAnonPacId(pacRawId, pacRawNome);
 
     const profRawId = e.idProfissional || eAny.profissionalId || eAny.cuidadorId || eAny.funcionarioId || eAny.idCuidador || eAny.idFuncionario || eAny.profissional;
     const profRawNome = e.nomeProfissional || eAny.profissionalNome || eAny.nomeCuidador || eAny.nomeFuncionario || eAny.cuidadorNome || eAny.funcionarioNome;
-    const profAnonId = (profRawId || profRawNome) ? getAnonProfId(profRawId, profRawNome) : null;
+    const profAnonId = e.profissionalCodigo || ((profRawId || profRawNome) ? getAnonProfId(profRawId, profRawNome) : null);
 
     // Regra de Negócio 1: Caixinha Curinga marcada no cadastro/edição
     const isCuringa = Boolean(
@@ -170,13 +176,21 @@ export function sanitizarPayloadAntesDeEnviar(dados: MetricasConsolidadasInput) 
       (e.motivo && String(e.motivo).toUpperCase().includes('CURINGA'))
     );
 
+    const dataFinal = (e.data && /^\d{4}-\d{2}-\d{2}$/.test(e.data)) ? e.data : dataInfo.data;
+    const diaSemanaFinal = e.diaSemana || dataInfo.diaSemana;
+    const turnoFinal = e.turno || e.horario || e.tipoTurno || '12h Diurno';
+    const statusAlocacaoFinal = e.statusAlocacao || (profAnonId ? 'completa' : 'incompleta');
+
     return {
       id: `ESC-${idx + 1}`,
+      pacienteCodigo: pacAnonId,
       pacienteId: pacAnonId,
       profissionalId: profAnonId,
-      data: dataInfo.data, // YYYY-MM-DD
-      diaSemana: dataInfo.diaSemana, // ex: Segunda-feira, Domingo, etc.
-      horario: e.horario || e.tipoTurno || e.turno || '12h Diurno',
+      data: dataFinal, // YYYY-MM-DD
+      diaSemana: diaSemanaFinal, // ex: Segunda-feira, Sábado, etc.
+      turno: turnoFinal,
+      horario: turnoFinal,
+      statusAlocacao: statusAlocacaoFinal,
       status: e.status || 'Agendado',
       valorPlantao: Number(e.valorPlantao || eAny.valorProfissional || eAny.repasseProfissional || eAny.valorDiaria || 0),
       valorRepasse: Number(e.valorRepasse || e.valorPlantao || eAny.valorProfissional || 0),
@@ -231,10 +245,16 @@ export function sanitizarPayloadAntesDeEnviar(dados: MetricasConsolidadasInput) 
   return {
     periodoReferencia: dados.periodoReferencia,
     resumoFinanceiro: dados.resumoFinanceiro,
+    resumoGeral: dados.resumoGeral,
+    escalasPorDiaSemana: dados.escalasPorDiaSemana,
+    escalasFimDeSemana: dados.escalasFimDeSemana,
+    gargalosEscala: dados.gargalosEscala,
+    estatisticasCuringas: dados.estatisticasCuringas,
+    financeiroConsolidado: dados.financeiroConsolidado,
     pacientes: pacientesLimpos.slice(0, 30),
     profissionais: profissionaisLimpos.slice(0, 30),
-    escalas: (dados.resumoFinanceiro && dados.resumoFinanceiro.length > 0) ? [] : escalasLimpas.slice(0, 30),
-    financeiro: (dados.resumoFinanceiro && dados.resumoFinanceiro.length > 0) ? [] : lancamentosAnonimizados.slice(0, 30),
+    escalas: escalasLimpas.slice(0, 60),
+    financeiro: lancamentosAnonimizados.slice(0, 30),
     totaisConsolidados: dados.totaisConsolidados,
     user: dados.user
   };

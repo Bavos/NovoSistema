@@ -257,13 +257,16 @@ export function sanitizarDadosOperacionaisHomeCare(dados: any) {
     : [];
 
   const escalasAnonimizadas = escalasRaw.map((e: any) => ({
-    paciente: getAnonPac(e.pacienteId || e.pacienteNome || e.idPaciente || e.nomePaciente || e.paciente),
-    profissional: (e.profissionalId || e.profissionalNome || e.idProfissional || e.nomeProfissional || e.cuidadorId || e.funcionarioId || e.idCuidador || e.idFuncionario || e.profissional) 
-      ? getAnonProf(e.profissionalId || e.profissionalNome || e.idProfissional || e.nomeProfissional || e.cuidadorId || e.funcionarioId || e.idCuidador || e.idFuncionario || e.profissional) 
+    pacienteCodigo: e.pacienteCodigo || getAnonPac(e.pacienteId || e.pacienteNome || e.idPaciente || e.nomePaciente || e.paciente),
+    paciente: e.pacienteCodigo || getAnonPac(e.pacienteId || e.pacienteNome || e.idPaciente || e.nomePaciente || e.paciente),
+    profissional: (e.profissionalCodigo || e.profissionalId || e.profissionalNome || e.idProfissional || e.nomeProfissional || e.cuidadorId || e.funcionarioId || e.idCuidador || e.idFuncionario || e.profissional) 
+      ? getAnonProf(e.profissionalCodigo || e.profissionalId || e.profissionalNome || e.idProfissional || e.nomeProfissional || e.cuidadorId || e.funcionarioId || e.idCuidador || e.idFuncionario || e.profissional) 
       : 'NÃO_ALOCADO (GARGALO)',
     data: e.data || e.dataPrevista || 'N/D',
     diaSemana: e.diaSemana || 'N/D',
-    horario: e.horario || e.tipoTurno || e.turno || '12h Diurno',
+    turno: e.turno || e.horario || e.tipoTurno || '12h Diurno',
+    horario: e.turno || e.horario || e.tipoTurno || '12h Diurno',
+    statusAlocacao: e.statusAlocacao || (e.profissionalCodigo || e.profissionalId || e.profissionalNome ? 'completa' : 'incompleta'),
     status: e.status || 'Agendado',
     curinga: Boolean(
       e.curinga === true ||
@@ -318,6 +321,150 @@ export function sanitizarDadosOperacionaisHomeCare(dados: any) {
     margem: Number(rf.margem ?? rf.margemPercentual ?? 0)
   }));
 
+  const diasSemanaOrdem = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'];
+
+  // Agregações determinísticas (recebidas do frontend ou calculadas no backend)
+  let escalasPorDiaSemana = source.escalasPorDiaSemana;
+  let escalasFimDeSemana = source.escalasFimDeSemana;
+  let gargalosEscala = source.gargalosEscala;
+  let estatisticasCuringas = source.estatisticasCuringas;
+  let financeiroConsolidado = source.financeiroConsolidado;
+  let resumoGeral = source.resumoGeral;
+
+  if (!escalasFimDeSemana || !gargalosEscala || !escalasPorDiaSemana) {
+    const porDia: Record<string, { total: number; completas: number; vagas: number; curingas: number }> = {};
+    diasSemanaOrdem.forEach(d => { porDia[d] = { total: 0, completas: 0, vagas: 0, curingas: 0 }; });
+
+    const sabadoPacientesMap = new Map<string, Set<string>>();
+    const domingoPacientesMap = new Map<string, Set<string>>();
+    let sabCompletas = 0;
+    let sabVagas = 0;
+    let domCompletas = 0;
+    let domVagas = 0;
+    let totCuringas = 0;
+    const curingasPorDia: Record<string, number> = {};
+    diasSemanaOrdem.forEach(d => { curingasPorDia[d] = 0; });
+    const vagasPorPac: Record<string, number> = {};
+
+    escalasAnonimizadas.forEach((e: any) => {
+      const diaRaw = String(e.diaSemana || '').trim();
+      let dia = 'N/D';
+      if (diaRaw.includes('Seg')) dia = 'Segunda-feira';
+      else if (diaRaw.includes('Ter')) dia = 'Terça-feira';
+      else if (diaRaw.includes('Qua')) dia = 'Quarta-feira';
+      else if (diaRaw.includes('Qui')) dia = 'Quinta-feira';
+      else if (diaRaw.includes('Sex')) dia = 'Sexta-feira';
+      else if (diaRaw.includes('Sáb') || diaRaw.includes('Sab')) dia = 'Sábado';
+      else if (diaRaw.includes('Dom')) dia = 'Domingo';
+
+      const isComp = e.statusAlocacao === 'completa';
+      const isCur = Boolean(e.curinga);
+
+      if (porDia[dia]) {
+        porDia[dia].total++;
+        if (isComp) porDia[dia].completas++;
+        else porDia[dia].vagas++;
+        if (isCur) porDia[dia].curingas++;
+      }
+
+      if (isCur) {
+        totCuringas++;
+        if (curingasPorDia[dia] !== undefined) curingasPorDia[dia]++;
+      }
+
+      if (!isComp) {
+        const pCod = e.pacienteCodigo || e.paciente || 'PAC_ND';
+        vagasPorPac[pCod] = (vagasPorPac[pCod] || 0) + 1;
+      }
+
+      if (dia === 'Sábado') {
+        if (isComp) sabCompletas++;
+        else sabVagas++;
+        const pCod = e.pacienteCodigo || e.paciente || 'PAC_ND';
+        const t = e.turno || e.horario || '12h Diurno';
+        if (!sabadoPacientesMap.has(pCod)) sabadoPacientesMap.set(pCod, new Set());
+        sabadoPacientesMap.get(pCod)!.add(t);
+      } else if (dia === 'Domingo') {
+        if (isComp) domCompletas++;
+        else domVagas++;
+        const pCod = e.pacienteCodigo || e.paciente || 'PAC_ND';
+        const t = e.turno || e.horario || '12h Diurno';
+        if (!domingoPacientesMap.has(pCod)) domingoPacientesMap.set(pCod, new Set());
+        domingoPacientesMap.get(pCod)!.add(t);
+      }
+    });
+
+    const sabadoPacientesAtendidos: string[] = [];
+    sabadoPacientesMap.forEach((turnos, pac) => {
+      turnos.forEach(t => sabadoPacientesAtendidos.push(`${pac} (${t})`));
+    });
+    sabadoPacientesAtendidos.sort();
+
+    const domingoPacientesAtendidos: string[] = [];
+    domingoPacientesMap.forEach((turnos, pac) => {
+      turnos.forEach(t => domingoPacientesAtendidos.push(`${pac} (${t})`));
+    });
+    domingoPacientesAtendidos.sort();
+
+    escalasPorDiaSemana = escalasPorDiaSemana || porDia;
+    escalasFimDeSemana = escalasFimDeSemana || {
+      sabado: {
+        total: porDia['Sábado']?.total || 0,
+        completas: sabCompletas,
+        vagas: sabVagas,
+        pacientesAtendidos: sabadoPacientesAtendidos
+      },
+      domingo: {
+        total: porDia['Domingo']?.total || 0,
+        completas: domCompletas,
+        vagas: domVagas,
+        pacientesAtendidos: domingoPacientesAtendidos
+      }
+    };
+
+    const totComp = escalasAnonimizadas.filter((e: any) => e.statusAlocacao === 'completa').length;
+    const totVagas = escalasAnonimizadas.filter((e: any) => e.statusAlocacao !== 'completa').length;
+    const pacAfetados = Object.entries(vagasPorPac)
+      .sort((a, b) => b[1] - a[1])
+      .map(([p, q]) => `${p} (${q} ${q > 1 ? 'vagas em aberto' : 'vaga em aberto'})`);
+
+    gargalosEscala = gargalosEscala || {
+      escalasVagasTotal: totVagas,
+      escalasCompletasTotal: totComp,
+      taxaOcupacaoPercentual: escalasAnonimizadas.length > 0 ? Number(((totComp / escalasAnonimizadas.length) * 100).toFixed(1)) : 100,
+      pacientesAfetados: pacAfetados
+    };
+
+    const distPerc: Record<string, string> = {};
+    diasSemanaOrdem.forEach(d => {
+      const q = curingasPorDia[d] || 0;
+      distPerc[d] = totCuringas > 0 ? ((q / totCuringas) * 100).toFixed(1) + '%' : '0%';
+    });
+
+    estatisticasCuringas = estatisticasCuringas || {
+      total: totCuringas,
+      percentualDoTotal: escalasAnonimizadas.length > 0 ? Number(((totCuringas / escalasAnonimizadas.length) * 100).toFixed(1)) : 0,
+      distribuicaoDias: curingasPorDia,
+      distribuicaoPercentual: distPerc
+    };
+
+    resumoGeral = resumoGeral || {
+      totalPacientes: pacientesRaw.length,
+      totalProfissionais: profissionaisRaw.length,
+      totalEscalas: escalasAnonimizadas.length
+    };
+  }
+
+  if (!financeiroConsolidado) {
+    const totDeb = financeiroAnonimizado.filter((f: any) => f.tipo === 'debito').reduce((a: number, b: any) => a + Number(b.valor || 0), 0);
+    const totCred = financeiroAnonimizado.filter((f: any) => f.tipo === 'credito').reduce((a: number, b: any) => a + Number(b.valor || 0), 0);
+    financeiroConsolidado = {
+      totalDebitos: totDeb,
+      totalCreditos: totCred,
+      saldoOperacional: totCred - totDeb
+    };
+  }
+
   return {
     metadadosLGPD: {
       anonimizacaoAplicada: true,
@@ -326,11 +473,17 @@ export function sanitizarDadosOperacionaisHomeCare(dados: any) {
     },
     periodoReferencia: source?.periodoReferencia || 'Período solicitado',
     resumoFinanceiro,
+    resumoGeral,
+    escalasPorDiaSemana,
+    escalasFimDeSemana,
+    gargalosEscala,
+    estatisticasCuringas,
+    financeiroConsolidado,
     metricasGerais,
     pacientes: pacientesAnonimizados.slice(0, 30),
     profissionais: profissionaisAnonimizados.slice(0, 30),
-    escalas: escalasAnonimizadas.slice(0, 20),
-    financeiro: financeiroAnonimizado.slice(0, 20)
+    escalas: escalasAnonimizadas.slice(0, 60),
+    financeiro: financeiroAnonimizado.slice(0, 30)
   };
 }
 
@@ -379,13 +532,18 @@ export const analisarMetricasHomeCare = onCall(
       throw new HttpsError("failed-precondition", "GEMINI_API_KEY não configurada no servidor.");
     }
 
-    const prompt = `Você é um assistente operacional e financeiro de gestão de home care de alto desempenho.
-Responda com agilidade, concisão e fundamentação estritamente nos dados operacionais e financeiros anonimizados abaixo:
+    const prompt = `Você é o Assistente Executivo de Inteligência Operacional da Vallidare Home Care.
+Você recebeu métricas agregadas e consolidadas da operação.
+
+Ao responder:
+- Apresente os dados com clareza executiva através de listas e tabelas em Markdown.
+- Se o gestor perguntar sobre pacientes aos sábados ou escalas vagas, utilize diretamente os blocos 'escalasFimDeSemana' e 'gargalosEscala'.
+- Destaque alertas operacionais prioritários (como escalas vagas ou alta concentração de substituições/curingas).
+- Mantenha respostas diretas, sem burocracia ou recusas desnecessárias.
+- Identificadores de Profissionais e Pacientes: Ao citar colaboradores ou pacientes (ex: PAC-01, PAC-02, P-01), utilize SEMPRE e EXATAMENTE o código literal informado, para que a interface decodifique e restaure os nomes reais localmente no navegador do gestor.
 
 ${metricas.resumoFinanceiro && metricas.resumoFinanceiro.length > 0 ? `
-DIRETRIZ OBRIGATÓRIA DE RENTABILIDADE E MARGEM DE LUCRO (RESUMO PRÉ-CALCULADO):
-Você recebeu uma lista financeira pré-calculada no campo 'resumoFinanceiro' com faturamento, custos e margem por paciente.
-Para responder a consultas de rentabilidade ou margem de lucro por paciente:
+DIRETRIZ DE RENTABILIDADE E MARGEM DE LUCRO (quando a consulta solicitar margem de lucro ou rentabilidade por paciente):
 1. LEIA DIRETAMENTE o 'resumoFinanceiro'. Não tente recalcular ou alterar esses valores matemáticos consolidados.
 2. RENDERIZE DIRETAMENTE a tabela em Markdown ordenada obrigatoriamente da MAIOR para a MENOR margem percentual, com a seguinte estrutura de colunas:
 | Paciente | Faturamento Total | Custo Cuidadores | Ajuda de Custo | Custos Totais | Lucro Operacional (R$) | Margem (%) |
@@ -394,7 +552,6 @@ Formate os valores monetários como moeda brasileira (ex: R$ 4.480,00) e a marge
    - Os 3 pacientes de maior rentabilidade (maior margem %).
    - Os 3 pacientes de menor margem (ou em prejuízo).
    - Conclusão rápida e objetiva (máximo 2 a 3 frases) com foco em tomada de decisão da diretoria, sem enrolação.
-4. Mantenha os códigos dos pacientes (ex: PAC-01, PAC-02) exatamente como fornecidos para que a aplicação decodifique e restaure os nomes reais no navegador do administrador.
 ` : `
 Dicionário Financeiro e Operacional de Pacientes:
 - Cada paciente possui sua estrutura de custos unitários por plantão: [valorPlantaoProfissional], [valorAjudaCusto] e [taxaAdministrativa].
@@ -407,16 +564,22 @@ Dicionário Financeiro e Operacional de Pacientes:
 - Ordene os pacientes da maior para a menor margem de lucro percentual.
 `}
 
-Dicionário de Regras de Negócio:
-- 'Curinga': Identificado pelo campo booleano 'curinga: true' nos registros de escalas ou em débitos de motivo 'Curinga'.
-- 'Escalas/Plantões': Contêm data ('data'), turno ('horario') e dia da semana ('diaSemana').
-- 'Identificadores de Profissionais e Pacientes': Os colaboradores e pacientes são identificados por pseudônimos no formato PROF_01, PROF_02, etc. (e pacientes por PAC-01, PAC-02, PAC_01, etc.). Ao citar colaboradores, pacientes, rankings de plantões/curingas, escalas ou rentabilidade, utilize SEMPRE e EXATAMENTE o código literal informado, para que a interface decodifique e restaure os nomes reais localmente.
+Dados Operacionais Agregados e Consolidados:
+${JSON.stringify({
+  periodoReferencia: metricas.periodoReferencia,
+  resumoGeral: metricas.resumoGeral,
+  escalasPorDiaSemana: metricas.escalasPorDiaSemana,
+  escalasFimDeSemana: metricas.escalasFimDeSemana,
+  gargalosEscala: metricas.gargalosEscala,
+  estatisticasCuringas: metricas.estatisticasCuringas,
+  financeiroConsolidado: metricas.financeiroConsolidado,
+  resumoFinanceiro: metricas.resumoFinanceiro,
+  pacientes: metricas.pacientes,
+  profissionais: metricas.profissionais
+}, null, 2)}
 
-Dados Operacionais Anonimizados:
-${JSON.stringify(metricas, null, 2)}
-
-Pergunta do Administrador:
-${pergunta || 'Apresente uma análise detalhada da margem de lucro por paciente ativo com tabela ordenada e resumo executivo.'}`;
+Pergunta do Gestor Operacional:
+${pergunta || 'Apresente uma análise operacional detalhada das escalas, cobertura dos plantões e distribuição operacional.'}`;
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
 
