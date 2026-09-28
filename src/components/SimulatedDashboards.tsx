@@ -6728,22 +6728,6 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                         <FileText size={14} className="inline mr-1" />
                         {loadingExport ? "Gerando..." : viewDoc.type === 'fatura' ? "Baixar Fatura (PDF)" : "Baixar Folha (PDF)"}
                       </GlossyButton>
-                      <GlossyButton
-                        variant="gray"
-                        className="relative z-20 flex-shrink-0 isolate pointer-events-auto no-print"
-                        onClick={() => {
-                          const docEl = document.getElementById('fatura-print-area') || document.getElementById('documento-fatura-impressao');
-                          if (!docEl) {
-                            toast.error('Elemento do documento da fatura não encontrado para impressão.');
-                            return;
-                          }
-                          window.print();
-                        }}
-                        title="Imprimir documento via navegador"
-                      >
-                        <Printer size={14} className="inline mr-1" />
-                        Imprimir
-                      </GlossyButton>
                       <GlossyButton variant="yellow"
                         className="relative z-20 flex-shrink-0 isolate pointer-events-auto no-print"
                         onClick={() => {

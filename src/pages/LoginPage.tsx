@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
-import { Logo } from '../components/Logo';
+import rhLogo from '../assets/images/rh_logo_1781469900395.jpg';
 import { validarDominioCorporativo } from '../types';
 import { getFriendlyErrorMessage } from '../utils/errorSanitizer';
 import { toast } from 'react-hot-toast';
@@ -132,20 +132,24 @@ export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ o
     };
 
     return (
-        <div className="flex justify-center items-center h-screen bg-slate-50">
-            <div className="bg-white p-10 rounded-2xl shadow-xl w-full max-w-sm border border-slate-100">
-                <div className="flex justify-center mb-4">
-                    <Logo className="w-full max-w-[250px] h-auto" />
+        <div className="flex justify-center items-center min-h-screen bg-[#f1f5f9] p-4">
+            <div className="bg-white px-8 pt-8 pb-10 rounded-[28px] shadow-2xl w-full max-w-[400px] border border-slate-100">
+                <div className="flex justify-center mb-5">
+                    <img 
+                        src={rhLogo} 
+                        alt="RH Gestão Domiciliar" 
+                        className="w-full max-w-[240px] h-auto object-contain select-none"
+                    />
                 </div>
-                <h1 className="text-2xl font-bold text-slate-800 mb-6 text-center">Login</h1>
+                <h1 className="text-2xl font-bold text-[#1e293b] mb-6 text-center">Login</h1>
                 {error && (
                     <div className="bg-red-50 text-red-600 p-3 rounded-xl text-xs mb-4 border border-red-100 text-center font-medium" id="login-error-message">
                         {error}
                     </div>
                 )}
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="space-y-1">
-                        <label htmlFor="login-email" className="block text-xs font-semibold text-slate-700 tracking-wide">
+                    <div>
+                        <label htmlFor="login-email" className="block text-xs font-medium text-slate-700 mb-1.5">
                             E-mail
                         </label>
                         <input 
@@ -156,13 +160,13 @@ export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ o
                                 setEmail(e.target.value);
                                 setShowResendVerification(false);
                             }} 
-                            className="w-full h-12 px-4 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#1A3626]/20 focus:border-[#1A3626] transition-all text-sm text-slate-800" 
+                            className="w-full h-11 px-4 border border-amber-200/50 rounded-xl bg-[#fef9c3] focus:bg-[#fef9c3] focus:border-[#1c3829] focus:ring-2 focus:ring-[#1c3829]/20 transition-all text-sm text-slate-800 placeholder-slate-400 outline-none" 
                             required 
                         />
                     </div>
-                    <div className="space-y-1">
-                        <div className="flex justify-between items-center">
-                            <label htmlFor="login-password" className="block text-xs font-semibold text-slate-700 tracking-wide">
+                    <div>
+                        <div className="flex justify-between items-center mb-1.5">
+                            <label htmlFor="login-password" className="block text-xs font-medium text-slate-700">
                                 Senha
                             </label>
                             <button
@@ -170,7 +174,7 @@ export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ o
                                 type="button"
                                 onClick={handleForgotPassword}
                                 disabled={isSendingReset}
-                                className="text-[11px] text-[#1A3626] hover:underline font-semibold cursor-pointer disabled:opacity-50"
+                                className="text-[11px] text-slate-500 hover:text-slate-800 font-normal hover:underline cursor-pointer disabled:opacity-50"
                             >
                                 {isSendingReset ? 'Enviando...' : 'Esqueceu a senha?'}
                             </button>
@@ -183,18 +187,20 @@ export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ o
                                 setPassword(e.target.value);
                                 setShowResendVerification(false);
                             }} 
-                            className="w-full h-12 px-4 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#1A3626]/20 focus:border-[#1A3626] transition-all text-sm text-slate-800" 
+                            className="w-full h-11 px-4 border border-amber-200/50 rounded-xl bg-[#fef9c3] focus:bg-[#fef9c3] focus:border-[#1c3829] focus:ring-2 focus:ring-[#1c3829]/20 transition-all text-sm text-slate-800 placeholder-slate-400 outline-none" 
                             required 
                         />
                     </div>
-                    <button 
-                        id="login-submit-btn"
-                        type="submit" 
-                        disabled={isLoading}
-                        className="w-full h-12 bg-[#1A3626] text-white rounded-xl font-semibold hover:bg-[#254A34] transition-all active:scale-[0.98] shadow-lg shadow-[#1A3626]/20 disabled:opacity-50 flex items-center justify-center text-sm cursor-pointer"
-                    >
-                        {isLoading ? 'Carregando...' : 'Entrar'}
-                    </button>
+                    <div className="pt-2">
+                        <button 
+                            id="login-submit-btn"
+                            type="submit" 
+                            disabled={isLoading}
+                            className="w-full h-11 bg-[#1c3829] text-white rounded-xl font-semibold hover:bg-[#152e21] transition-all active:scale-[0.99] shadow-md shadow-[#1c3829]/20 disabled:opacity-50 flex items-center justify-center text-sm cursor-pointer"
+                        >
+                            {isLoading ? 'Carregando...' : 'Entrar'}
+                        </button>
+                    </div>
 
                     {showResendVerification && (
                         <div className="text-center pt-1 animate-in fade-in duration-200">
@@ -209,14 +215,16 @@ export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ o
                         </div>
                     )}
 
-                    <button 
-                        id="login-register-link-btn"
-                        type="button" 
-                        onClick={onNavigateToFirstAccess}
-                        className="w-full h-12 text-slate-600 hover:text-[#1A3626] text-xs font-semibold text-center hover:bg-slate-50 rounded-xl transition-colors flex items-center justify-center cursor-pointer"
-                    >
-                        Primeiro Acesso? Crie sua senha
-                    </button>
+                    <div className="pt-3 text-center">
+                        <button 
+                            id="login-register-link-btn"
+                            type="button" 
+                            onClick={onNavigateToFirstAccess}
+                            className="text-xs text-slate-600 hover:text-[#1c3829] hover:underline font-normal text-center transition-colors cursor-pointer inline-block"
+                        >
+                            Primeiro Acesso? Crie sua senha
+                        </button>
+                    </div>
                 </form>
             </div>
         </div>
