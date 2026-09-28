@@ -58,7 +58,7 @@ export const Logo: React.FC<LogoProps> = ({ className = 'w-full h-auto', style }
         opacity="0.85"
       />
 
-      {/* 2. Lower Gold Arcs - Envolvendo Gestão Domiciliar harmoniosamente com respiro inferior */}
+      {/* 2. Lower Gold Arcs - Envolvendo a marca Vallidare harmoniosamente com respiro inferior */}
       <path
         d="M 65,255 C 180,298 320,298 435,255"
         fill="none"
@@ -150,32 +150,32 @@ export const Logo: React.FC<LogoProps> = ({ className = 'w-full h-auto', style }
         />
       </g>
 
-      {/* 4. Right Side: Classic Serif 'RH' and 'Gestão Domiciliar' */}
+      {/* 4. Right Side: 'VALLIDARE' and 'Gestão Médica e Auditoria' */}
       <g>
-        {/* Large Serif 'R H' letters in Elegant Forest Green */}
+        {/* Brand Name 'VALLIDARE' in Elegant Forest Green */}
         <text
           x="226"
-          y="204"
-          fontFamily="Times New Roman, Georgia, Playfair Display, serif"
-          fontSize="102"
-          fontWeight="700"
+          y="185"
+          fontFamily="Arial, Helvetica, sans-serif"
+          fontSize="42"
+          fontWeight="900"
           fill="#133820"
-          letterSpacing="-1.5"
+          letterSpacing="0.08em"
         >
-          RH
+          VALLIDARE
         </text>
 
-        {/* 'Gestão Domiciliar' text in highly readable balanced serif */}
+        {/* 'Gestão Médica e Auditoria' text */}
         <text
-          x="196"
-          y="242"
-          fontFamily="Times New Roman, Georgia, Playfair Display, serif"
-          fontSize="22.5"
-          fontWeight="bold"
-          fill="#133820"
-          letterSpacing="0.4"
+          x="228"
+          y="218"
+          fontFamily="Arial, Helvetica, sans-serif"
+          fontSize="12.5"
+          fontWeight="700"
+          fill="#2C5E3F"
+          letterSpacing="0.12em"
         >
-          Gestão Domiciliar
+          GESTÃO MÉDICA E AUDITORIA
         </text>
       </g>
     </svg>

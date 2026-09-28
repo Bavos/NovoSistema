@@ -723,7 +723,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
       return;
     }
 
-    let empresaNome = 'Vallidare - Gestão e Consultoria em Saúde';
+    let empresaNome = 'VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI';
     let empresaCnpj = '12.345.678/0001-99';
     let empresaEndereco = 'Rua Martins Ferreira, 71';
     try {
@@ -937,7 +937,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
       return;
     }
 
-    let empresaNome = 'Vallidare - Gestão e Consultoria em Saúde';
+    let empresaNome = 'VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI';
     let empresaCnpj = '12.345.678/0001-99';
     let empresaEndereco = 'Rua Martins Ferreira, 71';
     try {
@@ -1859,7 +1859,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                 <div className="flex items-center gap-2 bg-transparent">
                   <div className="flex flex-col text-left bg-transparent">
                     <span className="text-base font-black text-[#1a3c2e] leading-none tracking-tight">VALLIDARE</span>
-                    <span className="text-[8px] font-bold text-[#1a3c2e] tracking-wider uppercase mt-0.5">Gestão e Consultoria em Saúde</span>
+                    <span className="text-[8px] font-bold text-[#1a3c2e] tracking-wider uppercase mt-0.5">Gestão Médica e Auditoria</span>
                   </div>
                 </div>
               )}
@@ -1907,7 +1907,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
 
             {/* Integração de Dados Corporativos (Canto Inferior Direito) */}
             <div className="absolute bottom-4 right-5 z-10 text-right text-xs leading-tight font-sans">
-              <div className="font-bold text-slate-900">{config.razaoSocial || "Vallidare - Gestão e Consultoria em Saúde"}</div>
+              <div className="font-bold text-slate-900">{config.razaoSocial || "VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI"}</div>
               <div className="text-[11px] text-slate-800 font-semibold">{config.cnpj ? `CNPJ: ${config.cnpj}` : "CNPJ: 68.152.234/0001-98"}</div>
             </div>
 

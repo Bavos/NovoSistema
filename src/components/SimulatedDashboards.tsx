@@ -65,6 +65,7 @@ import autoTable from 'jspdf-autotable';
 import { sanitizeClonedDocForHtml2Canvas, exportCanvasToA4PDF } from '../lib/html2canvasSanitizer';
 import { exportFaturaPDF, exportHistoricoFaturasPDF } from '../utils/faturaPdfGenerator';
 import { exportFolhaPDF } from '../utils/folhaPdfGenerator';
+import { VALLIDARE_LOGO_BASE64 } from '../assets/logoBase64';
 import {
   Briefcase,
   Calendar,
@@ -200,7 +201,7 @@ export const EscalasDashboard: React.FC = () => {
     <div className="space-y-4 animate-in fade-in-30" id="escalas-dashboard">
       {/* Visual Report Header ONLY during print */}
       <div className="hidden print:block border-b-2 border-[#1a3c2e] pb-4 mb-4">
-        <h1 className="text-xl font-bold text-[#1a3c2e] uppercase">SISTEMA VALLIDARE - GESTÃO E CONSULTORIA EM SAÚDE</h1>
+        <h1 className="text-xl font-bold text-[#1a3c2e] uppercase">VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI</h1>
         <h2 className="text-lg font-black text-slate-800">Relatório de Escala de Plantões Diária</h2>
         <p className="text-xs text-slate-500 mt-1">Visão integrada das escalas ativas para o dia {new Date().toLocaleDateString('pt-BR')}</p>
         <div className="flex gap-4 text-[10px] text-slate-400 mt-2">
@@ -2919,31 +2920,6 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                       </div>
 
                       {/* Pix Copia e Cola se disponível */}
-                      
-                      {/* Código de Barras Numérico (44 Dígitos) */}
-                      {boletoResultData.codigoBarra && (
-                        <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-2">
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs font-bold text-slate-700">
-                              📊 Código de Barras Numérico (44 dígitos)
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                navigator.clipboard.writeText(boletoResultData.codigoBarra);
-                                toast.success("Código de barras copiado!");
-                              }}
-                              className="px-2.5 py-1 bg-slate-700 text-white text-xs font-bold rounded hover:bg-slate-800 transition-all cursor-pointer shadow-sm active:scale-95"
-                            >
-                              Copiar Código
-                            </button>
-                          </div>
-                          <p className="font-mono text-xs text-slate-700 bg-white p-2.5 rounded border border-slate-200 truncate select-all">
-                            {boletoResultData.codigoBarra}
-                          </p>
-                        </div>
-                      )}
-
                       {boletoResultData.pixCopiaECola && (
                         <div className="bg-emerald-50/50 border border-emerald-100 p-4 rounded-xl space-y-2">
                           <div className="flex justify-between items-center">
@@ -3242,7 +3218,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                     <div className="hidden print:block border-b border-slate-300 pb-4 mb-6">
                       <div className="flex justify-between items-start">
                         <div>
-                          <h1 className="text-xl font-bold text-slate-950 uppercase">SISTEMA VALLIDARE - GESTÃO E CONSULTORIA EM SAÚDE</h1>
+                          <h1 className="text-xl font-bold text-slate-950 uppercase">VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI</h1>
                           <h2 className="text-base font-black text-slate-800">Relatório de Listagem MEI</h2>
                           <p className="text-xs text-slate-500 mt-1">Período de Referência: {getReferenciaMesNome(referenciaMes)} de {referenciaAno}</p>
                         </div>
@@ -4734,7 +4710,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                           <polygon points="48,80 98,48 114,64 68,80" fill="url(#valGrad1)" />
                           <polygon points="68,80 114,64 118,78 84,80" fill="url(#valGrad3)" />
                           <text x="130" y="52" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="900" fill="#1e293b">VALLIDARE</text>
-                          <text x="130" y="74" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="600" fill="#64748b">GESTÃO E CONSULTORIA EM SAÚDE</text>
+                          <text x="130" y="74" font-family="Arial, Helvetica, sans-serif" font-size="9" font-weight="600" fill="#64748b">GESTÃO MÉDICA E AUDITORIA</text>
                         </svg>`;
                         const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
                         const url = URL.createObjectURL(blob);
@@ -4800,7 +4776,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
             doc.setFont('helvetica', 'normal');
             doc.setFontSize(8.5);
             doc.setTextColor(100, 116, 139);
-            doc.text('Relatório Gerado pelo Sistema RH de Gestão', 14, 32);
+            doc.text('VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI', 14, 32);
 
             // Linha divisória limpa
             doc.setDrawColor(203, 213, 225);
@@ -4977,7 +4953,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                 doc.setFontSize(8);
                 doc.setTextColor(148, 163, 184);
                 doc.text(`Página ${i} de ${totalPages}`, 196, 290, { align: 'right' });
-                doc.text('Relatório Gerado pelo Sistema RH de Gestão', 14, 290);
+                doc.text('VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI', 14, 290);
             }
 
             // 7. Download do Arquivo PDF
@@ -5054,48 +5030,36 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
 
     const handleExportFaturaPDF = async (faturaData: any) => {
         if (!faturaData) return;
-        setLoadingExport(true);
-        const toastId = toast.loading("Gerando PDF oficial da fatura...");
-        try {
-            await exportFaturaPDF(faturaData, empresa);
-            toast.success("Fatura em PDF gerada com sucesso!", { id: toastId });
-        } catch (err: any) {
-            console.error("Erro ao gerar PDF da fatura:", err);
-            toast.error("Erro ao gerar PDF da fatura.", { id: toastId });
-        } finally {
-            setLoadingExport(false);
-        }
+        // Unifica com a pré-visualização real da tela (html2canvas)
+        setViewDoc({ type: 'fatura', data: faturaData });
+        setTimeout(async () => {
+            await handleDownloadWordFromCanvas(faturaData, 'fatura');
+        }, 350);
     };
 
     const handleExportFolhaIndividualPDF = async (folhaData: any) => {
         if (!folhaData) return;
-        setLoadingExport(true);
-        const toastId = toast.loading("Gerando PDF oficial da folha de pagamento...");
-        try {
-            await exportFolhaPDF(folhaData, empresa);
-            toast.success("Folha de pagamento em PDF gerada com sucesso!", { id: toastId });
-        } catch (err: any) {
-            console.error("Erro ao gerar PDF da folha:", err);
-            toast.error("Erro ao gerar PDF da folha.", { id: toastId });
-        } finally {
-            setLoadingExport(false);
-        }
+        // Unifica com a pré-visualização real da tela (html2canvas)
+        setViewDoc({ type: 'folha', data: folhaData });
+        setTimeout(async () => {
+            await handleDownloadWordFromCanvas(folhaData, 'folha');
+        }, 350);
     };
 
     const handleDownloadWordFromCanvas = async (docData: any, type: 'fatura' | 'folha') => {
-        if (type === 'fatura') {
-            await handleExportFaturaPDF(docData);
-            return;
-        }
-        if (type === 'folha') {
-            await handleExportFolhaIndividualPDF(docData);
-            return;
-        }
         setLoadingExport(true);
-        const printElement = document.getElementById('print-area') || faturaRef.current;
+        const toastId = toast.loading(type === 'fatura' ? "Gerando PDF da fatura..." : "Gerando PDF da folha...");
+        const printElement = document.getElementById('fatura-print-area') || document.getElementById('documento-fatura-impressao') || faturaRef.current;
         if (printElement) {
             try {
-                const html2canvas = (await import('html2canvas-pro')).default;
+                let html2canvas: any;
+                try {
+                    html2canvas = (await import('html2canvas-pro')).default;
+                } catch {
+                    html2canvas = (await import('html2canvas')).default;
+                }
+                const { jsPDF } = await import('jspdf');
+
                 const canvas = await html2canvas(printElement, {
                     backgroundColor: '#ffffff',
                     scale: 2,
@@ -5124,7 +5088,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                         }
 
                         // 3. Localiza e estiliza o elemento de impressão clonado
-                        const clonedPrintArea = clonedDoc.getElementById('print-area');
+                        const clonedPrintArea = clonedDoc.getElementById('fatura-print-area') || clonedDoc.getElementById('documento-fatura-impressao') || clonedDoc.getElementById('print-area');
                         if (clonedPrintArea) {
                             clonedPrintArea.style.setProperty('width', '794px', 'important');
                             clonedPrintArea.style.setProperty('max-width', '794px', 'important');
@@ -5200,28 +5164,79 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                         }
                     }
                 });
-                
-                const nomeAlvo = docData.nomeProfissional || docData.nomePaciente;
-                const safeNome = (nomeAlvo || 'Documento').replace(/[^a-zA-Z0-9à-úÀ-Ú_]/g, '_');
-                let safeData = 'Data';
-                if (docData.dataEmissao) {
-                    if (docData.dataEmissao.includes('T')) {
-                        safeData = docData.dataEmissao.split('T')[0];
-                    } else {
-                        safeData = docData.dataEmissao.replace(/\//g, '-');
+
+                const imgData = canvas.toDataURL('image/png');
+
+                const pdf = new jsPDF({
+                    orientation: 'portrait',
+                    unit: 'mm',
+                    format: 'a4'
+                });
+
+                const pageWidth = pdf.internal.pageSize.getWidth();
+                const pageHeight = pdf.internal.pageSize.getHeight();
+                const margin = 8;
+                const printableWidth = pageWidth - margin * 2;
+                const printableHeight = pageHeight - margin * 2;
+
+                let pdfImgHeight = (canvas.height * printableWidth) / canvas.width;
+                let renderWidth = printableWidth;
+
+                if (pdfImgHeight > printableHeight && pdfImgHeight <= printableHeight * 1.15) {
+                    const scaleRatio = printableHeight / pdfImgHeight;
+                    renderWidth = printableWidth * scaleRatio;
+                    pdfImgHeight = printableHeight;
+                    const xOffset = margin + (printableWidth - renderWidth) / 2;
+                    pdf.addImage(imgData, 'PNG', xOffset, margin, renderWidth, pdfImgHeight);
+                } else if (pdfImgHeight <= printableHeight) {
+                    pdf.addImage(imgData, 'PNG', margin, margin, printableWidth, pdfImgHeight);
+                } else {
+                    let heightLeft = pdfImgHeight;
+                    let position = margin;
+
+                    pdf.addImage(imgData, 'PNG', margin, position, printableWidth, pdfImgHeight);
+                    heightLeft -= printableHeight;
+
+                    while (heightLeft > 8) {
+                        position = margin - (pdfImgHeight - heightLeft);
+                        pdf.addPage();
+                        pdf.addImage(imgData, 'PNG', margin, position, printableWidth, pdfImgHeight);
+                        heightLeft -= printableHeight;
                     }
                 }
-                const fileName = `Folha_${safeNome}_${safeData}.pdf`;
 
-                exportCanvasToA4PDF(canvas, fileName);
+                // Geração forçada de um novo Blob limpo e independente de cache
+                const pdfBlob = pdf.output('blob');
 
-                console.log("[FaturaExporter] File downloaded successfully as PDF.");
+                // Nome dinâmico único baseado no número da fatura/documento e timestamp
+                // ex: Fatura_${fatura.numero || 'detalhe'}_${new Date().getTime()}.pdf
+                const numDoc = docData?.numero || docData?.numeroFatura || (docData?.id ? docData.id.substring(0, 8) : 'detalhe');
+                const prefixo = type === 'fatura' ? 'Fatura' : 'Folha';
+                const safeNum = String(numDoc).replace(/[^a-zA-Z0-9_-]/g, '_');
+                const timestamp = new Date().getTime();
+                const fileName = `${prefixo}_${safeNum}_${timestamp}.pdf`;
+
+                // Disparo de download direto no navegador via link <a> temporário com atributo download e URL.createObjectURL(blob), revogando em seguida
+                const blobUrl = URL.createObjectURL(pdfBlob);
+                const tempLink = document.createElement('a');
+                tempLink.href = blobUrl;
+                tempLink.download = fileName;
+                document.body.appendChild(tempLink);
+                tempLink.click();
+                document.body.removeChild(tempLink);
+
+                setTimeout(() => {
+                    URL.revokeObjectURL(blobUrl);
+                }, 1500);
+
+                toast.success(`${type === 'fatura' ? 'Fatura' : 'Folha de pagamento'} em PDF gerada e baixada com sucesso!`, { id: toastId });
+                console.log("[FaturaExporter] File downloaded successfully as fresh Blob PDF:", fileName);
             } catch (err: any) {
-                console.error("Erro na exportação PDF:", err);
-                toast.error("Houve um problema ao gerar o PDF.");
+                console.error("Erro na exportação PDF do modal:", err);
+                toast.error("Houve um problema ao gerar o PDF.", { id: toastId });
             }
         } else {
-            toast.error("Referência do elemento do faturamento não encontrada.");
+            toast.error("Referência do elemento do documento não encontrada.", { id: toastId });
         }
         setLoadingExport(false);
     };
@@ -6114,7 +6129,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                       className="text-[11px] text-[#64748b] font-normal mt-0.5"
                       style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
                     >
-                      Relatório Gerado pelo Sistema RH de Gestão
+                      VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI
                     </p>
                   </div>
 
@@ -6548,8 +6563,8 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                     className="flex items-center justify-between text-[8pt] text-[#94a3b8] mt-4 pt-2 border-t border-[#e2e8f0]"
                     style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
                   >
-                    <span>Relatório Gerado pelo Sistema RH de Gestão</span>
-                    <span>Vallidare - Gestão e Consultoria em Saúde</span>
+                    <span>Documento Oficial • Sistema de Gestão</span>
+                    <span>VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI</span>
                   </div>
                 </div>
               );
@@ -6670,34 +6685,68 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                 : (totalSomaPlantoes - (viewDoc.data.valorTotalDebitos || 0));
 
             return (
-              <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 print:absolute print:inset-0 print:p-0 print:h-auto print:overflow-visible print:bg-white print:z-[999999]">
-                  <div className="bg-white p-6 rounded-2xl w-[860px] max-w-[96vw] max-h-[90vh] overflow-y-auto overflow-x-hidden print:p-0 print:max-h-none print:max-w-none print:w-full print:bg-white print:static print:shadow-none print:rounded-none print:overflow-visible">
-                       <div className="flex justify-between items-center mb-4 print:hidden relative z-20 flex-shrink-0">
-                        <h3 className="font-black text-lg text-slate-800">Visualização de {viewDoc.type === 'fatura' ? 'Fatura' : 'Folha de Pagamento'}</h3>
-                        <div className="flex gap-2 relative z-20 flex-shrink-0">
-                            <GlossyButton 
-                                variant="blue"
-                                className="relative z-20 flex-shrink-0 isolate pointer-events-auto"
-                                onClick={async () => {
-                                    await handleDownloadWordFromCanvas(viewDoc.data, viewDoc.type);
-                                }}
-                                disabled={loadingExport}
-                            >
-                                <FileText size={14} className="inline mr-1" />
-                                {loadingExport ? "Gerando..." : viewDoc.type === 'fatura' ? "Baixar Fatura (PDF)" : "Baixar Folha (PDF)"}
-                            </GlossyButton>
-                            <GlossyButton
-                                variant="gray"
-                                className="relative z-20 flex-shrink-0 isolate pointer-events-auto"
-                                onClick={() => window.print()}
-                                title="Imprimir documento via navegador"
-                            >
-                                <Printer size={14} className="inline mr-1" />
-                                Imprimir
-                            </GlossyButton>
-                            <GlossyButton variant="yellow"
-                                 className="relative z-20 flex-shrink-0 isolate pointer-events-auto"
-                                 onClick={() => {
+              <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 print:static print:inset-auto print:p-0 print:bg-white print:overflow-visible print:z-auto">
+                <style>{`
+                  @media print {
+                    /* Ocultar tudo na página: cabeçalhos, barras laterais, botões do modal e histórico ao fundo */
+                    body * {
+                      visibility: hidden;
+                    }
+                    /* Tornar visível APENAS o container da folha da fatura */
+                    #fatura-print-area, #fatura-print-area *,
+                    #documento-fatura-impressao, #documento-fatura-impressao * {
+                      visibility: visible !important;
+                    }
+                    #fatura-print-area, #documento-fatura-impressao {
+                      position: absolute !important;
+                      left: 0 !important;
+                      top: 0 !important;
+                      width: 100% !important;
+                      margin: 0 !important;
+                      padding: 0 !important;
+                      background: white !important;
+                      box-shadow: none !important;
+                    }
+                    /* Ocultar a barra de botões (Baixar, Imprimir, Fechar) */
+                    .no-print {
+                      display: none !important;
+                    }
+                  }
+                `}</style>
+                <div className="bg-white p-6 rounded-2xl w-[860px] max-w-[96vw] max-h-[90vh] overflow-y-auto overflow-x-hidden print:p-0 print:max-h-none print:max-w-none print:w-full print:bg-white print:static print:shadow-none print:rounded-none print:overflow-visible">
+                  <div className="flex justify-between items-center mb-4 print:hidden relative z-20 flex-shrink-0 no-print">
+                    <h3 className="font-black text-lg text-slate-800">Visualização de {viewDoc.type === 'fatura' ? 'Fatura' : 'Folha de Pagamento'}</h3>
+                    <div className="flex gap-2 relative z-20 flex-shrink-0 no-print">
+                      <GlossyButton 
+                        variant="blue"
+                        className="relative z-20 flex-shrink-0 isolate pointer-events-auto no-print"
+                        onClick={async () => {
+                          await handleDownloadWordFromCanvas(viewDoc.data, viewDoc.type);
+                        }}
+                        disabled={loadingExport}
+                      >
+                        <FileText size={14} className="inline mr-1" />
+                        {loadingExport ? "Gerando..." : viewDoc.type === 'fatura' ? "Baixar Fatura (PDF)" : "Baixar Folha (PDF)"}
+                      </GlossyButton>
+                      <GlossyButton
+                        variant="gray"
+                        className="relative z-20 flex-shrink-0 isolate pointer-events-auto no-print"
+                        onClick={() => {
+                          const docEl = document.getElementById('fatura-print-area') || document.getElementById('documento-fatura-impressao');
+                          if (!docEl) {
+                            toast.error('Elemento do documento da fatura não encontrado para impressão.');
+                            return;
+                          }
+                          window.print();
+                        }}
+                        title="Imprimir documento via navegador"
+                      >
+                        <Printer size={14} className="inline mr-1" />
+                        Imprimir
+                      </GlossyButton>
+                      <GlossyButton variant="yellow"
+                        className="relative z-20 flex-shrink-0 isolate pointer-events-auto no-print"
+                        onClick={() => {
                                      import('xlsx').then(XLSX => {
                                          const rows = plantoesValidos.map((p: any) => {
                                              const valorLinha = calculateRowValue(p, viewDoc.type);
@@ -6782,62 +6831,59 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                                      });
                                  }}
                             >Exportar XLSX</GlossyButton>
-                            <GlossyButton onClick={() => setViewDoc(null)} variant="gray" className="relative z-20 flex-shrink-0 isolate pointer-events-auto">Fechar</GlossyButton>
+                            <GlossyButton onClick={() => setViewDoc(null)} variant="gray" className="relative z-20 flex-shrink-0 isolate pointer-events-auto no-print">Fechar</GlossyButton>
                         </div>
                       </div>
-                      <div 
-                        id="print-area" 
-                        ref={faturaRef} 
-                        className="w-full max-w-[794px] min-h-[1123px] p-8 bg-white text-slate-900 font-sans border border-slate-200 rounded-lg mx-auto shadow-sm print:w-full print:max-w-none print:min-h-0 print:p-0 print:border-none print:shadow-none print:m-0 print:rounded-none flex flex-col justify-between" 
-                        style={{ 
-                          width: '794px', 
-                          maxWidth: '100%', 
-                          boxSizing: 'border-box', 
-                          backgroundColor: '#ffffff', 
-                          color: '#0f172a' 
-                        }}
-                      >
-                        <div>
-                          {/* 1. Cabeçalho Corporativo */}
-                          <div className="doc-header-row flex justify-between items-start border-b-2 border-[#1a3c2e] pb-4 mb-5" style={{ borderBottom: '2px solid #1a3c2e' }}>
-                            <div className="flex items-center gap-4">
-                              {empresa?.logoUrl ? (
+                      <div id="documento-fatura-impressao" className="w-full max-w-[794px] mx-auto">
+                        <div 
+                          id="fatura-print-area" 
+                          ref={faturaRef} 
+                          className="w-full max-w-[794px] min-h-[1123px] p-8 bg-white text-slate-900 font-sans border border-slate-200 rounded-lg mx-auto shadow-sm print:w-full print:max-w-none print:min-h-0 print:p-0 print:border-none print:shadow-none print:m-0 print:rounded-none flex flex-col justify-between" 
+                          style={{ 
+                            width: '794px', 
+                            maxWidth: '100%', 
+                            boxSizing: 'border-box', 
+                            backgroundColor: '#ffffff', 
+                            color: '#0f172a' 
+                          }}
+                        >
+                          <div>
+                            {/* 1. Cabeçalho Corporativo */}
+                            <div className="doc-header-row flex justify-between items-start border-b-2 border-[#1a3c2e] pb-4 mb-5" style={{ borderBottom: '2px solid #1a3c2e' }}>
+                              <div className="flex items-center gap-4">
                                 <img 
-                                  src={empresa.logoUrl} 
+                                  src={empresa?.logoUrl || VALLIDARE_LOGO_BASE64} 
                                   crossOrigin="anonymous" 
-                                  alt="Logo" 
+                                  alt="Logo Vallidare" 
                                   className="h-14 max-h-16 w-auto object-contain max-w-full shrink-0" 
-                                  style={{ imageRendering: '-webkit-optimize-contrast' }} 
+                                  style={{ imageRendering: '-webkit-optimize-contrast', display: 'block' }} 
                                 />
-                              ) : (
-                                <VallidareLogo height={52} className="shrink-0" />
-                              )}
-                              <div>
-                                <h2 className="text-base font-extrabold text-[#1a3c2e] tracking-tight leading-tight" style={{ color: '#1a3c2e', fontFamily: 'Arial, Helvetica, sans-serif' }}>
-                                  {empresa?.razaoSocial && !/VALUDARE|VALLIOARE|EIREU/i.test(empresa.razaoSocial)
-                                    ? empresa.razaoSocial.replace(/\s+/g, ' ').trim()
-                                    : 'VALLIDARE GESTÃO MÉDICA E AUDITORIA EIRELI'}
-                                </h2>
-                                <p className="text-xs text-slate-500 font-semibold mt-0.5" style={{ color: '#64748b', fontFamily: 'Arial, Helvetica, sans-serif' }}>
-                                  CNPJ: {empresa?.cnpj || '27.770.797/0001-62'}
+                                <div>
+                                  <h2 className="text-base font-extrabold text-[#1a3c2e] tracking-tight leading-tight" style={{ color: '#1a3c2e', fontFamily: 'Arial, Helvetica, sans-serif' }}>
+                                    {empresa?.razaoSocial && !/VALUDARE|VALLIOARE|EIREU/i.test(empresa.razaoSocial)
+                                      ? empresa.razaoSocial.replace(/\s+/g, ' ').trim()
+                                      : 'VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI'}
+                                  </h2>
+                                  <p className="text-xs text-slate-500 font-semibold mt-0.5" style={{ color: '#64748b', fontFamily: 'Arial, Helvetica, sans-serif' }}>
+                                    CNPJ: {empresa?.cnpj || '27.770.797/0001-62'}
+                                  </p>
+                                  <p className="text-xs text-slate-500 mt-0.5" style={{ color: '#64748b', fontFamily: 'Arial, Helvetica, sans-serif' }}>
+                                    {empresa?.endereco || 'Rua Martins Ferreira, 71 - Botafogo / Rio de Janeiro'}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <h1 className="text-2xl font-black text-[#1a3c2e] tracking-wide" style={{ color: '#1a3c2e', fontFamily: 'Arial, Helvetica, sans-serif' }}>
+                                  {viewDoc.type === 'fatura' ? 'FATURA' : 'FOLHA DE PAGAMENTO'}
+                                </h1>
+                                <p className="text-xs font-bold text-slate-700 mt-1" style={{ color: '#334155', fontFamily: 'Arial, Helvetica, sans-serif', letterSpacing: 'normal' }}>
+                                  Nº: {viewDoc.data.numeroFatura || (viewDoc.type === 'folha' ? 'FOLHA-' + (viewDoc.data.id ? viewDoc.data.id.substring(0, 6) : '0000') : 'FAT-0000')}
                                 </p>
                                 <p className="text-xs text-slate-500 mt-0.5" style={{ color: '#64748b', fontFamily: 'Arial, Helvetica, sans-serif' }}>
-                                  {empresa?.endereco || 'Rua Martins Ferreira, 71 - Botafogo / Rio de Janeiro'}
+                                  Emissão: {viewDoc.data.dataEmissao ? (viewDoc.data.dataEmissao.includes('T') ? new Date(viewDoc.data.dataEmissao).toLocaleDateString('pt-BR') : viewDoc.data.dataEmissao) : new Date().toLocaleDateString('pt-BR')}
                                 </p>
                               </div>
                             </div>
-                            <div className="text-right shrink-0">
-                              <h1 className="text-2xl font-black text-[#1a3c2e] tracking-wide" style={{ color: '#1a3c2e', fontFamily: 'Arial, Helvetica, sans-serif' }}>
-                                {viewDoc.type === 'fatura' ? 'FATURA' : 'FOLHA DE PAGAMENTO'}
-                              </h1>
-                              <p className="text-xs font-bold text-slate-700 mt-1" style={{ color: '#334155', fontFamily: 'Arial, Helvetica, sans-serif', letterSpacing: 'normal' }}>
-                                Nº: {viewDoc.data.numeroFatura || (viewDoc.type === 'folha' ? 'FOLHA-' + (viewDoc.data.id ? viewDoc.data.id.substring(0, 6) : '0000') : 'FAT-0000')}
-                              </p>
-                              <p className="text-xs text-slate-500 mt-0.5" style={{ color: '#64748b', fontFamily: 'Arial, Helvetica, sans-serif' }}>
-                                Emissão: {viewDoc.data.dataEmissao ? (viewDoc.data.dataEmissao.includes('T') ? new Date(viewDoc.data.dataEmissao).toLocaleDateString('pt-BR') : viewDoc.data.dataEmissao) : new Date().toLocaleDateString('pt-BR')}
-                              </p>
-                            </div>
-                          </div>
 
                           {/* 2. Box de Identificação - Dois Cards Informativos Lado a Lado */}
                           <div className="doc-cards-row flex flex-row gap-3 mb-5 w-full" style={{ display: 'flex', flexDirection: 'row', gap: '12px', width: '100%' }}>
@@ -7085,6 +7131,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                           <span>Página 1 de 1</span>
                         </div>
                       </div>
+                    </div>
                   </div>
               </div>
             );
@@ -7149,7 +7196,7 @@ export const EmpresaDashboard: React.FC = () => {
   const isAdmin = userRole?.toLowerCase() === 'administrador' || user?.email === 'renatobz@gmail.com' || user?.email === 'rhgestaodomiciliar@gmail.com';
 
 
-  const [razaoSocial, setRazaoSocial] = useState('Vallidare - Gestão e Consultoria em Saúde');
+  const [razaoSocial, setRazaoSocial] = useState('VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI');
   const [cnpj, setCnpj] = useState('12.345.678/0001-99');
   const [unidadeOperacao, setUnidadeOperacao] = useState('Rio de Janeiro - RJ (Zona Sul & Barra)');
   const [direcaoGeral, setDirecaoGeral] = useState('Renato B. Z.');

@@ -1,6 +1,6 @@
 # Documentação Técnica: Integração Banco Inter API v3 & Módulo Financeiro
 
-Documentação da arquitetura, fluxo de autenticação mTLS, Cloud Functions e componentes de interface do módulo financeiro da **RH Gestão Domiciliar**.
+Documentação da arquitetura, fluxo de autenticação mTLS, Cloud Functions e componentes de interface do módulo financeiro da **VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI**.
 
 ---
 

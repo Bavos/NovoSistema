@@ -1,6 +1,6 @@
 # Sistema de Gestão Vallidare
 
-Plataforma integrada de **Gestão e Consultoria em Saúde Domiciliar (Home Care)**, desenvolvida para proporcionar controle total sobre as operações clínicas, alocação de equipes, controle de escalas, faturamento, repasse financeiro e inteligência estratégica com estrita conformidade com a LGPD.
+Plataforma integrada de **Gestão Médica e Auditoria (Home Care)**, desenvolvida para proporcionar controle total sobre as operações clínicas, alocação de equipes, controle de escalas, faturamento, repasse financeiro e inteligência estratégica com estrita conformidade com a LGPD.
 
 ---
 
@@ -181,4 +181,4 @@ firebase deploy --only hosting
 
 ## 📄 Licença
 
-Este projeto é de uso restrito e confidencial da **Vallidare Gestão e Consultoria em Saúde**. Todos os direitos reservados.
+Este projeto é de uso restrito e confidencial da **VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI**. Todos os direitos reservados.

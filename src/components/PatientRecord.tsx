@@ -883,7 +883,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       return;
     }
 
-    let empresaNome = 'Vallidare - Gestão e Consultoria em Saúde';
+    let empresaNome = 'VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI';
     let empresaCnpj = '12.345.678/0001-99';
     let empresaEndereco = 'Rua Martins Ferreira, 71';
     try {
@@ -1042,7 +1042,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       return;
     }
 
-    let empresaNome = 'Vallidare - Gestão e Consultoria em Saúde';
+    let empresaNome = 'VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI';
     let empresaCnpj = '12.345.678/0001-99';
     let empresaEndereco = 'Rua Martins Ferreira, 71';
     try {
@@ -2882,7 +2882,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
     const faturaMaisRecente = faturaMaisRecenteRaw as any;
 
-    let empresaNome = 'Vallidare - Gestão e Consultoria em Saúde';
+    let empresaNome = 'VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI';
     let empresaCnpj = '12.345.678/0001-99';
     let empresaEndereco = 'Rua Martins Ferreira, 71';
     try {
@@ -3125,7 +3125,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
     const faturaMaisRecente = faturaMaisRecenteRaw as any;
 
-    let empresaNome = 'Vallidare - Gestão e Consultoria em Saúde';
+    let empresaNome = 'VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI';
     let empresaCnpj = '12.345.678/0001-99';
     let empresaEndereco = 'Rua Martins Ferreira, 71';
     try {
@@ -3445,7 +3445,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       console.warn("Erro ao buscar dados da empresa para PNG, usando fallbacks:", err);
     }
     const fallback = {
-      razaoSocial: 'Vallidare - Gestão e Consultoria em Saúde',
+      razaoSocial: 'VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI',
       cnpj: '12.345.678/0001-99',
       endereco: 'Rua Martins Ferreira, 71',
       logoUrl: ''
@@ -6744,7 +6744,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             </div>
 
             <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
-              Estrutura de dados NoSQL/Firestore homologada para faturamento corporativo no portal Vallidare - Gestão e Consultoria em Saúde.
+              Estrutura de dados NoSQL/Firestore homologada para faturamento corporativo no portal Vallidare - Gestão Médica e Auditoria.
             </p>
 
             <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 overflow-x-auto max-h-80 text-[11px] text-violet-300 leading-relaxed scrollbar-thin">
@@ -8570,7 +8570,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 {/* Cabeçalho da Empresa */}
                 <div className="flex justify-between items-start border-b border-slate-300 pb-4">
                   <div>
-                    <h1 className="text-lg font-black text-slate-905 text-slate-900 tracking-tight uppercase leading-none">VALLIDARE - GESTÃO E CONSULTORIA EM SAÚDE LTDA.</h1>
+                    <h1 className="text-lg font-black text-slate-905 text-slate-900 tracking-tight uppercase leading-none">VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI</h1>
                     <p className="text-[10px] text-slate-500 font-mono mt-1">EMPRESA GESTORA DE SERVIÇOS DE ENFERMAGEM & HOME CARE</p>
                     <p className="text-[9px] text-slate-400 mt-0.5">Rua do Acolhimento, 1000 - Belo Horizonte, MG | Contato: (31) 3333-3333</p>
                   </div>
@@ -8757,7 +8757,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 <div className="grid grid-cols-2 gap-8 pt-8 text-[11px]">
                   <div className="space-y-4 text-center">
                     <p className="border-t border-slate-400 pt-1.5 font-bold uppercase font-sans text-slate-800">
-                      Coordenadoria de Vallidare - Gestão e Consultoria em Saúde S.A.
+                      Coordenadoria de VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI
                     </p>
                     <p className="text-[9px] text-slate-450 text-slate-400 leading-none">Representante Geral Legal Corporativo</p>
                   </div>
@@ -8863,7 +8863,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 {/* Cabeçalho de Identidade Visual da Empresa */}
                 <div className="flex justify-between items-start border-b-2 border-[#b8860b] pb-4">
                   <div>
-                    <h1 className="text-xl font-black text-[#1a3c2e] tracking-tight uppercase leading-none">VALLIDARE - GESTÃO E CONSULTORIA EM SAÚDE</h1>
+                    <h1 className="text-xl font-black text-[#1a3c2e] tracking-tight uppercase leading-none">VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI</h1>
                     <p className="text-[10px] text-slate-500 font-mono mt-1">SISTEMA INTEGRADO DE GESTÃO DE SAÚDE & HOME CARE</p>
                     <p className="text-[9px] text-slate-400 mt-0.5">Gestão de Escalas, Prontuários Médicos e Repasses Financeiros</p>
                   </div>
@@ -9112,7 +9112,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
                 {/* Termo de Veracidade / Encerramento */}
                 <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[9px] text-slate-400 leading-relaxed font-sans text-left mt-4">
-                  O prontuário acima compreende dados confidenciais e de uso clínico estrito da coordenadoria do Vallidare - Gestão e Consultoria em Saúde Ltda. em conformidade com as diretivas do CFM (Conselho Federal de Medicina), COFEN e a Lei Geral de Proteção de Dados (LGPD). É de inteira obrigação das partes a confidencialidade e zelo no arquivamento deste registro impresso.
+                  O prontuário acima compreende dados confidenciais e de uso clínico estrito da coordenadoria de VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI em conformidade com as diretivas do CFM (Conselho Federal de Medicina), COFEN e a Lei Geral de Proteção de Dados (LGPD). É de inteira obrigação das partes a confidencialidade e zelo no arquivamento deste registro impresso.
                 </div>
 
               </div>

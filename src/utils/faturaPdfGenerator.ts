@@ -223,7 +223,7 @@ export const exportFaturaPDF = async (faturaData: any, empresaInfo?: any): Promi
   doc.setTextColor(30, 41, 59); // #1e293b
   const razaoSocialEmpresa = (empresaInfo?.razaoSocial && !/VALUDARE|VALLIOARE|EIREU/i.test(empresaInfo.razaoSocial))
     ? empresaInfo.razaoSocial.replace(/\s+/g, ' ').trim()
-    : 'Vallidare Gestão Médica e Auditoria EIRELI';
+    : 'VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI';
   doc.text(razaoSocialEmpresa, marginX, 18);
 
   const cnpjEmpresa = empresaInfo?.cnpj || '27.770.797/0001-62';
@@ -438,7 +438,7 @@ export const exportFaturaPDF = async (faturaData: any, empresaInfo?: any): Promi
   // =========================================================================
   // 4. RODAPÉ
   // =========================================================================
-  // Documento gerado pelo Sistema RH de Gestão • Página 1 de 1 (Cinza claro, 8pt, centralizado no fim da página)
+  // VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI • Página 1 de 1 (Cinza claro, 8pt, centralizado no fim da página)
   const totalPages = doc.getNumberOfPages();
   for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i);
@@ -446,17 +446,17 @@ export const exportFaturaPDF = async (faturaData: any, empresaInfo?: any): Promi
     doc.setFontSize(8);
     doc.setTextColor(156, 163, 175); // Cinza claro #9ca3af
     doc.text(
-      `Documento gerado pelo Sistema RH de Gestão • Página ${i} de ${totalPages}`,
+      `VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI • Página ${i} de ${totalPages}`,
       pageWidth / 2,
       288,
       { align: 'center' }
     );
   }
 
-  // Nome do arquivo padronizado
-  const safeNome = nomePaciente.replace(/[^a-zA-Z0-9à-úÀ-Ú_]/g, '_');
-  const safeData = dataEmissao.replace(/\//g, '-');
-  const fileName = `Fatura_${safeNome}_${safeData}.pdf`;
+  // Nome dinâmico sem conflitos de cache baseado no número da fatura e timestamp
+  const numDoc = faturaData.numero || faturaData.numeroFatura || (faturaData.id ? String(faturaData.id).substring(0, 8) : 'detalhe');
+  const safeNum = String(numDoc).replace(/[^a-zA-Z0-9_-]/g, '_');
+  const fileName = `Fatura_${safeNum}_${new Date().getTime()}.pdf`;
 
   doc.save(fileName);
   return doc;
@@ -487,7 +487,7 @@ export const exportHistoricoFaturasPDF = async (faturasList: any[], empresaInfo?
   doc.setTextColor(26, 60, 46); // #1a3c2e
   const razaoSocialEmpresa = (empresaInfo?.razaoSocial && !/VALUDARE|VALLIOARE|EIREU/i.test(empresaInfo.razaoSocial))
     ? empresaInfo.razaoSocial.replace(/\s+/g, ' ').trim()
-    : 'VALLIDARE GESTÃO MÉDICA E AUDITORIA EIRELI';
+    : 'VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI';
   doc.text(razaoSocialEmpresa.toUpperCase(), marginX, 18);
 
   const cnpjEmpresa = empresaInfo?.cnpj || '27.770.797/0001-62';
@@ -610,7 +610,7 @@ export const exportHistoricoFaturasPDF = async (faturasList: any[], empresaInfo?
     doc.setFontSize(8);
     doc.setTextColor(156, 163, 175); // #9ca3af
     doc.text(
-      `Relatório Gerado pelo Sistema RH de Gestão • Página ${i} de ${totalPages}`,
+      `VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI • Página ${i} de ${totalPages}`,
       pageWidth / 2,
       288,
       { align: 'center' }

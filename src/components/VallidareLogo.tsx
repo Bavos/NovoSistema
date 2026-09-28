@@ -75,7 +75,7 @@ export const VallidareLogo: React.FC<VallidareLogoProps> = ({
             className="font-semibold text-[#64748b] tracking-widest uppercase mt-1 leading-none"
             style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontSize: '7.5px', letterSpacing: '0.15em' }}
           >
-            GESTÃO E CONSULTORIA EM SAÚDE
+            GESTÃO MÉDICA E AUDITORIA
           </span>
         </div>
       )}

@@ -48,16 +48,32 @@ body {
   }
 
   /* Isolate print area and make it and its descendants visible */
+  #fatura-print-area, #fatura-print-area *,
+  #documento-fatura-impressao, #documento-fatura-impressao *,
   #print-area, #print-area *,
   #printable-area, #printable-area *,
-  #print-prontuario-area, #print-prontuario-area *,
-  #escalas-dashboard, #escalas-dashboard *,
-  #financeiro-dashboard, #financeiro-dashboard * {
+  #print-prontuario-area, #print-prontuario-area * {
     visibility: visible !important;
   }
 
+  /* When an isolated modal document is being printed, hide any underlying dashboards */
+  body:not(:has(#documento-fatura-impressao, #fatura-print-area)) #escalas-dashboard,
+  body:not(:has(#documento-fatura-impressao, #fatura-print-area)) #escalas-dashboard *,
+  body:not(:has(#documento-fatura-impressao, #fatura-print-area)) #financeiro-dashboard,
+  body:not(:has(#documento-fatura-impressao, #fatura-print-area)) #financeiro-dashboard * {
+    visibility: visible !important;
+  }
+
+  body:has(#documento-fatura-impressao, #fatura-print-area) #financeiro-dashboard,
+  body:has(#documento-fatura-impressao, #fatura-print-area) #financeiro-dashboard *,
+  body:has(#documento-fatura-impressao, #fatura-print-area) #escalas-dashboard,
+  body:has(#documento-fatura-impressao, #fatura-print-area) #escalas-dashboard * {
+    visibility: hidden !important;
+    display: none !important;
+  }
+
   /* Precision position of the printed document on the physical sheet */
-  #print-area, #printable-area, #print-prontuario-area, #escalas-dashboard, #financeiro-dashboard {
+  #fatura-print-area, #documento-fatura-impressao, #print-area, #printable-area, #print-prontuario-area {
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;
@@ -73,6 +89,12 @@ body {
     z-index: 9999999 !important;
     overflow: visible !important;
     box-sizing: border-box !important;
+  }
+
+  /* Hide any element with no-print during print */
+  .no-print, .no-print * {
+    display: none !important;
+    visibility: hidden !important;
   }
 
   /* Explicitly remove display of anything marked with print:hidden */

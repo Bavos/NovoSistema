@@ -1,4 +1,4 @@
-# Guia de Padrões, Regras e UI — RH Gestão Domiciliar
+# Guia de Padrões, Regras e UI — Vallidare - Gestão Médica e Auditoria
 
 ## 1. Identidade Visual e Barra Operacional (PatientRecord)
 A barra de controles no prontuário do paciente é dividida em dois níveis de ação com botões arredondados (`rounded-lg`), elevação suave no hover e microinterações:

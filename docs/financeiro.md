@@ -1,6 +1,6 @@
-# Arquitetura do Módulo Financeiro - RH Gestão Domiciliar
+# Arquitetura do Módulo Financeiro - Vallidare - Gestão Médica e Auditoria
 
-Este documento descreve a arquitetura atual do módulo financeiro da aplicação **RH Gestão Domiciliar**, detalha o funcionamento interno e consumo de dados no componente `SimulatedDashboards.tsx`, e apresenta o roteiro técnico para a transição completa de um modelo híbrido/simulado para um fluxo 100% real baseado no **Cloud Firestore** e **Cloud Functions**, mantendo rigorosamente as políticas de controle de acesso (RBAC) e segurança médica e bancária.
+Este documento descreve a arquitetura atual do módulo financeiro da aplicação **VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI**, detalha o funcionamento interno e consumo de dados no componente `SimulatedDashboards.tsx`, e apresenta o roteiro técnico para a transição completa de um modelo híbrido/simulado para um fluxo 100% real baseado no **Cloud Firestore** e **Cloud Functions**, mantendo rigorosamente as políticas de controle de acesso (RBAC) e segurança médica e bancária.
 
 ---
 

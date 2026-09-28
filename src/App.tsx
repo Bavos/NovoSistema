@@ -155,7 +155,7 @@ const AccessDeniedView: React.FC = () => (
     </p>
     <div className="pt-2">
       <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest font-bold text-[#b8860b] bg-[#fdfaf2] border border-[#f5ebcf] px-3.5 py-1.5 rounded-full select-none shadow-xs font-mono">
-        🛡️ Segurança Sistêmica Vallidare - Gestão e Consultoria em Saúde
+        🛡️ Segurança Sistêmica Vallidare - Gestão Médica e Auditoria
       </span>
     </div>
   </div>
@@ -289,7 +289,7 @@ function DashboardContent() {
 
   // Manter o título da aba do navegador padronizado
   useEffect(() => {
-    document.title = 'Vallidare - Gestão e Consultoria em Saúde';
+    document.title = 'Vallidare - Gestão Médica e Auditoria';
   }, []);
 
   const currentUserProfile = (usuariosSistema || []).find(u => {
@@ -336,7 +336,7 @@ function DashboardContent() {
     if (activeSidebarTab === 'financeiro') return 'Financeiro';
     if (activeSidebarTab === 'usuarios') return 'Gestão de Usuários';
     if (activeSidebarTab === 'empresa') return 'Informações Gerais';
-    return 'Vallidare - Gestão e Consultoria em Saúde';
+    return 'Vallidare - Gestão Médica e Auditoria';
   };
 
   if (loading) {

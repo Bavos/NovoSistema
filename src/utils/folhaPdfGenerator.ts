@@ -179,7 +179,7 @@ export const exportFolhaPDF = async (folhaData: any, empresaInfo?: any): Promise
   doc.setTextColor(30, 41, 59); // #1e293b
   const razaoSocialEmpresa = (empresaInfo?.razaoSocial && !/VALUDARE|VALLIOARE|EIREU/i.test(empresaInfo.razaoSocial))
     ? empresaInfo.razaoSocial.replace(/\s+/g, ' ').trim()
-    : 'Vallidare Gestão Médica e Auditoria EIRELI';
+    : 'VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI';
   doc.text(razaoSocialEmpresa, marginX, 18);
 
   const cnpjEmpresa = empresaInfo?.cnpj || '27.770.797/0001-62';
@@ -448,7 +448,7 @@ export const exportFolhaPDF = async (folhaData: any, empresaInfo?: any): Promise
   // =========================================================================
   // 4. RODAPÉ
   // =========================================================================
-  // Centralizado no final da página: Documento gerado pelo Sistema RH de Gestão • Página X de Y (Cinza, 8pt)
+  // Centralizado no final da página: VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI • Página X de Y (Cinza, 8pt)
   const totalPages = doc.getNumberOfPages();
   for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i);
@@ -456,7 +456,7 @@ export const exportFolhaPDF = async (folhaData: any, empresaInfo?: any): Promise
     doc.setFontSize(8);
     doc.setTextColor(156, 163, 175); // Cinza claro #9ca3af
     doc.text(
-      `Documento gerado pelo Sistema RH de Gestão • Página ${i} de ${totalPages}`,
+      `VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI • Página ${i} de ${totalPages}`,
       pageWidth / 2,
       288,
       { align: 'center' }

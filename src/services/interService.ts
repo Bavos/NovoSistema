@@ -188,7 +188,7 @@ function gerarBoletoMock(params: GerarBoletoInterParams): BoletoInterResponse {
   const cleanSeuNum = params.seuNumero.replace(/\D/g, '').padEnd(10, '0').slice(0, 10);
   const linhaDigitavel = `07791.00012 01234.567890 ${cleanSeuNum} 1 9876${valCentavos}`;
   const codigoBarra = `0779198760000${valCentavos}0001201234567890`;
-  const pixCopiaECola = `00020126580014br.gov.bcb.pix0136${params.seuNumero}-inter520400005303986540${params.valorNominal.toFixed(2)}5802BR5915${(params.pagador.nome || 'RHGESTAO').slice(0, 15).toUpperCase()}6009SAO PAULO62070503***6304E2CA`;
+  const pixCopiaECola = `00020126580014br.gov.bcb.pix0136${params.seuNumero}-inter520400005303986540${params.valorNominal.toFixed(2)}5802BR5915${(params.pagador.nome || 'VALLIDARE').slice(0, 15).toUpperCase()}6009SAO PAULO62070503***6304E2CA`;
 
   return {
     sucesso: true,

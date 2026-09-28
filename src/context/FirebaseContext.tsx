@@ -2363,7 +2363,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       
       await setDoc(doc(db, 'configuracoes_empresa', 'empresa'), {
         id: 'empresa',
-        razaoSocial: 'Vallidare - Gestão e Consultoria em Saúde',
+        razaoSocial: 'VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI',
         cnpj: '12.345.678/0001-99',
         endereco: 'Avenida Atlântica, 1720, Copacabana, Rio de Janeiro - RJ',
         logoUrl: '',
