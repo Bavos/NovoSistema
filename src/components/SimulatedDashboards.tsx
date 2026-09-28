@@ -5205,32 +5205,50 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                     }
                 }
 
-                // Geração forçada de um novo Blob limpo e independente de cache
-                const pdfBlob = pdf.output('blob');
+                // Nomenclatura automática padronizada: [TipoDocumento]_[NomeDoPaciente]_[Data].pdf
+                // Exemplo pretendido: Fatura_Marilda_Silva_de_Albuquerque_28-09-2026.pdf
+                const rawNome = type === 'fatura'
+                    ? (docData?.nomePaciente || docData?.paciente || docData?.pacienteNome || 'Paciente')
+                    : (docData?.nomeProfissional || docData?.profissional || docData?.profissionalNome || 'Profissional');
 
-                // Nome dinâmico único baseado no número da fatura/documento e timestamp
-                // ex: Fatura_${fatura.numero || 'detalhe'}_${new Date().getTime()}.pdf
-                const numDoc = docData?.numero || docData?.numeroFatura || (docData?.id ? docData.id.substring(0, 8) : 'detalhe');
+                const nomeSanitizado = String(rawNome)
+                    .normalize('NFD')
+                    .replace(/[\u0300-\u036f]/g, '')
+                    .replace(/[^a-zA-Z0-9_\s-]/g, '')
+                    .trim()
+                    .replace(/\s+/g, '_') || (type === 'fatura' ? 'Paciente' : 'Profissional');
+
+                const rawDate = docData?.dataEmissao;
+                let dataFormatada = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+                if (rawDate) {
+                    if (typeof rawDate === 'object' && typeof rawDate.toDate === 'function') {
+                        const d = rawDate.toDate();
+                        const dd = String(d.getDate()).padStart(2, '0');
+                        const mm = String(d.getMonth() + 1).padStart(2, '0');
+                        const yyyy = d.getFullYear();
+                        dataFormatada = `${dd}-${mm}-${yyyy}`;
+                    } else {
+                        const str = String(rawDate).trim();
+                        const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+                        if (isoMatch) {
+                            dataFormatada = `${isoMatch[3]}-${isoMatch[2]}-${isoMatch[1]}`;
+                        } else {
+                            const brMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+                            if (brMatch) {
+                                dataFormatada = `${brMatch[1].padStart(2, '0')}-${brMatch[2].padStart(2, '0')}-${brMatch[3]}`;
+                            }
+                        }
+                    }
+                }
+
                 const prefixo = type === 'fatura' ? 'Fatura' : 'Folha';
-                const safeNum = String(numDoc).replace(/[^a-zA-Z0-9_-]/g, '_');
-                const timestamp = new Date().getTime();
-                const fileName = `${prefixo}_${safeNum}_${timestamp}.pdf`;
+                const fileName = `${prefixo}_${nomeSanitizado}_${dataFormatada}.pdf`;
 
-                // Disparo de download direto no navegador via link <a> temporário com atributo download e URL.createObjectURL(blob), revogando em seguida
-                const blobUrl = URL.createObjectURL(pdfBlob);
-                const tempLink = document.createElement('a');
-                tempLink.href = blobUrl;
-                tempLink.download = fileName;
-                document.body.appendChild(tempLink);
-                tempLink.click();
-                document.body.removeChild(tempLink);
-
-                setTimeout(() => {
-                    URL.revokeObjectURL(blobUrl);
-                }, 1500);
+                // Salva o PDF com o nome padronizado
+                pdf.save(fileName);
 
                 toast.success(`${type === 'fatura' ? 'Fatura' : 'Folha de pagamento'} em PDF gerada e baixada com sucesso!`, { id: toastId });
-                console.log("[FaturaExporter] File downloaded successfully as fresh Blob PDF:", fileName);
+                console.log("[FaturaExporter] File downloaded successfully as PDF:", fileName);
             } catch (err: any) {
                 console.error("Erro na exportação PDF do modal:", err);
                 toast.error("Houve um problema ao gerar o PDF.", { id: toastId });

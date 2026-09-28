@@ -453,10 +453,29 @@ export const exportFaturaPDF = async (faturaData: any, empresaInfo?: any): Promi
     );
   }
 
-  // Nome dinâmico sem conflitos de cache baseado no número da fatura e timestamp
-  const numDoc = faturaData.numero || faturaData.numeroFatura || (faturaData.id ? String(faturaData.id).substring(0, 8) : 'detalhe');
-  const safeNum = String(numDoc).replace(/[^a-zA-Z0-9_-]/g, '_');
-  const fileName = `Fatura_${safeNum}_${new Date().getTime()}.pdf`;
+  // Nomenclatura automática padronizada: [TipoDocumento]_[NomeDoPaciente]_[Data].pdf
+  // Ex: Fatura_Marilda_Silva_de_Albuquerque_28-09-2026.pdf
+  const rawPaciente = faturaData.paciente || faturaData.pacienteNome || faturaData.nomePaciente || 'Paciente';
+  const nomeSanitizado = String(rawPaciente)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9_\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '_') || 'Paciente';
+
+  let dataFormatada = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+  if (dataEmissao) {
+    if (dataEmissao.includes('/')) {
+      dataFormatada = dataEmissao.replace(/\//g, '-');
+    } else if (dataEmissao.includes('-')) {
+      const parts = dataEmissao.split('-');
+      if (parts.length === 3) {
+        dataFormatada = `${parts[2]}-${parts[1]}-${parts[0]}`;
+      }
+    }
+  }
+
+  const fileName = `Fatura_${nomeSanitizado}_${dataFormatada}.pdf`;
 
   doc.save(fileName);
   return doc;
