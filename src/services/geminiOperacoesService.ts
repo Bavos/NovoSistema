@@ -18,8 +18,53 @@ export interface ResumoFinanceiroItem {
   quantidadePlantoes?: number;
 }
 
+export interface MetricasExatas {
+  total: number;
+  preenchidas: number;
+  vagas: number;
+  curingas: number;
+  pacientesAtivosTotal?: number;
+}
+
+export interface AlertaCritico {
+  tipo: "ESCALA_VAGA" | "CURINGA_EXCESSIVO" | string;
+  pacienteId: string;
+  pacienteNome?: string;
+  data: string;
+  turno: string;
+  profissionalId?: string;
+  motivo?: string;
+}
+
+export interface PadroesDetectados {
+  diaComMaisCuringas?: string;
+  totalNoDia?: number;
+  escalasFimDeSemana?: any;
+  curingasPorProfissional?: Record<string, number>;
+  curingasPorPaciente?: Record<string, number>;
+  [key: string]: any;
+}
+
+export interface MetricasAuditadas {
+  totalEscalasMes: number;
+  concluidas: number;
+  vagas: number;
+  curingas: number;
+  pacientesAtivosTotal: number;
+}
+
 export interface MetricasConsolidadasInput {
+  periodo?: string;
   periodoReferencia?: string;
+  metricasExatas?: MetricasExatas;
+  alertasCriticos?: AlertaCritico[];
+  padroesDetectados?: PadroesDetectados;
+  metricasAuditadas?: MetricasAuditadas;
+  totalEscalasMes?: number;
+  concluidas?: number;
+  vagas?: number;
+  curingas?: number;
+  pacientesAtivosTotal?: number;
   resumoFinanceiro?: ResumoFinanceiroItem[];
   resumoGeral?: any;
   escalasPorDiaSemana?: any;
@@ -30,6 +75,8 @@ export interface MetricasConsolidadasInput {
   pacientes: any[];
   profissionais: any[];
   escalas: any[];
+  escalasVagas?: any[];
+  plantoesCuringa?: any[];
   debitosProfissionais?: any[];
   faturasPacientes?: any[];
   folhasPagamento?: any[];
@@ -242,18 +289,73 @@ export function sanitizarPayloadAntesDeEnviar(dados: MetricasConsolidadasInput) 
     });
   });
 
+  const metricasAuditadas = dados.metricasAuditadas || {
+    totalEscalasMes: dados.totalEscalasMes ?? dados.metricasExatas?.total ?? dados.resumoGeral?.totalEscalas ?? escalasLimpas.length,
+    concluidas: dados.concluidas ?? dados.metricasExatas?.preenchidas ?? dados.gargalosEscala?.escalasCompletasTotal ?? escalasLimpas.filter(e => e.statusAlocacao === 'completa').length,
+    vagas: dados.vagas ?? dados.metricasExatas?.vagas ?? dados.gargalosEscala?.escalasVagasTotal ?? escalasLimpas.filter(e => e.statusAlocacao !== 'completa').length,
+    curingas: dados.curingas ?? dados.metricasExatas?.curingas ?? dados.estatisticasCuringas?.total ?? escalasLimpas.filter(e => e.curinga).length,
+    pacientesAtivosTotal: dados.pacientesAtivosTotal ?? dados.metricasExatas?.pacientesAtivosTotal ?? dados.resumoGeral?.totalPacientes ?? pacientesLimpos.length
+  };
+
+  const metricasExatas: MetricasExatas = dados.metricasExatas || {
+    total: metricasAuditadas.totalEscalasMes,
+    preenchidas: metricasAuditadas.concluidas,
+    vagas: metricasAuditadas.vagas,
+    curingas: metricasAuditadas.curingas,
+    pacientesAtivosTotal: metricasAuditadas.pacientesAtivosTotal
+  };
+
+  const alertasCriticosLimpos = Array.isArray(dados.alertasCriticos)
+    ? dados.alertasCriticos.map(a => ({
+        tipo: a.tipo || "ESCALA_VAGA",
+        pacienteId: getAnonPacId(a.pacienteId, a.pacienteNome),
+        data: a.data || "N/D",
+        turno: a.turno || "12h Diurno",
+        profissionalId: a.profissionalId ? getAnonProfId(a.profissionalId) : undefined,
+        motivo: a.motivo
+      }))
+    : [];
+
+  const padroesDetectados = dados.padroesDetectados || {};
+
   return {
-    periodoReferencia: dados.periodoReferencia,
+    periodo: dados.periodo || dados.periodoReferencia || 'Setembro/2026',
+    periodoReferencia: dados.periodoReferencia || dados.periodo || 'Setembro/2026',
+    metricasExatas,
+    alertasCriticos: alertasCriticosLimpos,
+    padroesDetectados,
+    metricasAuditadas,
+    totalEscalasMes: metricasAuditadas.totalEscalasMes,
+    concluidas: metricasAuditadas.concluidas,
+    vagas: metricasAuditadas.vagas,
+    curingas: metricasAuditadas.curingas,
+    pacientesAtivosTotal: metricasAuditadas.pacientesAtivosTotal,
     resumoFinanceiro: dados.resumoFinanceiro,
-    resumoGeral: dados.resumoGeral,
+    resumoGeral: {
+      ...(dados.resumoGeral || {}),
+      totalPacientes: metricasAuditadas.pacientesAtivosTotal,
+      totalEscalas: metricasAuditadas.totalEscalasMes
+    },
     escalasPorDiaSemana: dados.escalasPorDiaSemana,
     escalasFimDeSemana: dados.escalasFimDeSemana,
-    gargalosEscala: dados.gargalosEscala,
-    estatisticasCuringas: dados.estatisticasCuringas,
+    gargalosEscala: {
+      ...(dados.gargalosEscala || {}),
+      escalasCompletasTotal: metricasAuditadas.concluidas,
+      escalasVagasTotal: metricasAuditadas.vagas,
+      taxaOcupacaoPercentual: metricasAuditadas.totalEscalasMes > 0 
+        ? Number(((metricasAuditadas.concluidas / metricasAuditadas.totalEscalasMes) * 100).toFixed(1)) 
+        : 100
+    },
+    estatisticasCuringas: {
+      ...(dados.estatisticasCuringas || {}),
+      total: metricasAuditadas.curingas
+    },
     financeiroConsolidado: dados.financeiroConsolidado,
-    pacientes: pacientesLimpos.slice(0, 30),
-    profissionais: profissionaisLimpos.slice(0, 30),
-    escalas: escalasLimpas.slice(0, 60),
+    pacientes: pacientesLimpos.slice(0, 25),
+    profissionais: profissionaisLimpos.slice(0, 25),
+    escalas: escalasLimpas.slice(0, 50),
+    escalasVagas: dados.escalasVagas || escalasLimpas.filter(e => e.statusAlocacao !== 'completa'),
+    plantoesCuringa: dados.plantoesCuringa || escalasLimpas.filter(e => e.curinga),
     financeiro: lancamentosAnonimizados.slice(0, 30),
     totaisConsolidados: dados.totaisConsolidados,
     user: dados.user

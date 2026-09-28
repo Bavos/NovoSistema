@@ -20,13 +20,122 @@ import {
   ChevronDown
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useFirebase } from '../context/FirebaseContext';
 import { consultarAssistenteOperacional } from '../services/geminiOperacoesService';
 import { db } from '../lib/firebase';
 import { collection, query, limit, getDocs, getDoc, doc } from 'firebase/firestore';
-import { Profissional, Paciente } from '../types';
+import { Profissional, Paciente, Agendamento } from '../types';
 
 const NOMES_DIAS_SEMANA_COMPLETOS = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+
+/**
+ * Normaliza e extrai data ISO YYYY-MM-DD
+ */
+function parseDataIso(dateVal: any): string | null {
+  if (!dateVal) return null;
+  if (typeof dateVal === 'string') {
+    const s = dateVal.trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
+    const brMatch = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (brMatch) {
+      return `${brMatch[3]}-${brMatch[2].padStart(2, '0')}-${brMatch[1].padStart(2, '0')}`;
+    }
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+  } else if (dateVal instanceof Date) {
+    return dateVal.toISOString().split('T')[0];
+  } else if (dateVal?.toDate && typeof dateVal.toDate === 'function') {
+    return dateVal.toDate().toISOString().split('T')[0];
+  } else if (dateVal?.seconds) {
+    return new Date(dateVal.seconds * 1000).toISOString().split('T')[0];
+  }
+  return null;
+}
+
+/**
+ * Verifica se a data da escala pertence ao intervalo (ex: Setembro/2026 = 01/09/2026 até 30/09/2026)
+ */
+function pertenceAoIntervalo(dateVal: any, dataInicioIso: string = '2026-09-01', dataFimIso: string = '2026-09-30'): boolean {
+  const iso = parseDataIso(dateVal);
+  if (!iso) return false;
+  return iso >= dataInicioIso && iso <= dataFimIso;
+}
+
+/**
+ * Classificação estrita de escalas:
+ * - Concluída/Alocada: escala com ID ou nome de profissional preenchido
+ */
+function isEscalaAlocada(e: any): boolean {
+  if (!e) return false;
+  const profId = String(e.idProfissional || e.profissionalId || e.cuidadorId || e.funcionarioId || '').trim();
+  const profNome = String(e.nomeProfissional || e.profissionalNome || e.nomeCuidador || e.nomeFuncionario || e.profissional || '').trim();
+  const statusStr = String(e.status || '').toLowerCase().trim();
+
+  // Escala sem profissional ou explicitamente em aberto
+  if (statusStr === 'aberto' || statusStr === 'aberta' || statusStr === 'pendente') {
+    if (!profId && !profNome) return false;
+  }
+  if (
+    profId.toLowerCase() === 'não_alocado' || 
+    profId.toLowerCase() === 'vago' || 
+    profId.toLowerCase() === 'sem_profissional' ||
+    profId.toLowerCase() === 'pendente'
+  ) {
+    return false;
+  }
+  if (
+    profNome.toLowerCase().includes('não_alocado') ||
+    profNome.toLowerCase().includes('não alocado') || 
+    profNome.toLowerCase().includes('sem profissional') || 
+    profNome.toLowerCase().includes('vago') || 
+    profNome.toLowerCase().includes('vaga') ||
+    profNome.toLowerCase().includes('pendente')
+  ) {
+    return false;
+  }
+  return Boolean(profId || profNome);
+}
+
+/**
+ * - Vaga/Em Aberto: escala sem profissional atribuído ou com status "aberto"/"pendente"
+ */
+function isEscalaVaga(e: any): boolean {
+  return !isEscalaAlocada(e);
+}
+
+/**
+ * - Curinga: escalas com flag curinga: true
+ */
+function isEscalaCuringa(e: any): boolean {
+  if (!e) return false;
+  return Boolean(
+    e.curinga === true ||
+    e.isCuringa === true ||
+    (e.tipoEscala && String(e.tipoEscala).toLowerCase().includes('curinga')) ||
+    (e.observacao && String(e.observacao).toUpperCase().includes('CURINGA')) ||
+    (e.motivoFalta && String(e.motivoFalta).toUpperCase().includes('CURINGA')) ||
+    (e.motivo && String(e.motivo).toUpperCase().includes('CURINGA'))
+  );
+}
+
+/**
+ * Higieniza tabelas Markdown que possam ter vindo concatenadas em linha única (ex: | Métrica | Valor || :--- |)
+ */
+function normalizarMarkdownTabelas(texto: string): string {
+  if (!texto) return '';
+
+  // Substitui sequências grudadas '||' por '|\n|' para que o parser GFM divida as linhas da tabela
+  let formatado = texto.replace(/\|\|+/g, '|\n|');
+
+  // Quebra caso haja colunas seguidas de cabeçalho grudado '| ... | | :--- |'
+  formatado = formatado.replace(/\|\s+(\|\s*:?-+:?)/g, '|\n$1');
+
+  // Garante que o bloco de tabela seja isolado por linhas em branco
+  formatado = formatado.replace(/([^\n])\n(\|.+\|)\n([^\n])/g, '$1\n\n$2\n\n$3');
+
+  return formatado;
+}
 
 function extrairDataIsoEDiaSemana(dateVal: any): { data: string; diaSemana: string } {
   if (!dateVal) return { data: 'N/D', diaSemana: 'N/D' };
@@ -447,6 +556,73 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
   const [copiadoId, setCopiadoId] = useState<string | null>(null);
   const [dropdownAberto, setDropdownAberto] = useState(false);
 
+  // Carregamento de TODOS os pacientes e TODAS as escalas ativas vinculadas à empresa (sem restrição ou filtro de seleção única)
+  const [todosPacientes, setTodosPacientes] = useState<Paciente[]>([]);
+  const [todasEscalas, setTodasEscalas] = useState<Agendamento[]>([]);
+  const [carregandoBase, setCarregandoBase] = useState<boolean>(true);
+
+  useEffect(() => {
+    let ativo = true;
+
+    async function sincronizarBaseCompleta() {
+      try {
+        setCarregandoBase(true);
+        // 1. Carregar TODOS os pacientes vinculados à empresa sem limites artificiais
+        let listaPac: Paciente[] = [];
+        try {
+          const snapPacs = await getDocs(collection(db, 'pacientes'));
+          snapPacs.forEach(d => {
+            listaPac.push({ ...d.data(), id: d.id } as Paciente);
+          });
+        } catch (e) {
+          console.warn('[AnaliseInteligente] Aviso ao buscar pacientes do Firestore:', e);
+        }
+
+        if (listaPac.length === 0 && pacientes.length > 0) {
+          listaPac = [...pacientes];
+        }
+
+        // 2. Carregar TODAS as escalas da empresa
+        let listaAgs: Agendamento[] = [];
+        try {
+          const snapAgs = await getDocs(collection(db, 'agendamentos'));
+          snapAgs.forEach(d => {
+            listaAgs.push({ ...d.data(), id: d.id } as Agendamento);
+          });
+        } catch (e) {
+          console.warn('[AnaliseInteligente] Aviso ao buscar agendamentos do Firestore:', e);
+        }
+
+        if (listaAgs.length === 0 && agendamentos.length > 0) {
+          listaAgs = [...agendamentos];
+        }
+
+        if (ativo) {
+          if (listaPac.length > 0) setTodosPacientes(listaPac);
+          if (listaAgs.length > 0) setTodasEscalas(listaAgs);
+        }
+      } catch (err) {
+        console.error('[AnaliseInteligente] Erro ao sincronizar base completa:', err);
+      } finally {
+        if (ativo) setCarregandoBase(false);
+      }
+    }
+
+    sincronizarBaseCompleta();
+    return () => { ativo = false; };
+  }, [pacientes, agendamentos]);
+
+  const listaPacientesEfetiva = useMemo(() => {
+    // Garante que toda a base de pacientes ativos seja considerada, sem limites artificiais
+    if (todosPacientes.length > 0) return todosPacientes;
+    return pacientes || [];
+  }, [todosPacientes, pacientes]);
+
+  const listaEscalasEfetiva = useMemo(() => {
+    if (todasEscalas.length > 0) return todasEscalas;
+    return agendamentos || [];
+  }, [todasEscalas, agendamentos]);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mensagensEndRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -475,12 +651,29 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
 
   // Cálculos prévios das métricas operacionais para transparência e contexto
   const metricasSumarizadas = useMemo(() => {
-    const totalPac = pacientes.length;
-    const pacAtivos = pacientes.filter(p => (p.status || '').toLowerCase() === 'ativo').length;
+    // 1. Pacientes ativos vinculados à empresa
+    const pacsAtivosList = listaPacientesEfetiva.filter(p => {
+      const st = String(p.status || 'Ativo').toLowerCase().trim();
+      return st !== 'inativo' && st !== 'desativado' && st !== 'cancelado';
+    });
+    const totalPac = listaPacientesEfetiva.length;
+    const pacAtivos = pacsAtivosList.length > 0 ? pacsAtivosList.length : totalPac;
+
+    // 2. Profissionais
     const totalProf = profissionais.length;
     const profAtivos = profissionais.filter(p => (p.status || '').toLowerCase() !== 'inativo').length;
-    const totalEsc = agendamentos.length;
-    const escalasSemAlocacao = agendamentos.filter(a => !a.idProfissional && !a.nomeProfissional).length;
+
+    // 3. Escalas do Mês Corrente (Setembro/2026: 01/09/2026 até 30/09/2026)
+    const escalasSetembro = listaEscalasEfetiva.filter(e => {
+      const dataVal = e.data || (e as any).dataInicio || (e as any).dataPrevista;
+      return pertenceAoIntervalo(dataVal, '2026-09-01', '2026-09-30');
+    });
+
+    const escalasApuradasMes = escalasSetembro.length > 0 ? escalasSetembro : listaEscalasEfetiva;
+    const totalEscalasMes = escalasApuradasMes.length;
+    const concluidas = escalasApuradasMes.filter(isEscalaAlocada).length;
+    const vagas = escalasApuradasMes.filter(isEscalaVaga).length;
+    const curingas = escalasApuradasMes.filter(isEscalaCuringa).length;
 
     const faturamentoConsolidado = faturasPacientes.reduce((acc, f) => acc + (Number(f.valorTotal || 0)), 0);
     const custoFolhaConsolidado = folhasPagamento.reduce((acc, folha) => acc + (Number(folha.valorLiquidoReceber || folha.valorTotalPlantoes || 0)), 0);
@@ -491,13 +684,17 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
       pacAtivos,
       totalProf,
       profAtivos,
-      totalEsc,
-      escalasSemAlocacao,
+      totalEsc: listaEscalasEfetiva.length,
+      totalEscalasMes,
+      concluidas,
+      vagas,
+      curingas,
+      escalasSemAlocacao: vagas,
       faturamentoConsolidado,
       custoFolhaConsolidado,
       totalDebitos
     };
-  }, [pacientes, profissionais, agendamentos, faturasPacientes, folhasPagamento, debitosProfissionais]);
+  }, [listaPacientesEfetiva, listaEscalasEfetiva, profissionais, faturasPacientes, folhasPagamento, debitosProfissionais]);
 
   // Rolar para a última mensagem ao atualizar histórico
   useEffect(() => {
@@ -553,7 +750,7 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
       // Buscar por ID eventuais profissionais citados nas escalas que não constem na lista em memória
       const profIdsConhecidos = new Set(listaProfissionais.map(p => p.id));
       const profIdsFaltantes: string[] = [];
-      (agendamentos || []).forEach(e => {
+      (listaEscalasEfetiva || []).forEach(e => {
         const eAny = e as any;
         const pId = e.idProfissional || eAny.profissionalId || eAny.cuidadorId || eAny.funcionarioId || eAny.idCuidador || eAny.idFuncionario;
         if (pId && !profIdsConhecidos.has(pId) && !profIdsFaltantes.includes(pId)) {
@@ -576,11 +773,11 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
         }
       }
 
-      let listaPacientes: Paciente[] = [...(pacientes || [])];
+      // Carregar TODOS os pacientes ativos vinculados à empresa (sem restrição ou filtro de seleção única)
+      let listaPacientes: Paciente[] = [...listaPacientesEfetiva];
       try {
-        const precisaCarregarDoBanco = listaPacientes.length === 0 || !listaPacientes.some(p => p.planoAtendimento);
-        if (precisaCarregarDoBanco) {
-          const pacsSnap = await getDocs(query(collection(db, 'pacientes'), limit(1000)));
+        if (listaPacientes.length <= 1) {
+          const pacsSnap = await getDocs(collection(db, 'pacientes'));
           const docsPacs: Paciente[] = [];
           pacsSnap.forEach(d => docsPacs.push({ ...d.data(), id: d.id } as Paciente));
           if (docsPacs.length > 0) {
@@ -924,28 +1121,20 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
       });
 
       // 1. Agregação Matemática Prévia no Frontend (Ultrarrápida, escalável e segura)
-      // a) Detectar período solicitado na pergunta (ex: "agosto", "julho", "2026" ou último mês com faturas consolidadas)
-      const periodoDetectado = detectarPeriodoConsulta(textoParaEnviar, faturasPacientes || [], agendamentos || []);
+      // a) Detectar período solicitado na pergunta (ex: "agosto", "julho", "2026" ou padrão Setembro/2026)
+      const periodoDetectado = detectarPeriodoConsulta(textoParaEnviar, faturasPacientes || [], listaEscalasEfetiva || []);
 
-      // Carregar todas as escalas do mês/período ativo para que o conjunto contenha a visão real de todos os pacientes
-      let todosAgendamentos: any[] = [...(agendamentos || [])];
+      // Carregar todas as escalas para o conjunto completo da empresa
+      let todosAgendamentos: any[] = [...listaEscalasEfetiva];
       try {
-        const mesesNecessarios = periodoDetectado.meses;
-        const temMesesFaltantes = mesesNecessarios.some(m => 
-          !todosAgendamentos.some(e => dataPertenceAoPeriodo(e.data || (e as any).dataInicio, undefined, [m]))
-        );
-        
-        if (todosAgendamentos.length === 0 || temMesesFaltantes) {
+        if (todosAgendamentos.length === 0) {
           const agSnap = await getDocs(query(collection(db, 'agendamentos'), limit(3000)));
           const docsAg: any[] = [];
-          const idsExistentes = new Set(todosAgendamentos.map(a => a.id));
           agSnap.forEach(d => {
-            if (!idsExistentes.has(d.id)) {
-              docsAg.push({ ...d.data(), id: d.id });
-            }
+            docsAg.push({ ...d.data(), id: d.id });
           });
           if (docsAg.length > 0) {
-            todosAgendamentos = [...todosAgendamentos, ...docsAg];
+            todosAgendamentos = docsAg;
           }
         }
       } catch (err) {
@@ -953,27 +1142,66 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
       }
 
       // b) Filtrar faturas e agendamentos pelo período detectado
+      // Verificar se o usuário mencionou explicitamente outro mês diferente do mês corrente (Setembro/2026)
+      const pedeOutroMes = periodoDetectado.meses.length > 0 && 
+        !periodoDetectado.meses.some(m => m.mes === 9 && m.ano === 2026) &&
+        !textoParaEnviar.toLowerCase().includes('mês atual') &&
+        !textoParaEnviar.toLowerCase().includes('mes atual');
+
+      let agendamentosDoPeriodo: any[] = [];
+      let periodoDescricao = 'Setembro de 2026';
+
+      if (pedeOutroMes) {
+        agendamentosDoPeriodo = todosAgendamentos.filter(e => {
+          return dataPertenceAoPeriodo(e.data || e.dataInicio || e.dataPrevista, undefined, periodoDetectado.meses);
+        });
+        periodoDescricao = periodoDetectado.descricao;
+      } else {
+        // Mês corrente (Setembro/2026: 01/09/2026 até 30/09/2026)
+        agendamentosDoPeriodo = todosAgendamentos.filter(e => {
+          const dataVal = e.data || e.dataInicio || e.dataPrevista;
+          return pertenceAoIntervalo(dataVal, '2026-09-01', '2026-09-30');
+        });
+      }
+
+      // Se o filtro do mês não encontrou registros específicos na base, utiliza a base completa de agendamentos
+      if (agendamentosDoPeriodo.length === 0 && todosAgendamentos.length > 0) {
+        agendamentosDoPeriodo = todosAgendamentos;
+      }
+
       const faturasDoPeriodo = (faturasPacientes || []).filter(f => {
         const fatAny = f as any;
         return dataPertenceAoPeriodo(
           f.dataEmissao || f.periodoApurado?.fim || fatAny.createdAt || fatAny.criadoEm,
           f.mesReferencia,
-          periodoDetectado.meses
+          pedeOutroMes ? periodoDetectado.meses : [{ ano: 2026, mes: 9 }]
         );
       });
 
-      let agendamentosDoPeriodo = todosAgendamentos.filter(e => {
-        const eAny = e as any;
-        return dataPertenceAoPeriodo(
-          e.data || eAny.dataInicio || eAny.dataPrevista,
-          undefined,
-          periodoDetectado.meses
-        );
-      });
+      // =========================================================================================
+      // 1. Script de Auditoria Determinístico nos dados do Firestore (Extração Completa e Rígida)
+      // =========================================================================================
+      const escalasDescobertas: Array<{
+        tipo: string;
+        pacienteCodigo: string;
+        pacienteNomeOriginal?: string;
+        data: string;
+        turno: string;
+        diaSemana: string;
+      }> = [];
 
-      if (agendamentosDoPeriodo.length === 0 && todosAgendamentos.length > 0) {
-        agendamentosDoPeriodo = todosAgendamentos;
-      }
+      const escalasFimDeSemanaDetectadas: any[] = [];
+      const curingasPorProfissional: Record<string, number> = {};
+      const curingasPorPaciente: Record<string, number> = {};
+      const curingasPorDiaSemana: Record<string, number> = {
+        'Segunda-feira': 0,
+        'Terça-feira': 0,
+        'Quarta-feira': 0,
+        'Quinta-feira': 0,
+        'Sexta-feira': 0,
+        'Sábado': 0,
+        'Domingo': 0
+      };
 
       // Montar array de escalas estruturado com pacienteCodigo, data, diaSemana, turno, statusAlocacao e curinga
       const escalasParaEnvio = agendamentosDoPeriodo.map(e => {
@@ -985,27 +1213,52 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
         }
         const pacienteCodigo = obterPseudonimoPac(pacId, pacNome);
 
+        const profId = e.idProfissional || eAny.profissionalId || eAny.cuidadorId || eAny.funcionarioId;
+        let profNome = e.nomeProfissional || eAny.profissionalNome || eAny.nomeCuidador || eAny.nomeFuncionario;
+        if (!profNome && profId) {
+          profNome = mapaProfissionaisCadastrados.get(String(profId).trim());
+        }
+        const profissionalCodigo = (profNome || profId) ? obterPseudonimoProf(profId, profNome) : undefined;
+
         const { data: dataIso, diaSemana } = extrairDataIsoEDiaSemana(e.data || eAny.dataInicio || eAny.dataPrevista);
-
-        const profId = e.idProfissional || eAny.profissionalId || eAny.cuidadorId || eAny.funcionarioId || eAny.idCuidador || eAny.idFuncionario;
-        const profNome = e.nomeProfissional || eAny.profissionalNome || eAny.nomeCuidador || eAny.nomeFuncionario || eAny.profissional;
-        const temProfissional = Boolean(
-          (profId && String(profId).trim() !== '' && !String(profId).toLowerCase().includes('não_alocado')) ||
-          (profNome && String(profNome).trim() !== '' && !String(profNome).toLowerCase().includes('não_alocado') && !String(profNome).toLowerCase().includes('sem profissional') && !String(profNome).toLowerCase().includes('vago'))
-        );
-
-        const statusAlocacao = temProfissional ? 'completa' : 'incompleta';
-
-        const isCuringa = Boolean(
-          e.curinga === true ||
-          e.isCuringa === true ||
-          (e.tipoEscala && String(e.tipoEscala).toLowerCase().includes('curinga')) ||
-          (e.observacao && String(e.observacao).toUpperCase().includes('CURINGA')) ||
-          (e.motivoFalta && String(e.motivoFalta).toUpperCase().includes('CURINGA')) ||
-          (eAny.motivo && String(eAny.motivo).toUpperCase().includes('CURINGA'))
-        );
-
+        const alocada = isEscalaAlocada(e);
+        const statusAlocacao = alocada ? 'completa' : 'incompleta';
+        const curinga = isEscalaCuringa(e);
         const turno = String(e.horario || eAny.tipoTurno || eAny.turno || '12h Diurno').trim();
+
+        // Se campo de profissional vazio/aberto, registrar em escalasDescobertas
+        if (!alocada) {
+          escalasDescobertas.push({
+            tipo: "ESCALA_VAGA",
+            pacienteCodigo,
+            pacienteNomeOriginal: pacNome,
+            data: dataIso,
+            turno,
+            diaSemana
+          });
+        }
+
+        // Identificar escalas de fim de semana (Sábado/Domingo)
+        if (diaSemana === 'Sábado' || diaSemana === 'Domingo') {
+          escalasFimDeSemanaDetectadas.push({
+            pacienteCodigo,
+            data: dataIso,
+            diaSemana,
+            turno,
+            alocada,
+            curinga
+          });
+        }
+
+        // Contar ocorrências reais de curinga: true agrupadas por profissional e paciente
+        if (curinga) {
+          const chaveProf = profissionalCodigo || 'Sem Profissional Atribuído';
+          curingasPorProfissional[chaveProf] = (curingasPorProfissional[chaveProf] || 0) + 1;
+          curingasPorPaciente[pacienteCodigo] = (curingasPorPaciente[pacienteCodigo] || 0) + 1;
+          if (curingasPorDiaSemana[diaSemana] !== undefined) {
+            curingasPorDiaSemana[diaSemana]++;
+          }
+        }
 
         return {
           pacienteCodigo,
@@ -1013,16 +1266,69 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
           diaSemana,
           turno,
           statusAlocacao,
-          curinga: isCuringa
+          curinga
         };
       });
 
-      // c) Filtrar pacientes ativos
+      // Calcule os números consolidados finais: totalEscalas, escalasPreenchidas, escalasVagas, taxaOcupacaoReal
+      const totalEscalas = agendamentosDoPeriodo.length;
+      const escalasPreenchidas = agendamentosDoPeriodo.filter(isEscalaAlocada).length;
+      const escalasVagas = escalasDescobertas.length;
+      const totalCuringas = agendamentosDoPeriodo.filter(isEscalaCuringa).length;
+      const taxaOcupacaoReal = totalEscalas > 0 ? Number(((escalasPreenchidas / totalEscalas) * 100).toFixed(1)) : 100;
+
+      // Pacientes ativos vinculados à empresa (sem limites artificiais)
       const pacientesAtivos = listaPacientes.filter(p => {
-        const st = String(p.status || 'Ativo').toLowerCase();
-        return st !== 'inativo' && st !== 'cancelado';
+        const st = String(p.status || 'Ativo').toLowerCase().trim();
+        return st !== 'inativo' && st !== 'desativado' && st !== 'cancelado';
       });
       const pacientesAlvo = pacientesAtivos.length > 0 ? pacientesAtivos : listaPacientes;
+      const totalPacientesAtivos = pacientesAtivos.length > 0 ? pacientesAtivos.length : listaPacientes.length;
+
+      // Identificar o dia da semana com mais curingas
+      let diaComMaisCuringas = 'Sábado';
+      let maxCuringasNoDia = 0;
+      Object.entries(curingasPorDiaSemana).forEach(([dia, qtd]) => {
+        if (qtd > maxCuringasNoDia) {
+          maxCuringasNoDia = qtd;
+          diaComMaisCuringas = dia;
+        }
+      });
+
+      const metricasExatas = {
+        total: totalEscalas,
+        preenchidas: escalasPreenchidas,
+        vagas: escalasVagas,
+        curingas: totalCuringas,
+        pacientesAtivosTotal: totalPacientesAtivos
+      };
+
+      const alertasCriticos = escalasDescobertas.map(e => ({
+        tipo: "ESCALA_VAGA",
+        pacienteId: e.pacienteCodigo,
+        pacienteNome: e.pacienteNomeOriginal,
+        data: e.data,
+        turno: e.turno
+      }));
+
+      const padroesDetectados = {
+        diaComMaisCuringas,
+        totalNoDia: maxCuringasNoDia,
+        escalasFimDeSemana: {
+          total: escalasFimDeSemanaDetectadas.length,
+          vagas: escalasFimDeSemanaDetectadas.filter(e => !e.alocada).length
+        },
+        curingasPorProfissional,
+        curingasPorPaciente
+      };
+
+      const metricasAuditadas = {
+        totalEscalasMes: totalEscalas,
+        concluidas: escalasPreenchidas,
+        vagas: escalasVagas,
+        curingas: totalCuringas,
+        pacientesAtivosTotal: totalPacientesAtivos
+      };
 
       // d) Calcular faturamento, custos e margem por paciente
       const resumoFinanceiro: Array<{
@@ -1187,23 +1493,54 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
         debitosProfissionais || []
       );
 
-      // 3. Envio Estruturado e Agregado para a Cloud Function
+      // 3. Envio Estruturado e Agregado para a Cloud Function com Métricas Auditadas Determinísticas
       const dadosParaEnvio = {
-        periodoReferencia: periodoDetectado.descricao,
+        periodo: periodoDescricao,
+        periodoReferencia: periodoDescricao,
+        metricasExatas,
+        alertasCriticos,
+        padroesDetectados,
+        metricasAuditadas,
+        totalEscalasMes: metricasAuditadas.totalEscalasMes,
+        concluidas: metricasAuditadas.concluidas,
+        vagas: metricasAuditadas.vagas,
+        curingas: metricasAuditadas.curingas,
+        pacientesAtivosTotal: metricasAuditadas.pacientesAtivosTotal,
         resumoFinanceiro,
-        resumoGeral: agregacaoOperacional.resumoGeral,
+        resumoGeral: {
+          ...agregacaoOperacional.resumoGeral,
+          totalPacientes: metricasAuditadas.pacientesAtivosTotal,
+          totalEscalas: metricasAuditadas.totalEscalasMes
+        },
         escalasPorDiaSemana: agregacaoOperacional.escalasPorDiaSemana,
         escalasFimDeSemana: agregacaoOperacional.escalasFimDeSemana,
-        gargalosEscala: agregacaoOperacional.gargalosEscala,
-        estatisticasCuringas: agregacaoOperacional.estatisticasCuringas,
+        gargalosEscala: {
+          ...agregacaoOperacional.gargalosEscala,
+          escalasCompletasTotal: metricasAuditadas.concluidas,
+          escalasVagasTotal: metricasAuditadas.vagas,
+          taxaOcupacaoPercentual: taxaOcupacaoReal
+        },
+        estatisticasCuringas: {
+          ...agregacaoOperacional.estatisticasCuringas,
+          total: metricasAuditadas.curingas
+        },
         financeiroConsolidado: agregacaoOperacional.financeiroConsolidado,
-        pacientes: pacientesPseudonimizados.slice(0, 30),
-        profissionais: profissionaisPseudonimizados.slice(0, 30),
-        escalas: escalasParaEnvio.slice(0, 60),
+        pacientes: pacientesPseudonimizados.slice(0, 25),
+        profissionais: profissionaisPseudonimizados.slice(0, 25),
+        // Enviar APENAS exceções operacionais (escalas vagas e plantões curinga), eliminando centenas de escalas normais
+        escalas: escalasParaEnvio.filter(e => e.statusAlocacao !== 'completa' || e.curinga),
+        escalasVagas: escalasParaEnvio.filter(e => e.statusAlocacao !== 'completa'),
+        plantoesCuringa: escalasParaEnvio.filter(e => e.curinga),
         debitosProfissionais: [],
         faturasPacientes: [],
         folhasPagamento: [],
         totaisConsolidados: {
+          totalEscalasMes: totalEscalas,
+          concluidas: escalasPreenchidas,
+          vagas: escalasVagas,
+          curingas: totalCuringas,
+          pacientesAtivosTotal: totalPacientesAtivos,
+          taxaOcupacaoPercentual: taxaOcupacaoReal,
           faturamentoMensalConsolidado: metricasSumarizadas.faturamentoConsolidado,
           custoTotalFolhaConsolidado: metricasSumarizadas.custoFolhaConsolidado,
           totalDebitosProfissionais: metricasSumarizadas.totalDebitos
@@ -1214,7 +1551,35 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
         }
       };
 
-      const resultado = await consultarAssistenteOperacional(textoParaEnviar, dadosParaEnvio);
+      // Contexto imediato estrito (sem histórico acumulado para evitar explosão de tokens):
+      // Envia apenas a pergunta atual e, se houver, apenas a última resposta imediata resumida
+      const ultimaRespostaObj = [...mensagens].reverse().find(m => m.tipo === 'resposta');
+      const contextoUltimaResposta = ultimaRespostaObj?.texto
+        ? `\n\n[Contexto da resposta imediatamente anterior: "${ultimaRespostaObj.texto.slice(0, 250)}..."]\n`
+        : '';
+
+      // Diretriz rigorosa de auditoria determinística para eliminar alucinações e recalculos indevidos
+      const promptComAuditoria = `Você é o Diretor de Operações e Auditoria da Vallidare Home Care.
+Sua missão é emitir diagnósticos operacionais de alta precisão baseando-se EXCLUSIVAMENTE nas 'metricasExatas' e 'alertasCriticos' fornecidos.
+
+Diretrizes:
+- Seja ultra conciso, direto e executivo. Responda em no máximo 3 parágrafos curtos ou tópicos objetivos com tabela resumida. Elimine saudações formais, introduções óbvias ou conclusões prolixas.
+- Nunca altere ou estime os números de escalas e pacientes. Se a métrica informa ${metricasExatas.vagas} vagas, aponte exatamente ${metricasExatas.vagas} vagas. Se o total é ${metricasExatas.total} escalas, afirme exatamente ${metricasExatas.total}.
+- Se houver alertas críticos (escalas vagas ou alta taxa de curingas), priorize-os logo no primeiro parágrafo com ações recomendadas.
+- Formate a resposta de forma executiva com listas em tópicos e tabelas claras em Markdown.
+
+Diagnóstico Estruturado de Auditoria (${periodoDescricao}):
+${JSON.stringify({
+  periodo: periodoDescricao,
+  metricasExatas,
+  alertasCriticos: alertasCriticos.slice(0, 20),
+  padroesDetectados
+}, null, 2)}
+
+Consulta atual do gestor a ser respondida com base estrita nestas métricas:
+${textoParaEnviar}${contextoUltimaResposta}`;
+
+      const resultado = await consultarAssistenteOperacional(promptComAuditoria, dadosParaEnvio);
 
       // 2. Reversão Local ao Exibir a Resposta (Privacy by Design / Client-side Resolution)
       let textoFinal = resultado.resposta || 'Não foi possível gerar uma resposta para os dados informados.';
@@ -1400,21 +1765,28 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
 
       {/* Painel de Métricas Rápidas (Contexto da Operação) */}
       <div className="p-3 sm:p-5 bg-slate-50/60 border-b border-slate-200">
-        <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-          <TrendingUp className="w-3.5 h-3.5 text-blue-500" />
-          Dados Operacionais Carregados para Consulta
+        <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <TrendingUp className="w-3.5 h-3.5 text-blue-500" />
+            Dados Operacionais Auditados • Setembro/2026
+          </div>
+          {carregandoBase && (
+            <span className="text-2xs text-blue-600 font-normal flex items-center gap-1">
+              <RefreshCw className="w-3 h-3 animate-spin" /> Atualizando base...
+            </span>
+          )}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
           <div className="bg-white py-2 px-2.5 sm:p-3 rounded-lg border border-slate-200 shadow-2xs">
             <div className="flex items-center gap-1.5 text-slate-500 text-xs font-medium truncate">
               <Users className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-              <span>Pacientes</span>
+              <span>Pacientes Ativos</span>
             </div>
             <div className="text-lg sm:text-xl font-bold text-slate-800 mt-0.5 sm:mt-1">
-              {metricasSumarizadas.totalPac}
+              {metricasSumarizadas.pacAtivos}
             </div>
             <div className="text-2xs sm:text-xs text-emerald-600 font-medium truncate">
-              {metricasSumarizadas.pacAtivos} ativos
+              {metricasSumarizadas.pacAtivos} ativos ({metricasSumarizadas.totalPac} cadastrados)
             </div>
           </div>
 
@@ -1434,26 +1806,26 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
           <div className="bg-white py-2 px-2.5 sm:p-3 rounded-lg border border-slate-200 shadow-2xs">
             <div className="flex items-center gap-1.5 text-slate-500 text-xs font-medium truncate">
               <Calendar className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-              <span>Escalas</span>
+              <span>Escalas do Mês (Set/26)</span>
             </div>
             <div className="text-lg sm:text-xl font-bold text-slate-800 mt-0.5 sm:mt-1">
-              {metricasSumarizadas.totalEsc}
+              {metricasSumarizadas.totalEscalasMes}
             </div>
             <div className="text-2xs sm:text-xs text-slate-500 truncate">
-              plantões registrados
+              {metricasSumarizadas.concluidas} alocadas • {metricasSumarizadas.curingas} curingas
             </div>
           </div>
 
           <div className="bg-white py-2 px-2.5 sm:p-3 rounded-lg border border-slate-200 shadow-2xs">
             <div className="flex items-center gap-1.5 text-slate-500 text-xs font-medium truncate">
-              <AlertTriangle className={`w-3.5 h-3.5 shrink-0 ${metricasSumarizadas.escalasSemAlocacao > 0 ? 'text-amber-500' : 'text-slate-400'}`} />
-              <span>Gargalos</span>
+              <AlertTriangle className={`w-3.5 h-3.5 shrink-0 ${metricasSumarizadas.vagas > 0 ? 'text-amber-500' : 'text-slate-400'}`} />
+              <span>Vagas em Aberto</span>
             </div>
-            <div className={`text-lg sm:text-xl font-bold mt-0.5 sm:mt-1 ${metricasSumarizadas.escalasSemAlocacao > 0 ? 'text-amber-600' : 'text-slate-700'}`}>
-              {metricasSumarizadas.escalasSemAlocacao}
+            <div className={`text-lg sm:text-xl font-bold mt-0.5 sm:mt-1 ${metricasSumarizadas.vagas > 0 ? 'text-amber-600' : 'text-slate-700'}`}>
+              {metricasSumarizadas.vagas}
             </div>
             <div className="text-2xs sm:text-xs text-slate-500 truncate">
-              sem alocação
+              {metricasSumarizadas.vagas > 0 ? `${metricasSumarizadas.vagas} sem profissional` : '100% preenchidas'}
             </div>
           </div>
         </div>
@@ -1615,7 +1987,40 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
 
                 <div className="prose max-w-none text-slate-700 text-sm leading-relaxed">
                   <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
                     components={{
+                      table: ({ children }) => (
+                        <div className="overflow-x-auto my-4 rounded-xl border border-slate-200 shadow-2xs bg-white">
+                          <table className="min-w-full divide-y divide-slate-200 text-left text-xs text-slate-700">
+                            {children}
+                          </table>
+                        </div>
+                      ),
+                      thead: ({ children }) => (
+                        <thead className="bg-slate-100/95 text-slate-800 font-bold uppercase text-[11px] tracking-wider border-b border-slate-200">
+                          {children}
+                        </thead>
+                      ),
+                      tbody: ({ children }) => (
+                        <tbody className="divide-y divide-slate-100 bg-white">
+                          {children}
+                        </tbody>
+                      ),
+                      tr: ({ children }) => (
+                        <tr className="hover:bg-blue-50/50 transition-colors odd:bg-white even:bg-slate-50/70">
+                          {children}
+                        </tr>
+                      ),
+                      th: ({ children }) => (
+                        <th scope="col" className="px-3.5 py-2.5 font-bold text-slate-700 border-r last:border-r-0 border-slate-200 whitespace-nowrap">
+                          {children}
+                        </th>
+                      ),
+                      td: ({ children }) => (
+                        <td className="px-3.5 py-2 text-slate-600 border-r last:border-r-0 border-slate-100 whitespace-nowrap">
+                          {children}
+                        </td>
+                      ),
                       h1: ({ children }) => (
                         <h1 className="text-xl font-bold text-slate-900 border-b border-slate-200 pb-2 mb-4 mt-2">
                           {children}
@@ -1663,7 +2068,7 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
                       ),
                     }}
                   >
-                    {msg.texto}
+                    {normalizarMarkdownTabelas(msg.texto)}
                   </ReactMarkdown>
                 </div>
               </div>

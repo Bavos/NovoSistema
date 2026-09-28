@@ -532,15 +532,34 @@ export const analisarMetricasHomeCare = onCall(
       throw new HttpsError("failed-precondition", "GEMINI_API_KEY não configurada no servidor.");
     }
 
-    const prompt = `Você é o Assistente Executivo de Inteligência Operacional da Vallidare Home Care.
-Você recebeu métricas agregadas e consolidadas da operação.
+    const metricasExatas = (metricas as any).metricasExatas || (metricas as any).metricasAuditadas || {
+      total: (metricas as any).totalEscalasMes ?? (metricas as any).resumoGeral?.totalEscalas ?? metricas.escalas?.length ?? 0,
+      preenchidas: (metricas as any).concluidas ?? (metricas as any).gargalosEscala?.escalasCompletasTotal ?? 0,
+      vagas: (metricas as any).vagas ?? (metricas as any).gargalosEscala?.escalasVagasTotal ?? 0,
+      curingas: (metricas as any).curingas ?? (metricas as any).estatisticasCuringas?.total ?? 0,
+      pacientesAtivosTotal: (metricas as any).pacientesAtivosTotal ?? (metricas as any).resumoGeral?.totalPacientes ?? metricas.pacientes?.length ?? 0
+    };
+    const alertasCriticos = Array.isArray((metricas as any).alertasCriticos) ? (metricas as any).alertasCriticos : [];
+    const padroesDetectados = (metricas as any).padroesDetectados || {};
 
-Ao responder:
-- Apresente os dados com clareza executiva através de listas e tabelas em Markdown.
-- Se o gestor perguntar sobre pacientes aos sábados ou escalas vagas, utilize diretamente os blocos 'escalasFimDeSemana' e 'gargalosEscala'.
-- Destaque alertas operacionais prioritários (como escalas vagas ou alta concentração de substituições/curingas).
-- Mantenha respostas diretas, sem burocracia ou recusas desnecessárias.
+    const prompt = `Você é o Diretor de Operações e Auditoria da Vallidare Home Care.
+Sua missão é emitir diagnósticos operacionais de alta precisão baseando-se EXCLUSIVAMENTE nas 'metricasExatas' e 'alertasCriticos' fornecidos.
+
+Diretrizes:
+- Seja ultra conciso, direto e executivo. Responda em no máximo 3 parágrafos curtos ou tópicos objetivos com tabela resumida. Elimine saudações formais, introduções óbvias ou conclusões prolixas.
+- Nunca altere ou estime os números de escalas e pacientes. Se a métrica informa ${metricasExatas.vagas ?? 0} vagas, aponte exatamente ${metricasExatas.vagas ?? 0} vagas. Se informa ${metricasExatas.total ?? 0} escalas no total, afirme exatamente ${metricasExatas.total ?? 0}.
+- Se houver alertas críticos (escalas vagas ou alta taxa de curingas), priorize-os logo no primeiro parágrafo com ações recomendadas.
+- Formate a resposta de forma executiva com listas em tópicos e tabelas claras em Markdown.
+- Se o gestor perguntar sobre pacientes aos sábados ou escalas vagas, utilize diretamente os blocos 'escalasFimDeSemana', 'gargalosEscala' e 'alertasCriticos'.
 - Identificadores de Profissionais e Pacientes: Ao citar colaboradores ou pacientes (ex: PAC-01, PAC-02, P-01), utilize SEMPRE e EXATAMENTE o código literal informado, para que a interface decodifique e restaure os nomes reais localmente no navegador do gestor.
+
+Diagnóstico Estruturado de Auditoria:
+${JSON.stringify({
+  periodo: (metricas as any).periodo || metricas.periodoReferencia || 'Setembro/2026',
+  metricasExatas,
+  alertasCriticos,
+  padroesDetectados
+}, null, 2)}
 
 ${metricas.resumoFinanceiro && metricas.resumoFinanceiro.length > 0 ? `
 DIRETRIZ DE RENTABILIDADE E MARGEM DE LUCRO (quando a consulta solicitar margem de lucro ou rentabilidade por paciente):
@@ -592,6 +611,10 @@ ${pergunta || 'Apresente uma análise operacional detalhada das escalas, cobertu
         },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            maxOutputTokens: 600,
+            temperature: 0.2
+          }
         }),
       });
 
