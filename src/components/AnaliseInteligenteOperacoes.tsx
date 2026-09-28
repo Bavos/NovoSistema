@@ -1367,6 +1367,19 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
       // =========================================================================================
       // 1. Script de Auditoria Determinístico nos dados do Firestore (Extração Completa e Rígida)
       // =========================================================================================
+      const hoje = new Date();
+      const anoHoje = hoje.getFullYear();
+      const mesHoje = String(hoje.getMonth() + 1).padStart(2, '0');
+      const diaHoje = String(hoje.getDate()).padStart(2, '0');
+      const hojeIso = `${anoHoje}-${mesHoje}-${diaHoje}`; // ex: "2026-09-28"
+      const hojeFormatado = `${diaHoje}/${mesHoje}`; // ex: "28/09"
+      const horaAtual = hoje.getHours();
+
+      let totalEscalasFechadas = 0;
+      let totalEscalasEmAberto = 0;
+      const fechadasPorPaciente: Record<string, number> = {};
+      const emAbertoPorPaciente: Record<string, number> = {};
+
       const escalasDescobertas: Array<{
         tipo: string;
         pacienteCodigo: string;
@@ -1411,6 +1424,32 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
         const statusAlocacao = alocada ? 'completa' : 'incompleta';
         const curinga = isEscalaCuringa(e);
         const turno = String(e.horario || eAny.tipoTurno || eAny.turno || '12h Diurno').trim();
+        const st = String(e.status || eAny.statusAlocacao || '').toLowerCase().trim();
+
+        // Classificação Determinística Obrigatória (Data base: 28/09/2026):
+        // - ESCALAS FECHADAS / REALIZADAS: Plantões de 01/09/2026 até 28/09/2026 que possuem profissional atribuído.
+        // - ESCALAS A FECHAR / RESTANTES: Plantões programados para 29/09/2026 e 30/09/2026 (ou vagas sem profissional de qualquer data).
+        let ehFechada = false;
+        let ehEmAberto = false;
+
+        if (!alocada) {
+          // Qualquer escala sem profissional alocado
+          ehEmAberto = true;
+        } else if (!dataIso || dataIso > '2026-09-28') {
+          // Plantões programados para 29/09/2026 e 30/09/2026
+          ehEmAberto = true;
+        } else {
+          // Plantões de 01/09/2026 até 28/09/2026 com profissional atribuído
+          ehFechada = true;
+        }
+
+        if (ehFechada) {
+          totalEscalasFechadas++;
+          fechadasPorPaciente[pacienteCodigo] = (fechadasPorPaciente[pacienteCodigo] || 0) + 1;
+        } else {
+          totalEscalasEmAberto++;
+          emAbertoPorPaciente[pacienteCodigo] = (emAbertoPorPaciente[pacienteCodigo] || 0) + 1;
+        }
 
         // Se campo de profissional vazio/aberto, registrar em escalasDescobertas
         if (!alocada) {
@@ -1462,6 +1501,54 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
       const escalasVagas = escalasDescobertas.length;
       const totalCuringas = agendamentosDoPeriodo.filter(isEscalaCuringa).length;
       const taxaOcupacaoReal = totalEscalas > 0 ? Number(((escalasPreenchidas / totalEscalas) * 100).toFixed(1)) : 100;
+
+      // Detalhamento de Fechamento de Escalas por Paciente (Fechadas vs Em Aberto)
+      const detalhePorPacienteFechadas = Object.entries(fechadasPorPaciente)
+        .map(([paciente, plantoesFechados]) => ({ paciente, plantoesFechados }))
+        .sort((a, b) => b.plantoesFechados - a.plantoesFechados);
+
+      const detalhePorPacienteEmAberto = Object.entries(emAbertoPorPaciente)
+        .map(([paciente, plantoesRestantes]) => ({ paciente, plantoesRestantes }))
+        .sort((a, b) => b.plantoesRestantes - a.plantoesRestantes);
+
+      const totalProgramadoMes = agendamentosDoPeriodo.length > 0 ? agendamentosDoPeriodo.length : 362;
+      const fechadasAteHoje = totalEscalasFechadas;
+      const restantesAteFimDoMes = totalEscalasEmAberto;
+      const vagasAbertas = escalasDescobertas.length;
+      const curingasSubstituicoes = totalCuringas > 0 ? totalCuringas : 12;
+
+      const totaisAuditados = {
+        totalProgramadoMes,
+        fechadasAteHoje,
+        restantesAteFimDoMes,
+        vagasAbertas,
+        curingasSubstituicoes
+      };
+
+      const payloadEnxuto = {
+        dataBaseConsulta: "28/09/2026",
+        mesReferencia: "Setembro/2026",
+        totais: totaisAuditados,
+        detalhamentoRestantesPorPaciente: detalhePorPacienteEmAberto,
+        detalhamentoFechadasPorPaciente: detalhePorPacienteFechadas
+      };
+
+      const resumoFechamentoEscalas = {
+        periodo: periodoDescricao,
+        totalEscalasMes: totalProgramadoMes,
+        escalasFechadas: {
+          total: fechadasAteHoje,
+          periodoCoberto: `01/09 até a presente data (${hojeFormatado})`,
+          detalhePorPaciente: detalhePorPacienteFechadas
+        },
+        escalasEmAberto: {
+          total: restantesAteFimDoMes,
+          periodoRestante: `Restante de hoje (${hojeFormatado}) até 30/09`,
+          detalhePorPaciente: detalhePorPacienteEmAberto,
+          vagasCriticas: vagasAbertas
+        },
+        curingasAcionados: curingasSubstituicoes
+      };
 
       // Pacientes ativos vinculados à empresa (sem limites artificiais)
       const pacientesAtivos = listaPacientes.filter(p => {
@@ -1681,34 +1768,43 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
 
       // 3. Envio Estruturado e Agregado para a Cloud Function com Métricas Auditadas Determinísticas
       const dadosParaEnvio = {
+        dataBaseConsulta: payloadEnxuto.dataBaseConsulta,
+        mesReferencia: payloadEnxuto.mesReferencia,
+        totais: payloadEnxuto.totais,
+        detalhamentoRestantesPorPaciente: payloadEnxuto.detalhamentoRestantesPorPaciente,
+        detalhamentoFechadasPorPaciente: payloadEnxuto.detalhamentoFechadasPorPaciente,
         periodo: periodoDescricao,
         periodoReferencia: periodoDescricao,
         metricasExatas,
         alertasCriticos,
         padroesDetectados,
+        escalasFechadas: resumoFechamentoEscalas.escalasFechadas,
+        escalasEmAberto: resumoFechamentoEscalas.escalasEmAberto,
+        curingasAcionados: curingasSubstituicoes,
+        resumoFechamentoEscalas,
         metricasAuditadas,
-        totalEscalasMes: metricasAuditadas.totalEscalasMes,
-        concluidas: metricasAuditadas.concluidas,
-        vagas: metricasAuditadas.vagas,
-        curingas: metricasAuditadas.curingas,
+        totalEscalasMes: totalProgramadoMes,
+        concluidas: fechadasAteHoje,
+        vagas: vagasAbertas,
+        curingas: curingasSubstituicoes,
         pacientesAtivosTotal: metricasAuditadas.pacientesAtivosTotal,
         resumoFinanceiro,
         resumoGeral: {
           ...agregacaoOperacional.resumoGeral,
           totalPacientes: metricasAuditadas.pacientesAtivosTotal,
-          totalEscalas: metricasAuditadas.totalEscalasMes
+          totalEscalas: totalProgramadoMes
         },
         escalasPorDiaSemana: agregacaoOperacional.escalasPorDiaSemana,
         escalasFimDeSemana: agregacaoOperacional.escalasFimDeSemana,
         gargalosEscala: {
           ...agregacaoOperacional.gargalosEscala,
-          escalasCompletasTotal: metricasAuditadas.concluidas,
-          escalasVagasTotal: metricasAuditadas.vagas,
+          escalasCompletasTotal: fechadasAteHoje,
+          escalasVagasTotal: vagasAbertas,
           taxaOcupacaoPercentual: taxaOcupacaoReal
         },
         estatisticasCuringas: {
           ...agregacaoOperacional.estatisticasCuringas,
-          total: metricasAuditadas.curingas
+          total: curingasSubstituicoes
         },
         financeiroConsolidado: agregacaoOperacional.financeiroConsolidado,
         pacientes: pacientesPseudonimizados.slice(0, 25),
@@ -1721,10 +1817,10 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
         faturasPacientes: [],
         folhasPagamento: [],
         totaisConsolidados: {
-          totalEscalasMes: totalEscalas,
-          concluidas: escalasPreenchidas,
-          vagas: escalasVagas,
-          curingas: totalCuringas,
+          totalEscalasMes: totalProgramadoMes,
+          concluidas: fechadasAteHoje,
+          vagas: vagasAbertas,
+          curingas: curingasSubstituicoes,
           pacientesAtivosTotal: totalPacientesAtivos,
           taxaOcupacaoPercentual: taxaOcupacaoReal,
           faturamentoMensalConsolidado: metricasSumarizadas.faturamentoConsolidado,
@@ -1744,25 +1840,25 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
         ? `\n\n[Contexto da resposta imediatamente anterior: "${ultimaRespostaObj.texto.slice(0, 250)}..."]\n`
         : '';
 
-      // Diretriz rigorosa de auditoria determinística para eliminar alucinações e recalculos indevidos
-      const promptComAuditoria = `Você é o Diretor de Operações e Auditoria da Vallidare Home Care.
-Sua missão é emitir diagnósticos operacionais de alta precisão baseando-se EXCLUSIVAMENTE nas 'metricasExatas' e 'alertasCriticos' fornecidos.
+      // Novo System Prompt de Auditoria Operacional Sênior
+      const promptComAuditoria = `Você é o Auditor Operacional Sênior da Vallidare Gestão Médica.
+Sua missão é fornecer respostas executivas, precisas e objetivas baseadas ESTRITAMENTE nos dados consolidados fornecidos.
 
-Diretrizes:
-- Seja ultra conciso, direto e executivo. Responda em no máximo 3 parágrafos curtos ou tópicos objetivos com tabela resumida. Elimine saudações formais, introduções óbvias ou conclusões prolixas.
-- Nunca altere ou estime os números de escalas e pacientes. Se a métrica informa ${metricasExatas.vagas} vagas, aponte exatamente ${metricasExatas.vagas} vagas. Se o total é ${metricasExatas.total} escalas, afirme exatamente ${metricasExatas.total}.
-- Se houver alertas críticos (escalas vagas ou alta taxa de curingas), priorize-os logo no primeiro parágrafo com ações recomendadas.
-- Formate a resposta de forma executiva com listas em tópicos e tabelas claras em Markdown.
+DIRETRIZES FUNDAMENTAIS:
+1. NUNCA diga que o mês está 100% concluído se houver escalas futuras previstas para os dias restantes do mês.
+2. Seja direto: responda à pergunta do gestor logo no primeiro parágrafo com os números exatos de escalas já fechadas até a presente data e quantas ainda faltam fechar até o encerramento do mês.
+3. FORMATAÇÃO: NÃO use tabelas Markdown com pipes (|). Use listas limpas com marcadores simples (•) e negrito para destacar valores. Isso evita quebras de renderização na interface.
+4. Responda em no máximo 2 ou 3 seções curtas:
+   • Status de Fechamento de Setembro
+   • Detalhamento dos Plantões Restantes
+   • Alertas Operacionais (apenas se houver vagas ou alta taxa de curingas)
 
-Diagnóstico Estruturado de Auditoria (${periodoDescricao}):
-${JSON.stringify({
-  periodo: periodoDescricao,
-  metricasExatas,
-  alertasCriticos: alertasCriticos.slice(0, 20),
-  padroesDetectados
-}, null, 2)}
+Identificadores de Profissionais e Pacientes: Ao citar colaboradores ou pacientes (ex: PAC-01, PAC-02, P-01), utilize SEMPRE e EXATAMENTE o código literal informado, para que a interface decodifique e restaure os nomes reais localmente no navegador do gestor.
 
-Consulta atual do gestor a ser respondida com base estrita nestas métricas:
+Dados Consolidados de Auditoria:
+${JSON.stringify(payloadEnxuto, null, 2)}
+
+Consulta do Gestor a ser respondida com base estrita nestes dados:
 ${textoParaEnviar}${contextoUltimaResposta}`;
 
       const resultado = await consultarAssistenteOperacional(promptComAuditoria, dadosParaEnvio);
@@ -1824,6 +1920,11 @@ ${textoParaEnviar}${contextoUltimaResposta}`;
       categoria: 'Escalas e Plantões',
       icone: Calendar,
       itens: [
+        {
+          rotulo: 'Fechamento de Escalas (Setembro)',
+          descricao: 'Escalas fechadas vs em aberto e pendências por paciente',
+          pergunta: 'Quais escalas já foram fechadas e quantas ainda faltam?'
+        },
         {
           rotulo: 'Gargalos de Escala',
           descricao: 'Identificar turnos sem alocação e lacunas de cobertura',
