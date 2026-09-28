@@ -20,7 +20,6 @@ import {
   ChevronDown
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { useFirebase } from '../context/FirebaseContext';
 import { consultarAssistenteOperacional } from '../services/geminiOperacoesService';
 import { db } from '../lib/firebase';
@@ -125,7 +124,7 @@ function isEscalaCuringa(e: any): boolean {
 function normalizarMarkdownTabelas(texto: string): string {
   if (!texto) return '';
 
-  // Substitui sequências grudadas '||' por '|\n|' para que o parser GFM divida as linhas da tabela
+  // Substitui sequências grudadas '||' por '|\n|' para que as linhas da tabela sejam divididas corretamente
   let formatado = texto.replace(/\|\|+/g, '|\n|');
 
   // Quebra caso haja colunas seguidas de cabeçalho grudado '| ... | | :--- |'
@@ -136,6 +135,193 @@ function normalizarMarkdownTabelas(texto: string): string {
 
   return formatado;
 }
+
+interface BlocoConteudo {
+  tipo: 'tabela' | 'markdown';
+  conteudo: string;
+}
+
+function separarBlocosMarkdown(texto: string): BlocoConteudo[] {
+  if (!texto) return [];
+  const normalizado = normalizarMarkdownTabelas(texto);
+  const linhas = normalizado.replace(/\r\n/g, '\n').split('\n');
+  const blocos: BlocoConteudo[] = [];
+  let buffer: string[] = [];
+  let emTabela = false;
+
+  for (let i = 0; i < linhas.length; i++) {
+    const l = linhas[i];
+    const trimL = l.trim();
+    const ehLinhaTabela = trimL.startsWith('|') || (trimL.includes('|') && trimL.endsWith('|'));
+    const ehSeparador = /^\|?\s*:?-{2,}:?\s*(\|?\s*:?-{2,}:?\s*)+\|?$/.test(trimL);
+
+    if (ehLinhaTabela || ehSeparador) {
+      if (!emTabela) {
+        if (buffer.length > 0) {
+          blocos.push({ tipo: 'markdown', conteudo: buffer.join('\n') });
+          buffer = [];
+        }
+        emTabela = true;
+      }
+      buffer.push(l);
+    } else {
+      if (emTabela) {
+        blocos.push({ tipo: 'tabela', conteudo: buffer.join('\n') });
+        buffer = [];
+        emTabela = false;
+      }
+      buffer.push(l);
+    }
+  }
+
+  if (buffer.length > 0) {
+    blocos.push({ tipo: emTabela ? 'tabela' : 'markdown', conteudo: buffer.join('\n') });
+  }
+
+  return blocos.filter(b => b.conteudo.trim() !== '');
+}
+
+function extrairCelulasLinha(linha: string): string[] {
+  let s = linha.trim();
+  if (s.startsWith('|')) s = s.substring(1);
+  if (s.endsWith('|')) s = s.substring(0, s.length - 1);
+  return s.split('|').map(c => c.trim());
+}
+
+function parseTabelaMarkdown(conteudo: string): { cabecalho: string[]; linhasDados: string[][] } | null {
+  const linhas = conteudo.trim().split('\n').map(l => l.trim()).filter(l => l.includes('|'));
+  if (linhas.length < 2) return null;
+
+  const sepIdx = linhas.findIndex(l => /^\|?\s*:?-{2,}:?\s*(\|?\s*:?-{2,}:?\s*)+\|?$/.test(l));
+  let cabecalho: string[] = [];
+  let corpoLinhas: string[] = [];
+
+  if (sepIdx > 0) {
+    cabecalho = extrairCelulasLinha(linhas[0]);
+    corpoLinhas = linhas.slice(sepIdx + 1);
+  } else {
+    cabecalho = extrairCelulasLinha(linhas[0]);
+    corpoLinhas = linhas.slice(1);
+  }
+
+  const linhasDados = corpoLinhas.map(extrairCelulasLinha).filter(r => r.length > 0 && r.some(c => c !== ''));
+  if (cabecalho.length === 0 && linhasDados.length === 0) return null;
+
+  return { cabecalho, linhasDados };
+}
+
+/**
+ * Renderizador nativo de respostas da IA: renderiza tabelas Markdown como tabelas HTML puras
+ * sem depender de nenhum plugin externo (como remark-gfm), e processa Markdown padrão com react-markdown nativo.
+ */
+const RenderizadorRespostaIA: React.FC<{ texto: string }> = ({ texto }) => {
+  const blocos = separarBlocosMarkdown(texto);
+
+  if (blocos.length === 0) {
+    return <p className="text-slate-600 text-sm">Nenhum conteúdo recebido.</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {blocos.map((bloco, idx) => {
+        if (bloco.tipo === 'tabela') {
+          const dadosTabela = parseTabelaMarkdown(bloco.conteudo);
+          if (dadosTabela && dadosTabela.cabecalho.length > 0) {
+            return (
+              <div key={idx} className="overflow-x-auto my-3 rounded-xl border border-slate-200 shadow-2xs bg-white">
+                <table className="min-w-full divide-y divide-slate-200 text-left text-xs text-slate-700">
+                  <thead className="bg-slate-100/95 text-slate-800 font-bold uppercase text-[11px] tracking-wider border-b border-slate-200">
+                    <tr>
+                      {dadosTabela.cabecalho.map((col, cIdx) => (
+                        <th key={cIdx} scope="col" className="px-3.5 py-2.5 font-bold text-slate-700 border-r last:border-r-0 border-slate-200 whitespace-nowrap">
+                          {col}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {dadosTabela.linhasDados.map((row, rIdx) => (
+                      <tr key={rIdx} className="hover:bg-blue-50/50 transition-colors odd:bg-white even:bg-slate-50/70">
+                        {row.map((cell, cIdx) => (
+                          <td key={cIdx} className="px-3.5 py-2 text-slate-600 border-r last:border-r-0 border-slate-100 whitespace-nowrap">
+                            {cell}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          }
+
+          // Fallback seguro caso a formatação de tabela seja atípica
+          return (
+            <div key={idx} className="overflow-x-auto my-3 p-3 bg-slate-50 rounded-lg border border-slate-200 font-mono text-xs text-slate-700 whitespace-pre">
+              {bloco.conteudo}
+            </div>
+          );
+        }
+
+        // Bloco padrão de Markdown nativo (sem plugins externos)
+        return (
+          <ReactMarkdown
+            key={idx}
+            components={{
+              h1: ({ children }) => (
+                <h1 className="text-xl font-bold text-slate-900 border-b border-slate-200 pb-2 mb-3 mt-2">
+                  {children}
+                </h1>
+              ),
+              h2: ({ children }) => (
+                <h2 className="text-base font-bold text-blue-900 bg-blue-50 px-3 py-1.5 rounded-lg border-l-4 border-blue-600 mt-4 mb-2">
+                  {children}
+                </h2>
+              ),
+              h3: ({ children }) => (
+                <h3 className="text-sm font-semibold text-slate-800 mt-3 mb-1.5">
+                  {children}
+                </h3>
+              ),
+              p: ({ children }) => (
+                <p className="mb-2 leading-relaxed text-slate-700">
+                  {children}
+                </p>
+              ),
+              ul: ({ children }) => (
+                <ul className="list-disc list-outside pl-5 mb-2.5 space-y-1 text-slate-700">
+                  {children}
+                </ul>
+              ),
+              ol: ({ children }) => (
+                <ol className="list-decimal list-outside pl-5 mb-2.5 space-y-1 text-slate-700">
+                  {children}
+                </ol>
+              ),
+              li: ({ children }) => (
+                <li className="pl-1">
+                  {children}
+                </li>
+              ),
+              strong: ({ children }) => (
+                <strong className="font-semibold text-slate-900">
+                  {children}
+                </strong>
+              ),
+              blockquote: ({ children }) => (
+                <blockquote className="border-l-4 border-slate-300 pl-3 py-1 italic bg-white text-slate-600 rounded-r my-2">
+                  {children}
+                </blockquote>
+              )
+            }}
+          >
+            {bloco.conteudo}
+          </ReactMarkdown>
+        );
+      })}
+    </div>
+  );
+};
 
 function extrairDataIsoEDiaSemana(dateVal: any): { data: string; diaSemana: string } {
   if (!dateVal) return { data: 'N/D', diaSemana: 'N/D' };
@@ -1986,90 +2172,7 @@ ${textoParaEnviar}${contextoUltimaResposta}`;
                 </div>
 
                 <div className="prose max-w-none text-slate-700 text-sm leading-relaxed">
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      table: ({ children }) => (
-                        <div className="overflow-x-auto my-4 rounded-xl border border-slate-200 shadow-2xs bg-white">
-                          <table className="min-w-full divide-y divide-slate-200 text-left text-xs text-slate-700">
-                            {children}
-                          </table>
-                        </div>
-                      ),
-                      thead: ({ children }) => (
-                        <thead className="bg-slate-100/95 text-slate-800 font-bold uppercase text-[11px] tracking-wider border-b border-slate-200">
-                          {children}
-                        </thead>
-                      ),
-                      tbody: ({ children }) => (
-                        <tbody className="divide-y divide-slate-100 bg-white">
-                          {children}
-                        </tbody>
-                      ),
-                      tr: ({ children }) => (
-                        <tr className="hover:bg-blue-50/50 transition-colors odd:bg-white even:bg-slate-50/70">
-                          {children}
-                        </tr>
-                      ),
-                      th: ({ children }) => (
-                        <th scope="col" className="px-3.5 py-2.5 font-bold text-slate-700 border-r last:border-r-0 border-slate-200 whitespace-nowrap">
-                          {children}
-                        </th>
-                      ),
-                      td: ({ children }) => (
-                        <td className="px-3.5 py-2 text-slate-600 border-r last:border-r-0 border-slate-100 whitespace-nowrap">
-                          {children}
-                        </td>
-                      ),
-                      h1: ({ children }) => (
-                        <h1 className="text-xl font-bold text-slate-900 border-b border-slate-200 pb-2 mb-4 mt-2">
-                          {children}
-                        </h1>
-                      ),
-                      h2: ({ children }) => (
-                        <h2 className="text-base font-bold text-blue-900 bg-blue-50 px-3 py-1.5 rounded-lg border-l-4 border-blue-600 mt-6 mb-3">
-                          {children}
-                        </h2>
-                      ),
-                      h3: ({ children }) => (
-                        <h3 className="text-sm font-semibold text-slate-800 mt-4 mb-2">
-                          {children}
-                        </h3>
-                      ),
-                      p: ({ children }) => (
-                        <p className="mb-2.5 leading-relaxed text-slate-700">
-                          {children}
-                        </p>
-                      ),
-                      ul: ({ children }) => (
-                        <ul className="list-disc list-outside pl-5 mb-3 space-y-1 text-slate-700">
-                          {children}
-                        </ul>
-                      ),
-                      ol: ({ children }) => (
-                        <ol className="list-decimal list-outside pl-5 mb-3 space-y-1 text-slate-700">
-                          {children}
-                        </ol>
-                      ),
-                      li: ({ children }) => (
-                        <li className="pl-1">
-                          {children}
-                        </li>
-                      ),
-                      strong: ({ children }) => (
-                        <strong className="font-semibold text-slate-900">
-                          {children}
-                        </strong>
-                      ),
-                      blockquote: ({ children }) => (
-                        <blockquote className="border-l-4 border-slate-300 pl-3 py-1 italic bg-white text-slate-600 rounded-r my-3">
-                          {children}
-                        </blockquote>
-                      ),
-                    }}
-                  >
-                    {normalizarMarkdownTabelas(msg.texto)}
-                  </ReactMarkdown>
+                  <RenderizadorRespostaIA texto={msg.texto} />
                 </div>
               </div>
             )}

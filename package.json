@@ -35,7 +35,6 @@
     "react-markdown": "^10.1.0",
     "react-to-print": "^3.3.0",
     "recharts": "^3.8.1",
-    "remark-gfm": "^4.0.1",
     "unzipper": "^0.12.3",
     "vite": "^6.2.3",
     "xlsx": "^0.18.5",
