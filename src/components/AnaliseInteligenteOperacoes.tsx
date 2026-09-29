@@ -211,6 +211,35 @@ function parseTabelaMarkdown(conteudo: string): { cabecalho: string[]; linhasDad
 }
 
 /**
+ * Função de substituição segura para restauração de dados reais (despseudonimização)
+ * Utiliza split e join para evitar que caracteres reservados do RegExp ou datas/asteriscos quebrem a execução.
+ */
+function restaurarDadosReais(textoBruto: string, mapaPseudonimos: Record<string, string>): string {
+  if (!textoBruto) return '';
+  let textoLimpo = textoBruto;
+
+  const entradas = Object.entries(mapaPseudonimos)
+    .filter(([pseudonimo, nomeReal]) => {
+      if (!pseudonimo || !nomeReal) return false;
+      const key = pseudonimo.trim();
+      // Ignora chaves inseguras (ex: números isolados, datas com barras, asteriscos) que possam colidir com texto/datas
+      if (/^\d{1,4}$/.test(key)) return false;
+      if (key.includes('/') || key.includes('*') || key.includes('\\')) return false;
+      if (key.length < 3 && !key.startsWith('P-')) return false;
+      return true;
+    })
+    .sort(([a], [b]) => b.length - a.length);
+
+  for (const [pseudonimo, nomeReal] of entradas) {
+    if (pseudonimo && nomeReal) {
+      textoLimpo = textoLimpo.split(pseudonimo).join(nomeReal);
+    }
+  }
+
+  return textoLimpo;
+}
+
+/**
  * Renderizador nativo de respostas da IA: renderiza tabelas Markdown como tabelas HTML puras
  * sem depender de nenhum plugin externo (como remark-gfm), e processa Markdown padrão com react-markdown nativo.
  */
@@ -1058,7 +1087,7 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
         mapaDePara[`Profissional [PROF-${pad2}]`] = nomeLimpo;
         mapaDePara[`Profissional PROF-${pad2}`] = nomeLimpo;
 
-        if (idOriginal && idOriginal.length >= 4) {
+        if (idOriginal && idOriginal.length >= 6 && !/^\d+$/.test(idOriginal) && !idOriginal.includes('/') && !idOriginal.includes('*')) {
           mapaDePara[idOriginal] = nomeLimpo;
         }
       };
@@ -1096,7 +1125,7 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
         mapaDePara[`Paciente [PAC_${pad2}]`] = nomeLimpo;
         mapaDePara[`Paciente PAC_${pad2}`] = nomeLimpo;
 
-        if (idOriginal && idOriginal.length >= 4) {
+        if (idOriginal && idOriginal.length >= 6 && !/^\d+$/.test(idOriginal) && !idOriginal.includes('/') && !idOriginal.includes('*')) {
           mapaDePara[idOriginal] = nomeLimpo;
         }
       };
@@ -1864,15 +1893,8 @@ ${textoParaEnviar}${contextoUltimaResposta}`;
       const resultado = await consultarAssistenteOperacional(promptComAuditoria, dadosParaEnvio);
 
       // 2. Reversão Local ao Exibir a Resposta (Privacy by Design / Client-side Resolution)
-      let textoFinal = resultado.resposta || 'Não foi possível gerar uma resposta para os dados informados.';
-
-      // Ordenação das chaves pelo comprimento em ordem decrescente para evitar substituições parciais (ex: [PAC-016] e [PAC-01])
-      const chavesOrdenadas = Object.keys(mapaDePara).sort((a, b) => b.length - a.length);
-      chavesOrdenadas.forEach((codigo) => {
-        if (codigo && mapaDePara[codigo]) {
-          textoFinal = textoFinal.split(codigo).join(mapaDePara[codigo]);
-        }
-      });
+      const textoBruto = resultado.resposta || 'Não foi possível gerar uma resposta para os dados informados.';
+      const textoFinal = restaurarDadosReais(textoBruto, mapaDePara);
 
       const novaMensagemResposta: MensagemInterativa = {
         id: `resp-${Date.now()}`,

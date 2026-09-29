@@ -632,7 +632,7 @@ ${pergunta || 'Apresente o status de fechamento das escalas do mês, quantas já
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
-            maxOutputTokens: 600,
+            maxOutputTokens: 2048,
             temperature: 0.2
           }
         }),
