@@ -4,10 +4,11 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Bell, LogOut } from 'lucide-react';
+import { Bell, LogOut, ShieldCheck } from 'lucide-react';
 import { useFirebase } from '../context/FirebaseContext';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { ModalConfiguracao2FA } from './ModalConfiguracao2FA';
 
 interface TopHeaderProps {
   isSidebarExpanded: boolean;
@@ -24,6 +25,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [show2FAModal, setShow2FAModal] = useState(false);
   const [empresa, setEmpresa] = useState<any>(null);
 
   const { user, userRole, usuariosSistema, logout, isQuotaExceeded, isTestMode, toggleTestMode } = useFirebase();
@@ -204,10 +206,21 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               </div>
 
               <div className="p-1 space-y-0.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShow2FAModal(true);
+                    setShowDropdown(false);
+                  }}
+                  className="w-full flex items-center space-x-2 px-3 py-2 text-xs text-forest-green hover:bg-[#e8e4db] rounded-lg transition-colors text-left font-medium cursor-pointer"
+                >
+                  <ShieldCheck size={14} className="text-forest-green shrink-0" />
+                  <span>Autenticação em 2 Etapas (2FA)</span>
+                </button>
                 <div className="border-t border-forest-green/5 my-1"></div>
                 <button
                   onClick={handleSair}
-                  className="w-full flex items-center space-x-2 px-3 py-2 text-xs text-red-700 hover:bg-red-50 rounded-lg transition-colors text-left font-medium"
+                  className="w-full flex items-center space-x-2 px-3 py-2 text-xs text-red-700 hover:bg-red-50 rounded-lg transition-colors text-left font-medium cursor-pointer"
                 >
                   <LogOut size={14} />
                   <span>Sair do Sistema</span>
@@ -217,6 +230,12 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           )}
         </div>
       </div>
+
+      {/* Modal de Configuração da Autenticação em Duas Etapas (2FA via SMS) */}
+      <ModalConfiguracao2FA 
+        isOpen={show2FAModal} 
+        onClose={() => setShow2FAModal(false)} 
+      />
     </header>
   );
 };
