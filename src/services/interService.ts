@@ -10,6 +10,67 @@
 
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../lib/firebase';
+import { toast } from 'react-hot-toast';
+
+export async function obterPdfBoletoInter(codigoSolicitacao: string): Promise<string | null> {
+  try {
+    const obterPdfFn = httpsCallable<{ codigoSolicitacao: string }, { pdfBase64?: string }>(
+      functions,
+      'obterPdfBoletoInter'
+    );
+    const res = await obterPdfFn({ codigoSolicitacao });
+    return res.data?.pdfBase64 || null;
+  } catch (err: any) {
+    console.warn('[interService] Falha ao obter PDF do Banco Inter:', err);
+    return null;
+  }
+}
+
+export async function downloadBoletoPdf(base64Data?: string, seuNumero?: string, codigoSolicitacao?: string): Promise<boolean> {
+  let finalBase64 = base64Data;
+
+  if (!finalBase64 && codigoSolicitacao) {
+    const toastId = toast.loading('Buscando PDF oficial no Banco Inter...');
+    try {
+      finalBase64 = await obterPdfBoletoInter(codigoSolicitacao);
+      toast.dismiss(toastId);
+    } catch (err: any) {
+      toast.dismiss(toastId);
+      toast.error('O Banco Inter ainda está processando o PDF deste boleto. Tente novamente em instantes.');
+      return false;
+    }
+  }
+
+  if (!finalBase64) {
+    toast.error('Arquivo PDF não disponível no momento. Tente novamente.');
+    return false;
+  }
+
+  try {
+    const cleanBase64 = finalBase64.replace(/^data:application\/pdf;base64,/, '').trim();
+    const byteCharacters = atob(cleanBase64);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Boleto_Banco_Inter_${seuNumero || 'cobranca'}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success('Download do PDF do Boleto concluído!');
+    return true;
+  } catch (err: any) {
+    console.error('[interService] Erro ao decodificar/baixar PDF:', err);
+    toast.error('Falha ao decodificar o arquivo PDF.');
+    return false;
+  }
+}
 
 export interface BoletoPagadorInput {
   cpfCnpj: string;

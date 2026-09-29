@@ -40,7 +40,8 @@ export const PatientList: React.FC<PatientListProps> = ({
     hasMore, 
     loadingPacientes,
     fetchFirstPagePacientes,
-    totalPacientes
+    totalPacientes,
+    faturasPacientes
   } = useFirebase();
   const isColaborador = userRole?.toLowerCase() === 'colaborador';
 
@@ -245,11 +246,31 @@ export const PatientList: React.FC<PatientListProps> = ({
               className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-700 font-medium focus:outline-none focus:border-blue-500 focus:bg-white transition-all shadow-inner cursor-pointer"
             >
               <option value="todos">Todos os Pacientes</option>
-              {sortedPacientes.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.codigoReferencia?.trim() ? `[${p.codigoReferencia.trim()}] ` : ''}{p.nome} ({p.status === 'Ativo' ? 'Ativo' : 'Inativo'})
-                </option>
-              ))}
+              {sortedPacientes.map((p) => {
+                const currentMonthPrefix = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+                const faturaDoMes = (faturasPacientes || []).find((f: any) => {
+                  const matchPac = f.idPaciente === p.id || f.pacienteId === p.id || (f.nomePaciente && f.nomePaciente.toLowerCase() === p.nome.toLowerCase());
+                  const matchMonth = f.mesReferencia === currentMonthPrefix || (f.periodoApurado?.inicio && f.periodoApurado.inicio.startsWith(currentMonthPrefix));
+                  const hasBoleto = Boolean(
+                    f.cobrancaInter?.nossoNumero ||
+                    f.cobrancaInter?.codigoSolicitacao ||
+                    f.cobrancaInter?.status === 'EMITIDO' ||
+                    f.nossoNumero ||
+                    f.codigoSolicitacao
+                  );
+                  return matchPac && matchMonth && hasBoleto;
+                });
+                const valBoleto = faturaDoMes ? (faturaDoMes.cobrancaInter?.valor || faturaDoMes.valorTotal || 0) : 0;
+                const boletoTag = faturaDoMes
+                  ? ` [Boleto Emitido - R$ ${valBoleto.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}]`
+                  : ' [Pendente]';
+
+                return (
+                  <option key={p.id} value={p.id}>
+                    {p.codigoReferencia?.trim() ? `[${p.codigoReferencia.trim()}] ` : ''}{p.nome} ({p.status === 'Ativo' ? 'Ativo' : 'Inativo'}){boletoTag}
+                  </option>
+                );
+              })}
             </select>
           </div>
 
@@ -383,6 +404,38 @@ export const PatientList: React.FC<PatientListProps> = ({
                         {p.nome}
                       </button>
                       {getStatusBadge(p.status)}
+
+                      {(() => {
+                        const currentMonthPrefix = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+                        const faturaDoMes = (faturasPacientes || []).find((f: any) => {
+                          const matchPac = f.idPaciente === p.id || f.pacienteId === p.id || (f.nomePaciente && f.nomePaciente.toLowerCase() === p.nome.toLowerCase());
+                          const matchMonth = f.mesReferencia === currentMonthPrefix || (f.periodoApurado?.inicio && f.periodoApurado.inicio.startsWith(currentMonthPrefix));
+                          const hasBoleto = Boolean(
+                            f.cobrancaInter?.nossoNumero ||
+                            f.cobrancaInter?.codigoSolicitacao ||
+                            f.cobrancaInter?.status === 'EMITIDO' ||
+                            f.nossoNumero ||
+                            f.codigoSolicitacao
+                          );
+                          return matchPac && matchMonth && hasBoleto;
+                        });
+
+                        if (faturaDoMes) {
+                          const valBoleto = faturaDoMes.cobrancaInter?.valor || faturaDoMes.valorTotal || 0;
+                          return (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs" title="Boleto Banco Inter emitido no mês atual">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                              <span>[Boleto Emitido - R$ {Number(valBoleto).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}]</span>
+                            </span>
+                          );
+                        }
+
+                        return (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium text-slate-400 bg-slate-50 border border-slate-200" title="Boleto pendente no mês atual">
+                            [Pendente]
+                          </span>
+                        );
+                      })()}
                     </div>
 
                     {/* Meta Info Row: Phone, Dependence, Bairro */}

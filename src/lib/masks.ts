@@ -43,6 +43,50 @@ export const validarCPF = (value: string): boolean => {
 };
 
 /**
+ * Valida o dígito verificador do CNPJ
+ */
+export const validarCNPJ = (value: string): boolean => {
+  const clean = value.replace(/\D/g, '');
+  if (clean.length !== 14) return false;
+  if (/^(\d)\1+$/.test(clean)) return false;
+
+  let tamanho = clean.length - 2;
+  let numeros = clean.substring(0, tamanho);
+  const digitos = clean.substring(tamanho);
+  let soma = 0;
+  let pos = tamanho - 7;
+  for (let i = tamanho; i >= 1; i--) {
+    soma += parseInt(numeros.charAt(tamanho - i), 10) * pos--;
+    if (pos < 2) pos = 9;
+  }
+  let resultado = soma % 11 < 2 ? 0 : 11 - (soma % 11);
+  if (resultado !== parseInt(digitos.charAt(0), 10)) return false;
+
+  tamanho = tamanho + 1;
+  numeros = clean.substring(0, tamanho);
+  soma = 0;
+  pos = tamanho - 7;
+  for (let i = tamanho; i >= 1; i--) {
+    soma += parseInt(numeros.charAt(tamanho - i), 10) * pos--;
+    if (pos < 2) pos = 9;
+  }
+  resultado = soma % 11 < 2 ? 0 : 11 - (soma % 11);
+  if (resultado !== parseInt(digitos.charAt(1), 10)) return false;
+
+  return true;
+};
+
+/**
+ * Valida se é um CPF (11 dígitos) ou CNPJ (14 dígitos) válido
+ */
+export const validarCPFouCNPJ = (value: string): boolean => {
+  const clean = value.replace(/\D/g, '');
+  if (clean.length === 11) return validarCPF(clean);
+  if (clean.length === 14) return validarCNPJ(clean);
+  return false;
+};
+
+/**
  * Aplica máscara de CNPJ: 00.000.000/0000-00 (Máximo 18 caracteres)
  */
 export const mascaraCNPJ = (value: string): string => {
@@ -186,8 +230,26 @@ export const mascaraFinanceira = (value: string): string => {
 };
 
 /**
- * Converte uma string formatada em moeda brasileiro para número de ponto flutuante
+ * Sugere data de vencimento padrão (dia 05 do mês subsequente ou D+5 dias úteis)
  */
+export const getSugestaoVencimento = (): string => {
+  const hoje = new Date();
+  let mes = hoje.getMonth() + 1; // próximo mês
+  let ano = hoje.getFullYear();
+  if (mes > 11) {
+    mes = 0;
+    ano += 1;
+  }
+  const d05 = new Date(ano, mes, 5);
+  const iso05 = d05.toISOString().split('T')[0];
+  const hojeIso = hoje.toISOString().split('T')[0];
+  if (iso05 >= hojeIso) {
+    return iso05;
+  }
+  const d5 = new Date();
+  d5.setDate(d5.getDate() + 5);
+  return d5.toISOString().split('T')[0];
+};
 export const converterMascaraParaNumero = (value: string | number | undefined | null): number => {
   if (value === undefined || value === null || value === '') return 0;
   if (typeof value === 'number') return value;

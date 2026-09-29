@@ -278,9 +278,26 @@ export interface FaturaPaciente {
   mesReferencia?: string;
   periodoApurado: { inicio: string; fim: string };
   valorTotal: number;
-  status: 'Aberta' | 'Fechada';
-  plantoesCongelados: any[];
+  status: 'Aberta' | 'Fechada' | 'EMITIDO' | string;
+  plantoesCongelados?: any[];
   servicosExtras?: ServicoExtra[];
+  cobrancaInter?: {
+    nossoNumero?: string;
+    codigoSolicitacao?: string;
+    linhaDigitavel?: string;
+    pixCopiaECola?: string;
+    pdfBase64?: string | null;
+    dataEmissao?: string;
+    valor?: number;
+    status?: string;
+  };
+  nossoNumero?: string;
+  codigoSolicitacao?: string;
+  linhaDigitavel?: string;
+  pixCopiaECola?: string;
+  pdfBase64?: string;
+  statusPagamento?: string;
+  situacaoInter?: string;
 }
 
 export interface FolhaPagamento {

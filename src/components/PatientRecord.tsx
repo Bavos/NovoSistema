@@ -12,12 +12,13 @@ import { useFirebase } from '../context/FirebaseContext';
 import { usePacienteData } from '../hooks/usePacienteData';
 import { sanitizeClonedDocForHtml2Canvas, exportCanvasToA4PDF } from '../lib/html2canvasSanitizer';
 import { exportFaturaPDF } from '../utils/faturaPdfGenerator';
+import { downloadBoletoPdf } from '../services/interService';
 import { ModalInserirDebito, DadosAtalhoCuringa } from './ModalInserirDebito';
 import { CardBase, DataGrid, DataField, SoftBadge } from './ui/DesignSystem';
 import { Logo } from './Logo';
 import { pacienteSchema } from '../schemas/validationSchemas';
 import { getProximoCodigoReferencia } from '../utils/codigoPacienteUtils';
-import { mascaraCPF, mascaraTelefone, mascaraCEP, mascaraMesAno, validarCPF, mascaraAltura, mascaraPeso, mascaraFinanceira, formatarMoeda, converterMascaraParaNumero } from '../lib/masks';
+import { mascaraCPF, mascaraCNPJ, mascaraTelefone, mascaraCEP, mascaraMesAno, validarCPF, validarCNPJ, validarCPFouCNPJ, getSugestaoVencimento, mascaraAltura, mascaraPeso, mascaraFinanceira, formatarMoeda, converterMascaraParaNumero } from '../lib/masks';
 import {
   Save,
   Lock,
@@ -459,6 +460,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   });
   const [batchWeekdays, setBatchWeekdays] = useState<string[]>(['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']);
+
+  // Modal de Confirmação Rápida de Boleto Inter
+  const [showPatientBoletoConfirmModal, setShowPatientBoletoConfirmModal] = useState<boolean>(false);
+  const [patientBoletoConfirmData, setPatientBoletoConfirmData] = useState<any>(null);
+  const [copiedLinhaDigitavel, setCopiedLinhaDigitavel] = useState<boolean>(false);
+  const [copiedPix, setCopiedPix] = useState<boolean>(false);
 
   // Automatically calculate weekday from dates
   useEffect(() => {
@@ -3456,9 +3463,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
   
   
-  const handleVerificarStatusBoleto = async (codigoSolicitacao: string, faturaId: string, monthKey?: string) => {
-    if (!codigoSolicitacao) {
-      toast.error("Código de cobrança não localizado nesta fatura.");
+  const handleVerificarStatusBoleto = async (codigoOuNossoNumero: string, faturaId?: string, monthKey?: string) => {
+    if (!codigoOuNossoNumero) {
+      toast.error("Código de cobrança ou Nosso Número não localizado nesta fatura.");
       return;
     }
     const tId = toast.loading("Consultando status em tempo real no Banco Inter...");
@@ -3467,7 +3474,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       const { app } = await import("../lib/firebase");
       const functions = getFunctions(app, "southamerica-east1");
       const consultar = httpsCallable(functions, "consultarStatusBoletoInter");
-      const res: any = await consultar({ codigoSolicitacao, faturaId });
+      const res: any = await consultar({ codigoSolicitacao: codigoOuNossoNumero, nossoNumero: codigoOuNossoNumero, faturaId: faturaId || "" });
       toast.dismiss(tId);
 
       const st = (res.data?.status || "").toLowerCase();
@@ -3475,13 +3482,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
       // Atualização imediata do estado da tela
       if (st === "pago") {
-        setStatusBoletoLocal(prev => ({ ...prev, [currentMonthKey]: "pago", [faturaId]: "pago" }));
+        setStatusBoletoLocal(prev => ({ ...prev, [currentMonthKey]: "pago", ...(faturaId ? { [faturaId]: "pago" } : {}) }));
         toast.success("Pagamento confirmado! Fatura liquidada no Banco Inter.");
       } else if (st === "vencido") {
-        setStatusBoletoLocal(prev => ({ ...prev, [currentMonthKey]: "vencido", [faturaId]: "vencido" }));
+        setStatusBoletoLocal(prev => ({ ...prev, [currentMonthKey]: "vencido", ...(faturaId ? { [faturaId]: "vencido" } : {}) }));
         toast.error("Boleto vencido sem confirmação de pagamento.");
       } else {
-        setStatusBoletoLocal(prev => ({ ...prev, [currentMonthKey]: "pendente", [faturaId]: "pendente" }));
+        setStatusBoletoLocal(prev => ({ ...prev, [currentMonthKey]: "pendente", ...(faturaId ? { [faturaId]: "pendente" } : {}) }));
         toast(`Status no Banco Inter: ${res.data?.situacaoInter || "Aguardando Pagamento"}`, { icon: 'ℹ️' });
       }
     } catch (err: any) {
@@ -3508,7 +3515,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     ).replace(/\D/g, "");
 
     if (!docPagador || docPagador.length < 11) {
-      toast.error("CPF ou CNPJ do pagador/responsável não configurado no cadastro.");
+      toast.error("CPF ou CNPJ do pagador/responsável não configurado ou incompleto no cadastro (mínimo 11 dígitos).");
       return;
     }
 
@@ -3554,6 +3561,27 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       return;
     }
 
+    const sugestaoVencimento = getSugestaoVencimento();
+
+    // Abre o Modal de Confirmação Rápida Pré-Disparo
+    setPatientBoletoConfirmData({
+      clienteNome: (paciente as any).nomeResponsavel || (paciente as any).responsavel || paciente.nome,
+      clienteDocumento: docPagador,
+      valor: valorFinal,
+      dataVencimento: sugestaoVencimento,
+      competencia: `${String(calendarMonth + 1).padStart(2, "0")}/${calendarYear}`,
+      matchedFatura,
+      mesFormatado
+    });
+    setShowPatientBoletoConfirmModal(true);
+  };
+
+  const executarEmissaoBoletoPaciente = async () => {
+    if (!patientBoletoConfirmData || !paciente) return;
+    setShowPatientBoletoConfirmModal(false);
+
+    const { clienteNome, clienteDocumento, valor, dataVencimento, matchedFatura, mesFormatado } = patientBoletoConfirmData;
+
     const loaderId = toast.loading("Emitindo Boleto Oficial no Banco Inter...");
     const seuNum = matchedFatura?.numeroFatura ? String(matchedFatura.numeroFatura).substring(0, 15) : `FAT-${Date.now().toString().slice(-6)}`;
 
@@ -3565,16 +3593,32 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
       const response: any = await emitir({
         faturaId: seuNum,
-        clienteNome: (paciente as any).nomeResponsavel || (paciente as any).responsavel || paciente.nome,
-        clienteDocumento: docPagador,
+        clienteNome: clienteNome.trim(),
+        clienteDocumento: clienteDocumento.replace(/\D/g, ''),
         clienteEmail: (paciente as any).email || (paciente as any).emailResponsavel || "",
-        valor: valorFinal,
-        dataVencimento: new Date(Date.now() + 5 * 86400000).toISOString().split("T")[0],
-        descricao: `Prestação de Serviços - Ref: ${String(calendarMonth + 1).padStart(2, "0")}/${calendarYear}`
+        valor: valor,
+        dataVencimento: dataVencimento,
+        descricao: `Prestação de Serviços - Ref: ${String(calendarMonth + 1).padStart(2, "0")}/${calendarYear}`,
+        pagador: {
+          cpfCnpj: clienteDocumento.replace(/\D/g, ''),
+          nome: clienteNome.trim(),
+          tipoPessoa: clienteDocumento.replace(/\D/g, '').length > 11 ? "JURIDICA" : "FISICA"
+        }
       });
 
       const resData: any = response.data;
       toast.dismiss(loaderId);
+
+      const cobrancaInterPayload = {
+        nossoNumero: resData?.nossoNumero || resData?.codigoSolicitacao || "",
+        codigoSolicitacao: resData?.codigoSolicitacao || "",
+        linhaDigitavel: resData?.linhaDigitavel || "",
+        pixCopiaECola: resData?.pixCopiaECola || "",
+        pdfBase64: resData?.pdfBase64 || null,
+        dataEmissao: new Date().toISOString(),
+        valor: valor,
+        status: 'EMITIDO'
+      };
 
       // Atualizar dados do boleto na fatura do Firestore se ela já existir
       if (matchedFatura?.id) {
@@ -3589,10 +3633,45 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             pixCopiaECola: resData.pixCopiaECola || "",
             pdfBase64: resData.pdfBase64 || "",
             statusPagamento: "Pendente",
-            situacaoInter: resData.situacaoInter || "A_RECEBER"
+            situacaoInter: resData.situacaoInter || "A_RECEBER",
+            cobrancaInter: cobrancaInterPayload
           });
         } catch (dbErr) {
           console.warn("Aviso ao vincular boleto na fatura existente:", dbErr);
+        }
+      } else {
+        try {
+          const { doc, setDoc, collection } = await import("firebase/firestore");
+          const { db } = await import("../lib/firebase");
+          const newDocRef = doc(collection(db, "faturas_pacientes"));
+          const monthPrefix = `${calendarYear}-${String(calendarMonth + 1).padStart(2, "0")}`;
+          const lastDay = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+          await setDoc(newDocRef, {
+            id: newDocRef.id,
+            idPaciente: paciente.id,
+            pacienteId: paciente.id,
+            nomePaciente: paciente.nome,
+            numeroFatura: `FAT-${calendarYear}${String(calendarMonth + 1).padStart(2, "0")}-${newDocRef.id.slice(-4).toUpperCase()}`,
+            dataEmissao: new Date().toISOString(),
+            mesReferencia: monthPrefix,
+            periodoApurado: {
+              inicio: `${monthPrefix}-01`,
+              fim: `${monthPrefix}-${String(lastDay).padStart(2, "0")}`
+            },
+            valorTotal: valor,
+            status: 'EMITIDO',
+            statusPagamento: "Pendente",
+            situacaoInter: resData?.situacaoInter || "A_RECEBER",
+            nossoNumero: resData?.nossoNumero || "",
+            codigoSolicitacao: resData?.codigoSolicitacao || "",
+            linhaDigitavel: resData?.linhaDigitavel || "",
+            codigoBarras: resData?.codigoBarras || "",
+            pixCopiaECola: resData?.pixCopiaECola || "",
+            pdfBase64: resData?.pdfBase64 || "",
+            cobrancaInter: cobrancaInterPayload
+          });
+        } catch (dbErr) {
+          console.warn("Aviso ao criar fatura com cobrancaInter:", dbErr);
         }
       }
 
@@ -5294,14 +5373,45 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       <span>Baixar Fatura (PDF)</span>
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={handleGerarBoletoInter}
-                      className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-200 transform hover:-translate-y-0.5 bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-500/30 cursor-pointer flex items-center space-x-1.5 text-xs active:scale-95"
-                    >
-                      <Receipt size={14} />
-                      <span>Gerar Boleto</span>
-                    </button>
+                    {(() => {
+                      const monthPrefix = `${calendarYear}-${String(calendarMonth + 1).padStart(2, "0")}`;
+                      const matchedFatura: any = (faturasPacientes || []).find((f: any) => {
+                        const matchesPaciente = f.idPaciente === (paciente?.id || "") || f.pacienteId === (paciente?.id || "") || f.nomePaciente?.toLowerCase() === (paciente?.nome || "").toLowerCase();
+                        const matchesPeriodo = f.mesReferencia === monthPrefix || (f.periodoApurado?.inicio && f.periodoApurado.inicio.startsWith(monthPrefix));
+                        return matchesPaciente && matchesPeriodo;
+                      });
+
+                      const cobranca = matchedFatura?.cobrancaInter;
+                      const nossoNum = cobranca?.nossoNumero || matchedFatura?.nossoNumero;
+                      const codSolicitacao = cobranca?.codigoSolicitacao || matchedFatura?.codigoSolicitacao;
+                      const pdfBase64 = cobranca?.pdfBase64 || matchedFatura?.pdfBase64;
+                      const temBoleto = Boolean(nossoNum || codSolicitacao || cobranca?.status === 'EMITIDO');
+
+                      if (temBoleto) {
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => downloadBoletoPdf(pdfBase64, nossoNum || matchedFatura?.numeroFatura, codSolicitacao)}
+                            className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-200 transform hover:-translate-y-0.5 bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-500/30 cursor-pointer flex items-center space-x-1.5 text-xs active:scale-95"
+                            title="Baixar 2ª via do PDF do Boleto Banco Inter emitido"
+                          >
+                            <Receipt size={14} />
+                            <span>Baixar Boleto (PDF)</span>
+                          </button>
+                        );
+                      }
+
+                      return (
+                        <button
+                          type="button"
+                          onClick={handleGerarBoletoInter}
+                          className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-200 transform hover:-translate-y-0.5 bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-500/30 cursor-pointer flex items-center space-x-1.5 text-xs active:scale-95"
+                        >
+                          <Receipt size={14} />
+                          <span>Gerar Boleto</span>
+                        </button>
+                      );
+                    })()}
 
                     <button
                       type="button"
@@ -5401,7 +5511,16 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                               return matchesPaciente && matchesPeriodo;
                             });
 
-                            if (!matchedFatura || (!matchedFatura.codigoSolicitacao && !matchedFatura.linhaDigitavel && !matchedFatura.statusPagamento)) {
+                            const cobranca = matchedFatura?.cobrancaInter;
+                            const nossoNumeroInter = cobranca?.nossoNumero || matchedFatura?.nossoNumero;
+                            const codigoSolicitacaoInter = cobranca?.codigoSolicitacao || matchedFatura?.codigoSolicitacao;
+                            const linhaDigitavelInter = cobranca?.linhaDigitavel || matchedFatura?.linhaDigitavel;
+                            const pixCopiaEColaInter = cobranca?.pixCopiaECola || matchedFatura?.pixCopiaECola;
+                            const pdfBase64Inter = cobranca?.pdfBase64 || matchedFatura?.pdfBase64;
+                            const valorFinalBoleto = cobranca?.valor || matchedFatura?.valorTotal || 0;
+                            const temBoletoEmitido = Boolean(nossoNumeroInter || codigoSolicitacaoInter || cobranca?.status === 'EMITIDO');
+
+                            if (!matchedFatura || !temBoletoEmitido) {
                               return (
                                 <span className="text-[11px] font-bold text-slate-400 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-full flex items-center gap-1.5">
                                   ⚪ Boleto Pendente
@@ -5411,13 +5530,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
                             const localOverride = statusBoletoLocal[monthPrefix] || (matchedFatura?.id ? statusBoletoLocal[matchedFatura.id] : undefined);
                             const stPag = (matchedFatura.statusPagamento || "").toLowerCase();
-                            const stInter = (matchedFatura.situacaoInter || "").toLowerCase();
+                            const stInter = (cobranca?.status || matchedFatura.situacaoInter || "").toLowerCase();
                             const stFat = (matchedFatura.status || "").toLowerCase();
                             const isPago = localOverride === "pago" || stPag === "pago" || stInter === "pago" || stInter === "recebido" || stInter === "marcado_recebido" || stFat === "pago";
                             const isVencido = !isPago && (localOverride === "vencido" || stPag === "vencido" || stInter === "vencido" || stInter === "expirado" || stInter === "atrasado" || stFat === "vencido");
 
                             return (
-                              <div className="flex flex-wrap items-center gap-1.5 animate-in fade-in-30">
+                              <div className="flex flex-wrap items-center gap-2 animate-in fade-in-30">
                                 {isPago ? (
                                   <span className="px-2.5 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
                                     ✅ PAGO
@@ -5427,33 +5546,76 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                     ⛔ VENCIDO
                                   </span>
                                 ) : (
-                                  <span className="px-2.5 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
-                                    ⏳ EM ABERTO
+                                  <span className="px-2.5 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-300 flex items-center gap-1.5 shadow-2xs">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                    <span>Boleto Emitido - R$ {Number(valorFinalBoleto).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                   </span>
                                 )}
 
+                                {/* Botão Baixar Boleto (PDF) */}
                                 <button
                                   type="button"
-                                  onClick={() => handleVerificarStatusBoleto(matchedFatura.codigoSolicitacao || matchedFatura.nossoNumero, matchedFatura.id, monthPrefix)}
-                                  className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 text-[11px] font-bold rounded-md border border-slate-300 shadow-2xs transition-all cursor-pointer flex items-center gap-1 active:scale-95"
-                                  title="Consultar baixa em tempo real no Banco Inter"
+                                  onClick={() => downloadBoletoPdf(pdfBase64Inter, nossoNumeroInter || matchedFatura.numeroFatura, codigoSolicitacaoInter)}
+                                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg shadow-2xs transition-all cursor-pointer flex items-center gap-1 active:scale-95"
+                                  title="Baixar Boleto Oficial em PDF"
                                 >
-                                  🔄 Sincronizar
+                                  <span>📥</span>
+                                  <span>Baixar Boleto (PDF)</span>
                                 </button>
 
-                                {matchedFatura.pixCopiaECola && !isPago && (
+                                {/* Botão Copiar Linha Digitável */}
+                                {linhaDigitavelInter && (
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      navigator.clipboard.writeText(matchedFatura.pixCopiaECola);
-                                      toast.success("Pix Copia e Cola copiado!");
+                                      navigator.clipboard.writeText(linhaDigitavelInter);
+                                      setCopiedLinhaDigitavel(true);
+                                      toast.success("Linha digitável copiada!");
+                                      setTimeout(() => setCopiedLinhaDigitavel(false), 2500);
                                     }}
-                                    className="px-2 py-1 bg-teal-50 hover:bg-teal-100 text-teal-800 text-[11px] font-bold rounded-md border border-teal-200 shadow-2xs transition-all cursor-pointer flex items-center gap-1 active:scale-95"
-                                    title="Copiar Pix Copia e Cola"
+                                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg shadow-2xs transition-all cursor-pointer flex items-center gap-1 active:scale-95 ${
+                                      copiedLinhaDigitavel
+                                        ? 'bg-blue-600 text-white border border-blue-600'
+                                        : 'bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200'
+                                    }`}
+                                    title="Copiar Linha Digitável do Boleto"
                                   >
-                                    ⚡ Copiar Pix
+                                    <span>{copiedLinhaDigitavel ? "✓" : "📋"}</span>
+                                    <span>{copiedLinhaDigitavel ? "Copiado!" : "Copiar Linha"}</span>
                                   </button>
                                 )}
+
+                                {/* Botão Copiar Pix Copia e Cola */}
+                                {pixCopiaEColaInter && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(pixCopiaEColaInter);
+                                      setCopiedPix(true);
+                                      toast.success("Pix Copia e Cola copiado!");
+                                      setTimeout(() => setCopiedPix(false), 2500);
+                                    }}
+                                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg shadow-2xs transition-all cursor-pointer flex items-center gap-1 active:scale-95 ${
+                                      copiedPix
+                                        ? 'bg-teal-600 text-white border border-teal-600'
+                                        : 'bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200'
+                                    }`}
+                                    title="Copiar Pix Copia e Cola"
+                                  >
+                                    <span>{copiedPix ? "✓" : "⚡"}</span>
+                                    <span>{copiedPix ? "Copiado!" : "Copiar Pix"}</span>
+                                  </button>
+                                )}
+
+                                {/* Botão Sincronizar lendo diretamente cobrancaInter.nossoNumero */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleVerificarStatusBoleto(nossoNumeroInter || codigoSolicitacaoInter, matchedFatura.id, monthPrefix)}
+                                  className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 text-[11px] font-bold rounded-lg border border-slate-300 shadow-2xs transition-all cursor-pointer flex items-center gap-1 active:scale-95"
+                                  title={`Consultar baixa em tempo real no Banco Inter (Nosso Número: ${nossoNumeroInter})`}
+                                >
+                                  🔄 Sincronizar
+                                </button>
                               </div>
                             );
                           })()}
@@ -10088,6 +10250,80 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
           </div>
         );
       })()}
+      {/* Modal de Confirmação Rápida Pré-Disparo - Boleto Inter (Paciente) */}
+      {showPatientBoletoConfirmModal && patientBoletoConfirmData && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 animate-in fade-in-20 font-sans">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl p-6 max-w-lg w-full space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                <Receipt className="w-5 h-5 text-blue-600" />
+                <span>Conferência de Emissão de Boleto - Banco Inter</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowPatientBoletoConfirmModal(false)}
+                className="text-slate-400 hover:text-slate-700 font-bold text-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Confira os dados da cobrança bancária do paciente abaixo antes de realizar o envio oficial à API v3 do Banco Inter:
+            </p>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2.5 text-xs">
+              <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
+                <span className="font-bold text-slate-500">Pagador:</span>
+                <span className="font-bold text-slate-900 text-right">{patientBoletoConfirmData.clienteNome}</span>
+              </div>
+              <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
+                <span className="font-bold text-slate-500">Documento (CPF/CNPJ):</span>
+                <span className="font-mono font-bold text-slate-900">
+                  {patientBoletoConfirmData.clienteDocumento.length > 11
+                    ? mascaraCNPJ(patientBoletoConfirmData.clienteDocumento)
+                    : mascaraCPF(patientBoletoConfirmData.clienteDocumento)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
+                <span className="font-bold text-slate-500">Competência / Referência:</span>
+                <span className="font-bold text-slate-800">
+                  {patientBoletoConfirmData.competencia}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
+                <span className="font-bold text-slate-500">Valor Total Nominal:</span>
+                <span className="font-mono font-extrabold text-emerald-700 text-sm">
+                  R$ {Number(patientBoletoConfirmData.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="font-bold text-slate-500">Data de Vencimento:</span>
+                <span className="font-mono font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded border border-blue-200">
+                  {patientBoletoConfirmData.dataVencimento ? patientBoletoConfirmData.dataVencimento.split('-').reverse().join('/') : '-'}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowPatientBoletoConfirmModal(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer"
+              >
+                Ajustar / Voltar
+              </button>
+              <button
+                type="button"
+                onClick={executarEmissaoBoletoPaciente}
+                className="px-5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+              >
+                <span>🧾 Confirmar e Emitir Boleto</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -14,13 +14,13 @@ async function downloadBoletoPdf(base64Data?: string, seuNumero?: string, codigo
       toast.dismiss("loading-pdf");
     } catch (err: any) {
       toast.dismiss("loading-pdf");
-      alert("O Banco Inter ainda está processando o PDF deste boleto. Aguarde 5 segundos e tente clicar novamente.");
+      toast.error("O Banco Inter ainda está processando o PDF deste boleto. Tente novamente em instantes.");
       return;
     }
   }
 
   if (!finalBase64) {
-    alert("Arquivo PDF não disponível no momento. Tente novamente.");
+    toast.error("Arquivo PDF não disponível no momento. Tente novamente.");
     return;
   }
 
@@ -44,7 +44,7 @@ async function downloadBoletoPdf(base64Data?: string, seuNumero?: string, codigo
     toast.success("Download do PDF concluído!");
   } catch (err: any) {
     console.error("Erro ao baixar PDF:", err);
-    alert("Falha ao abrir PDF: " + (err?.message || err));
+    toast.error("Falha ao abrir PDF: " + (err?.message || err));
   }
 }
 
@@ -96,8 +96,8 @@ import { INITIAL_PROFESSIONALS } from '../mockData';
 import { useFirebase } from '../context/FirebaseContext';
 import { Agendamento, DebitoProfissional } from '../types';
 import { db } from '../lib/firebase';
-import { collection, query, where, getDocs, doc, getDoc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
-import { mascaraCNPJ, mascaraCPF, mascaraFinanceira, converterMascaraParaNumero } from '../lib/masks';
+import { collection, query, where, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { mascaraCNPJ, mascaraCPF, mascaraFinanceira, converterMascaraParaNumero, validarCPFouCNPJ, getSugestaoVencimento, formatarMoeda } from '../lib/masks';
 import { toast } from 'react-hot-toast';
 import { showSuccessToast } from './CustomToast';
 import { GlossyButton } from './GlossyButton';
@@ -330,7 +330,8 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
     addFolhaPagamento,
     setNotification,
     isQuotaExceeded,
-    isTestMode
+    isTestMode,
+    addAuditLog
   } = useFirebase();
 
   const activePacientes = pacientes.filter(p => p.status === 'Ativo' || p.status?.toLowerCase() === 'ativo');
@@ -386,9 +387,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   // States for Banco Inter Integration (Transferências & Boletos)
   const [metodoPagamentoInter, setMetodoPagamentoInter] = useState<'pix_ted' | 'boleto'>('pix_ted');
   const [boletoVencimento, setBoletoVencimento] = useState<string>(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 5);
-    return d.toISOString().split('T')[0];
+    return getSugestaoVencimento();
   });
   const [boletoCpfCnpj, setBoletoCpfCnpj] = useState<string>('');
   const [boletoPagadorNome, setBoletoPagadorNome] = useState<string>('');
@@ -396,6 +395,10 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   const [boletoValor, setBoletoValor] = useState<string>('0,00');
   const [boletoResultData, setBoletoResultData] = useState<any | null>(null);
   const [selectedPagadorType, setSelectedPagadorType] = useState<'manual' | 'paciente' | 'profissional'>('manual');
+  const [selectedPacienteId, setSelectedPacienteId] = useState<string>('');
+  const [showConfirmBoletoModal, setShowConfirmBoletoModal] = useState<boolean>(false);
+  const [copiedLinhaDigitavel, setCopiedLinhaDigitavel] = useState<boolean>(false);
+  const [copiedPix, setCopiedPix] = useState<boolean>(false);
 
   const meiProfissionais = activeProfissionais.filter(p => p.temMei && !p.meiIrregular && p.cnpj && p.cnpj.trim() !== '');
 
@@ -1266,14 +1269,41 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
     }
   };
 
-  const gerarBoletoInter = async () => {
-    if (!boletoVencimento) {
-      toast.error('Por favor, informe a Data de Vencimento do boleto.');
+  const handleIniciarEmissaoBoleto = () => {
+    const cleanCpfCnpj = (boletoCpfCnpj || '').replace(/\D/g, '');
+    if (!cleanCpfCnpj || cleanCpfCnpj.length < 11) {
+      toast.error('CPF/CNPJ do pagador é obrigatório (mínimo 11 dígitos para CPF ou 14 para CNPJ).');
       return;
     }
+    const hojeIso = new Date().toISOString().split('T')[0];
+    if (!boletoVencimento || boletoVencimento < hojeIso) {
+      toast.error('Data de Vencimento é obrigatória e não pode ser anterior a hoje.');
+      return;
+    }
+    const valNum = converterMascaraParaNumero(boletoValor);
+    if (isNaN(valNum) || valNum <= 0) {
+      toast.error('Por favor, informe um valor maior que R$ 0,00 para a cobrança.');
+      return;
+    }
+    if (!boletoPagadorNome.trim()) {
+      toast.error('Por favor, informe o Nome/Razão Social do pagador.');
+      return;
+    }
+
+    setShowConfirmBoletoModal(true);
+  };
+
+  const gerarBoletoInter = async () => {
+    setShowConfirmBoletoModal(false);
+
     const cleanCpfCnpj = (boletoCpfCnpj || '').replace(/\D/g, '');
     if (!cleanCpfCnpj || cleanCpfCnpj.length < 11) {
       toast.error('Por favor, informe um CPF/CNPJ válido para o pagador (mínimo 11 dígitos).');
+      return;
+    }
+    const hojeIso = new Date().toISOString().split('T')[0];
+    if (!boletoVencimento || boletoVencimento < hojeIso) {
+      toast.error('Por favor, informe uma Data de Vencimento igual ou posterior a hoje.');
       return;
     }
     const valNum = converterMascaraParaNumero(boletoValor);
@@ -1296,9 +1326,9 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       valorNominal: valNum,
       dataVencimento: boletoVencimento,
       pagador: {
-        cpfCnpj: cleanCpfCnpj,
+        cpfCnpj: cleanCpfCnpj, // Apenas dígitos
         tipoPessoa: cleanCpfCnpj.length > 11 ? "JURIDICA" : "FISICA",
-        nome: boletoPagadorNome || "Pagador Registrado",
+        nome: (boletoPagadorNome || "Pagador Registrado").trim(),
         endereco: boletoEndereco || undefined,
       }
     };
@@ -1309,12 +1339,13 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
 
       const response = await emitir({
         faturaId: seuNum,
-        clienteNome: boletoPagadorNome || "Pagador Registrado",
+        clienteNome: (boletoPagadorNome || "Pagador Registrado").trim(),
         clienteDocumento: cleanCpfCnpj,
         clienteEmail: ((payloadBoleto.pagador as any)?.email) || "",
         valor: valNum,
         dataVencimento: boletoVencimento,
-        descricao: "Prestação de Serviços de Home Care"
+        descricao: `Prestação de Serviços de Home Care - Ref: ${getReferenciaMesNome(referenciaMes)}/${referenciaAno}`,
+        pagador: payloadBoleto.pagador
       });
 
       const realData = response.data as any;
@@ -1338,6 +1369,91 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       setBoletoResultData(realResult);
       setFolhaSuccess(true);
       toast.success(`Boleto de R$ ${valNum.toFixed(2)} emitido com sucesso no Banco Inter!`);
+
+      // 1. Conectar a emissão de boletos realizada no módulo Financeiro à fatura do paciente em Escalas/Faturas
+      const targetPaciente = selectedPacienteId
+        ? activePacientes.find(p => p.id === selectedPacienteId)
+        : (selectedPagadorType === 'paciente' ? activePacientes.find(p => p.nome.toLowerCase() === (boletoPagadorNome || '').trim().toLowerCase()) : null);
+
+      if (targetPaciente) {
+        const monthPrefix = `${referenciaAno}-${String(referenciaMes).padStart(2, '0')}`;
+        const cobrancaInterPayload = {
+          nossoNumero: realResult.nossoNumero,
+          codigoSolicitacao: realResult.codigoSolicitacao,
+          linhaDigitavel: realResult.linhaDigitavel,
+          pixCopiaECola: realResult.pixCopiaECola,
+          pdfBase64: realResult.pdfBase64 || null,
+          dataEmissao: new Date().toISOString(),
+          valor: valNum,
+          status: 'EMITIDO'
+        };
+
+        try {
+          let existingFatura = (faturasPacientes || []).find((f: any) => {
+            const matchPac = f.idPaciente === targetPaciente.id || f.pacienteId === targetPaciente.id || (f.nomePaciente && f.nomePaciente.toLowerCase() === targetPaciente.nome.toLowerCase());
+            const matchMonth = f.mesReferencia === monthPrefix || (f.periodoApurado?.inicio && f.periodoApurado.inicio.startsWith(monthPrefix));
+            return matchPac && matchMonth;
+          });
+
+          if (!existingFatura?.id) {
+            try {
+              const qSnap = await getDocs(query(collection(db, 'faturas_pacientes'), where('idPaciente', '==', targetPaciente.id), where('mesReferencia', '==', monthPrefix)));
+              if (!qSnap.empty) {
+                existingFatura = { id: qSnap.docs[0].id, ...qSnap.docs[0].data() } as any;
+              } else {
+                const qSnap2 = await getDocs(query(collection(db, 'faturas_pacientes'), where('pacienteId', '==', targetPaciente.id), where('mesReferencia', '==', monthPrefix)));
+                if (!qSnap2.empty) {
+                  existingFatura = { id: qSnap2.docs[0].id, ...qSnap2.docs[0].data() } as any;
+                }
+              }
+            } catch (qErr) {
+              console.warn('[SimulatedDashboards] Falha ao consultar fatura existente por query:', qErr);
+            }
+          }
+
+          if (existingFatura?.id) {
+            await updateDoc(doc(db, 'faturas_pacientes', existingFatura.id), {
+              cobrancaInter: cobrancaInterPayload,
+              nossoNumero: realResult.nossoNumero,
+              codigoSolicitacao: realResult.codigoSolicitacao,
+              linhaDigitavel: realResult.linhaDigitavel,
+              pixCopiaECola: realResult.pixCopiaECola,
+              pdfBase64: realResult.pdfBase64 || null,
+              statusPagamento: 'Pendente',
+              situacaoInter: 'EMITIDO'
+            });
+          } else {
+            const newFatRef = doc(collection(db, 'faturas_pacientes'));
+            const lastDay = new Date(referenciaAno, referenciaMes, 0).getDate();
+            await setDoc(newFatRef, {
+              id: newFatRef.id,
+              idPaciente: targetPaciente.id,
+              pacienteId: targetPaciente.id,
+              nomePaciente: targetPaciente.nome,
+              numeroFatura: `FAT-${referenciaAno}${String(referenciaMes).padStart(2, '0')}-${newFatRef.id.slice(-4).toUpperCase()}`,
+              dataEmissao: new Date().toISOString(),
+              mesReferencia: monthPrefix,
+              periodoApurado: {
+                inicio: `${monthPrefix}-01`,
+                fim: `${monthPrefix}-${String(lastDay).padStart(2, '0')}`
+              },
+              valorTotal: valNum,
+              status: 'EMITIDO',
+              statusPagamento: 'Pendente',
+              situacaoInter: 'EMITIDO',
+              nossoNumero: realResult.nossoNumero,
+              codigoSolicitacao: realResult.codigoSolicitacao,
+              linhaDigitavel: realResult.linhaDigitavel,
+              pixCopiaECola: realResult.pixCopiaECola,
+              pdfBase64: realResult.pdfBase64 || null,
+              cobrancaInter: cobrancaInterPayload
+            });
+          }
+          await addAuditLog('UPDATE', 'faturas_pacientes', targetPaciente.id, `Boleto Banco Inter emitido (Nosso Número: ${realResult.nossoNumero}) para a competência ${monthPrefix}`);
+        } catch (dbErr) {
+          console.warn('[SimulatedDashboards] Erro ao sincronizar cobrancaInter na fatura do paciente:', dbErr);
+        }
+      }
     } catch (err: any) {
       console.error("Erro na emissão oficial do Banco Inter:", err);
       toast.dismiss(loaderToastId);
@@ -2337,9 +2453,27 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                         >
                           <option value="">Selecione um paciente...</option>
                           <option value="ALL">📋 TODOS OS PACIENTES</option>
-                          {activePacientes.map(p => (
-                            <option key={p.id} value={p.id}>{p.nome}</option>
-                          ))}
+                          {activePacientes.map(p => {
+                            const monthPrefix = `${referenciaAno}-${String(referenciaMes).padStart(2, '0')}`;
+                            const faturaDoMes = (faturasPacientes || []).find((f: any) => {
+                              const matchPac = f.idPaciente === p.id || f.pacienteId === p.id || (f.nomePaciente && f.nomePaciente.toLowerCase() === p.nome.toLowerCase());
+                              const matchMonth = f.mesReferencia === monthPrefix || (f.periodoApurado?.inicio && f.periodoApurado.inicio.startsWith(monthPrefix));
+                              const hasBoleto = Boolean(
+                                f.cobrancaInter?.nossoNumero ||
+                                f.cobrancaInter?.codigoSolicitacao ||
+                                f.cobrancaInter?.status === 'EMITIDO' ||
+                                f.nossoNumero ||
+                                f.codigoSolicitacao
+                              );
+                              return matchPac && matchMonth && hasBoleto;
+                            });
+                            const valBoleto = faturaDoMes ? (faturaDoMes.cobrancaInter?.valor || faturaDoMes.valorTotal || 0) : 0;
+                            return (
+                              <option key={p.id} value={p.id}>
+                                {p.nome} {faturaDoMes ? `[Boleto Emitido - R$ ${valBoleto.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}]` : '[Pendente]'}
+                              </option>
+                            );
+                          })}
                         </select>
                       </div>
                     )}
@@ -2682,22 +2816,97 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                           <select
                             onChange={(e) => {
                               const pac = activePacientes.find(p => p.id === e.target.value);
+                              setSelectedPacienteId(pac ? pac.id : '');
                               if (pac) {
-                                setBoletoPagadorNome(pac.nome || '');
-                                const clean = (pac.cpf || (pac as any).cnpj || '').replace(/\D/g, '');
-                                setBoletoCpfCnpj(clean.length > 11 ? mascaraCNPJ(clean) : mascaraCPF(clean));
+                                setBoletoPagadorNome(pac.nome || (pac as any).nomeResponsavel || (pac as any).responsavel || '');
+                                const clean = (
+                                  pac.cpf ||
+                                  (pac as any).cnpj ||
+                                  (pac as any).responsavelFinanceiro?.cpf ||
+                                  (pac as any).cpfResponsavel ||
+                                  (pac as any).responsavelCpf ||
+                                  (pac as any).documento ||
+                                  ''
+                                ).replace(/\D/g, '');
+                                setBoletoCpfCnpj(clean ? (clean.length > 11 ? mascaraCNPJ(clean) : mascaraCPF(clean)) : '');
                                 const endStr = pac.endereco ? `${pac.endereco.rua || (pac.endereco as any).logradouro || ''}, ${pac.endereco.numero || ''} ${pac.endereco.bairro || ''} - ${pac.endereco.cidade || ''}/${pac.endereco.estado || (pac.endereco as any).uf || ''}`.trim() : '';
                                 setBoletoEndereco(endStr);
+
+                                const hojeIso = new Date().toISOString().split('T')[0];
+                                if (!boletoVencimento || boletoVencimento < hojeIso) {
+                                  setBoletoVencimento(getSugestaoVencimento());
+                                }
+
+                                const monthPrefix = `${referenciaAno}-${String(referenciaMes).padStart(2, '0')}`;
+                                const agendsDoMes = agendamentos.filter((s: any) =>
+                                  (s.idPaciente === pac.id || s.pacienteId === pac.id) &&
+                                  s.data && s.data.startsWith(monthPrefix) &&
+                                  !s.considerarFalta && s.status !== "Cancelado"
+                                );
+                                let totPac = agendsDoMes.reduce((acc, ag) => acc + getAgendamentoCalculatedValues(ag).cobradoDia, 0);
+                                if (totPac <= 0 && (pac as any).valorMensalidade) {
+                                  totPac = Number((pac as any).valorMensalidade || 0);
+                                }
+                                if (totPac > 0) {
+                                  setBoletoValor(formatarMoeda(totPac));
+                                }
                               }
                             }}
                             className="p-1.5 border border-slate-200 rounded-md text-xs bg-white text-slate-800 font-bold max-w-xs cursor-pointer"
+                            value={selectedPacienteId}
                           >
                             <option value="">-- Selecionar Paciente --</option>
-                            {activePacientes.map(p => (
-                              <option key={p.id} value={p.id}>{p.nome}</option>
-                            ))}
+                            {activePacientes.map(p => {
+                              const monthPrefix = `${referenciaAno}-${String(referenciaMes).padStart(2, '0')}`;
+                              const faturaDoMes = (faturasPacientes || []).find((f: any) => {
+                                const matchPac = f.idPaciente === p.id || f.pacienteId === p.id || (f.nomePaciente && f.nomePaciente.toLowerCase() === p.nome.toLowerCase());
+                                const matchMonth = f.mesReferencia === monthPrefix || (f.periodoApurado?.inicio && f.periodoApurado.inicio.startsWith(monthPrefix));
+                                const hasBoleto = Boolean(
+                                  f.cobrancaInter?.nossoNumero ||
+                                  f.cobrancaInter?.codigoSolicitacao ||
+                                  f.cobrancaInter?.status === 'EMITIDO' ||
+                                  f.nossoNumero ||
+                                  f.codigoSolicitacao
+                                );
+                                return matchPac && matchMonth && hasBoleto;
+                              });
+
+                              const valBoleto = faturaDoMes ? (faturaDoMes.cobrancaInter?.valor || faturaDoMes.valorTotal || 0) : 0;
+                              return (
+                                <option key={p.id} value={p.id}>
+                                  {p.nome} {faturaDoMes ? `[Boleto Emitido - R$ ${valBoleto.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}]` : '[Pendente]'}
+                                </option>
+                              );
+                            })}
                           </select>
                         )}
+
+                        {selectedPagadorType === 'paciente' && selectedPacienteId && (() => {
+                          const monthPrefix = `${referenciaAno}-${String(referenciaMes).padStart(2, '0')}`;
+                          const faturaDoMes = (faturasPacientes || []).find((f: any) => {
+                            const matchPac = f.idPaciente === selectedPacienteId || f.pacienteId === selectedPacienteId || (f.nomePaciente && f.nomePaciente.toLowerCase() === (boletoPagadorNome || '').trim().toLowerCase());
+                            const matchMonth = f.mesReferencia === monthPrefix || (f.periodoApurado?.inicio && f.periodoApurado.inicio.startsWith(monthPrefix));
+                            const hasBoleto = Boolean(
+                              f.cobrancaInter?.nossoNumero ||
+                              f.cobrancaInter?.codigoSolicitacao ||
+                              f.cobrancaInter?.status === 'EMITIDO' ||
+                              f.nossoNumero ||
+                              f.codigoSolicitacao
+                            );
+                            return matchPac && matchMonth && hasBoleto;
+                          });
+                          const valBoleto = faturaDoMes ? (faturaDoMes.cobrancaInter?.valor || faturaDoMes.valorTotal || 0) : 0;
+                          return faturaDoMes ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse"></span>
+                              [Boleto Emitido - R$ {valBoleto.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}]
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium text-slate-500 bg-slate-100 border border-slate-200">
+                              [Pendente no mês {getReferenciaMesNome(referenciaMes)}/{referenciaAno}]
+                            </span>
+                          );
+                        })()}
 
                         {selectedPagadorType === 'profissional' && (
                           <select
@@ -2706,8 +2915,12 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                               if (prof) {
                                 setBoletoPagadorNome(prof.nome || '');
                                 const clean = (prof.cpf || (prof as any).cnpj || '').replace(/\D/g, '');
-                                setBoletoCpfCnpj(clean.length > 11 ? mascaraCNPJ(clean) : mascaraCPF(clean));
+                                setBoletoCpfCnpj(clean ? (clean.length > 11 ? mascaraCNPJ(clean) : mascaraCPF(clean)) : '');
                                 setBoletoEndereco(typeof prof.endereco === 'string' ? prof.endereco : `${prof.endereco?.rua || (prof.endereco as any)?.logradouro || ''}`);
+                                const hojeIso = new Date().toISOString().split('T')[0];
+                                if (!boletoVencimento || boletoVencimento < hojeIso) {
+                                  setBoletoVencimento(getSugestaoVencimento());
+                                }
                               }
                             }}
                             className="p-1.5 border border-slate-200 rounded-md text-xs bg-white text-slate-800 font-bold max-w-xs cursor-pointer"
@@ -2725,14 +2938,24 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                           <label className="block text-xs font-bold text-slate-600 mb-1">CPF/CNPJ do Pagador *</label>
                           <input
                             type="text"
-                            placeholder="000.000.000-00"
+                            placeholder="000.000.000-00 ou 00.000.000/0000-00"
                             value={boletoCpfCnpj}
                             onChange={(e) => {
                               const clean = e.target.value.replace(/\D/g, '');
                               setBoletoCpfCnpj(clean.length > 11 ? mascaraCNPJ(clean) : mascaraCPF(clean));
                             }}
-                            className="w-full p-2 border border-slate-200 rounded-lg text-sm bg-white font-mono"
+                            className={`w-full p-2 border rounded-lg text-sm font-mono ${
+                              (!boletoCpfCnpj || boletoCpfCnpj.replace(/\D/g, '').length < 11)
+                                ? 'border-amber-400 bg-amber-50/50 text-amber-950 font-bold'
+                                : 'border-slate-200 bg-white text-slate-800'
+                            }`}
                           />
+                          {(!boletoCpfCnpj || boletoCpfCnpj.replace(/\D/g, '').length < 11) && (
+                            <p className="text-[11px] font-bold text-amber-800 bg-amber-100/70 border border-amber-300 p-1.5 rounded-md mt-1.5 flex items-center gap-1">
+                              <span>⚠️</span>
+                              <span>CPF/CNPJ obrigatório para registro de boleto</span>
+                            </p>
+                          )}
                         </div>
 
                         <div>
@@ -2750,10 +2973,21 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                           <label className="block text-xs font-bold text-slate-600 mb-1">Data de Vencimento *</label>
                           <input
                             type="date"
+                            min={new Date().toISOString().split('T')[0]}
                             value={boletoVencimento}
                             onChange={(e) => setBoletoVencimento(e.target.value)}
-                            className="w-full p-2 border border-slate-200 rounded-lg text-sm bg-white font-medium"
+                            className={`w-full p-2 border rounded-lg text-sm font-medium ${
+                              (!boletoVencimento || boletoVencimento < new Date().toISOString().split('T')[0])
+                                ? 'border-rose-400 bg-rose-50/50 text-rose-950 font-bold'
+                                : 'border-slate-200 bg-white text-slate-800'
+                            }`}
                           />
+                          {(!boletoVencimento || boletoVencimento < new Date().toISOString().split('T')[0]) && (
+                            <p className="text-[11px] font-bold text-rose-800 bg-rose-100/70 border border-rose-300 p-1.5 rounded-md mt-1.5 flex items-center gap-1">
+                              <span>⚠️</span>
+                              <span>Data de vencimento é obrigatória (hoje ou posterior)</span>
+                            </p>
+                          )}
                         </div>
 
                         <div>
@@ -2782,13 +3016,97 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                       <div className="flex justify-end pt-2">
                         <button
                           type="button"
-                          onClick={gerarBoletoInter}
-                          disabled={isProcessingFolha}
-                          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-all active:scale-95 disabled:opacity-50 cursor-pointer shadow-md text-xs"
+                          onClick={handleIniciarEmissaoBoleto}
+                          disabled={
+                            isProcessingFolha ||
+                            !boletoCpfCnpj ||
+                            boletoCpfCnpj.replace(/\D/g, '').length < 11 ||
+                            !boletoVencimento ||
+                            boletoVencimento < new Date().toISOString().split('T')[0] ||
+                            converterMascaraParaNumero(boletoValor) <= 0 ||
+                            !boletoPagadorNome.trim()
+                          }
+                          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-md text-xs"
                         >
-                          🧾 Emissão de Boleto Inter
+                          🧾 Emissão de Boleto (Cobrança)
                         </button>
                       </div>
+
+                      {/* Modal de Confirmação Rápida Pré-Disparo */}
+                      {showConfirmBoletoModal && (
+                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 animate-in fade-in-20">
+                          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl p-6 max-w-lg w-full space-y-5 font-sans">
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                              <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                                <Building2 className="w-5 h-5 text-blue-600" />
+                                <span>Conferência de Emissão de Boleto - Banco Inter</span>
+                              </h3>
+                              <button
+                                type="button"
+                                onClick={() => setShowConfirmBoletoModal(false)}
+                                className="text-slate-400 hover:text-slate-700 font-bold text-lg cursor-pointer"
+                              >
+                                ✕
+                              </button>
+                            </div>
+
+                            <p className="text-xs text-slate-600 leading-relaxed">
+                              Confira os dados da cobrança bancária abaixo antes de realizar o envio oficial à API v3 do Banco Inter:
+                            </p>
+
+                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2.5 text-xs">
+                              <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
+                                <span className="font-bold text-slate-500">Pagador:</span>
+                                <span className="font-bold text-slate-900 text-right">{boletoPagadorNome}</span>
+                              </div>
+                              <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
+                                <span className="font-bold text-slate-500">Documento (CPF/CNPJ):</span>
+                                <span className="font-mono font-bold text-slate-900">
+                                  {boletoCpfCnpj.replace(/\D/g, '').length > 11
+                                    ? mascaraCNPJ(boletoCpfCnpj)
+                                    : mascaraCPF(boletoCpfCnpj)}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
+                                <span className="font-bold text-slate-500">Competência / Referência:</span>
+                                <span className="font-bold text-slate-800">
+                                  {getReferenciaMesNome(referenciaMes)}/{referenciaAno}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
+                                <span className="font-bold text-slate-500">Valor Total Nominal:</span>
+                                <span className="font-mono font-extrabold text-emerald-700 text-sm">
+                                  R$ {converterMascaraParaNumero(boletoValor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center py-1">
+                                <span className="font-bold text-slate-500">Data de Vencimento:</span>
+                                <span className="font-mono font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded border border-blue-200">
+                                  {boletoVencimento ? boletoVencimento.split('-').reverse().join('/') : '-'}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-end gap-3 pt-2">
+                              <button
+                                type="button"
+                                onClick={() => setShowConfirmBoletoModal(false)}
+                                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer"
+                              >
+                                Ajustar / Voltar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={gerarBoletoInter}
+                                disabled={isProcessingFolha}
+                                className="px-5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+                              >
+                                <span>🧾 Confirmar e Emitir Boleto</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2907,11 +3225,18 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                             type="button"
                             onClick={() => {
                               navigator.clipboard.writeText(boletoResultData.linhaDigitavel);
-                              toast.success('Linha digitável copiada para a área de transferência!');
+                              setCopiedLinhaDigitavel(true);
+                              toast.success('Linha digitável copiada!');
+                              setTimeout(() => setCopiedLinhaDigitavel(false), 2500);
                             }}
-                            className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-md hover:bg-blue-700 transition-all cursor-pointer shadow-sm active:scale-95"
+                            className={`flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer shadow-sm active:scale-95 ${
+                              copiedLinhaDigitavel
+                                ? 'bg-blue-800 text-white ring-2 ring-blue-400'
+                                : 'bg-blue-600 hover:bg-blue-700 text-white'
+                            }`}
                           >
-                            📋 Copiar Linha Digitável
+                            <span>{copiedLinhaDigitavel ? "✓" : "📋"}</span>
+                            <span>{copiedLinhaDigitavel ? "Copiado!" : "Copiar Linha Digitável"}</span>
                           </button>
                         </div>
                         <div className="bg-white p-3 rounded-lg border border-blue-200 font-mono text-xs sm:text-sm font-black text-slate-800 text-center tracking-wider break-all select-all">
@@ -2930,14 +3255,21 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                               type="button"
                               onClick={() => {
                                 navigator.clipboard.writeText(boletoResultData.pixCopiaECola);
+                                setCopiedPix(true);
                                 toast.success('Pix Copia e Cola copiado!');
+                                setTimeout(() => setCopiedPix(false), 2500);
                               }}
-                              className="px-2.5 py-1 bg-emerald-600 text-white text-xs font-bold rounded-md hover:bg-emerald-700 transition-all cursor-pointer shadow-sm active:scale-95"
+                              className={`flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-md transition-all cursor-pointer shadow-sm active:scale-95 ${
+                                copiedPix
+                                  ? 'bg-teal-700 text-white ring-2 ring-teal-400'
+                                  : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                              }`}
                             >
-                              Copiar Pix
+                              <span>{copiedPix ? "✓" : "⚡"}</span>
+                              <span>{copiedPix ? "Copiado!" : "Copiar Pix Copia e Cola"}</span>
                             </button>
                           </div>
-                          <p className="font-mono text-[10px] text-slate-600 bg-white p-2 rounded border border-emerald-200 truncate">
+                          <p className="font-mono text-[10px] text-slate-600 bg-white p-2 rounded border border-emerald-200 truncate select-all">
                             {boletoResultData.pixCopiaECola}
                           </p>
                         </div>
