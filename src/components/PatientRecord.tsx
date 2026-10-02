@@ -4213,18 +4213,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               <MapPin size={15} />
               <span>Endereço</span>
             </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('medico')}
-              className={`shrink-0 flex items-center space-x-1.5 pb-2.5 px-1 text-xs md:text-sm font-semibold transition-all border-b-2 ${
-                activeTab === 'medico'
-                  ? 'border-emerald-500 text-emerald-600 font-bold bg-transparent'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 bg-transparent'
-              }`}
-            >
-              <Stethoscope size={15} />
-              <span>Info Médica</span>
-            </button>
             {!isColaborador && (
               <button
                 type="button"
@@ -4262,7 +4250,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               id="tab-btn-ocorrencias"
             >
               <AlertOctagon size={15} />
-              <span>Ocorrências</span>
+              <span>Inf. Clínica</span>
             </button>
             <button
               type="button"
@@ -4741,89 +4729,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     onChange={(e) => setLogisticaChegada(e.target.value)}
                     rows={4}
                     className="w-full text-xs p-3 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed font-sans leading-relaxed"
-                  />
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'medico' && (
-              <div className="w-full max-w-xl mx-auto bg-white rounded-2xl shadow-xl border border-gray-200 p-6 md:p-8 mt-6 mb-12 space-y-4 animate-in fade-in-30 slide-in-from-right-3">
-                <h4 className="text-sm font-semibold text-gray-800 border-b border-slate-200 pb-2 uppercase tracking-wider">HISTÓRICO CLÍNICO & PRONTUÁRIO DOMICILIAR</h4>
-
-                {/* Replicating the Visual Card/Grid format from the reference standard */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-slate-50/50 p-4 border border-slate-200 rounded-xl space-y-3">
-                    <h5 className="text-sm font-semibold text-gray-800 flex items-center space-x-1.5">
-                      <span className="w-1.5 h-3 bg-blue-500 rounded-sm inline-block"></span>
-                      <span>Diagnósticos & Comorbidades</span>
-                    </h5>
-                    <div className="space-y-3">
-                      <div className="space-y-1.5">
-                        <label className="block text-sm font-medium text-gray-700">Diagnóstico Principal *</label>
-                        <input
-                          type="text"
-                          required
-                          disabled={isCurrentlyDeactivated || isColaborador}
-                          value={diagnosticoPrincipal}
-                          onChange={(e) => setDiagnosticoPrincipal(e.target.value)}
-                          className="w-full text-sm p-2.5 bg-white border border-slate-300 rounded-lg text-gray-900 font-normal focus:outline-none focus:border-blue-550 focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="block text-sm font-medium text-gray-700">Comorbidades Associadas</label>
-                        <input
-                          type="text"
-                          disabled={isCurrentlyDeactivated || isColaborador}
-                          value={comorbidades}
-                          onChange={(e) => setComorbidades(e.target.value)}
-                          className="w-full text-sm p-2.5 bg-white border border-slate-300 rounded-lg text-gray-900 font-normal focus:outline-none focus:border-blue-550 focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-50/50 p-4 border border-slate-200 rounded-xl space-y-3">
-                    <h5 className="text-sm font-semibold text-gray-800 flex items-center space-x-1.5">
-                      <span className="w-1.5 h-3 bg-red-500 rounded-sm inline-block"></span>
-                      <span>Alergias & Crises</span>
-                    </h5>
-                    <div className="space-y-3">
-                      <div className="space-y-1">
-                        <label className="block text-sm font-medium text-gray-700">Alergias Conhecidas</label>
-                        <input
-                          type="text"
-                          disabled={isCurrentlyDeactivated || isColaborador}
-                          value={alergias}
-                          onChange={(e) => setAlergias(e.target.value)}
-                          className="w-full text-sm p-2.5 bg-white border border-slate-300 rounded-lg text-gray-900 font-normal focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="block text-sm font-medium text-gray-700">Grau de Dependência *</label>
-                        <select
-                          disabled={isCurrentlyDeactivated || isColaborador}
-                          value={grauDependencia}
-                          onChange={(e) => setGrauDependencia(e.target.value as any)}
-                          className="w-full text-sm p-2.5 bg-white border border-slate-300 rounded-lg text-gray-900 font-normal focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
-                        >
-                          <option value="Baixo">Baixo (Supervisão simples)</option>
-                          <option value="Médio">Médio (Auxílio parcial)</option>
-                          <option value="Alto">Alto (Dependência física/motora)</option>
-                          <option value="Muito Alto">Muito Alto (Enfermagem complexa ou VNI)</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="block text-sm font-medium text-gray-700">Observações Clínicas Gerais:</label>
-                  <textarea
-                    disabled={isCurrentlyDeactivated || isColaborador}
-                    value={observacoesClinicas}
-                    onChange={(e) => setObservacoesClinicas(e.target.value)}
-                    rows={3}
-                    className="w-full text-sm p-2.5 bg-white border border-slate-300 rounded-lg text-gray-900 font-normal focus:outline-none focus:border-blue-500 disabled:bg-slate-100/80 disabled:cursor-not-allowed shadow-none"
                   />
                 </div>
               </div>
