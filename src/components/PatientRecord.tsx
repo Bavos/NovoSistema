@@ -4263,7 +4263,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               id="tab-btn-auditoria"
             >
               <History size={15} />
-              <span>Histórico</span>
+              <span>Auditoria</span>
             </button>
           </nav>
 
