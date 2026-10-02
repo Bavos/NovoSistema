@@ -152,6 +152,19 @@ export interface OcorrenciaPaciente {
   bloquearProfissional: boolean;
 }
 
+export interface ProfissionalRestricao {
+  id: string;
+  profissionalId: string;
+  nomeProfissional: string;
+  motivo: string;
+  dataRegistro: string;
+}
+
+export interface PreferenciasInadequacoes {
+  inadequados?: ProfissionalRestricao[];
+  preferenciais?: ProfissionalRestricao[];
+}
+
 export interface Paciente {
   id: string;
   codigoReferencia?: string;
@@ -177,6 +190,7 @@ export interface Paciente {
   createdAt: string;
   profissionaisBloqueados?: string[];
   ocorrencias?: OcorrenciaPaciente[];
+  preferenciasInadequacoes?: PreferenciasInadequacoes;
   mesesConcluidos?: string[];
 }
 

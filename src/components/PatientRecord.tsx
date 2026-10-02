@@ -7,7 +7,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { updateDoc, doc, getDoc, addDoc, collection, serverTimestamp, getDocs, query, where, deleteDoc, limit, writeBatch } from 'firebase/firestore';
 import { fetchCep, fetchBanks, getHolidays } from '../lib/brasilApi';
-import { Paciente, Plantao, CancelingReason, EscalacaoPlano, Agendamento } from '../types';
+import { Paciente, Plantao, CancelingReason, EscalacaoPlano, Agendamento, ProfissionalRestricao } from '../types';
 import { useFirebase } from '../context/FirebaseContext';
 import { usePacienteData } from '../hooks/usePacienteData';
 import { sanitizeClonedDocForHtml2Canvas, exportCanvasToA4PDF } from '../lib/html2canvasSanitizer';
@@ -54,7 +54,11 @@ import {
   Calculator,
   DollarSign,
   FileSpreadsheet,
-  FileText
+  FileText,
+  HeartHandshake,
+  ShieldAlert,
+  UserCheck,
+  UserX
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { toast } from 'react-hot-toast';
@@ -383,10 +387,40 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         return;
       }
 
-      if (payloads.length > 0) {
-        await addAgendamentosBatch(payloads);
-        toast.success(`${payloads.length} plantão(ões) colado(s) com sucesso no dia ${targetDateStr.split('-').reverse().join('/')}!`);
+      if (payloads.length === 0) {
+        toast.error('Nenhum plantão válido para colar.');
+        return;
       }
+
+      const findInad = payloads.find(p => getInadequadoInfo(p.nomeProfissional || p.idProfissional));
+      const executePaste = async () => {
+        try {
+          await addAgendamentosBatch(payloads);
+          toast.success(`${payloads.length} plantão(ões) colado(s) com sucesso no dia ${targetDateStr.split('-').reverse().join('/')}!`);
+        } catch (err) {
+          console.error('Erro ao colar plantão:', err);
+          toast.error('Erro ao colar plantão');
+        }
+      };
+
+      if (findInad) {
+        const info = getInadequadoInfo(findInad.nomeProfissional || findInad.idProfissional);
+        setInadequadoConfirmModal({
+          isOpen: true,
+          nomeProfissional: findInad.nomeProfissional || 'Profissional',
+          motivo: info?.motivo || 'Incompatibilidade ou restrição informada.',
+          dataRegistro: info?.dataRegistro,
+          onConfirm: () => {
+            executePaste();
+          },
+          onCancel: () => {
+            toast('Ação de colar plantão cancelada pelo gestor.', { icon: 'ℹ️' });
+          }
+        });
+        return;
+      }
+
+      await executePaste();
     } catch (err) {
       console.error('Erro ao colar plantão:', err);
       toast.error('Erro ao colar plantão');
@@ -394,13 +428,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   };
 
   const isBlockedBidirectional = (prof: any) => {
-    if (!paciente) return false;
+    if (!prof || !paciente) return false;
     const patientId = paciente.id;
     if (prof.pacientesBloqueados && prof.pacientesBloqueados.includes(patientId)) {
-      return true;
-    }
-    const profId = prof.id;
-    if (paciente.profissionaisBloqueados && paciente.profissionaisBloqueados.includes(profId)) {
       return true;
     }
     return false;
@@ -411,10 +441,52 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const [empresaInfo, setEmpresaInfo] = useState<any>(null);
   const tempFaturaRef = useRef<HTMLDivElement>(null);
 
-  const [activeTab, setActiveTab] = useState<'geral' | 'endereco' | 'medico' | 'plano' | 'agendamento' | 'ocorrencias' | 'auditoria'>('geral');
+  const [activeTab, setActiveTab] = useState<'geral' | 'endereco' | 'medico' | 'plano' | 'agendamento' | 'preferencias' | 'ocorrencias' | 'auditoria'>('geral');
   const [alertDeactivateOpen, setAlertDeactivateOpen] = useState(false);
   const [deactivateReasonInput, setDeactivateReasonInput] = useState('');
   const [deactivateConfirmInput, setDeactivateConfirmInput] = useState('');
+
+  // Estados para Preferências e Inadequações de Profissionais (Fonte Única da Verdade)
+  const [inadequados, setInadequados] = useState<ProfissionalRestricao[]>([]);
+  const [preferenciais, setPreferenciais] = useState<ProfissionalRestricao[]>([]);
+  const [novoInadequadoProfId, setNovoInadequadoProfId] = useState('');
+  const [novoInadequadoMotivo, setNovoInadequadoMotivo] = useState('');
+  const [novoPreferencialProfId, setNovoPreferencialProfId] = useState('');
+  const [novoPreferencialMotivo, setNovoPreferencialMotivo] = useState('');
+
+  // Modal de Alerta e Confirmação de Alocação Excepcional de Profissional Inadequado
+  const [inadequadoConfirmModal, setInadequadoConfirmModal] = useState<{
+    isOpen: boolean;
+    nomeProfissional: string;
+    motivo: string;
+    dataRegistro?: string;
+    onConfirm: () => void;
+    onCancel: () => void;
+  } | null>(null);
+
+  const getInadequadoInfo = (profNameOrId: string) => {
+    if (!profNameOrId) return null;
+    const clean = profNameOrId.trim().toLowerCase();
+    return (
+      inadequados.find(
+        (i) =>
+          i.profissionalId === profNameOrId ||
+          (i.nomeProfissional && i.nomeProfissional.trim().toLowerCase() === clean)
+      ) || null
+    );
+  };
+
+  const getPreferencialInfo = (profNameOrId: string) => {
+    if (!profNameOrId) return null;
+    const clean = profNameOrId.trim().toLowerCase();
+    return (
+      preferenciais.find(
+        (p) =>
+          p.profissionalId === profNameOrId ||
+          (p.nomeProfissional && p.nomeProfissional.trim().toLowerCase() === clean)
+      ) || null
+    );
+  };
 
   // Cancel shift modal state
   const [cancelShiftModalOpen, setCancelShiftModalOpen] = useState(false);
@@ -874,6 +946,169 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       toast.error(getFriendlyErrorMessage(err, 'Erro ao excluir a informação. Tente novamente.'));
     } finally {
       setDeleteConfirmOc(null);
+    }
+  };
+
+  // Handlers para Gerenciamento de Preferências e Inadequações (Fonte Única da Verdade)
+  const handleAddInadequado = async () => {
+    if (!novoInadequadoProfId) {
+      toast.error('Por favor, selecione um profissional para a lista de inadequados.');
+      return;
+    }
+    const prof = profissionais.find(p => p.id === novoInadequadoProfId);
+    if (!prof) return;
+
+    if (inadequados.some(i => i.profissionalId === novoInadequadoProfId)) {
+      toast.error('Este profissional já está registrado na lista de inadequados deste paciente.');
+      return;
+    }
+
+    const novoItem: ProfissionalRestricao = {
+      id: `inad-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      profissionalId: prof.id,
+      nomeProfissional: prof.nome,
+      motivo: novoInadequadoMotivo.trim() || 'Incompatibilidade ou restrição informada pelo paciente/família',
+      dataRegistro: new Date().toISOString().slice(0, 10)
+    };
+
+    const updatedInad = [...inadequados, novoItem];
+    setInadequados(updatedInad);
+    setNovoInadequadoProfId('');
+    setNovoInadequadoMotivo('');
+
+    // Se estiver em preferenciais, remove dele
+    const updatedPref = preferenciais.filter(p => p.profissionalId !== prof.id);
+    setPreferenciais(updatedPref);
+
+    if (paciente?.id) {
+      try {
+        const targetPatient = pacientes.find(p => p.id === paciente.id) || paciente;
+        const updatedObj: Paciente = {
+          ...targetPatient,
+          preferenciasInadequacoes: {
+            inadequados: updatedInad,
+            preferenciais: updatedPref
+          },
+          profissionaisBloqueados: updatedInad.map(i => i.profissionalId)
+        };
+        await updatePaciente(updatedObj, true);
+        if (onSelectPatient) onSelectPatient(updatedObj);
+        toast.success(`${prof.nome} adicionado aos Inadequados com sucesso.`);
+      } catch (err) {
+        console.error('Erro ao salvar inadequado:', err);
+        toast.error('Erro ao salvar no banco de dados.');
+      }
+    } else {
+      toast.success(`${prof.nome} adicionado aos Inadequados.`);
+    }
+  };
+
+  const handleRemoveInadequado = async (itemId: string) => {
+    const item = inadequados.find(i => i.id === itemId);
+    const updatedInad = inadequados.filter(i => i.id !== itemId);
+    setInadequados(updatedInad);
+
+    if (paciente?.id) {
+      try {
+        const targetPatient = pacientes.find(p => p.id === paciente.id) || paciente;
+        const updatedObj: Paciente = {
+          ...targetPatient,
+          preferenciasInadequacoes: {
+            inadequados: updatedInad,
+            preferenciais
+          },
+          profissionaisBloqueados: updatedInad.map(i => i.profissionalId)
+        };
+        await updatePaciente(updatedObj, true);
+        if (onSelectPatient) onSelectPatient(updatedObj);
+        toast.success(item ? `${item.nomeProfissional} removido dos Inadequados.` : 'Profissional removido dos Inadequados.');
+      } catch (err) {
+        console.error('Erro ao remover inadequado:', err);
+        toast.error('Erro ao salvar no banco de dados.');
+      }
+    } else {
+      toast.success('Profissional removido dos Inadequados.');
+    }
+  };
+
+  const handleAddPreferencial = async () => {
+    if (!novoPreferencialProfId) {
+      toast.error('Por favor, selecione um profissional para a lista de preferenciais.');
+      return;
+    }
+    const prof = profissionais.find(p => p.id === novoPreferencialProfId);
+    if (!prof) return;
+
+    if (preferenciais.some(p => p.profissionalId === novoPreferencialProfId)) {
+      toast.error('Este profissional já está na lista de preferenciais deste paciente.');
+      return;
+    }
+
+    const novoItem: ProfissionalRestricao = {
+      id: `pref-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      profissionalId: prof.id,
+      nomeProfissional: prof.nome,
+      motivo: novoPreferencialMotivo.trim() || 'Equipe recomendada com afinidade comprovada',
+      dataRegistro: new Date().toISOString().slice(0, 10)
+    };
+
+    const updatedPref = [...preferenciais, novoItem];
+    setPreferenciais(updatedPref);
+    setNovoPreferencialProfId('');
+    setNovoPreferencialMotivo('');
+
+    // Se estiver em inadequados, remove dele
+    const updatedInad = inadequados.filter(i => i.profissionalId !== prof.id);
+    setInadequados(updatedInad);
+
+    if (paciente?.id) {
+      try {
+        const targetPatient = pacientes.find(p => p.id === paciente.id) || paciente;
+        const updatedObj: Paciente = {
+          ...targetPatient,
+          preferenciasInadequacoes: {
+            inadequados: updatedInad,
+            preferenciais: updatedPref
+          },
+          profissionaisBloqueados: updatedInad.map(i => i.profissionalId)
+        };
+        await updatePaciente(updatedObj, true);
+        if (onSelectPatient) onSelectPatient(updatedObj);
+        toast.success(`${prof.nome} adicionado aos Preferenciais com sucesso.`);
+      } catch (err) {
+        console.error('Erro ao salvar preferencial:', err);
+        toast.error('Erro ao salvar no banco de dados.');
+      }
+    } else {
+      toast.success(`${prof.nome} adicionado aos Preferenciais.`);
+    }
+  };
+
+  const handleRemovePreferencial = async (itemId: string) => {
+    const item = preferenciais.find(p => p.id === itemId);
+    const updatedPref = preferenciais.filter(p => p.id !== itemId);
+    setPreferenciais(updatedPref);
+
+    if (paciente?.id) {
+      try {
+        const targetPatient = pacientes.find(p => p.id === paciente.id) || paciente;
+        const updatedObj: Paciente = {
+          ...targetPatient,
+          preferenciasInadequacoes: {
+            inadequados,
+            preferenciais: updatedPref
+          },
+          profissionaisBloqueados: inadequados.map(i => i.profissionalId)
+        };
+        await updatePaciente(updatedObj, true);
+        if (onSelectPatient) onSelectPatient(updatedObj);
+        toast.success(item ? `${item.nomeProfissional} removido dos Preferenciais.` : 'Profissional removido dos Preferenciais.');
+      } catch (err) {
+        console.error('Erro ao remover preferencial:', err);
+        toast.error('Erro ao salvar no banco de dados.');
+      }
+    } else {
+      toast.success('Profissional removido dos Preferenciais.');
     }
   };
 
@@ -1712,6 +1947,25 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       setPStatus(paciente.status);
       setPDeactDate(paciente.desativadoEm || null);
       setPDeactReason(paciente.desativadoMotivo || null);
+
+      // Carregar Inadequados e Preferenciais
+      const loadedInad: ProfissionalRestricao[] = paciente.preferenciasInadequacoes?.inadequados || [];
+      if (loadedInad.length === 0 && paciente.profissionaisBloqueados && paciente.profissionaisBloqueados.length > 0) {
+        const converted: ProfissionalRestricao[] = paciente.profissionaisBloqueados.map(id => {
+          const pr = profissionais.find(p => p.id === id);
+          return {
+            id: `inad-leg-${id}`,
+            profissionalId: id,
+            nomeProfissional: pr?.nome || id,
+            motivo: 'Restrição registrada anteriormente',
+            dataRegistro: new Date().toISOString().slice(0, 10)
+          };
+        });
+        setInadequados(converted);
+      } else {
+        setInadequados(loadedInad);
+      }
+      setPreferenciais(paciente.preferenciasInadequacoes?.preferenciais || []);
     } else {
       if (lastLoadedPatientIdRef.current === 'NEW') {
         return;
@@ -1759,6 +2013,13 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       setValorAlimentacao(formatarMoeda(0));
       setTaxaAdm(formatarMoeda(0));
       setTiposPlantao([]);
+
+      setInadequados([]);
+      setPreferenciais([]);
+      setNovoInadequadoProfId('');
+      setNovoInadequadoMotivo('');
+      setNovoPreferencialProfId('');
+      setNovoPreferencialMotivo('');
 
       setPStatus('Ativo');
       setPDeactDate(null);
@@ -1987,6 +2248,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         emailFaturamento: (opcaoEnvio === 'E-mail' || opcaoEnvio === 'Ambos') ? email : '',
         dataReajuste,
       },
+      preferenciasInadequacoes: {
+        inadequados,
+        preferenciais,
+      },
+      profissionaisBloqueados: inadequados.map(i => i.profissionalId),
     };
 
     try {
@@ -2287,55 +2553,72 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     }
 
     const pickedProf = profissionais.find(p => p.nome === newShiftProf);
-    if (pickedProf && isBlockedBidirectional(pickedProf)) {
-      toast.error('Atenção: Este profissional possui uma restrição de atendimento (bloqueio) para este paciente devido a uma ocorrência passada.');
+    const inadInfo = pickedProf ? getInadequadoInfo(pickedProf.id || pickedProf.nome) : getInadequadoInfo(newShiftProf);
+
+    const executeAddShiftInline = async () => {
+      try {
+        const datesToSchedule = newShiftDatesList.length > 0 ? newShiftDatesList : [newShiftDate];
+        
+        const { plantaoFinal, taxaAdmFinal, ajudaCusto: finalAjuda } = calculateShiftValues(
+          newShiftValor,
+          converterMascaraParaNumero(taxaAdm),
+          converterMascaraParaNumero(ajudaCusto),
+          newShiftFeriado
+        );
+
+        for (const currentDt of datesToSchedule) {
+          // Check for conflicts
+          const conflict = agendamentos.find(p => p.data === currentDt && p.nomeProfissional === newShiftProf && p.status === 'Confirmado');
+          if (conflict) {
+            if (!window.confirm(`⚠️ Atenção: ${newShiftProf} já está escalado em outro plantão nesta data (${currentDt}). Tem certeza que deseja confirmar este agendamento simultâneo?`)) {
+              continue; // Skip this date if not confirmed
+            }
+          }
+
+          const targetProf = profissionais.find(p => p.nome === newShiftProf);
+          await addAgendamento({
+            idPaciente: paciente.id,
+            idProfissional: targetProf ? targetProf.id : 'n/a', 
+            nomeProfissional: newShiftProf,
+            data: currentDt,
+            horario: `${newShiftHoraInicio}-${newShiftHoraTermino}`,
+            valorPlantao: plantaoFinal,
+            valorRepasse: plantaoFinal,
+            ajudaCusto: finalAjuda,
+            taxaAdm: taxaAdmFinal,
+            status: 'Confirmado',
+            observacao: newShiftObservacao,
+            tipoDia: newShiftFeriado ? (`Feriado ${newShiftFeriado}` as any) : 'Normal'
+          });
+        }
+
+        setNewShiftProf('');
+        setNewShiftDatesList([]);
+        setNewShiftFeriado(null);
+        toast.success(datesToSchedule.length > 1 ? `${datesToSchedule.length} plantões agendados com sucesso!` : 'Plantão agendado com sucesso!');
+      } catch (err: any) {
+        toast.error('Erro ao agendar plantão.');
+        console.error(err);
+      }
+    };
+
+    if (inadInfo) {
+      setInadequadoConfirmModal({
+        isOpen: true,
+        nomeProfissional: pickedProf?.nome || newShiftProf,
+        motivo: inadInfo.motivo,
+        dataRegistro: inadInfo.dataRegistro,
+        onConfirm: () => {
+          executeAddShiftInline();
+        },
+        onCancel: () => {
+          toast('Alocação cancelada pelo gestor.', { icon: 'ℹ️' });
+        }
+      });
       return;
     }
 
-    try {
-      const datesToSchedule = newShiftDatesList.length > 0 ? newShiftDatesList : [newShiftDate];
-      
-      const { plantaoFinal, taxaAdmFinal, ajudaCusto: finalAjuda } = calculateShiftValues(
-        newShiftValor,
-        converterMascaraParaNumero(taxaAdm),
-        converterMascaraParaNumero(ajudaCusto),
-        newShiftFeriado
-      );
-
-      for (const currentDt of datesToSchedule) {
-        // Check for conflicts
-        const conflict = agendamentos.find(p => p.data === currentDt && p.nomeProfissional === newShiftProf && p.status === 'Confirmado');
-        if (conflict) {
-          if (!window.confirm(`⚠️ Atenção: ${newShiftProf} já está escalado em outro plantão nesta data (${currentDt}). Tem certeza que deseja confirmar este agendamento simultâneo?`)) {
-            continue; // Skip this date if not confirmed
-          }
-        }
-
-        const pickedProf = profissionais.find(p => p.nome === newShiftProf);
-        await addAgendamento({
-          idPaciente: paciente.id,
-          idProfissional: pickedProf ? pickedProf.id : 'n/a', 
-          nomeProfissional: newShiftProf,
-          data: currentDt,
-          horario: `${newShiftHoraInicio}-${newShiftHoraTermino}`,
-          valorPlantao: plantaoFinal,
-          valorRepasse: plantaoFinal,
-          ajudaCusto: finalAjuda,
-          taxaAdm: taxaAdmFinal,
-          status: 'Confirmado',
-          observacao: newShiftObservacao,
-          tipoDia: newShiftFeriado ? (`Feriado ${newShiftFeriado}` as any) : 'Normal'
-        });
-      }
-
-      setNewShiftProf('');
-      setNewShiftDatesList([]);
-      setNewShiftFeriado(null);
-      toast.success(datesToSchedule.length > 1 ? `${datesToSchedule.length} plantões agendados com sucesso!` : 'Plantão agendado com sucesso!');
-    } catch (err: any) {
-      toast.error('Erro ao agendar plantão.');
-      console.error(err);
-    }
+    await executeAddShiftInline();
   };
 
   // Cancel shift modal confirmation triggers
@@ -2410,162 +2693,190 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       }
 
       const pickedProf = profissionais.find(p => p.nome === avulsoProf);
-      if (pickedProf && isBlockedBidirectional(pickedProf)) {
-        toast.error('Atenção: Este profissional possui uma restrição de atendimento (bloqueio) para este paciente devido a uma ocorrência passada.');
-        return false;
-      }
+      const inadInfo = pickedProf ? getInadequadoInfo(pickedProf.id || pickedProf.nome) : getInadequadoInfo(avulsoProf);
 
-      const shiftsList = [
-        {
-          id: 'principal',
-          tipoEscala: tipoEscala || 'Diurno 12h',
-          horaInicio: horaInicioPadrao || '07:00',
-          valorPlantao: parseNum(valorSugeridoPlantao, 150),
-          ajudaCusto: parseNum(ajudaCusto, 0),
-          valorTransporte: parseNum(valorTransporte, 0),
-          valorAlimentacao: parseNum(valorAlimentacao, 0),
-          taxaAdm: parseNum(taxaAdm, 0),
-        },
-        ...tiposPlantao.map((tp) => ({
-          id: tp.id,
-          tipoEscala: tp.tipoEscala,
-          horaInicio: tp.horaInicio,
-          valorPlantao: parseNum(tp.valorPlantao, 150),
-          ajudaCusto: parseNum(tp.ajudaCusto, 0),
-          valorTransporte: parseNum(tp.valorTransporte ?? tp.ajudaCusto, 0),
-          valorAlimentacao: parseNum(tp.valorAlimentacao, 0),
-          taxaAdm: parseNum(tp.taxaAdm, 0),
-        })),
-      ];
-
-      const chosenOpt = shiftsList.find((s) => s.id === avulsoPlantaoOptionId) || shiftsList[0];
-
-      const baseRepasseValue = chosenOpt.valorPlantao;
-      const baseTransporte = chosenOpt.valorTransporte || 0;
-      const baseAlimentacao = chosenOpt.valorAlimentacao || 0;
-      const baseTaxaValue = chosenOpt.taxaAdm;
-      const chosenHoraInicio = chosenOpt.horaInicio;
-      const chosenTipoEscalaStr = chosenOpt.tipoEscala;
-
-      // Parse duration in hours
-      let durationHrs = 12;
-      const parsedMatch = chosenTipoEscalaStr.match(/(\d+)\s*h/i);
-      if (parsedMatch) {
-        durationHrs = parseInt(parsedMatch[1], 10);
-      } else if (chosenTipoEscalaStr.includes('24')) {
-        durationHrs = 24;
-      } else if (chosenTipoEscalaStr.includes('6')) {
-        durationHrs = 6;
-      }
-
-      // Holiday factor
-      let isFeriado: '20%' | '50%' | null = null;
-      if (avulsoTipoDia === 'Feriado 20%') {
-        isFeriado = '20%';
-      } else if (avulsoTipoDia === 'Feriado 50%') {
-        isFeriado = '50%';
-      }
-
-      // Helper to calculate endTime
-      const getTerminoTime = (startTime: string, duration: number): string => {
+      const executeAvulsoBatch = async () => {
+        setIsSaving(true);
         try {
-          const [h, m] = startTime.split(':').map(Number);
-          const endH = (h + duration) % 24;
-          return `${String(endH).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-        } catch (e) {
-          return '19:00';
+          const shiftsList = [
+            {
+              id: 'principal',
+              tipoEscala: tipoEscala || 'Diurno 12h',
+              horaInicio: horaInicioPadrao || '07:00',
+              valorPlantao: parseNum(valorSugeridoPlantao, 150),
+              ajudaCusto: parseNum(ajudaCusto, 0),
+              valorTransporte: parseNum(valorTransporte, 0),
+              valorAlimentacao: parseNum(valorAlimentacao, 0),
+              taxaAdm: parseNum(taxaAdm, 0),
+            },
+            ...tiposPlantao.map((tp) => ({
+              id: tp.id,
+              tipoEscala: tp.tipoEscala,
+              horaInicio: tp.horaInicio,
+              valorPlantao: parseNum(tp.valorPlantao, 150),
+              ajudaCusto: parseNum(tp.ajudaCusto, 0),
+              valorTransporte: parseNum(tp.valorTransporte ?? tp.ajudaCusto, 0),
+              valorAlimentacao: parseNum(tp.valorAlimentacao, 0),
+              taxaAdm: parseNum(tp.taxaAdm, 0),
+            })),
+          ];
+
+          const chosenOpt = shiftsList.find((s) => s.id === avulsoPlantaoOptionId) || shiftsList[0];
+
+          const baseRepasseValue = chosenOpt.valorPlantao;
+          const baseTransporte = chosenOpt.valorTransporte || 0;
+          const baseAlimentacao = chosenOpt.valorAlimentacao || 0;
+          const baseTaxaValue = chosenOpt.taxaAdm;
+          const chosenHoraInicio = chosenOpt.horaInicio;
+          const chosenTipoEscalaStr = chosenOpt.tipoEscala;
+
+          // Parse duration in hours
+          let durationHrs = 12;
+          const parsedMatch = chosenTipoEscalaStr.match(/(\d+)\s*h/i);
+          if (parsedMatch) {
+            durationHrs = parseInt(parsedMatch[1], 10);
+          } else if (chosenTipoEscalaStr.includes('24')) {
+            durationHrs = 24;
+          } else if (chosenTipoEscalaStr.includes('6')) {
+            durationHrs = 6;
+          }
+
+          // Holiday factor
+          let isFeriado: '20%' | '50%' | null = null;
+          if (avulsoTipoDia === 'Feriado 20%') {
+            isFeriado = '20%';
+          } else if (avulsoTipoDia === 'Feriado 50%') {
+            isFeriado = '50%';
+          }
+
+          // Helper to calculate endTime
+          const getTerminoTime = (startTime: string, duration: number): string => {
+            try {
+              const [h, m] = startTime.split(':').map(Number);
+              const endH = (h + duration) % 24;
+              return `${String(endH).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+            } catch (e) {
+              return '19:00';
+            }
+          };
+
+          // Criar agendamento individual para cada data selecionada
+          const payloads: any[] = [];
+          let activeParentId = '';
+
+          for (const curItem of selectedDates) {
+            const curData = curItem.date;
+            const curCycle = curItem.cycle || 1;
+
+            const is48h = chosenTipoEscalaStr.toLowerCase().includes('48h');
+            if (is48h) {
+              if (curCycle === 1) {
+                activeParentId = `pai-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+              }
+            } else {
+              activeParentId = '';
+            }
+
+            // Apply our dynamic business logic for 48h and Normal shifts
+            let dayTransporte = baseTransporte;
+            let dayAlimentacao = baseAlimentacao;
+
+            if (is48h && curCycle === 2) {
+              dayTransporte = autoPagarTransporte48hDia2 ? baseTransporte : 0;
+            }
+
+            const dayAjudaCusto = dayTransporte + dayAlimentacao;
+
+            const { plantaoFinal, taxaAdmFinal, ajudaCusto: finalAjuda } = calculateShiftValues(
+              baseRepasseValue,
+              baseTaxaValue,
+              dayAjudaCusto,
+              isFeriado
+            );
+
+            // Check for conflicts
+            const conflict = agendamentos.find(p => p.data === curData && p.nomeProfissional === avulsoProf && p.status === 'Confirmado');
+            if (conflict) {
+              if (!window.confirm(`⚠️ Atenção: ${avulsoProf} já está escalado em outro plantão nesta data (${curData}). Tem certeza que deseja confirmar este agendamento simultâneo para essa data?`)) {
+                continue; // Pula essa data se o usuário não confirmar
+              }
+            }
+
+            payloads.push({
+              idPaciente: paciente.id,
+              idProfissional: pickedProf ? pickedProf.id : 'n/a',
+              nomeProfissional: avulsoProf,
+              data: curData,
+              horario: `${chosenHoraInicio}-${getTerminoTime(chosenHoraInicio, durationHrs)}`,
+              valorPlantao: plantaoFinal,
+              valorRepasse: plantaoFinal,
+              ajudaCusto: finalAjuda,
+              valorTransporte: dayTransporte,
+              valorAlimentacao: dayAlimentacao,
+              taxaAdm: taxaAdmFinal,
+              status: 'Confirmado',
+              observacao: avulsoObs || (avulsoCuringa ? 'CURINGA' : ''),
+              tipoDia: avulsoTipoDia as 'Normal' | 'Feriado 20%' | 'Feriado 50%',
+              isCuringa: avulsoCuringa,
+              ciclo: curCycle,
+              idAgendamentoPai: activeParentId || null
+            });
+          }
+
+          if (payloads.length > 0) {
+            await addAgendamentosBatch(payloads);
+          }
+
+          const totalQuantity = payloads.length;
+          setAvulsoProf('');
+          setAvulsoPlantaoOptionId('principal');
+          setAvulsoTipoDia('Normal');
+          setAvulsoObs('');
+          setAvulsoCuringa(false);
+          
+          // 3. Atualização de Estado (UX) - limpar selectedDates e fechar modal
+          setSelectedDates([]);
+          setAvulsoModalOpen(false);
+
+          // Real-time Firebase listener handles calendar update automatically, but we also log it for clarity.
+          console.log("Sucesso: Real-time listener do Firebase atualiza os dados do calendário automaticamente.");
+
+          // 2. Feedback Visual (Toasts) - Sucesso
+          showSuccessToast(
+            totalQuantity > 1 ? `${totalQuantity} plantões agendados em lote com sucesso!` : 'Agendamento de plantão salvo com sucesso!',
+            'Agendamento Realizado'
+          );
+          return true;
+        } catch (err: any) {
+          const errorMessage = err?.message || String(err);
+          console.error('Erro ao salvar agendamento:', err);
+          toast.error(`Erro ao salvar: ${errorMessage}`);
+          return false;
+        } finally {
+          setIsSaving(false);
         }
       };
 
-      // Criar agendamento individual para cada data selecionada
-      const payloads: any[] = [];
-      let activeParentId = '';
-
-      for (const curItem of selectedDates) {
-        const curData = curItem.date;
-        const curCycle = curItem.cycle || 1;
-
-        const is48h = chosenTipoEscalaStr.toLowerCase().includes('48h');
-        if (is48h) {
-          if (curCycle === 1) {
-            activeParentId = `pai-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      if (inadInfo) {
+        setIsSaving(false);
+        setInadequadoConfirmModal({
+          isOpen: true,
+          nomeProfissional: pickedProf?.nome || avulsoProf,
+          motivo: inadInfo.motivo,
+          dataRegistro: inadInfo.dataRegistro,
+          onConfirm: () => {
+            executeAvulsoBatch();
+          },
+          onCancel: () => {
+            setIsSaving(false);
+            toast('Alocação cancelada pelo gestor.', { icon: 'ℹ️' });
           }
-        } else {
-          activeParentId = '';
-        }
-
-        // Apply our dynamic business logic for 48h and Normal shifts
-        let dayTransporte = baseTransporte;
-        let dayAlimentacao = baseAlimentacao;
-
-        if (is48h && curCycle === 2) {
-          dayTransporte = autoPagarTransporte48hDia2 ? baseTransporte : 0;
-        }
-
-        const dayAjudaCusto = dayTransporte + dayAlimentacao;
-
-        const { plantaoFinal, taxaAdmFinal, ajudaCusto: finalAjuda } = calculateShiftValues(
-          baseRepasseValue,
-          baseTaxaValue,
-          dayAjudaCusto,
-          isFeriado
-        );
-
-        // Check for conflicts
-        const conflict = agendamentos.find(p => p.data === curData && p.nomeProfissional === avulsoProf && p.status === 'Confirmado');
-        if (conflict) {
-          if (!window.confirm(`⚠️ Atenção: ${avulsoProf} já está escalado em outro plantão nesta data (${curData}). Tem certeza que deseja confirmar este agendamento simultâneo para essa data?`)) {
-            continue; // Pula essa data se o usuário não confirmar
-          }
-        }
-
-        payloads.push({
-          idPaciente: paciente.id,
-          idProfissional: pickedProf ? pickedProf.id : 'n/a',
-          nomeProfissional: avulsoProf,
-          data: curData,
-          horario: `${chosenHoraInicio}-${getTerminoTime(chosenHoraInicio, durationHrs)}`,
-          valorPlantao: plantaoFinal,
-          valorRepasse: plantaoFinal,
-          ajudaCusto: finalAjuda,
-          valorTransporte: dayTransporte,
-          valorAlimentacao: dayAlimentacao,
-          taxaAdm: taxaAdmFinal,
-          status: 'Confirmado',
-          observacao: avulsoObs || (avulsoCuringa ? 'CURINGA' : ''),
-          tipoDia: avulsoTipoDia as 'Normal' | 'Feriado 20%' | 'Feriado 50%',
-          isCuringa: avulsoCuringa,
-          ciclo: curCycle,
-          idAgendamentoPai: activeParentId || null
         });
+        return false;
       }
 
-      if (payloads.length > 0) {
-        await addAgendamentosBatch(payloads);
-      }
-
-      const totalQuantity = payloads.length;
-      setAvulsoProf('');
-      setAvulsoPlantaoOptionId('principal');
-      setAvulsoTipoDia('Normal');
-      setAvulsoObs('');
-      setAvulsoCuringa(false);
-      
-      // 3. Atualização de Estado (UX) - limpar selectedDates e fechar modal
-      setSelectedDates([]);
-      setAvulsoModalOpen(false);
-
-      // Real-time Firebase listener handles calendar update automatically, but we also log it for clarity.
-      console.log("Sucesso: Real-time listener do Firebase atualiza os dados do calendário automaticamente.");
-
-      // 2. Feedback Visual (Toasts) - Sucesso
-      showSuccessToast(
-        totalQuantity > 1 ? `${totalQuantity} plantões agendados em lote com sucesso!` : 'Agendamento de plantão salvo com sucesso!',
-        'Agendamento Realizado'
-      );
-      return true;
+      return await executeAvulsoBatch();
     } catch (err: any) {
-      // 2. Feedback Visual (Toasts) - Erro
       const errorMessage = err?.message || String(err);
       console.error('Erro ao salvar agendamento:', err);
       toast.error(`Erro ao salvar: ${errorMessage}`);
@@ -4238,6 +4549,19 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             >
               <CalendarDays size={15} />
               <span>Agendamento</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('preferencias')}
+              className={`shrink-0 flex items-center space-x-1.5 pb-2.5 px-1 text-xs md:text-sm font-semibold transition-all border-b-2 ${
+                activeTab === 'preferencias'
+                  ? 'border-emerald-500 text-emerald-600 font-bold bg-transparent'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 bg-transparent'
+              }`}
+              id="tab-btn-preferencias"
+            >
+              <HeartHandshake size={15} />
+              <span>Preferências/Inadequações</span>
             </button>
             <button
               type="button"
@@ -6403,6 +6727,301 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               </div>
             )}
 
+            {activeTab === 'preferencias' && (
+              <div className="w-full max-w-4xl mx-auto mt-6 mb-12 space-y-8 animate-in fade-in-30 slide-in-from-right-3">
+                {/* Informative Card */}
+                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-5 shadow-xs">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2.5 bg-emerald-100/80 text-emerald-800 rounded-xl shrink-0">
+                      <HeartHandshake className="w-5 h-5" />
+                    </div>
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-bold text-slate-800 tracking-tight">
+                        Gestão de Preferências e Restrições de Escala
+                      </h4>
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        Defina a <strong>equipe recomendada (preferenciais)</strong> e os <strong>profissionais com restrição/inadequação</strong> para este paciente. Esta aba é a fonte única da verdade para regras de alocação na escala.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bloco 1: Profissionais Inadequados / Restrições */}
+                <div className="bg-white rounded-2xl border border-rose-200/80 p-6 md:p-8 shadow-sm space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-rose-100 gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 bg-rose-50 text-rose-600 rounded-lg">
+                        <ShieldAlert className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                          Profissionais Inadequados (Restrições de Escala)
+                        </h4>
+                        <p className="text-xs text-slate-500">
+                          Alerta e confirmação excepcional ao tentar escalar esses profissionais
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-xs font-bold px-2.5 py-1 bg-rose-50 text-rose-700 rounded-full border border-rose-200 self-start sm:self-auto">
+                      {inadequados.length} {inadequados.length === 1 ? 'registrado' : 'registrados'}
+                    </span>
+                  </div>
+
+                  {/* Form para Adicionar Inadequado */}
+                  {!isColaborador && !isCurrentlyDeactivated && (
+                    <div className="bg-rose-50/40 border border-rose-200/60 rounded-xl p-4 space-y-3">
+                      <span className="text-[11px] font-bold text-rose-800 uppercase tracking-wider block">
+                        + Adicionar Restrição / Profissional Inadequado
+                      </span>
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                        <div className="md:col-span-5 space-y-1">
+                          <label className="block text-[11px] font-semibold text-slate-600">Profissional *</label>
+                          <select
+                            value={novoInadequadoProfId}
+                            onChange={(e) => setNovoInadequadoProfId(e.target.value)}
+                            className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-rose-500"
+                          >
+                            <option value="">Selecione um profissional...</option>
+                            {profissionais
+                              .filter(p => p.status === 'Ativo' && !inadequados.some(i => i.profissionalId === p.id))
+                              .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''))
+                              .map(p => (
+                                <option key={p.id} value={p.id}>
+                                  {p.nome} ({p.especialidade || 'Cuidador(a)'})
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                        <div className="md:col-span-5 space-y-1">
+                          <label className="block text-[11px] font-semibold text-slate-600">Motivo da Restrição / Inadequação</label>
+                          <input
+                            type="text"
+                            value={novoInadequadoMotivo}
+                            onChange={(e) => setNovoInadequadoMotivo(e.target.value)}
+                            placeholder="Ex: Incompatibilidade de perfil, solicitação da família..."
+                            className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-rose-500 font-sans"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleAddInadequado();
+                              }
+                            }}
+                          />
+                        </div>
+                        <div className="md:col-span-2 flex items-end">
+                          <button
+                            type="button"
+                            onClick={handleAddInadequado}
+                            className="w-full p-2.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
+                          >
+                            <Plus size={14} />
+                            <span>Adicionar</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Listagem de Inadequados */}
+                  {inadequados.length === 0 ? (
+                    <div className="text-center py-8 px-4 border border-dashed border-slate-200 rounded-xl text-slate-400">
+                      <ShieldAlert className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+                      <p className="text-xs font-medium">Nenhum profissional registrado como inadequado para este paciente.</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">Todos os profissionais ativos estão disponíveis normalmente para escala.</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto rounded-xl border border-rose-100 shadow-2xs">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-rose-50/50 border-b border-rose-100 text-[10px] uppercase font-bold text-rose-800">
+                            <th className="py-2.5 px-4 text-left">Profissional</th>
+                            <th className="py-2.5 px-4 text-left">Motivo / Justificativa</th>
+                            <th className="py-2.5 px-4 text-center whitespace-nowrap">Data Registro</th>
+                            <th className="py-2.5 px-4 text-center">Status</th>
+                            {!isColaborador && !isCurrentlyDeactivated && (
+                              <th className="py-2.5 px-4 text-center">Ações</th>
+                            )}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-rose-50">
+                          {inadequados.map((item) => (
+                            <tr key={item.id} className="hover:bg-rose-50/30 transition-colors">
+                              <td className="py-3 px-4 font-semibold text-slate-800">
+                                <div className="flex items-center gap-2">
+                                  <UserX className="w-4 h-4 text-rose-500 shrink-0" />
+                                  <span>{item.nomeProfissional}</span>
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 text-slate-600 max-w-md break-words">
+                                {item.motivo || 'Incompatibilidade ou restrição informada.'}
+                              </td>
+                              <td className="py-3 px-4 text-center text-slate-500 font-mono text-[11px] whitespace-nowrap">
+                                {item.dataRegistro ? item.dataRegistro.split('-').reverse().join('/') : '-'}
+                              </td>
+                              <td className="py-3 px-4 text-center whitespace-nowrap">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                                  INADEQUADO
+                                </span>
+                              </td>
+                              {!isColaborador && !isCurrentlyDeactivated && (
+                                <td className="py-3 px-4 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveInadequado(item.id)}
+                                    title="Remover restrição deste profissional"
+                                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </td>
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Bloco 2: Profissionais Preferenciais */}
+                <div className="bg-white rounded-2xl border border-emerald-200/80 p-6 md:p-8 shadow-sm space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-emerald-100 gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
+                        <HeartHandshake className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                          Profissionais Preferenciais (Equipe Recomendada)
+                        </h4>
+                        <p className="text-xs text-slate-500">
+                          Profissionais com afinidade e preferência comprovada pelo paciente ou família
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-xs font-bold px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-200 self-start sm:self-auto">
+                      {preferenciais.length} {preferenciais.length === 1 ? 'registrado' : 'registrados'}
+                    </span>
+                  </div>
+
+                  {/* Form para Adicionar Preferencial */}
+                  {!isColaborador && !isCurrentlyDeactivated && (
+                    <div className="bg-emerald-50/40 border border-emerald-200/60 rounded-xl p-4 space-y-3">
+                      <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider block">
+                        + Adicionar Profissional Preferencial
+                      </span>
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                        <div className="md:col-span-5 space-y-1">
+                          <label className="block text-[11px] font-semibold text-slate-600">Profissional *</label>
+                          <select
+                            value={novoPreferencialProfId}
+                            onChange={(e) => setNovoPreferencialProfId(e.target.value)}
+                            className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-emerald-500"
+                          >
+                            <option value="">Selecione um profissional...</option>
+                            {profissionais
+                              .filter(p => p.status === 'Ativo' && !preferenciais.some(pr => pr.profissionalId === p.id))
+                              .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''))
+                              .map(p => (
+                                <option key={p.id} value={p.id}>
+                                  {p.nome} ({p.especialidade || 'Cuidador(a)'})
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                        <div className="md:col-span-5 space-y-1">
+                          <label className="block text-[11px] font-semibold text-slate-600">Motivo / Afinidade</label>
+                          <input
+                            type="text"
+                            value={novoPreferencialMotivo}
+                            onChange={(e) => setNovoPreferencialMotivo(e.target.value)}
+                            placeholder="Ex: Excelente afinidade, preferência expressa pela família..."
+                            className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-emerald-500 font-sans"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleAddPreferencial();
+                              }
+                            }}
+                          />
+                        </div>
+                        <div className="md:col-span-2 flex items-end">
+                          <button
+                            type="button"
+                            onClick={handleAddPreferencial}
+                            className="w-full p-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
+                          >
+                            <Plus size={14} />
+                            <span>Adicionar</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Listagem de Preferenciais */}
+                  {preferenciais.length === 0 ? (
+                    <div className="text-center py-8 px-4 border border-dashed border-slate-200 rounded-xl text-slate-400">
+                      <HeartHandshake className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+                      <p className="text-xs font-medium">Nenhum profissional cadastrado na lista de preferenciais.</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">Adicione profissionais com boa avaliação e afinidade comprovada.</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto rounded-xl border border-emerald-100 shadow-2xs">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-emerald-50/50 border-b border-emerald-100 text-[10px] uppercase font-bold text-emerald-800">
+                            <th className="py-2.5 px-4 text-left">Profissional</th>
+                            <th className="py-2.5 px-4 text-left">Observação / Afinidade</th>
+                            <th className="py-2.5 px-4 text-center whitespace-nowrap">Data Registro</th>
+                            <th className="py-2.5 px-4 text-center">Status</th>
+                            {!isColaborador && !isCurrentlyDeactivated && (
+                              <th className="py-2.5 px-4 text-center">Ações</th>
+                            )}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-emerald-50">
+                          {preferenciais.map((item) => (
+                            <tr key={item.id} className="hover:bg-emerald-50/30 transition-colors">
+                              <td className="py-3 px-4 font-semibold text-slate-800">
+                                <div className="flex items-center gap-2">
+                                  <UserCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                                  <span>{item.nomeProfissional}</span>
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 text-slate-600 max-w-md break-words">
+                                {item.motivo || 'Equipe recomendada com afinidade comprovada.'}
+                              </td>
+                              <td className="py-3 px-4 text-center text-slate-500 font-mono text-[11px] whitespace-nowrap">
+                                {item.dataRegistro ? item.dataRegistro.split('-').reverse().join('/') : '-'}
+                              </td>
+                              <td className="py-3 px-4 text-center whitespace-nowrap">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                  PREFERENCIAL
+                                </span>
+                              </td>
+                              {!isColaborador && !isCurrentlyDeactivated && (
+                                <td className="py-3 px-4 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemovePreferencial(item.id)}
+                                    title="Remover da lista de preferenciais"
+                                    className="p-1.5 text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </td>
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {activeTab === 'ocorrencias' && (
               <div className="w-full max-w-xl mx-auto bg-white rounded-2xl shadow-xl border border-gray-200 p-6 md:p-8 mt-6 mb-12 space-y-6 animate-in fade-in-30 slide-in-from-right-3">
                 <div>
@@ -6448,22 +7067,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed font-sans"
                       />
                     </div>
-
-                    {ocProfId && (
-                      <div className="md:col-span-2 flex items-center space-x-2 py-1">
-                        <input
-                          type="checkbox"
-                          id="check-bloquear-prof"
-                          disabled={isColaborador}
-                          checked={ocBloquear}
-                          onChange={(e) => setOcBloquear(e.target.checked)}
-                          className="h-4 w-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                        />
-                        <label htmlFor="check-bloquear-prof" className="text-xs font-semibold text-rose-700 cursor-pointer select-none disabled:opacity-50">
-                          Bloquear este profissional para este paciente
-                        </label>
-                      </div>
-                    )}
                   </div>
 
                   {!isColaborador && (
@@ -6883,30 +7486,77 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   onBlur={() => setTimeout(() => setShowAvulsoProfDropdown(false), 200)}
                   onChange={(e) => setAvulsoProf(e.target.value)}
                   className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/50 focus:outline-none focus:border-blue-500 font-sans"
+                  placeholder="Digite o nome do profissional..."
                 />
                 {showAvulsoProfDropdown && (
-                  <div className="absolute left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl z-55 divide-y divide-slate-100">
+                  <div className="absolute left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl z-55 divide-y divide-slate-100 font-sans">
                     {profissionais
                       .filter(p =>
                         removerAcentos(p.nome || '').includes(removerAcentos(avulsoProf || '')) &&
-                        p.status === 'Ativo' &&
-                        !isBlockedBidirectional(p)
+                        p.status === 'Ativo'
                       )
-                      .map((prof) => (
-                        <button
-                          key={prof.id}
-                          type="button"
-                          onMouseDown={() => {
-                            setAvulsoProf(prof.nome);
-                            setShowAvulsoProfDropdown(false);
-                          }}
-                          className="w-full text-left p-2.5 hover:bg-slate-50 transition-colors text-xs font-semibold text-slate-850"
-                        >
-                          {prof.nome} ({prof.especialidade})
-                        </button>
-                      ))}
+                      .map((prof) => {
+                        const inad = getInadequadoInfo(prof.id || prof.nome);
+                        const pref = getPreferencialInfo(prof.id || prof.nome);
+                        return (
+                          <button
+                            key={prof.id}
+                            type="button"
+                            onMouseDown={() => {
+                              setAvulsoProf(prof.nome);
+                              setShowAvulsoProfDropdown(false);
+                            }}
+                            className={`w-full text-left p-2.5 hover:bg-slate-50 transition-colors text-xs font-semibold flex items-center justify-between cursor-pointer ${
+                              inad ? 'bg-rose-50/40 text-rose-900' : pref ? 'bg-emerald-50/40 text-emerald-900' : 'text-slate-800'
+                            }`}
+                          >
+                            <span className="truncate">{prof.nome} ({prof.especialidade || 'Cuidador(a)'})</span>
+                            {inad ? (
+                              <span className="shrink-0 text-[9px] font-bold text-rose-700 bg-rose-100/90 px-1.5 py-0.5 rounded border border-rose-200">
+                                ⚠️ INADEQUADO
+                              </span>
+                            ) : pref ? (
+                              <span className="shrink-0 text-[9px] font-bold text-emerald-700 bg-emerald-100/90 px-1.5 py-0.5 rounded border border-emerald-200">
+                                ⭐ PREFERENCIAL
+                              </span>
+                            ) : null}
+                          </button>
+                        );
+                      })}
                   </div>
                 )}
+                {/* Alerta Visual Imediato de Alocação de Inadequado */}
+                {(() => {
+                  const picked = profissionais.find(p => p.nome === avulsoProf);
+                  const inad = picked ? getInadequadoInfo(picked.id || picked.nome) : getInadequadoInfo(avulsoProf);
+                  const pref = picked ? getPreferencialInfo(picked.id || picked.nome) : getPreferencialInfo(avulsoProf);
+                  if (inad) {
+                    return (
+                      <div className="mt-1.5 p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 flex items-start gap-2 animate-in fade-in">
+                        <ShieldAlert size={16} className="text-rose-600 mt-0.5 shrink-0" />
+                        <div>
+                          <p className="font-bold text-[11px] text-rose-800">
+                            Atenção: Profissional registrado na lista de INADEQUADOS
+                          </p>
+                          <p className="text-[11px] text-rose-700 mt-0.5">
+                            Motivo: {inad.motivo || 'Incompatibilidade ou restrição informada.'}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  }
+                  if (pref) {
+                    return (
+                      <div className="mt-1.5 p-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-center gap-2 animate-in fade-in">
+                        <HeartHandshake size={15} className="text-emerald-600 shrink-0" />
+                        <span className="text-[11px] font-medium text-emerald-800">
+                          <strong>Profissional Preferencial:</strong> {pref.motivo || 'Equipe recomendada com afinidade comprovada.'}
+                        </span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
 
               {/* Seletor de Modo: Seleção Manual vs Gerador Automático */}
@@ -7644,30 +8294,77 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       onBlur={() => setTimeout(() => setShowDetailsProfDropdown(false), 200)}
                       onChange={(e) => setDetailsProfName(e.target.value)}
                       className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-705 text-slate-700 bg-slate-50 focus:outline-none focus:border-blue-500 font-sans font-medium"
+                      placeholder="Digite o nome do profissional..."
                     />
                     {showDetailsProfDropdown && (
-                      <div className="absolute left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl z-25 divide-y divide-slate-100">
+                      <div className="absolute left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl z-25 divide-y divide-slate-100 font-sans">
                         {profissionais
                           .filter(p =>
                             removerAcentos(p.nome || '').includes(removerAcentos(detailsProfName || '')) &&
-                            p.status === 'Ativo' &&
-                            !isBlockedBidirectional(p)
+                            p.status === 'Ativo'
                           )
-                          .map((prof) => (
-                            <button
-                              key={prof.id}
-                              type="button"
-                              onMouseDown={() => {
-                                setDetailsProfName(prof.nome);
-                                setShowDetailsProfDropdown(false);
-                              }}
-                              className="w-full text-left p-2.5 hover:bg-slate-50 transition-colors text-xs font-semibold text-slate-800"
-                            >
-                              {prof.nome} ({prof.especialidade})
-                            </button>
-                          ))}
+                          .map((prof) => {
+                            const inad = getInadequadoInfo(prof.id || prof.nome);
+                            const pref = getPreferencialInfo(prof.id || prof.nome);
+                            return (
+                              <button
+                                key={prof.id}
+                                type="button"
+                                onMouseDown={() => {
+                                  setDetailsProfName(prof.nome);
+                                  setShowDetailsProfDropdown(false);
+                                }}
+                                className={`w-full text-left p-2.5 hover:bg-slate-50 transition-colors text-xs font-semibold flex items-center justify-between cursor-pointer ${
+                                  inad ? 'bg-rose-50/40 text-rose-900' : pref ? 'bg-emerald-50/40 text-emerald-900' : 'text-slate-800'
+                                }`}
+                              >
+                                <span className="truncate">{prof.nome} ({prof.especialidade || 'Cuidador(a)'})</span>
+                                {inad ? (
+                                  <span className="shrink-0 text-[9px] font-bold text-rose-700 bg-rose-100/90 px-1.5 py-0.5 rounded border border-rose-200">
+                                    ⚠️ INADEQUADO
+                                  </span>
+                                ) : pref ? (
+                                  <span className="shrink-0 text-[9px] font-bold text-emerald-700 bg-emerald-100/90 px-1.5 py-0.5 rounded border border-emerald-200">
+                                    ⭐ PREFERENCIAL
+                                  </span>
+                                ) : null}
+                              </button>
+                            );
+                          })}
                       </div>
                     )}
+                    {/* Alerta Visual Imediato no Modal de Detalhes */}
+                    {(() => {
+                      const picked = profissionais.find(p => p.nome === detailsProfName);
+                      const inad = picked ? getInadequadoInfo(picked.id || picked.nome) : getInadequadoInfo(detailsProfName);
+                      const pref = picked ? getPreferencialInfo(picked.id || picked.nome) : getPreferencialInfo(detailsProfName);
+                      if (inad) {
+                        return (
+                          <div className="mt-1.5 p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 flex items-start gap-2 animate-in fade-in">
+                            <ShieldAlert size={16} className="text-rose-600 mt-0.5 shrink-0" />
+                            <div>
+                              <p className="font-bold text-[11px] text-rose-800">
+                                Atenção: Profissional na lista de INADEQUADOS
+                              </p>
+                              <p className="text-[11px] text-rose-700 mt-0.5">
+                                Motivo: {inad.motivo || 'Incompatibilidade ou restrição informada.'}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      }
+                      if (pref) {
+                        return (
+                          <div className="mt-1.5 p-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-center gap-2 animate-in fade-in">
+                            <HeartHandshake size={15} className="text-emerald-600 shrink-0" />
+                            <span className="text-[11px] font-medium text-emerald-800">
+                              <strong>Profissional Preferencial:</strong> {pref.motivo || 'Equipe recomendada com afinidade comprovada.'}
+                            </span>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
 
                   <div className="space-y-1">
@@ -7907,77 +8604,98 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           };
 
                           const pickedProf = profissionais.find(p => p.nome === detailsProfName);
-                          if (pickedProf && isBlockedBidirectional(pickedProf)) {
-                            toast.error('Atenção: Este profissional possui uma restrição de atendimento (bloqueio) para este paciente devido a uma ocorrência passada.');
+                          const inadInfo = pickedProf ? getInadequadoInfo(pickedProf.id || pickedProf.nome) : getInadequadoInfo(detailsProfName);
+
+                          const executeSaveDetails = async () => {
+                            try {
+                              let cleanObs = detailsObservacao.trim();
+                              if (!detailsCuringa) {
+                                if (cleanObs.toUpperCase() === 'CURINGA') {
+                                  cleanObs = '';
+                                } else if (cleanObs.toUpperCase().includes('CURINGA')) {
+                                  cleanObs = cleanObs.replace(/curinga/gi, '').trim();
+                                }
+                              } else {
+                                if (!cleanObs) {
+                                  cleanObs = 'CURINGA';
+                                }
+                              }
+
+                              const updatedAg: any = {
+                                ...selectedShiftForDetails,
+                                idProfissional: pickedProf ? pickedProf.id : 'n/a',
+                                nomeProfissional: detailsProfName,
+                                data: detailsDate,
+                                horario: `${chosenHoraInicio}-${getTerminoTime(chosenHoraInicio, durationHrs)}`,
+                                valorPlantao: considerarFalta ? 0 : plantaoFinal,
+                                valorRepasse: considerarFalta ? 0 : plantaoFinal,
+                                ajudaCusto: considerarFalta ? 0 : finalAjuda,
+                                taxaAdm: considerarFalta ? 0 : taxaAdmFinal,
+                                tipoDia: detailsTipoDia,
+                                isCuringa: detailsCuringa,
+                                observacao: cleanObs,
+                                considerarFalta,
+                                motivoFalta: considerarFalta ? motivoFalta : '',
+                                atendimentoRealizado
+                              };
+
+                              await updateAgendamento(updatedAg);
+
+                              const hadAbsence = !!selectedShiftForDetails.considerarFalta;
+                              const hasNoAbsence = !considerarFalta;
+                              if (!isQuotaExceeded && !isTestMode && hadAbsence && hasNoAbsence && selectedShiftForDetails.idProfissional && selectedShiftForDetails.idProfissional !== 'n/a') {
+                                const oclRef = collection(db, 'profissionais', selectedShiftForDetails.idProfissional, 'ocorrencias');
+                                const q = query(oclRef, where('data', '==', selectedShiftForDetails.data), where('tipo', '==', 'automatica'));
+                                getDocs(q).then((qSnap) => {
+                                  qSnap.docs.forEach((docSnap) => {
+                                    deleteDoc(doc(db, 'profissionais', selectedShiftForDetails.idProfissional, 'ocorrencias', docSnap.id)).catch(e => console.error(e));
+                                  });
+                                }).catch(e => console.error("Erro ao remover ocorrência automática:", e));
+                              }
+
+                              if (!isQuotaExceeded && !isTestMode && considerarFalta && updatedAg.idProfissional && updatedAg.idProfissional !== 'n/a') {
+                                try {
+                                  await addDoc(collection(db, 'profissionais', updatedAg.idProfissional, 'ocorrencias'), {
+                                    data: updatedAg.data,
+                                    paciente: paciente?.nome || 'Não Informado',
+                                    pacienteNome: paciente?.nome || 'Não Informado',
+                                    pacienteId: paciente?.id || 'n/a',
+                                    descricao: 'Falta registrada via Agenda. Motivo: ' + (updatedAg.motivoFalta || 'Não Informado'),
+                                    tipo: 'automatica',
+                                    bloquearEscala: false,
+                                    mesAno: updatedAg.data.substring(0, 7),
+                                    timestamp: serverTimestamp()
+                                  });
+                                } catch (errOc) {
+                                  console.error("Erro ao gerar ocorrência de Falta automática para profissional:", errOc);
+                                }
+                              }
+
+                              setSelectedShiftForDetails(updatedAg);
+                              setIsEditingDetails(false);
+                              showSuccessToast('Plantão atualizado com sucesso!', 'Plantão Atualizado');
+                            } catch (err) {
+                              toast.error('Erro ao atualizar plantão.');
+                            }
+                          };
+
+                          if (inadInfo) {
+                            setInadequadoConfirmModal({
+                              isOpen: true,
+                              nomeProfissional: pickedProf?.nome || detailsProfName,
+                              motivo: inadInfo.motivo,
+                              dataRegistro: inadInfo.dataRegistro,
+                              onConfirm: () => {
+                                executeSaveDetails();
+                              },
+                              onCancel: () => {
+                                toast('Alteração cancelada pelo gestor.', { icon: 'ℹ️' });
+                              }
+                            });
                             return;
                           }
 
-                          let cleanObs = detailsObservacao.trim();
-                          if (!detailsCuringa) {
-                            if (cleanObs.toUpperCase() === 'CURINGA') {
-                              cleanObs = '';
-                            } else if (cleanObs.toUpperCase().includes('CURINGA')) {
-                              cleanObs = cleanObs.replace(/curinga/gi, '').trim();
-                            }
-                          } else {
-                            if (!cleanObs) {
-                              cleanObs = 'CURINGA';
-                            }
-                          }
-
-                          const updatedAg: any = {
-                            ...selectedShiftForDetails,
-                            idProfissional: pickedProf ? pickedProf.id : 'n/a',
-                            nomeProfissional: detailsProfName,
-                            data: detailsDate,
-                            horario: `${chosenHoraInicio}-${getTerminoTime(chosenHoraInicio, durationHrs)}`,
-                            valorPlantao: considerarFalta ? 0 : plantaoFinal,
-                            valorRepasse: considerarFalta ? 0 : plantaoFinal,
-                            ajudaCusto: considerarFalta ? 0 : finalAjuda,
-                            taxaAdm: considerarFalta ? 0 : taxaAdmFinal,
-                            tipoDia: detailsTipoDia,
-                            isCuringa: detailsCuringa,
-                            observacao: cleanObs,
-                            considerarFalta,
-                            motivoFalta: considerarFalta ? motivoFalta : '',
-                            atendimentoRealizado
-                          };
-
-                          await updateAgendamento(updatedAg);
-
-                          const hadAbsence = !!selectedShiftForDetails.considerarFalta;
-                          const hasNoAbsence = !considerarFalta;
-                          if (!isQuotaExceeded && !isTestMode && hadAbsence && hasNoAbsence && selectedShiftForDetails.idProfissional && selectedShiftForDetails.idProfissional !== 'n/a') {
-                            const oclRef = collection(db, 'profissionais', selectedShiftForDetails.idProfissional, 'ocorrencias');
-                            const q = query(oclRef, where('data', '==', selectedShiftForDetails.data), where('tipo', '==', 'automatica'));
-                            getDocs(q).then((qSnap) => {
-                              qSnap.docs.forEach((docSnap) => {
-                                deleteDoc(doc(db, 'profissionais', selectedShiftForDetails.idProfissional, 'ocorrencias', docSnap.id)).catch(e => console.error(e));
-                              });
-                            }).catch(e => console.error("Erro ao remover ocorrência automática:", e));
-                          }
-
-                          if (!isQuotaExceeded && !isTestMode && considerarFalta && updatedAg.idProfissional && updatedAg.idProfissional !== 'n/a') {
-                            try {
-                              await addDoc(collection(db, 'profissionais', updatedAg.idProfissional, 'ocorrencias'), {
-                                data: updatedAg.data,
-                                paciente: paciente?.nome || 'Não Informado',
-                                pacienteNome: paciente?.nome || 'Não Informado',
-                                pacienteId: paciente?.id || 'n/a',
-                                descricao: 'Falta registrada via Agenda. Motivo: ' + (updatedAg.motivoFalta || 'Não Informado'),
-                                tipo: 'automatica',
-                                bloquearEscala: false,
-                                mesAno: updatedAg.data.substring(0, 7),
-                                timestamp: serverTimestamp()
-                              });
-                            } catch (errOc) {
-                              console.error("Erro ao gerar ocorrência de Falta automática para profissional:", errOc);
-                            }
-                          }
-
-                          setSelectedShiftForDetails(updatedAg);
-                          setIsEditingDetails(false);
-                          showSuccessToast('Plantão atualizado com sucesso!', 'Plantão Atualizado');
+                          await executeSaveDetails();
                         } catch (err) {
                           toast.error('Erro ao atualizar plantão.');
                         }
@@ -10286,6 +11004,74 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 className="px-5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
               >
                 <span>🧾 Confirmar e Emitir Boleto</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal de Alerta e Confirmação de Alocação Excepcional de Profissional Inadequado */}
+      {inadequadoConfirmModal && inadequadoConfirmModal.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[99999] p-4 animate-in fade-in-20 font-sans">
+          <div className="bg-white rounded-2xl border border-rose-200 shadow-2xl p-6 max-w-md w-full space-y-5 animate-in zoom-in-95">
+            <div className="flex items-start gap-3">
+              <div className="p-3 bg-rose-100 rounded-xl text-rose-600 shrink-0">
+                <ShieldAlert className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-slate-900">
+                  Alerta: Profissional Inadequado
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Validação de restrição de escala do paciente
+                </p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-rose-50/80 border border-rose-200 rounded-xl space-y-2 text-xs">
+              <p className="text-rose-900 font-medium leading-relaxed">
+                Atenção: <strong className="text-rose-950 font-bold underline">{inadequadoConfirmModal.nomeProfissional}</strong> está registrado na lista de <strong>INADEQUADOS</strong> deste paciente.
+              </p>
+              <div className="bg-white/90 p-3 rounded-lg border border-rose-200 text-rose-950 space-y-1">
+                <span className="font-bold block text-[10px] text-rose-700 uppercase tracking-wider">
+                  Motivo Registrado:
+                </span>
+                <span className="italic leading-snug block">
+                  {inadequadoConfirmModal.motivo || 'Incompatibilidade ou restrição informada pelo paciente/família.'}
+                </span>
+              </div>
+              {inadequadoConfirmModal.dataRegistro && (
+                <p className="text-[10px] text-rose-600 font-mono pt-1">
+                  Data do registro da restrição: {inadequadoConfirmModal.dataRegistro.split('-').reverse().join('/')}
+                </p>
+              )}
+            </div>
+
+            <p className="text-xs text-slate-650 font-medium text-center leading-relaxed">
+              Deseja realmente prosseguir com a alocação excepcional deste profissional na escala ou cancelar a operação?
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  inadequadoConfirmModal.onCancel();
+                  setInadequadoConfirmModal(null);
+                }}
+                className="px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-all cursor-pointer"
+              >
+                Cancelar Operação
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const cb = inadequadoConfirmModal.onConfirm;
+                  setInadequadoConfirmModal(null);
+                  cb();
+                }}
+                className="px-4 py-2.5 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+              >
+                <ShieldAlert size={14} />
+                <span>Prosseguir com Alocação</span>
               </button>
             </div>
           </div>
