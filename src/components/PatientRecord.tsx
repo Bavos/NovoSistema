@@ -715,7 +715,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const handleSaveOcorrencia = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!paciente) {
-      toast.error('Salve o paciente antes de cadastrar uma ocorrência.');
+      toast.error('Salve o paciente antes de cadastrar uma informação.');
       return;
     }
     const targetPatient = pacientes.find(p => p.id === paciente.id) || paciente;
@@ -725,11 +725,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     }
 
     if (!ocData) {
-      toast.error('Selecione uma data para a ocorrência.');
+      toast.error('Selecione uma data para a informação.');
       return;
     }
     if (!ocDescricao.trim()) {
-      toast.error('Informe a descrição do motivo da ocorrência.');
+      toast.error('Informe a descrição do motivo da informação.');
       return;
     }
 
@@ -811,12 +811,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       setOcDescricao('');
       setOcBloquear(false);
       setEditingOcorrenciaId(null);
-      toast.success('Ocorrência salva com sucesso!', {
+      toast.success('Informação salva com sucesso!', {
         icon: '✅',
       });
     } catch (err: any) {
       console.error('Erro ao salvar ocorrência:', err);
-      toast.error(getFriendlyErrorMessage(err, 'Erro ao salvar a ocorrência. Tente novamente.'));
+      toast.error(getFriendlyErrorMessage(err, 'Erro ao salvar a informação. Tente novamente.'));
     } finally {
       setSavingOcorrencia(false);
     }
@@ -866,12 +866,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       if (userRole === 'Administrador' && paciente) {
         await addAuditLog('UPDATE', 'pacientes', paciente.id, `Administrador excluiu ocorrência do paciente ${paciente.nome}`);
       }
-      toast.success('Ocorrência excluída com sucesso!', {
+      toast.success('Informação excluída com sucesso!', {
         icon: '✅',
       });
     } catch (err: any) {
       console.error('Erro ao excluir ocorrência:', err);
-      toast.error(getFriendlyErrorMessage(err, 'Erro ao excluir a ocorrência. Tente novamente.'));
+      toast.error(getFriendlyErrorMessage(err, 'Erro ao excluir a informação. Tente novamente.'));
     } finally {
       setDeleteConfirmOc(null);
     }
@@ -6407,11 +6407,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               <div className="w-full max-w-xl mx-auto bg-white rounded-2xl shadow-xl border border-gray-200 p-6 md:p-8 mt-6 mb-12 space-y-6 animate-in fade-in-30 slide-in-from-right-3">
                 <div>
                   <h4 className="text-xs font-bold text-slate-700 border-b border-slate-100 pb-2 uppercase tracking-wider italic">
-                    {editingOcorrenciaId ? 'EDITAR OCORRÊNCIA' : 'CADASTRAR NOVA OCORRÊNCIA'}
+                    {editingOcorrenciaId ? 'EDITAR INFORMAÇÃO' : 'CADASTRAR NOVA INFORMAÇÃO'}
                   </h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                     <div className="space-y-1">
-                      <label className="block text-xs font-normal text-slate-700">Data da Ocorrência *</label>
+                      <label className="block text-xs font-normal text-slate-700">Data da Informação *</label>
                       <input
                         type="date"
                         disabled={isColaborador}
@@ -6429,7 +6429,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         onChange={(e) => setOcProfId(e.target.value)}
                         className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-slate-50/55 focus:outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed font-sans"
                       >
-                        <option value="">Nenhum (Ocorrência Administrativa / Geral)</option>
+                        <option value="">Nenhum (Informação Administrativa / Geral)</option>
                         {profissionais.map(p => (
                           <option key={p.id} value={p.id}>
                             {p.nome} ({p.especialidade || p.profissao || 'Profissional'})
@@ -6490,7 +6490,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 text-white font-medium rounded-lg shadow-lg shadow-blue-500/40 hover:bg-blue-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Save size={14} />
-                        <span>{savingOcorrencia ? 'Salvando...' : 'Salvar Ocorrência'}</span>
+                        <span>{savingOcorrencia ? 'Salvando...' : 'Salvar Informação'}</span>
                       </button>
                     </div>
                   )}
@@ -6500,7 +6500,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 <div className="pt-6 border-t border-slate-100 font-sans">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2 mb-3">
                     <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider block">
-                      Histórico de Ocorrências ({((pacientes.find(p => p.id === paciente?.id) || paciente)?.ocorrencias || []).length})
+                      HISTÓRICO DE INFORMAÇÕES CLÍNICAS ({((pacientes.find(p => p.id === paciente?.id) || paciente)?.ocorrencias || []).length})
                     </h4>
                     <div className="flex flex-wrap items-center gap-2">
                       <button
@@ -6524,7 +6524,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   
                   {(((pacientes.find(p => p.id === paciente?.id) || paciente)?.ocorrencias || []).length === 0) ? (
                     <div className="p-6 text-center text-xs text-slate-400 italic border border-dashed border-slate-200 rounded-xl">
-                      Nenhuma ocorrência registrada para este paciente.
+                      Nenhuma informação registrada para este paciente.
                     </div>
                   ) : (
                     <div className="overflow-x-auto border border-slate-200 rounded-xl">
@@ -9991,9 +9991,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             <div className="flex items-start space-x-3 text-red-650">
               <span className="text-2xl mt-0.5 flex-shrink-0">⚠️</span>
               <div>
-                <h3 className="font-bold text-sm text-slate-800">Confirmar Exclusão de Ocorrência</h3>
+                <h3 className="font-bold text-sm text-slate-800">Confirmar Exclusão de Informação?</h3>
                 <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  Tem certeza que deseja excluir permanentemente esta ocorrência de data <strong>{deleteConfirmOc.data ? deleteConfirmOc.data.split('-').reverse().join('/') : '-'}</strong> relacionada ao profissional <strong>{deleteConfirmOc.profissionalNome || 'Administrativa / Geral'}</strong>? Esta ação não pode ser desfeita.
+                  Tem certeza que deseja excluir permanentemente esta informação de data <strong>{deleteConfirmOc.data ? deleteConfirmOc.data.split('-').reverse().join('/') : '-'}</strong> relacionada ao profissional <strong>{deleteConfirmOc.profissionalNome || 'Administrativa / Geral'}</strong>? Esta ação não pode ser desfeita.
                 </p>
               </div>
             </div>
@@ -10010,7 +10010,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 onClick={handleConfirmDeleteOcorrencia}
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 font-extrabold text-xs text-white rounded-lg transition-colors shadow-sm cursor-pointer"
               >
-                Excluir Ocorrência
+                Excluir Informação
               </button>
             </div>
           </div>
