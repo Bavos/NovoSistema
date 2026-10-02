@@ -2209,7 +2209,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 bg-transparent'
                     }`}
                   >
-                    <span>Ocorrências</span>
+                    <span>Histórico do Profissional</span>
                   </button>
                 </>
               )}
