@@ -972,16 +972,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     );
 
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
-    const inicioDoMes = `${currentYear}-${currentMonth}-01`;
-
     const unsubscribeAgendamentos = onSnapshot(
       query(
         collection(db, 'agendamentos'),
-        where('data', '>=', inicioDoMes),
-        orderBy('data', 'desc'),
         limit(5000)
       ),
       (snap) => {
@@ -1550,13 +1543,17 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const updateAgendamentosBatch = async (agendamentosToUpdate: (Partial<Agendamento> & { id: string })[]) => {
+    if (!agendamentosToUpdate || agendamentosToUpdate.length === 0) return;
+
     if (isQuotaExceeded) {
-      const updatedList = agendamentos.map(a => {
-        const update = agendamentosToUpdate.find(upd => upd.id === a.id);
-        return update ? { ...a, ...update } as Agendamento : a;
+      setAgendamentos(prev => {
+        const updatedList = prev.map(item => {
+          const update = agendamentosToUpdate.find(u => u.id === item.id);
+          return update ? ({ ...item, ...update } as Agendamento) : item;
+        });
+        localStorage.setItem('contingency_agendamentos', JSON.stringify(updatedList));
+        return updatedList;
       });
-      setAgendamentos(updatedList);
-      localStorage.setItem('contingency_agendamentos', JSON.stringify(updatedList));
       setNotification(`${agendamentosToUpdate.length} agendamentos atualizados (Contingência Local).`);
       return;
     }
@@ -1571,30 +1568,41 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const batch = writeBatch(db);
         chunk.forEach((ag) => {
           const agToSave = { ...ag } as any;
+          delete agToSave.id;
           Object.keys(agToSave).forEach(key => {
             if (agToSave[key] === undefined) {
               delete agToSave[key];
             }
           });
           const ref = doc(db, 'agendamentos', ag.id);
-          batch.set(ref, agToSave, { merge: true });
+          batch.update(ref, agToSave);
         });
         await batch.commit();
       }
       
-      setAgendamentos(prev => prev.map(a => {
-        const update = agendamentosToUpdate.find(upd => upd.id === a.id);
-        return update ? { ...a, ...update } as Agendamento : a;
-      }));
+      setAgendamentos(prev => {
+        const updatedList = prev.map(item => {
+          const update = agendamentosToUpdate.find(u => u.id === item.id);
+          return update ? ({ ...item, ...update } as Agendamento) : item;
+        });
+        try {
+          localStorage.setItem('contingency_agendamentos', JSON.stringify(updatedList));
+        } catch {
+          // ignore
+        }
+        return updatedList;
+      });
       setNotification(`${agendamentosToUpdate.length} agendamentos atualizados em lote.`);
     } catch (err) {
       if (handleQuotaError(err, 'updateAgendamentosBatch')) {
-        const updatedList = agendamentos.map(a => {
-          const update = agendamentosToUpdate.find(upd => upd.id === a.id);
-          return update ? { ...a, ...update } as Agendamento : a;
+        setAgendamentos(prev => {
+          const updatedList = prev.map(item => {
+            const update = agendamentosToUpdate.find(u => u.id === item.id);
+            return update ? ({ ...item, ...update } as Agendamento) : item;
+          });
+          localStorage.setItem('contingency_agendamentos', JSON.stringify(updatedList));
+          return updatedList;
         });
-        setAgendamentos(updatedList);
-        localStorage.setItem('contingency_agendamentos', JSON.stringify(updatedList));
         setNotification(`${agendamentosToUpdate.length} agendamentos atualizados (Contingência Local).`);
         return;
       }
@@ -1605,6 +1613,10 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const deleteAgendamento = async (id: string) => {
     const existing = agendamentos.find(a => a.id === id);
+    if (existing && (existing.status === 'Faturada' || (existing as any).faturado)) {
+      toast.error('Plantão já faturado. Exclusão bloqueada para preservar o faturamento.');
+      return;
+    }
     if (existing && isEscalaConcluida(existing.idPaciente, existing.data)) {
       toast.error('Escala fechada. Não é possível excluir esse plantão.');
       return;
@@ -1638,6 +1650,11 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const deleteAgendamentosBatch = async (ids: string[]) => {
     const toDelete = agendamentos.filter(a => ids.includes(a.id));
+    const hasFaturada = toDelete.some(a => a.status === 'Faturada' || (a as any).faturado);
+    if (hasFaturada) {
+      toast.error('Plantões faturados selecionados. Exclusão bloqueada para manter a integridade fiscal.');
+      return;
+    }
     const invalid = toDelete.some(a => isEscalaConcluida(a.idPaciente, a.data));
     if (invalid) {
       toast.error('Algum dos plantões selecionados está com escala fechada.');

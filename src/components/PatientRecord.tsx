@@ -2587,9 +2587,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     const formattedMo = mo.padStart(2, '0');
     const mesAnoKey = `${formattedMo}/${yr}`; // Formato estrito e padronizado MM/YYYY (ex: '08/2026')
 
-    const agendamentosPaciente = agendamentos.filter((a) => a.idPaciente === currentP.id);
+    const agendamentosPaciente = agendamentos.filter((a) => a.idPaciente === currentP.id || (a as any).pacienteId === currentP.id);
     const matches = agendamentosPaciente.filter(
-      (s) => s.data >= concluirStartDate && s.data <= concluirEndDate && s.status !== 'Concluido' && s.status !== 'Cancelado'
+      (s) => s.data >= concluirStartDate && s.data <= concluirEndDate && s.status !== 'Concluido' && s.status !== 'Cancelado' && s.status !== 'Faturada'
     );
 
     console.log(`Tentando concluir agendamentos do paciente ${currentP.id} de ${concluirStartDate} a ${concluirEndDate}.`);
@@ -3882,10 +3882,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       return;
     }
 
-    const closedCount = matches.filter((s) => s.escalaCongelada || s.status === 'Concluido').length;
+    const closedCount = matches.filter((s) => s.escalaCongelada || s.status === 'Concluido' || s.status === 'Faturada' || (s as any).faturado).length;
 
     if (closedCount > 0) {
-      toast.error('Escala fechada. Não é possível excluir esse plantão.');
+      toast.error('Escala fechada ou plantões faturados selecionados. Não é possível excluir.');
       return;
     }
 
@@ -5430,7 +5430,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   
                   // Filter agendamentos for this patient in the current month
                   const patientAgendamentosThisMonth = agendamentos.filter(
-                    (s) => s.idPaciente === (paciente?.id || '') && s.data.startsWith(`${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}`)
+                    (s) => (s.idPaciente === (paciente?.id || '') || (s as any).pacienteId === (paciente?.id || '')) && s.data.startsWith(`${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}`)
                   );
 
                   // Extract unique professionals from these agendamentos, fallback if empty
@@ -5659,7 +5659,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
                             // Filter agendamentos for this date and patient (Garantia de vínculo: data e idPaciente)
                             const rawDayAgendamentos = agendamentos.filter(
-                              (s) => s.data === cell.dateStr && s.idPaciente === (paciente?.id || '')
+                              (s) => s.data === cell.dateStr && (s.idPaciente === (paciente?.id || '') || (s as any).pacienteId === (paciente?.id || ''))
                             );
                             const dayAgendamentos: Agendamento[] = [];
                             const seenIds = new Set<string>();
@@ -5728,6 +5728,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                   {dayAgendamentos.map((ag) => {
                                     const isCancelled = ag.status === 'Cancelado';
                                     const isConcluido = ag.status === 'Concluido';
+                                    const isFaturada = ag.status === 'Faturada' || (ag as any).faturado === true;
                                     const isFalta = ag.considerarFalta === true || (ag as any).atendimentoRealizado === 'Não' || (ag.status as string) === 'Falta' || (ag.status as string) === 'falta';
 
                                     const isCuringa = !!ag.isCuringa || ag.observacao?.toUpperCase().includes('CURINGA');
@@ -5739,6 +5740,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                       cardBgBorder = 'bg-slate-100 border-slate-200 text-slate-400 line-through';
                                     } else if (isFalta) {
                                       cardBgBorder = 'bg-rose-50 border-rose-300 text-rose-950 font-medium';
+                                    } else if (isFaturada) {
+                                      cardBgBorder = 'bg-emerald-50/90 border-emerald-300 text-emerald-950 font-medium hover:bg-emerald-100/90 shadow-3xs';
                                     } else if (isCuringa) {
                                       cardBgBorder = 'bg-purple-50 border-purple-300 text-purple-950 font-bold hover:bg-purple-100 hover:border-purple-400 shadow-3xs';
                                     } else if (is50) {
@@ -5756,6 +5759,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                     let statusStr = 'Normal';
                                     if (isCancelled) statusStr = 'Cancelado';
                                     else if (isFalta) statusStr = 'Falta Registrada';
+                                    else if (isFaturada) statusStr = 'Faturado';
                                     else if (isCuringa) statusStr = 'Curinga';
                                     else if (is50) statusStr = 'Feriado 50%';
                                     else if (is20) statusStr = 'Feriado 20%';
@@ -5802,12 +5806,17 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                         </button>
 
                                         <div className="flex justify-between items-center gap-1.5 w-full min-w-0">
-                                          <span className={`flex-1 min-w-0 truncate font-bold text-[10px] leading-tight ${isFalta ? 'line-through text-slate-500' : 'text-slate-900'}`}>
+                                          <span className={`flex-1 min-w-0 truncate font-bold text-[10px] leading-tight ${isFalta ? 'line-through text-slate-500' : isFaturada ? 'text-emerald-950 font-extrabold' : 'text-slate-900'}`}>
                                             {profName}
                                           </span>
                                           <div className="flex items-center space-x-0.5 shrink-0">
                                             {isFalta && (
                                               <span className="px-1 py-[0.2px] text-[6.5px] font-black uppercase bg-rose-200 text-rose-900 border border-rose-300 rounded font-sans">FALTA</span>
+                                            )}
+                                            {isFaturada && (
+                                              <span className="px-1.5 py-[0.5px] text-[6.5px] font-black uppercase bg-emerald-200 text-emerald-900 border border-emerald-300 rounded font-sans inline-flex items-center gap-0.5 shadow-2xs" title="Plantão Faturado">
+                                                <span>✓</span> FATURADO
+                                              </span>
                                             )}
                                             {isCuringa && (
                                               <span className="px-1 py-[0.2px] text-[6.5px] font-black uppercase bg-purple-200 text-purple-900 border border-purple-300 rounded font-sans" title="Plantão Curinga">Curinga</span>
@@ -5818,16 +5827,21 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                             {is20 && (
                                               <span className="px-1 py-[0.2px] text-[6.5px] font-black uppercase bg-amber-200 text-amber-900 border border-amber-300 rounded font-sans" title="Feriado +20%">20%</span>
                                             )}
-                                            {!isCuringa && !is50 && !is20 && !isFalta && !isCancelled && (
+                                            {!isCuringa && !is50 && !is20 && !isFalta && !isCancelled && !isFaturada && (
                                               <span className="px-1 py-[0.2px] text-[6.5px] font-bold uppercase bg-blue-100 text-blue-800 border border-blue-200 rounded font-sans">Normal</span>
                                             )}
-                                            {isConcluido && <span className="text-[8px]" title="Escala Fechada">🔒</span>}
+                                            {isConcluido && !isFaturada && <span className="text-[8px]" title="Escala Fechada">🔒</span>}
                                           </div>
                                         </div>
 
-                                        {shiftTurno && (
-                                          <div className="text-[9px] text-slate-600 font-medium truncate leading-tight">
-                                            {shiftTurno}
+                                        {(shiftTurno || shiftHorario) && (
+                                          <div className="flex items-center justify-between gap-1 text-[9px] text-slate-600 font-medium truncate leading-tight mt-0.5">
+                                            {shiftTurno ? <span className="truncate">{shiftTurno}</span> : <span />}
+                                            {shiftHorario && (
+                                              <span className={`shrink-0 font-mono text-[8.5px] font-semibold ${isFaturada ? 'text-emerald-850 font-bold' : 'text-slate-500'}`}>
+                                                🕒 {shiftHorario}
+                                              </span>
+                                            )}
                                           </div>
                                         )}
                                       </div>
@@ -5845,6 +5859,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         <span>💡 <strong>Legenda do Calendário:</strong> Identificação visual por tipo de dia e adicional.</span>
                         <div className="flex items-center space-x-2 shrink-0 font-extrabold flex-wrap gap-y-1">
                           <span className="flex items-center"><span className="w-2.5 h-2.5 bg-blue-100 border border-slate-300 rounded-xs mr-1"></span> Normal</span>
+                          <span className="flex items-center"><span className="w-2.5 h-2.5 bg-emerald-100 border border-emerald-300 rounded-xs mr-1"></span> Faturado 🧾</span>
                           <span className="flex items-center"><span className="w-2.5 h-2.5 bg-amber-100 border border-amber-300 rounded-xs mr-1"></span> 20%</span>
                           <span className="flex items-center"><span className="w-2.5 h-2.5 bg-orange-100 border border-orange-300 rounded-xs mr-1"></span> 50%</span>
                           <span className="flex items-center"><span className="w-2.5 h-2.5 bg-purple-100 border border-purple-300 rounded-xs mr-1"></span> Curinga</span>
@@ -7490,6 +7505,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       <div>
                         <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Tipo de Dia / Categoria</span>
                         <div className="flex flex-wrap gap-1.5 items-center">
+                          {(selectedShiftForDetails.status === 'Faturada' || (selectedShiftForDetails as any).faturado) && (
+                            <span className="px-3 py-1.5 rounded-lg text-xs font-black bg-emerald-100 text-emerald-950 border border-emerald-300 shadow-3xs inline-flex items-center gap-1">
+                              <span>🧾</span>
+                              <span>Plantão Faturado (Fechado)</span>
+                            </span>
+                          )}
                           {(selectedShiftForDetails.isCuringa || selectedShiftForDetails.observacao?.toUpperCase().includes('CURINGA')) && (
                             <span className="px-3 py-1.5 rounded-lg text-xs font-black bg-purple-100 text-purple-900 border border-purple-300 shadow-3xs inline-flex items-center gap-1">
                               <span>⚡</span>
@@ -7510,7 +7531,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           )}
                           {!(selectedShiftForDetails.isCuringa || selectedShiftForDetails.observacao?.toUpperCase().includes('CURINGA')) &&
                            !(selectedShiftForDetails.tipoDia === 'Feriado 50%' || selectedShiftForDetails.tipoDia?.includes('50%')) &&
-                           !(selectedShiftForDetails.tipoDia === 'Feriado 20%' || selectedShiftForDetails.tipoDia?.includes('20%')) && (
+                           !(selectedShiftForDetails.tipoDia === 'Feriado 20%' || selectedShiftForDetails.tipoDia?.includes('20%')) &&
+                           !(selectedShiftForDetails.status === 'Faturada' || (selectedShiftForDetails as any).faturado) && (
                             <span className="px-3 py-1.5 rounded-lg text-xs font-extrabold bg-emerald-100 text-emerald-900 border border-emerald-300 shadow-3xs inline-flex items-center gap-1">
                               <span>📅</span>
                               <span>Dia Normal (Sem Adicional)</span>
@@ -7518,6 +7540,23 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           )}
                         </div>
                       </div>
+
+                      {(selectedShiftForDetails.status === 'Faturada' || (selectedShiftForDetails as any).faturado) && (
+                        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2.5">
+                          <span className="text-xl">🧾</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-emerald-900">Plantão Faturado</span>
+                              <span className="px-1.5 py-0.5 text-[8px] font-black uppercase bg-emerald-200 text-emerald-950 border border-emerald-300 rounded font-sans">
+                                Histórico Preservado
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-emerald-800 leading-tight mt-0.5">
+                              Este agendamento já compõe uma fatura emitida. A edição e o cancelamento estão bloqueados para garantir a integridade contábil e permitir a navegação histórica irrestrita.
+                            </p>
+                          </div>
+                        </div>
+                      )}
 
                       {selectedShiftForDetails.considerarFalta && (
                         <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex flex-col gap-1">
@@ -7632,6 +7671,10 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           <button
                             type="button"
                             onClick={() => {
+                              if (selectedShiftForDetails.status === 'Faturada' || (selectedShiftForDetails as any).faturado) {
+                                toast.error('Plantão faturado: Edição bloqueada para preservar o histórico financeiro.');
+                                return;
+                              }
                               // Initialize edit forms
                               setDetailsProfName(selectedShiftForDetails.nomeProfissional);
                               setDetailsDate(selectedShiftForDetails.data);
@@ -7648,20 +7691,34 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                               
                               setIsEditingDetails(true);
                             }}
-                            className="flex-1 py-2 text-xs font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 rounded-lg border border-sky-200 transition-all text-center flex items-center justify-center gap-1 cursor-pointer"
+                            className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-all text-center flex items-center justify-center gap-1 cursor-pointer ${
+                              selectedShiftForDetails.status === 'Faturada' || (selectedShiftForDetails as any).faturado
+                                ? 'text-slate-400 bg-slate-100 border-slate-200 cursor-not-allowed opacity-75'
+                                : 'text-sky-700 bg-sky-50 hover:bg-sky-100 border-sky-200'
+                            }`}
+                            title={selectedShiftForDetails.status === 'Faturada' || (selectedShiftForDetails as any).faturado ? 'Edição bloqueada (Plantão Faturado)' : 'Editar Plantão'}
                           >
                             <span>✏️ Editar</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => {
+                              if (selectedShiftForDetails.status === 'Faturada' || (selectedShiftForDetails as any).faturado) {
+                                toast.error('Plantão faturado: Exclusão bloqueada para preservar a integridade da fatura emitida.');
+                                return;
+                              }
                               if (selectedShiftForDetails.escalaCongelada || selectedShiftForDetails.status === 'Concluido') {
                                 toast.error("Escala fechada. Não é possível excluir esse plantão.");
                                 return;
                               }
                               setIsConfirmingDelete(true);
                             }}
-                            className="flex-1 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-all text-center flex items-center justify-center gap-1 cursor-pointer"
+                            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all text-center flex items-center justify-center gap-1 cursor-pointer ${
+                              selectedShiftForDetails.status === 'Faturada' || (selectedShiftForDetails as any).faturado
+                                ? 'text-slate-400 bg-slate-100 border-slate-200 cursor-not-allowed opacity-75'
+                                : 'text-white bg-rose-600 hover:bg-rose-700'
+                            }`}
+                            title={selectedShiftForDetails.status === 'Faturada' || (selectedShiftForDetails as any).faturado ? 'Exclusão bloqueada (Plantão Faturado)' : 'Cancelar Plantão'}
                           >
                             <span>🗑️ Cancelar Plantão</span>
                           </button>
@@ -7894,6 +7951,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       onClick={async () => {
                         if (!detailsProfName || detailsProfName.trim() === '') {
                           toast.error('Por favor, selecione um profissional para o agendamento.');
+                          return;
+                        }
+
+                        if (selectedShiftForDetails.status === 'Faturada' || (selectedShiftForDetails as any).faturado) {
+                          toast.error('Este plantão já está faturado. Edição não permitida.');
                           return;
                         }
                         
@@ -9298,7 +9360,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       {isFaturaModalOpen && (() => {
         const monthPrefix = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}`;
         const agMes = agendamentos.filter(
-          (a) => a.idPaciente === paciente?.id && a.data && a.data.startsWith(monthPrefix)
+          (a) => (a.idPaciente === paciente?.id || (a as any).pacienteId === paciente?.id) && a.data && a.data.startsWith(monthPrefix)
         );
 
         let sumRep = 0;
@@ -9318,7 +9380,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             if (s.considerarFalta) {
               faltas++;
             } else {
-              if (s.status === 'Concluido' || s.escalaCongelada) {
+              if (s.status === 'Concluido' || s.escalaCongelada || s.status === 'Faturada') {
                 concluidos++;
               } else {
                 ativos++;
@@ -9691,7 +9753,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         
         // Filter agendamentos for current patient and active month
         const monthShiftsRaw = agendamentos.filter(
-          (a) => a.idPaciente === (paciente?.id || '') && a.data && a.data.startsWith(monthPrefix)
+          (a) => (a.idPaciente === (paciente?.id || '') || (a as any).pacienteId === (paciente?.id || '')) && a.data && a.data.startsWith(monthPrefix)
         );
 
         // Deduplicate by ID
