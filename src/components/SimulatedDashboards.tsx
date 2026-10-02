@@ -2346,7 +2346,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
               : 'border-transparent text-gray-500 hover:text-gray-700 font-medium'
           }`}
         >
-          🗂️ Emissão de Folhas
+          🗂️ Faturamento & Cobrança
         </button>
         <button
           id="subtab-debitos"
