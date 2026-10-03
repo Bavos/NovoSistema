@@ -125,29 +125,42 @@ function apiServerPlugin(): Plugin {
               dataProcessamento: new Date().toISOString()
             },
             metricasGerais,
-            amostraPacientes: pacientesRaw.slice(0, 50).map(p => ({
+            amostraPacientes: pacientesRaw.slice(0, 60).map(p => ({
               codigo: anonPac(p.id || p.nome),
               status: p.status || 'Ativo',
-              complexidade: p.complexidade || p.grauComplexidade || 'Média',
+              bairro: p.endereco?.bairro || p.bairro || 'Não informado',
+              cidade: p.endereco?.cidade || p.cidade || 'Não informado',
+              grauDependencia: p.complexidade || p.grauComplexidade || p.grauDependencia || 'Média',
               planoCuidado: p.planoCuidado || p.tipoPlantao || 'Plantão 12h',
               especialidadeNecessaria: p.especialidade || 'Técnico de Enfermagem',
+              incompatibilidades: (p.preferenciasInadequacoes?.inadequados || []).map((i: any) => anonProf(i.profissionalId || i.nomeProfissional)),
+              preferenciais: (p.preferenciasInadequacoes?.preferenciais || []).map((pr: any) => anonProf(pr.profissionalId || pr.nomeProfissional)),
               valorPlantaoProfissional: Number(p.valorPlantaoProfissional || 0),
               valorAjudaCusto: Number(p.valorAjudaCusto || 0),
               taxaAdministrativa: Number(p.taxaAdministrativa || 0),
               valorTotalCobradoPlantao: Number(p.valorTotalCobradoPlantao || 0)
             })),
-            amostraProfissionais: profissionaisRaw.slice(0, 40).map(p => ({
+            amostraProfissionais: profissionaisRaw.slice(0, 50).map(p => ({
               codigo: anonProf(p.id || p.nome),
               categoria: p.categoria || p.funcao || 'Cuidador',
               especialidade: p.especialidade || 'Geral',
-              status: p.status || 'Disponível'
+              bairroResidencia: p.endereco?.bairro || p.bairro || 'Não informado',
+              cidadeResidencia: p.endereco?.cidade || p.cidade || 'Não informado',
+              status: p.status || 'Disponível',
+              dadosBancariosConciliacao: (p.dadosBancarios || p.chavePix) ? {
+                banco: p.dadosBancarios?.banco || 'Não informado',
+                temChavePix: !!(p.dadosBancarios?.chavePix || p.chavePix),
+                tipoChavePix: p.dadosBancarios?.tipoChavePix || (p.chavePix ? 'Cadastrada' : 'Ausente')
+              } : 'Pendente / Ausente',
+              pacientesBloqueados: (p.pacientesBloqueados || []).map((pId: string) => anonPac(pId))
             })),
-            amostraEscalas: escalasRaw.slice(0, 50).map(e => ({
+            amostraEscalas: escalasRaw.slice(0, 60).map(e => ({
               paciente: anonPac(e.pacienteId || e.pacienteNome || e.idPaciente),
               profissional: (e.profissionalId || e.profissionalNome || e.idProfissional || e.nomeProfissional) 
                 ? anonProf(e.profissionalId || e.profissionalNome || e.idProfissional || e.nomeProfissional) 
                 : 'NÃO_ALOCADO (GARGALO)',
               turno: e.tipoTurno || e.turno || e.horario || '12h Diurno',
+              data: e.data || '',
               status: e.status || 'Agendado',
               valorRepasse: Number(e.valorRepasse || e.valorPlantao || 0),
               ajudaCusto: Number(e.ajudaCusto || 0),
@@ -158,12 +171,30 @@ function apiServerPlugin(): Plugin {
           const { GoogleGenAI } = await import('@google/genai');
           const ai = new GoogleGenAI({ apiKey });
 
-          const systemInstruction =
-            "Você é um assistente de análise de gestão e operações financeiras de home care. " +
-            "Analise exclusivamente os dados anonimizados fornecidos, destacando margem de lucro por paciente, custos de plantões, repasses e escalas. " +
-            "Ao calcular margem de lucro: Custos Totais = Custo Profissionais + Ajuda de Custo; Lucro Operacional = Faturamento Total - Custos Totais; Margem (%) = (Lucro Operacional / Faturamento Total) * 100. " +
-            "Se solicitado tabela de margem, estruture em Markdown: | Paciente | Faturamento Total | Custo Profissionais | Ajuda de Custo | Custos Totais | Lucro Operacional (R$) | Margem (%) | ordenando da maior para menor margem. " +
-            "Nunca deduza nem tente solicitar dados de identificação pessoal.";
+          const systemInstruction = `Você é a inteligência analítica e assistente de operações da RH Gestão Domiciliar.
+
+1. AUTONOMIA TOTAL E ANÁLISE PROFUNDA (PACIENTES E PROFISSIONAIS):
+- Tem total liberdade para examinar, cruzar e correlacionar todo o conjunto de dados operacionais, clínicos, cadastrais e financeiros do sistema:
+  * PROFISSIONAIS: Histórico de plantões, disponibilidade, competências técnicas, restrições, preferências, conciliação de dados bancários (contas, chaves Pix para repasses) e bairros de residência/atuação.
+  * PACIENTES/UTENTES: Grau de dependência, rotinas clínicas, horários de cobertura necessários e bairros de atendimento.
+  * ESCALAS: Distribuição de turnos e plantões vagos.
+- Realize diagnósticos geo-operacionais ativos: avalie a proximidade entre o bairro do profissional e o bairro do paciente para otimizar o tempo de deslocação, custos de ajuda de custo e reduzir o risco de atrasos ou faltas.
+- Cruze as informações bancárias e de repasse com os plantões efetivamente cumpridos para apontar inconformidades antes dos pagamentos.
+
+2. SEGURANÇA E AMBIENTE FECHADO:
+- Todos os dados analisados (incluindo informações bancárias, cadastros de colaboradores e fichas clínicas) pertencem exclusivamente ao ecossistema interno deste sistema de gestão.
+- Não exporte, não simule integrações externas e não direcione dados para serviços ou ferramentas fora desta plataforma. O tratamento decorre estritamente dentro deste contexto.
+
+3. PERSONALIDADE E TOM DE VOZ:
+- Mantenha uma postura enérgica, animada, acolhedora e proativa, aliada a um rigor analítico impecável.
+- Seja direto, objetivo e focado em soluções operacionais acionáveis para o gestor.
+- Não use respostas pré-formatadas ou repetitivas. Adapte cada análise à complexidade do caso concreto.
+
+4. DIRETRIZES DE RESPOSTA:
+- Quando sugerir substituições ou montagens de escala, apresente com clareza: a compatibilidade técnica do profissional, a viabilidade logística (bairro) e o impacto no custo/repasse.
+- Se faltar algum dado relevante (como chave Pix, agência bancária, bairro ou escala em aberto), identifique explicitamente o campo em falta para que o gestor possa providenciar o ajuste.
+- Responda sempre em português do Brasil, priorizando a excelência assistencial, o equilíbrio das escalas e a precisão administrativa.
+- FORMATO DE RESPOSTA (OUTPUT FORMAT): Retorne exclusivamente texto corrido e fluido formatado em Markdown amigável (Plaintext). NUNCA retorne a resposta estruturada em JSON.`;
 
           const prompt = pergunta
             ? `O administrador do serviço de Home Care fez a seguinte consulta operacional:
@@ -202,11 +233,11 @@ O relatório DEVE ser retornado em formato Markdown fluido, legível e altamente
 - Recomendações de governança operacional e melhoria contínua.`;
 
           const response = await ai.models.generateContent({
-            model: 'gemini-3.8-flash',
+            model: 'gemini-3.5-flash',
             contents: prompt,
             config: {
               systemInstruction,
-              temperature: 0.2
+              temperature: 0.75
             }
           });
 

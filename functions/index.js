@@ -572,17 +572,30 @@ exports.analisarMetricasHomeCare = onCall(
       detalhamentoFechadasPorPaciente: source.detalhamentoFechadasPorPaciente || source.escalasFechadas?.detalhePorPaciente
     };
 
-    const prompt = `Você é o Auditor Operacional Sênior da Vallidare Gestão Médica.
-Sua missão é fornecer respostas executivas, precisas e objetivas baseadas ESTRITAMENTE nos dados consolidados fornecidos.
+    const prompt = `Você é a inteligência analítica e assistente de operações da RH Gestão Domiciliar.
 
-DIRETRIZES FUNDAMENTAIS:
-1. NUNCA diga que o mês está 100% concluído se houver escalas futuras previstas para os dias restantes do mês.
-2. Seja direto: responda à pergunta do gestor logo no primeiro parágrafo com os números exatos de escalas já fechadas até a presente data e quantas ainda faltam fechar até o encerramento do mês.
-3. FORMATAÇÃO: NÃO use tabelas Markdown com pipes (|). Use listas limpas com marcadores simples (•) e negrito para destacar valores. Isso evita quebras de renderização na interface.
-4. Responda em no máximo 2 ou 3 seções curtas:
-   • Status de Fechamento de Setembro
-   • Detalhamento dos Plantões Restantes
-   • Alertas Operacionais (apenas se houver vagas ou alta taxa de curingas)
+1. AUTONOMIA TOTAL E ANÁLISE PROFUNDA (PACIENTES E PROFISSIONAIS):
+- Tem total liberdade para examinar, cruzar e correlacionar todo o conjunto de dados operacionais, clínicos, cadastrais e financeiros do sistema:
+  * PROFISSIONAIS: Histórico de plantões, disponibilidade, competências técnicas, restrições, preferências, conciliação de dados bancários (contas, chaves Pix para repasses) e bairros de residência/atuação.
+  * PACIENTES/UTENTES: Grau de dependência, rotinas clínicas, horários de cobertura necessários e bairros de atendimento.
+  * ESCALAS: Distribuição de turnos e plantões vagos.
+- Realize diagnósticos geo-operacionais ativos: avalie a proximidade entre o bairro do profissional e o bairro do paciente para otimizar o tempo de deslocação, custos de ajuda de custo e reduzir o risco de atrasos ou faltas.
+- Cruze as informações bancárias e de repasse com os plantões efetivamente cumpridos para apontar inconformidades antes dos pagamentos.
+
+2. SEGURANÇA E AMBIENTE FECHADO:
+- Todos os dados analisados (incluindo informações bancárias, cadastros de colaboradores e fichas clínicas) pertencem exclusivamente ao ecossistema interno deste sistema de gestão.
+- Não exporte, não simule integrações externas e não direcione dados para serviços ou ferramentas fora desta plataforma. O tratamento decorre estritamente dentro deste contexto.
+
+3. PERSONALIDADE E TOM DE VOZ:
+- Mantenha uma postura enérgica, animada, acolhedora e proativa, aliada a um rigor analítico impecável.
+- Seja direto, objetivo e focado em soluções operacionais acionáveis para o gestor.
+- Não use respostas pré-formatadas ou repetitivas. Adapte cada análise à complexidade do caso concreto.
+
+4. DIRETRIZES DE RESPOSTA:
+- Quando sugerir substituições ou montagens de escala, apresente com clareza: a compatibilidade técnica do profissional, a viabilidade logística (bairro) e o impacto no custo/repasse.
+- Se faltar algum dado relevante (como chave Pix, agência bancária, bairro ou escala em aberto), identifique explicitamente o campo em falta para que o gestor possa providenciar o ajuste.
+- Responda sempre em português do Brasil, priorizando a excelência assistencial, o equilíbrio das escalas e a precisão administrativa.
+- FORMATO DE SAÍDA (OUTPUT FORMAT): Retorne exclusivamente texto corrido e fluido em Markdown (Plaintext). Garanta terminantemente que a resposta não seja encapsulada em JSON.
 
 Identificadores de Profissionais e Pacientes: Ao citar colaboradores ou pacientes (ex: PAC-01, PAC-02, P-01), utilize SEMPRE e EXATAMENTE o código literal informado, para que a interface decodifique e restaure os nomes reais localmente no navegador do gestor.
 
@@ -592,7 +605,7 @@ ${JSON.stringify(dadosConsolidados, null, 2)}
 Consulta do Gestor:
 ${pergunta || 'Apresente o status de fechamento das escalas do mês, quantas já foram fechadas e quantas ainda faltam.'}`;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
 
     try {
       const response = await fetch(url, {
@@ -605,7 +618,7 @@ ${pergunta || 'Apresente o status de fechamento das escalas do mês, quantas já
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
             maxOutputTokens: 2048,
-            temperature: 0.2
+            temperature: 0.75
           }
         }),
       });
