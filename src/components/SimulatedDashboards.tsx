@@ -2841,20 +2841,30 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                               const pac = activePacientes.find(p => p.id === e.target.value);
                               setSelectedPacienteId(pac ? pac.id : '');
                               if (pac) {
-                                setBoletoPagadorNome(pac.nome || (pac as any).nomeResponsavel || (pac as any).responsavel || '');
-                                const clean = (
-                                  pac.cpf ||
-                                  (pac as any).cnpj ||
-                                  (pac as any).responsavelFinanceiro?.cpf ||
-                                  (pac as any).cpfResponsavel ||
-                                  (pac as any).responsavelCpf ||
-                                  (pac as any).documento ||
-                                  ''
-                                ).replace(/\D/g, '');
-                                setBoletoCpfCnpj(clean ? (clean.length > 11 ? mascaraCNPJ(clean) : mascaraCPF(clean)) : '');
+                                const dadosPag = (pac as any).dadosPagamento || {};
+                                const isOutro = dadosPag.responsavelPagamento === 'Outro Responsável' || ((dadosPag.nomePagador && dadosPag.nomePagador.trim()) && (dadosPag.cpfPagador && dadosPag.cpfPagador.trim()));
+
+                                if (isOutro && dadosPag.nomePagador && dadosPag.cpfPagador) {
+                                  setBoletoPagadorNome(dadosPag.nomePagador.trim());
+                                  const cleanPag = dadosPag.cpfPagador.replace(/\D/g, '');
+                                  setBoletoCpfCnpj(cleanPag.length > 11 ? mascaraCNPJ(cleanPag) : mascaraCPF(cleanPag));
+                                } else {
+                                  setBoletoPagadorNome(pac.nome || '');
+                                  const clean = (
+                                    pac.cpf ||
+                                    (pac as any).cnpj ||
+                                    (pac as any).responsavelFinanceiro?.cpf ||
+                                    (pac as any).cpfResponsavel ||
+                                    (pac as any).responsavelCpf ||
+                                    (pac as any).documento ||
+                                    ''
+                                  ).replace(/\D/g, '');
+                                  setBoletoCpfCnpj(clean ? (clean.length > 11 ? mascaraCNPJ(clean) : mascaraCPF(clean)) : '');
+                                }
+
                                 const endStr = pac.endereco ? `${pac.endereco.rua || (pac.endereco as any).logradouro || ''}, ${pac.endereco.numero || ''} ${pac.endereco.bairro || ''} - ${pac.endereco.cidade || ''}/${pac.endereco.estado || (pac.endereco as any).uf || ''}`.trim() : '';
                                 setBoletoEndereco(endStr);
-                                const emailPac = (pac as any).email || (pac as any).emailResponsavel || (pac as any).responsavelEmail || (pac as any).responsavelFinanceiro?.email || '';
+                                const emailPac = (dadosPag.emailFaturamento || dadosPag.email || (pac as any).emailEnvio || (pac as any).email || (pac as any).emailResponsavel || (pac as any).responsavelEmail || (pac as any).responsavelFinanceiro?.email || '').trim();
                                 setBoletoEmail(emailPac);
                                 setBoletoDescricao(`Serviços de Home Care - Ref: ${getReferenciaMesNome(referenciaMes)}/${referenciaAno}`);
 

@@ -3815,18 +3815,59 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       return;
     }
 
-    const docPagador = (
-      (paciente as any).cpf ||
-      (paciente as any).documento ||
-      (paciente as any).cpfCnpj ||
-      (paciente as any).cpfResponsavel ||
-      (paciente as any).responsavelCpf ||
-      (paciente as any).cnpj ||
+    // REGRA OBRIGATÓRIA DE PAGADOR:
+    // 1. Verificar a seção "DADOS DE FATURAMENTO E PAGAMENTO" (estado local do formulário ou objeto salvo no paciente)
+    const dadosPag = (paciente as any)?.dadosPagamento || {};
+    const respPag = responsavelPagamento || dadosPag.responsavelPagamento || 'O próprio Paciente';
+
+    const nomePagadorInformado = (
+      nomePagador || 
+      dadosPag.nomePagador || 
+      (paciente as any)?.responsavelFinanceiro?.nome ||
+      (paciente as any)?.nomeResponsavel || 
+      ""
+    ).trim();
+
+    const cpfPagadorInformado = (
+      cpfPagador || 
+      dadosPag.cpfPagador || 
+      (paciente as any)?.responsavelFinanceiro?.cpf ||
+      (paciente as any)?.cpfResponsavel || 
+      (paciente as any)?.responsavelCpf || 
       ""
     ).replace(/\D/g, "");
 
-    if (!docPagador || docPagador.length < 11) {
-      toast.error("CPF ou CNPJ do pagador/responsável não configurado ou incompleto no cadastro (mínimo 11 dígitos).");
+    let finalClienteNome = "";
+    let finalClienteDocumento = "";
+
+    // Se "Responsável pelo Pagamento" for "Outro Responsável" OU se houver pagador/responsável financeiro definido:
+    const isOutro = respPag === 'Outro Responsável';
+    const temDadosPagador = nomePagadorInformado !== "" && cpfPagadorInformado.length >= 11;
+
+    if (isOutro || temDadosPagador) {
+      // Usa OBRIGATORIAMENTE o Nome e o CPF do pagador/responsável financeiro
+      finalClienteNome = nomePagadorInformado || (paciente.nome || "").trim();
+      finalClienteDocumento = cpfPagadorInformado.length >= 11
+        ? cpfPagadorInformado
+        : (paciente.cpf || (paciente as any)?.documento || "").replace(/\D/g, "");
+    } else {
+      // Utilize o nome e CPF do paciente apenas se a cobrança for para o próprio paciente ou se os dados do pagador não estiverem informados
+      finalClienteNome = (paciente.nome || "").trim();
+      finalClienteDocumento = (
+        paciente.cpf ||
+        (paciente as any)?.documento ||
+        (paciente as any)?.cpfCnpj ||
+        ""
+      ).replace(/\D/g, "");
+    }
+
+    if (!finalClienteDocumento || finalClienteDocumento.length < 11) {
+      toast.error("CPF ou CNPJ do pagador/paciente não configurado ou incompleto (mínimo 11 dígitos).");
+      return;
+    }
+
+    if (!finalClienteNome) {
+      toast.error("Nome do pagador/paciente não configurado.");
       return;
     }
 
@@ -3873,18 +3914,31 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     }
 
     const sugestaoVencimento = getSugestaoVencimento();
-    const defaultEmail = (paciente as any)?.email || (paciente as any)?.emailResponsavel || (paciente as any)?.responsavelEmail || (paciente as any)?.responsavelFinanceiro?.email || "";
+
+    // Preencher o e-mail pré-preenchido do pagador a partir do "E-mail para Envio" da seção de faturamento
+    const emailFaturamentoPreenchido = (
+      email || // input "E-mail para Envio" na aba DADOS DE FATURAMENTO E PAGAMENTO
+      dadosPag.emailFaturamento ||
+      dadosPag.email ||
+      (paciente as any)?.emailEnvio ||
+      (paciente as any)?.email ||
+      (paciente as any)?.emailResponsavel ||
+      (paciente as any)?.responsavelEmail ||
+      (paciente as any)?.responsavelFinanceiro?.email ||
+      ""
+    ).trim();
+
     const compStr = `${String(calendarMonth + 1).padStart(2, "0")}/${calendarYear}`;
     const defaultDescricao = `Serviços de Home Care - Ref. ${compStr}`;
 
     // Abre o Modal de Confirmação Rápida Pré-Disparo
     setPatientBoletoConfirmData({
-      clienteNome: (paciente as any).nomeResponsavel || (paciente as any).responsavel || paciente.nome,
-      clienteDocumento: docPagador,
+      clienteNome: finalClienteNome,
+      clienteDocumento: finalClienteDocumento,
       valor: valorFinal,
       dataVencimento: sugestaoVencimento,
       descricao: defaultDescricao,
-      clienteEmail: defaultEmail,
+      clienteEmail: emailFaturamentoPreenchido,
       competencia: compStr,
       matchedFatura,
       mesFormatado
