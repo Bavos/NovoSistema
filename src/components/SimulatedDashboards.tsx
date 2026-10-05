@@ -5592,60 +5592,33 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
     };
 
     // Helper functions for safe date parsing and formatting
-    const extractISODateString = (rawDate: any): string | null => {
+    const parseFlexibleDate = (rawDate: any): Date | null => {
         if (!rawDate) return null;
-        
-        // Firestore Timestamp or object with toDate()
+
+        // JS Date instance
+        if (rawDate instanceof Date) {
+            return isNaN(rawDate.getTime()) ? null : rawDate;
+        }
+
+        // Firestore Timestamp with toDate()
         if (typeof rawDate === 'object' && typeof rawDate.toDate === 'function') {
             try {
                 const d = rawDate.toDate();
-                if (!isNaN(d.getTime())) {
-                    const yr = d.getFullYear();
-                    const mo = String(d.getMonth() + 1).padStart(2, '0');
-                    const dy = String(d.getDate()).padStart(2, '0');
-                    return `${yr}-${mo}-${dy}`;
-                }
-            } catch {
-                // fallback
-            }
+                if (d instanceof Date && !isNaN(d.getTime())) return d;
+            } catch {}
         }
 
         // Firestore Timestamp with seconds
         if (typeof rawDate === 'object' && typeof rawDate.seconds === 'number') {
-            try {
-                const d = new Date(rawDate.seconds * 1000);
-                if (!isNaN(d.getTime())) {
-                    const yr = d.getFullYear();
-                    const mo = String(d.getMonth() + 1).padStart(2, '0');
-                    const dy = String(d.getDate()).padStart(2, '0');
-                    return `${yr}-${mo}-${dy}`;
-                }
-            } catch {
-                // fallback
-            }
+            const d = new Date(rawDate.seconds * 1000);
+            if (!isNaN(d.getTime())) return d;
         }
 
-        // JS Date instance
-        if (rawDate instanceof Date) {
-            if (!isNaN(rawDate.getTime())) {
-                const yr = rawDate.getFullYear();
-                const mo = String(rawDate.getMonth() + 1).padStart(2, '0');
-                const dy = String(rawDate.getDate()).padStart(2, '0');
-                return `${yr}-${mo}-${dy}`;
-            }
-            return null;
-        }
-
-        // Number timestamp in ms
+        // Number timestamp in ms or s
         if (typeof rawDate === 'number') {
-            const d = new Date(rawDate);
-            if (!isNaN(d.getTime())) {
-                const yr = d.getFullYear();
-                const mo = String(d.getMonth() + 1).padStart(2, '0');
-                const dy = String(d.getDate()).padStart(2, '0');
-                return `${yr}-${mo}-${dy}`;
-            }
-            return null;
+            const ms = rawDate < 10000000000 ? rawDate * 1000 : rawDate;
+            const d = new Date(ms);
+            if (!isNaN(d.getTime())) return d;
         }
 
         // String formats
@@ -5653,48 +5626,107 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
             const trimmed = rawDate.trim();
             if (!trimmed) return null;
 
-            // Match DD/MM/YYYY
-            const brMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+            // Formato brasileiro: DD/MM/YYYY ou DD/MM/YYYY HH:mm:ss
+            const brMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[\sT](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
             if (brMatch) {
-                const dy = brMatch[1].padStart(2, '0');
-                const mo = brMatch[2].padStart(2, '0');
-                const yr = brMatch[3];
-                return `${yr}-${mo}-${dy}`;
+                const dy = parseInt(brMatch[1], 10);
+                const mo = parseInt(brMatch[2], 10) - 1;
+                const yr = parseInt(brMatch[3], 10);
+                const hr = brMatch[4] ? parseInt(brMatch[4], 10) : 12;
+                const min = brMatch[5] ? parseInt(brMatch[5], 10) : 0;
+                const sec = brMatch[6] ? parseInt(brMatch[6], 10) : 0;
+                const d = new Date(yr, mo, dy, hr, min, sec);
+                if (!isNaN(d.getTime())) return d;
             }
 
-            // Match YYYY-MM-DD or ISO string
-            const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+            // Formato ISO: YYYY-MM-DD apenas (sem horário)
+            const isoOnly = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+            if (isoOnly) {
+                const yr = parseInt(isoOnly[1], 10);
+                const mo = parseInt(isoOnly[2], 10) - 1;
+                const dy = parseInt(isoOnly[3], 10);
+                return new Date(yr, mo, dy, 12, 0, 0);
+            }
+
+            // Formato ISO com horário / timestamp
+            const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})[T\s](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?/);
             if (isoMatch) {
-                const yr = isoMatch[1];
-                const mo = isoMatch[2].padStart(2, '0');
-                const dy = isoMatch[3].padStart(2, '0');
-                return `${yr}-${mo}-${dy}`;
+                const parsed = new Date(trimmed);
+                if (!isNaN(parsed.getTime())) return parsed;
+                const yr = parseInt(isoMatch[1], 10);
+                const mo = parseInt(isoMatch[2], 10) - 1;
+                const dy = parseInt(isoMatch[3], 10);
+                const hr = parseInt(isoMatch[4], 10);
+                const min = parseInt(isoMatch[5], 10);
+                const sec = isoMatch[6] ? parseInt(isoMatch[6], 10) : 0;
+                const d = new Date(yr, mo, dy, hr, min, sec);
+                if (!isNaN(d.getTime())) return d;
             }
 
-            // Fallback generic Date parse
-            const parsed = new Date(trimmed);
-            if (!isNaN(parsed.getTime())) {
-                const yr = parsed.getFullYear();
-                const mo = String(parsed.getMonth() + 1).padStart(2, '0');
-                const dy = String(parsed.getDate()).padStart(2, '0');
-                return `${yr}-${mo}-${dy}`;
-            }
+            // Fallback genérico nativo
+            const fallback = new Date(trimmed);
+            if (!isNaN(fallback.getTime())) return fallback;
         }
 
         return null;
     };
 
+    const getFilterStartDate = (val: string): Date | null => {
+        if (!val || !val.trim()) return null;
+        const trimmed = val.trim();
+        const iso = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+        if (iso) {
+            return new Date(parseInt(iso[1], 10), parseInt(iso[2], 10) - 1, parseInt(iso[3], 10), 0, 0, 0, 0);
+        }
+        const br = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+        if (br) {
+            return new Date(parseInt(br[3], 10), parseInt(br[2], 10) - 1, parseInt(br[1], 10), 0, 0, 0, 0);
+        }
+        const d = new Date(trimmed);
+        if (!isNaN(d.getTime())) {
+            d.setHours(0, 0, 0, 0);
+            return d;
+        }
+        return null;
+    };
+
+    const getFilterEndDate = (val: string): Date | null => {
+        if (!val || !val.trim()) return null;
+        const trimmed = val.trim();
+        const iso = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+        if (iso) {
+            return new Date(parseInt(iso[1], 10), parseInt(iso[2], 10) - 1, parseInt(iso[3], 10), 23, 59, 59, 999);
+        }
+        const br = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+        if (br) {
+            return new Date(parseInt(br[3], 10), parseInt(br[2], 10) - 1, parseInt(br[1], 10), 23, 59, 59, 999);
+        }
+        const d = new Date(trimmed);
+        if (!isNaN(d.getTime())) {
+            d.setHours(23, 59, 59, 999);
+            return d;
+        }
+        return null;
+    };
+
+    const extractISODateString = (rawDate: any): string | null => {
+        const d = parseFlexibleDate(rawDate);
+        if (!d) return null;
+        const yr = d.getFullYear();
+        const mo = String(d.getMonth() + 1).padStart(2, '0');
+        const dy = String(d.getDate()).padStart(2, '0');
+        return `${yr}-${mo}-${dy}`;
+    };
+
     const formatDisplayDate = (val: any) => {
         if (!val) return '-';
-        const iso = extractISODateString(val);
-        if (iso) {
-            const [y, m, d] = iso.split('-');
-            return `${d}/${m}/${y}`;
+        const d = parseFlexibleDate(val);
+        if (d) {
+            const dy = String(d.getDate()).padStart(2, '0');
+            const mo = String(d.getMonth() + 1).padStart(2, '0');
+            const yr = d.getFullYear();
+            return `${dy}/${mo}/${yr}`;
         }
-        try {
-            const d = new Date(val);
-            if (!isNaN(d.getTime())) return d.toLocaleDateString('pt-BR');
-        } catch {}
         return String(val);
     };
 
@@ -5786,33 +5818,40 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
         fetchEmpresa();
     }, [isQuotaExceeded, pacientes, profissionais]);
 
-    const filteredFaturas = faturasPacientes.filter(f => {
-        const matchesPaciente = !searchFaturaPaciente || searchFaturaPaciente === 'all' || f.nomePaciente === searchFaturaPaciente;
+    const filteredFaturas = React.useMemo(() => {
+        const startDate = getFilterStartDate(searchFaturaDataInicio);
+        const endDate = getFilterEndDate(searchFaturaDataFim);
+        const searchTerm = (searchFaturaText || '').trim().toLowerCase();
 
-        // Extrai a data normalizada YYYY-MM-DD com suporte seguro a múltiplos formatos e timestamps
-        const faturaDateStr = extractISODateString(f.dataEmissao) || extractISODateString(f.criadoEm) || extractISODateString((f as any).dataEmissaoTimestamp) || extractISODateString((f as any).createdAt);
-        const faturaInicioStr = f.periodoApurado ? extractISODateString(f.periodoApurado.inicio) : null;
-        const faturaFimStr = f.periodoApurado ? extractISODateString(f.periodoApurado.fim) : null;
+        return (faturasPacientes || []).filter(f => {
+            // 1. Filtro por paciente selecionado no dropdown
+            const matchesPaciente = !searchFaturaPaciente || searchFaturaPaciente === 'all' || f.nomePaciente === searchFaturaPaciente;
+            if (!matchesPaciente) return false;
 
-        let matchesDate = true;
-        if (searchFaturaDataInicio || searchFaturaDataFim) {
-            const emissaoOk = faturaDateStr ? ((!searchFaturaDataInicio || faturaDateStr >= searchFaturaDataInicio) && (!searchFaturaDataFim || faturaDateStr <= searchFaturaDataFim)) : false;
-            const periodoOk = (faturaInicioStr || faturaFimStr)
-                ? ((!searchFaturaDataInicio || (faturaFimStr || faturaInicioStr)! >= searchFaturaDataInicio) && (!searchFaturaDataFim || (faturaInicioStr || faturaFimStr)! <= searchFaturaDataFim))
-                : false;
-            matchesDate = emissaoOk || periodoOk;
-        }
+            // 2. Filtro textual por nome do paciente ou número da fatura
+            if (searchTerm) {
+                const pacMatch = (f.nomePaciente || '').toLowerCase().includes(searchTerm);
+                const numMatch = (f.numeroFatura || '').toLowerCase().includes(searchTerm);
+                if (!pacMatch && !numMatch) return false;
+            }
 
-        let matchesText = true;
-        if (searchFaturaText.trim()) {
-            const term = searchFaturaText.toLowerCase().trim();
-            const pacMatch = (f.nomePaciente || '').toLowerCase().includes(term);
-            const numMatch = (f.numeroFatura || '').toLowerCase().includes(term);
-            matchesText = pacMatch || numMatch;
-        }
+            // 3. Filtro por período de datas (Data de Emissão da Fatura)
+            if (startDate || endDate) {
+                const faturaDate = parseFlexibleDate(
+                    f.dataEmissao || 
+                    (f as any).criadoEm || 
+                    (f as any).dataEmissaoTimestamp || 
+                    (f as any).createdAt
+                );
 
-        return matchesPaciente && matchesDate && matchesText;
-    });
+                if (!faturaDate) return false;
+                if (startDate && faturaDate.getTime() < startDate.getTime()) return false;
+                if (endDate && faturaDate.getTime() > endDate.getTime()) return false;
+            }
+
+            return true;
+        });
+    }, [faturasPacientes, searchFaturaPaciente, searchFaturaText, searchFaturaDataInicio, searchFaturaDataFim]);
 
     const sortedFaturas = React.useMemo(() => {
         return [...filteredFaturas].sort((a, b) => {
@@ -5826,10 +5865,10 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
             }
 
             if (faturaSortConfig.key === 'emissao') {
-                const dateStrA = extractISODateString(a.dataEmissao) || extractISODateString(a.criadoEm);
-                const dateStrB = extractISODateString(b.dataEmissao) || extractISODateString(b.criadoEm);
-                const timeA = dateStrA ? new Date(dateStrA + 'T00:00:00').getTime() : 0;
-                const timeB = dateStrB ? new Date(dateStrB + 'T00:00:00').getTime() : 0;
+                const dateA = parseFlexibleDate(a.dataEmissao || (a as any).criadoEm);
+                const dateB = parseFlexibleDate(b.dataEmissao || (b as any).criadoEm);
+                const timeA = dateA ? dateA.getTime() : 0;
+                const timeB = dateB ? dateB.getTime() : 0;
                 return faturaSortConfig.direction === 'asc' ? timeA - timeB : timeB - timeA;
             }
 
@@ -5837,36 +5876,51 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
         });
     }, [filteredFaturas, faturaSortConfig]);
 
-    const filteredFolhas = folhasPagamento.filter(f => {
-        const matchesProfissional = !searchFolhaProfissional || searchFolhaProfissional === 'all' || f.nomeProfissional === searchFolhaProfissional;
+    const filteredFolhas = React.useMemo(() => {
+        const startDate = getFilterStartDate(searchFolhaDataInicio);
+        const endDate = getFilterEndDate(searchFolhaDataFim);
+        const searchTerm = (searchFolhaText || '').trim().toLowerCase();
 
-        // Data de emissão ou criação
-        const dataEmissaoStr = extractISODateString(f.dataEmissao) || 
-                               extractISODateString((f as any).criadoEm) || 
-                               extractISODateString((f as any).dataEmissaoTimestamp) || 
-                               extractISODateString((f as any).createdAt);
-        // Datas do período apurado (início e fim)
-        const inicioPeriodoStr = f.periodoApurado ? extractISODateString(f.periodoApurado.inicio) : null;
-        const fimPeriodoStr = f.periodoApurado ? extractISODateString(f.periodoApurado.fim) : null;
+        return (folhasPagamento || []).filter(f => {
+            // 1. Filtro por profissional selecionado no dropdown
+            const matchesProfissional = !searchFolhaProfissional || 
+                                       searchFolhaProfissional === 'all' || 
+                                       f.nomeProfissional === searchFolhaProfissional;
+            if (!matchesProfissional) return false;
 
-        let matchesDate = true;
-        if (searchFolhaDataInicio || searchFolhaDataFim) {
-            const emissaoOk = dataEmissaoStr ? ((!searchFolhaDataInicio || dataEmissaoStr >= searchFolhaDataInicio) && (!searchFolhaDataFim || dataEmissaoStr <= searchFolhaDataFim)) : false;
-            const periodoOk = (inicioPeriodoStr || fimPeriodoStr)
-                ? ((!searchFolhaDataInicio || (fimPeriodoStr || inicioPeriodoStr)! >= searchFolhaDataInicio) && (!searchFolhaDataFim || (inicioPeriodoStr || fimPeriodoStr)! <= searchFolhaDataFim))
-                : false;
-            matchesDate = emissaoOk || periodoOk;
-        }
+            // 2. Filtro por busca textual (nome do profissional)
+            if (searchTerm) {
+                const nomeProf = (f.nomeProfissional || '').toLowerCase();
+                if (!nomeProf.includes(searchTerm)) {
+                    return false;
+                }
+            }
 
-        let matchesText = true;
-        if (searchFolhaText.trim()) {
-            const term = searchFolhaText.toLowerCase().trim();
-            const profMatch = (f.nomeProfissional || '').toLowerCase().includes(term);
-            matchesText = profMatch;
-        }
+            // 3. Filtro por intervalo de datas (Data de Emissão da Folha de Pagamento)
+            if (startDate || endDate) {
+                const emissaoDate = parseFlexibleDate(
+                    f.dataEmissao || 
+                    (f as any).criadoEm || 
+                    (f as any).dataEmissaoTimestamp || 
+                    (f as any).createdAt
+                );
 
-        return matchesProfissional && matchesDate && matchesText;
-    });
+                if (!emissaoDate) {
+                    return false;
+                }
+
+                if (startDate && emissaoDate.getTime() < startDate.getTime()) {
+                    return false;
+                }
+
+                if (endDate && emissaoDate.getTime() > endDate.getTime()) {
+                    return false;
+                }
+            }
+
+            return true;
+        });
+    }, [folhasPagamento, searchFolhaProfissional, searchFolhaText, searchFolhaDataInicio, searchFolhaDataFim]);
 
     const sortedFolhas = React.useMemo(() => {
         return [...filteredFolhas].sort((a, b) => {
@@ -5880,16 +5934,21 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
             }
 
             if (folhaSortConfig.key === 'emissao') {
-                const dateStrA = extractISODateString(a.dataEmissao) || extractISODateString((a as any).criadoEm);
-                const dateStrB = extractISODateString(b.dataEmissao) || extractISODateString((b as any).criadoEm);
-                const timeA = dateStrA ? new Date(dateStrA + 'T00:00:00').getTime() : 0;
-                const timeB = dateStrB ? new Date(dateStrB + 'T00:00:00').getTime() : 0;
+                const dateA = parseFlexibleDate(a.dataEmissao || (a as any).criadoEm);
+                const dateB = parseFlexibleDate(b.dataEmissao || (b as any).criadoEm);
+                const timeA = dateA ? dateA.getTime() : 0;
+                const timeB = dateB ? dateB.getTime() : 0;
                 return folhaSortConfig.direction === 'asc' ? timeA - timeB : timeB - timeA;
             }
 
             return 0;
         });
     }, [filteredFolhas, folhaSortConfig]);
+
+    const selectedFolhasFiltradas = React.useMemo(() => {
+        const idsFiltrados = new Set(sortedFolhas.map(f => f.id));
+        return selectedHistorico.filter(id => idsFiltrados.has(id));
+    }, [selectedHistorico, sortedFolhas]);
 
     return (
       <div className="space-y-6 animate-in fade-in-30">
@@ -6172,13 +6231,13 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                 >
                   {isExportingFolhasPDF ? 'Gerando PDF...' : 'Baixar Resumo para Pagamento'}
                 </button>
-                {selectedHistorico.length > 0 && (
+                {selectedFolhasFiltradas.length > 0 && (
                   <button
-                    onClick={() => setBatchDeleteConfirm({ isOpen: true, type: 'folha', ids: selectedHistorico })}
+                    onClick={() => setBatchDeleteConfirm({ isOpen: true, type: 'folha', ids: selectedFolhasFiltradas })}
                     className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700 transition-all active:scale-95 cursor-pointer shadow-sm animate-in fade-in"
                     title="Excluir folhas selecionadas em lote"
                   >
-                    <Trash2 className="w-3.5 h-3.5" /> Excluir em Lote ({selectedHistorico.length})
+                    <Trash2 className="w-3.5 h-3.5" /> Excluir em Lote ({selectedFolhasFiltradas.length})
                   </button>
                 )}
               </div>
@@ -6276,15 +6335,18 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                               <input 
                                   type="checkbox"
                                   className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                                  checked={sortedFolhas.length > 0 && selectedHistorico.length === sortedFolhas.length}
+                                  checked={sortedFolhas.length > 0 && sortedFolhas.every(f => selectedHistorico.includes(f.id))}
                                   onChange={(e) => {
                                       if (e.target.checked) {
-                                          setSelectedHistorico(sortedFolhas.map(f => f.id));
+                                          const nextSelected = new Set(selectedHistorico);
+                                          sortedFolhas.forEach(f => nextSelected.add(f.id));
+                                          setSelectedHistorico(Array.from(nextSelected));
                                       } else {
-                                          setSelectedHistorico([]);
+                                          const sortedIds = new Set(sortedFolhas.map(f => f.id));
+                                          setSelectedHistorico(prev => prev.filter(id => !sortedIds.has(id)));
                                       }
                                   }}
-                                  title="Selecionar todas as folhas"
+                                  title="Selecionar todas as folhas filtradas"
                               />
                           </th>
                           <th 
@@ -6412,8 +6474,8 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
             style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
           >
             {(() => {
-              const listToPrint = selectedHistorico.length > 0 
-                ? sortedFolhas.filter(f => selectedHistorico.includes(f.id)) 
+              const listToPrint = selectedFolhasFiltradas.length > 0 
+                ? sortedFolhas.filter(f => selectedFolhasFiltradas.includes(f.id)) 
                 : sortedFolhas;
 
               const firstFolhaItem = listToPrint[0];
