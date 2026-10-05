@@ -392,6 +392,8 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   const [boletoCpfCnpj, setBoletoCpfCnpj] = useState<string>('');
   const [boletoPagadorNome, setBoletoPagadorNome] = useState<string>('');
   const [boletoEndereco, setBoletoEndereco] = useState<string>('');
+  const [boletoDescricao, setBoletoDescricao] = useState<string>('');
+  const [boletoEmail, setBoletoEmail] = useState<string>('');
   const [boletoValor, setBoletoValor] = useState<string>('0,00');
   const [boletoResultData, setBoletoResultData] = useState<any | null>(null);
   const [selectedPagadorType, setSelectedPagadorType] = useState<'manual' | 'paciente' | 'profissional'>('manual');
@@ -1290,20 +1292,30 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       return;
     }
 
+    if (!boletoDescricao.trim()) {
+      setBoletoDescricao(`Serviços de Home Care - Ref: ${getReferenciaMesNome(referenciaMes)}/${referenciaAno}`);
+    }
+    if (!boletoEmail.trim() && selectedPagadorType === 'paciente' && selectedPacienteId) {
+      const pac = activePacientes.find(p => p.id === selectedPacienteId);
+      const pacEmail = (pac as any)?.email || (pac as any)?.emailResponsavel || (pac as any)?.responsavelEmail || (pac as any)?.responsavelFinanceiro?.email || '';
+      if (pacEmail) setBoletoEmail(pacEmail);
+    }
+
     setShowConfirmBoletoModal(true);
   };
 
   const gerarBoletoInter = async () => {
+    const hojeIso = new Date().toISOString().split('T')[0];
+    if (!boletoVencimento || boletoVencimento < hojeIso) {
+      toast.error('Por favor, informe uma Data de Vencimento igual ou posterior a hoje.');
+      return;
+    }
+
     setShowConfirmBoletoModal(false);
 
     const cleanCpfCnpj = (boletoCpfCnpj || '').replace(/\D/g, '');
     if (!cleanCpfCnpj || cleanCpfCnpj.length < 11) {
       toast.error('Por favor, informe um CPF/CNPJ válido para o pagador (mínimo 11 dígitos).');
-      return;
-    }
-    const hojeIso = new Date().toISOString().split('T')[0];
-    if (!boletoVencimento || boletoVencimento < hojeIso) {
-      toast.error('Por favor, informe uma Data de Vencimento igual ou posterior a hoje.');
       return;
     }
     const valNum = converterMascaraParaNumero(boletoValor);
@@ -1321,7 +1333,10 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
     const loaderToastId = toast.loading("Gerando Boleto de Cobrança v3 no Banco Inter...");
     const seuNum = `BOL-${Date.now().toString().slice(-8)}`;
 
-    const payloadBoleto = {
+    const emailLimpo = (boletoEmail || '').trim();
+    const descricaoFinal = (boletoDescricao || `Prestação de Serviços de Home Care - Ref: ${getReferenciaMesNome(referenciaMes)}/${referenciaAno}`).trim();
+
+    const payloadBoleto: any = {
       seuNumero: seuNum,
       valorNominal: valNum,
       dataVencimento: boletoVencimento,
@@ -1332,21 +1347,29 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
         endereco: boletoEndereco || undefined,
       }
     };
+    if (emailLimpo) {
+      payloadBoleto.pagador.email = emailLimpo;
+    }
 
     try {
       const functions = getFunctions(app, "southamerica-east1");
       const emitir = httpsCallable(functions, "emitirBoletoInter");
 
-      const response = await emitir({
+      const emitirParams: any = {
         faturaId: seuNum,
         clienteNome: (boletoPagadorNome || "Pagador Registrado").trim(),
         clienteDocumento: cleanCpfCnpj,
-        clienteEmail: ((payloadBoleto.pagador as any)?.email) || "",
         valor: valNum,
         dataVencimento: boletoVencimento,
-        descricao: `Prestação de Serviços de Home Care - Ref: ${getReferenciaMesNome(referenciaMes)}/${referenciaAno}`,
+        descricao: descricaoFinal,
         pagador: payloadBoleto.pagador
-      });
+      };
+
+      if (emailLimpo) {
+        emitirParams.clienteEmail = emailLimpo;
+      }
+
+      const response = await emitir(emitirParams);
 
       const realData = response.data as any;
       toast.dismiss(loaderToastId);
@@ -2831,6 +2854,9 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                                 setBoletoCpfCnpj(clean ? (clean.length > 11 ? mascaraCNPJ(clean) : mascaraCPF(clean)) : '');
                                 const endStr = pac.endereco ? `${pac.endereco.rua || (pac.endereco as any).logradouro || ''}, ${pac.endereco.numero || ''} ${pac.endereco.bairro || ''} - ${pac.endereco.cidade || ''}/${pac.endereco.estado || (pac.endereco as any).uf || ''}`.trim() : '';
                                 setBoletoEndereco(endStr);
+                                const emailPac = (pac as any).email || (pac as any).emailResponsavel || (pac as any).responsavelEmail || (pac as any).responsavelFinanceiro?.email || '';
+                                setBoletoEmail(emailPac);
+                                setBoletoDescricao(`Serviços de Home Care - Ref: ${getReferenciaMesNome(referenciaMes)}/${referenciaAno}`);
 
                                 const hojeIso = new Date().toISOString().split('T')[0];
                                 if (!boletoVencimento || boletoVencimento < hojeIso) {
@@ -3079,11 +3105,41 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                                   R$ {converterMascaraParaNumero(boletoValor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </span>
                               </div>
-                              <div className="flex justify-between items-center py-1">
-                                <span className="font-bold text-slate-500">Data de Vencimento:</span>
-                                <span className="font-mono font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded border border-blue-200">
-                                  {boletoVencimento ? boletoVencimento.split('-').reverse().join('/') : '-'}
-                                </span>
+                              <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
+                                <label className="font-bold text-slate-500">Data de Vencimento *</label>
+                                <input
+                                  type="date"
+                                  min={new Date().toISOString().split('T')[0]}
+                                  value={boletoVencimento}
+                                  onChange={(e) => setBoletoVencimento(e.target.value)}
+                                  className={`p-1.5 border rounded-lg text-xs font-mono font-bold text-blue-800 bg-white focus:ring-2 focus:ring-blue-500 outline-none ${
+                                    (!boletoVencimento || boletoVencimento < new Date().toISOString().split('T')[0])
+                                      ? 'border-rose-400 bg-rose-50/70 text-rose-950'
+                                      : 'border-slate-300'
+                                  }`}
+                                />
+                              </div>
+                              <div className="py-1 border-b border-slate-200/60 space-y-1">
+                                <label className="block font-bold text-slate-500">Descrição / Mensagem do Boleto:</label>
+                                <input
+                                  type="text"
+                                  placeholder="Ex: Serviços de Home Care - Ref. 10/2026"
+                                  value={boletoDescricao}
+                                  onChange={(e) => setBoletoDescricao(e.target.value)}
+                                  className="w-full p-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                />
+                              </div>
+                              <div className="py-1 space-y-1">
+                                <label className="block font-bold text-slate-500">
+                                  E-mail para Envio do Boleto <span className="font-normal text-slate-400">(Opcional)</span>:
+                                </label>
+                                <input
+                                  type="email"
+                                  placeholder="email@responsavel.com"
+                                  value={boletoEmail}
+                                  onChange={(e) => setBoletoEmail(e.target.value)}
+                                  className="w-full p-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                />
                               </div>
                             </div>
 
@@ -3098,8 +3154,8 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                               <button
                                 type="button"
                                 onClick={gerarBoletoInter}
-                                disabled={isProcessingFolha}
-                                className="px-5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+                                disabled={isProcessingFolha || !boletoVencimento || boletoVencimento < new Date().toISOString().split('T')[0]}
+                                className="px-5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
                               >
                                 <span>🧾 Confirmar e Emitir Boleto</span>
                               </button>

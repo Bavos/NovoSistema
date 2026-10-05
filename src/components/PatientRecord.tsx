@@ -3873,6 +3873,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     }
 
     const sugestaoVencimento = getSugestaoVencimento();
+    const defaultEmail = (paciente as any)?.email || (paciente as any)?.emailResponsavel || (paciente as any)?.responsavelEmail || (paciente as any)?.responsavelFinanceiro?.email || "";
+    const compStr = `${String(calendarMonth + 1).padStart(2, "0")}/${calendarYear}`;
+    const defaultDescricao = `Serviços de Home Care - Ref. ${compStr}`;
 
     // Abre o Modal de Confirmação Rápida Pré-Disparo
     setPatientBoletoConfirmData({
@@ -3880,7 +3883,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       clienteDocumento: docPagador,
       valor: valorFinal,
       dataVencimento: sugestaoVencimento,
-      competencia: `${String(calendarMonth + 1).padStart(2, "0")}/${calendarYear}`,
+      descricao: defaultDescricao,
+      clienteEmail: defaultEmail,
+      competencia: compStr,
       matchedFatura,
       mesFormatado
     });
@@ -3889,9 +3894,16 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
   const executarEmissaoBoletoPaciente = async () => {
     if (!patientBoletoConfirmData || !paciente) return;
+
+    const hojeIso = new Date().toISOString().split("T")[0];
+    if (!patientBoletoConfirmData.dataVencimento || patientBoletoConfirmData.dataVencimento < hojeIso) {
+      toast.error("Por favor, selecione uma Data de Vencimento válida (hoje ou posterior).");
+      return;
+    }
+
     setShowPatientBoletoConfirmModal(false);
 
-    const { clienteNome, clienteDocumento, valor, dataVencimento, matchedFatura, mesFormatado } = patientBoletoConfirmData;
+    const { clienteNome, clienteDocumento, valor, dataVencimento, descricao, clienteEmail, matchedFatura, mesFormatado } = patientBoletoConfirmData;
 
     const loaderId = toast.loading("Emitindo Boleto Oficial no Banco Inter...");
     const seuNum = matchedFatura?.numeroFatura ? String(matchedFatura.numeroFatura).substring(0, 15) : `FAT-${Date.now().toString().slice(-6)}`;
@@ -3902,20 +3914,30 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       const functions = getFunctions(app, "southamerica-east1");
       const emitir = httpsCallable(functions, "emitirBoletoInter");
 
-      const response: any = await emitir({
+      const cleanDoc = clienteDocumento.replace(/\D/g, '');
+      const emailTrim = (clienteEmail || "").trim();
+      const descTrim = (descricao || `Prestação de Serviços - Ref: ${String(calendarMonth + 1).padStart(2, "0")}/${calendarYear}`).trim();
+
+      const emitirPayload: any = {
         faturaId: seuNum,
         clienteNome: clienteNome.trim(),
-        clienteDocumento: clienteDocumento.replace(/\D/g, ''),
-        clienteEmail: (paciente as any).email || (paciente as any).emailResponsavel || "",
+        clienteDocumento: cleanDoc,
         valor: valor,
         dataVencimento: dataVencimento,
-        descricao: `Prestação de Serviços - Ref: ${String(calendarMonth + 1).padStart(2, "0")}/${calendarYear}`,
+        descricao: descTrim,
         pagador: {
-          cpfCnpj: clienteDocumento.replace(/\D/g, ''),
+          cpfCnpj: cleanDoc,
           nome: clienteNome.trim(),
-          tipoPessoa: clienteDocumento.replace(/\D/g, '').length > 11 ? "JURIDICA" : "FISICA"
+          tipoPessoa: cleanDoc.length > 11 ? "JURIDICA" : "FISICA"
         }
-      });
+      };
+
+      if (emailTrim) {
+        emitirPayload.clienteEmail = emailTrim;
+        emitirPayload.pagador.email = emailTrim;
+      }
+
+      const response: any = await emitir(emitirPayload);
 
       const resData: any = response.data;
       toast.dismiss(loaderId);
@@ -10982,11 +11004,41 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                   R$ {Number(patientBoletoConfirmData.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
-              <div className="flex justify-between items-center py-1">
-                <span className="font-bold text-slate-500">Data de Vencimento:</span>
-                <span className="font-mono font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded border border-blue-200">
-                  {patientBoletoConfirmData.dataVencimento ? patientBoletoConfirmData.dataVencimento.split('-').reverse().join('/') : '-'}
-                </span>
+              <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
+                <label className="font-bold text-slate-500">Data de Vencimento *</label>
+                <input
+                  type="date"
+                  min={new Date().toISOString().split('T')[0]}
+                  value={patientBoletoConfirmData.dataVencimento || ""}
+                  onChange={(e) => setPatientBoletoConfirmData((prev: any) => ({ ...prev, dataVencimento: e.target.value }))}
+                  className={`p-1.5 border rounded-lg text-xs font-mono font-bold text-blue-800 bg-white focus:ring-2 focus:ring-blue-500 outline-none ${
+                    (!patientBoletoConfirmData.dataVencimento || patientBoletoConfirmData.dataVencimento < new Date().toISOString().split('T')[0])
+                      ? "border-rose-400 bg-rose-50/70 text-rose-950"
+                      : "border-slate-300"
+                  }`}
+                />
+              </div>
+              <div className="py-1 border-b border-slate-200/60 space-y-1">
+                <label className="block font-bold text-slate-500">Descrição / Mensagem do Boleto:</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Serviços de Home Care - Ref. 10/2026"
+                  value={patientBoletoConfirmData.descricao || ""}
+                  onChange={(e) => setPatientBoletoConfirmData((prev: any) => ({ ...prev, descricao: e.target.value }))}
+                  className="w-full p-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+              <div className="py-1 space-y-1">
+                <label className="block font-bold text-slate-500">
+                  E-mail para Envio do Boleto <span className="font-normal text-slate-400">(Opcional)</span>:
+                </label>
+                <input
+                  type="email"
+                  placeholder="email@responsavel.com"
+                  value={patientBoletoConfirmData.clienteEmail || ""}
+                  onChange={(e) => setPatientBoletoConfirmData((prev: any) => ({ ...prev, clienteEmail: e.target.value }))}
+                  className="w-full p-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                />
               </div>
             </div>
 
@@ -11001,7 +11053,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               <button
                 type="button"
                 onClick={executarEmissaoBoletoPaciente}
-                className="px-5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+                disabled={!patientBoletoConfirmData.dataVencimento || patientBoletoConfirmData.dataVencimento < new Date().toISOString().split('T')[0]}
+                className="px-5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
               >
                 <span>🧾 Confirmar e Emitir Boleto</span>
               </button>

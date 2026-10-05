@@ -21,6 +21,8 @@ export function DashboardFinanceiro({ initialSubTab }: DashboardFinanceiroProps)
   const [faturaParaEmitir, setFaturaParaEmitir] = useState<Fatura | null>(null);
   const [docModalInput, setDocModalInput] = useState<string>("");
   const [vencimentoModalInput, setVencimentoModalInput] = useState<string>("");
+  const [descricaoModalInput, setDescricaoModalInput] = useState<string>("");
+  const [emailModalInput, setEmailModalInput] = useState<string>("");
 
   const handleAbrirModalConfirmacao = (fatura: Fatura) => {
     setMsgSucesso(null);
@@ -35,6 +37,8 @@ export function DashboardFinanceiro({ initialSubTab }: DashboardFinanceiroProps)
       : getSugestaoVencimento();
 
     setVencimentoModalInput(venc);
+    setDescricaoModalInput(fatura.descricao || `Serviços de Home Care - Ref. ${(fatura as any)?.mesReferencia || new Date().toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" })}`);
+    setEmailModalInput(fatura.clienteEmail || (fatura as any)?.email || "");
     setFaturaParaEmitir(fatura);
   };
 
@@ -57,6 +61,8 @@ export function DashboardFinanceiro({ initialSubTab }: DashboardFinanceiroProps)
       ...faturaParaEmitir,
       clienteDocumento: cleanDoc,
       dataVencimento: vencimentoModalInput,
+      descricao: (descricaoModalInput || "Prestação de Serviços de Home Care").trim(),
+      clienteEmail: emailModalInput.trim() || undefined,
     };
 
     const targetId = faturaParaEmitir.id;
@@ -341,6 +347,32 @@ export function DashboardFinanceiro({ initialSubTab }: DashboardFinanceiroProps)
                     ⚠️ Data de vencimento é obrigatória (hoje ou posterior)
                   </p>
                 )}
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-600 mb-1">
+                  Descrição / Mensagem do Boleto
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: Serviços de Home Care - Ref. 10/2026"
+                  value={descricaoModalInput}
+                  onChange={(e) => setDescricaoModalInput(e.target.value)}
+                  className="w-full p-2 border border-slate-200 rounded-lg text-xs bg-white font-medium text-slate-800"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-600 mb-1">
+                  E-mail para Envio do Boleto <span className="font-normal text-slate-400">(Opcional)</span>
+                </label>
+                <input
+                  type="email"
+                  placeholder="email@responsavel.com"
+                  value={emailModalInput}
+                  onChange={(e) => setEmailModalInput(e.target.value)}
+                  className="w-full p-2 border border-slate-200 rounded-lg text-xs bg-white font-medium text-slate-800"
+                />
               </div>
             </div>
 
