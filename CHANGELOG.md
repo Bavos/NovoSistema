@@ -7,6 +7,16 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [07/10/2026] - Ajustes no Módulo Financeiro e Emissão de Boletos (Banco Inter)
+- **Correção da Resolução do Pagador:** Ajustado `src/components/PatientRecord.tsx` (e dashboards correlatos) para priorizar estritamente o Nome e CPF/CNPJ informados na seção "DADOS DE FATURAMENTO E PAGAMENTO" (`dadosPagamento.nomePagador`, `dadosPagamento.cpfPagador` ou responsáveis financeiros). O sistema não utiliza mais o CPF do paciente quando há pagador/responsável configurado.
+- **Modal de Conferência de Boleto:** 
+  * Campo de Data de Vencimento convertido para input interativo (`type="date"`), permitindo ajuste antes do disparo.
+  * Adicionado campo editável de Descrição / Mensagem da cobrança.
+  * Adicionado campo opcional de E-mail para envio, pré-preenchido com o e-mail de faturamento.
+- **Exclusão de Registro de Boleto:** Adicionado botão com ícone de lixeira na barra de status mensal do prontuário para remover o vínculo local do boleto, acompanhado de modal de confirmação alertando que a baixa bancária oficial deve ser feita manualmente via Internet Banking do Banco Inter.
+
+---
+
 ## [2.4.0] - 2026-09-22
 
 ### Adicionado

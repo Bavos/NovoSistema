@@ -13,3 +13,8 @@ Este documento descreve as regras críticas do sistema.
 
 *   **Dynamic Rows**: A interface de documentos inicia vazia.
 *   **Bloqueio de Edição**: Após um arquivo ser anexado a uma linha, o campo "Tipo de Documento" deve ficar desabilitado (`disabled`) para garantir a integridade da relação tipo-arquivo.
+
+## Módulo: Financeiro e Emissão de Boletos (Banco Inter)
+
+*   **Resolução do Pagador**: Na emissão de cobranças, priorizar estritamente o Nome e CPF/CNPJ informados em "DADOS DE FATURAMENTO E PAGAMENTO" (`dadosPagamento.nomePagador`, `dadosPagamento.cpfPagador`) ou responsáveis financeiros. O sistema não utiliza o CPF do paciente quando há pagador/responsável configurado.
+*   **Cancelamento e Baixa Bancária**: A exclusão ou cancelamento de registros de boletos na interface/prontuário é estritamente lógico e local, desvinculando o documento no sistema. A baixa bancária definitiva ou o cancelamento formal do título junto ao Banco Inter deve ser realizado manualmente pelo operador através do Internet Banking do Banco Inter.

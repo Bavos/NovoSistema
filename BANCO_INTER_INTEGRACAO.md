@@ -29,3 +29,10 @@ Documentação da arquitetura, fluxo de autenticação mTLS, Cloud Functions e c
 ## 4. Recursos da Interface (Frontend)
 - **Download Direto do PDF:** Dispara o download automático do arquivo `.pdf` no navegador.
 - **Cópia Rápida:** Botões para Linha Digitável, Código de Barras (44 dígitos) e Pix Copia e Cola.
+
+---
+
+## 5. Regras Operacionais de Exclusão e Baixa
+- **Cancelamento Lógico Local:** A exclusão ou desvinculação de um registro de boleto na interface (ex.: lixeira no prontuário do paciente) tem efeito exclusivamente lógico dentro do sistema Vallidare.
+- **Baixa Manual no Banco Inter:** A baixa bancária definitiva ou o cancelamento do título registrado emitido junto ao Banco Inter deve ser realizado manualmente pelo operador através do Internet Banking PJ do Banco Inter.
+

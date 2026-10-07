@@ -46,6 +46,7 @@ O **Sistema de Gestão Vallidare** atende às demandas complexas de empresas de 
 - **Folha e Repasse a Profissionais**: Cálculo automatizado por hora/plantão, descontos e acréscimos.
 - **Lançamento de Débitos e Créditos**: Registro discriminado com motivos operacionais e vínculo com plantões.
 - **Integração com Banco Inter**: Geração de boletos via API oficial com autenticação mTLS (certificado digital X.509 e chave privada), conciliação e baixa automatizada.
+- **Cancelamento e Exclusão de Boletos (Regra Operacional)**: A exclusão ou remoção de boletos no sistema realiza apenas o cancelamento lógico e a desvinculação local dos registros no prontuário e no faturamento. **A baixa bancária oficial ou o cancelamento do título registrado deve ser realizada manualmente via Internet Banking do Banco Inter**.
 
 ### 5. Assistente de Inteligência Operacional (Gemini)
 - Análise de indicadores estratégicos através do modelo **Gemini 3.6 Flash**.
