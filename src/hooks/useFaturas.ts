@@ -70,6 +70,7 @@ export function useFaturas() {
       valor: fatura.valor,
       dataVencimento: fatura.dataVencimento,
       descricao: fatura.descricao || "Prestação de Serviços de Home Care",
+      mensagem: fatura.descricao || "Prestação de Serviços de Home Care",
       pagador: {
         cpfCnpj: cleanDoc,
         nome: fatura.clienteNome.trim(),

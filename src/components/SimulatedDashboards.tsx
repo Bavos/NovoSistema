@@ -392,7 +392,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
   const [boletoCpfCnpj, setBoletoCpfCnpj] = useState<string>('');
   const [boletoPagadorNome, setBoletoPagadorNome] = useState<string>('');
   const [boletoEndereco, setBoletoEndereco] = useState<string>('');
-  const [boletoDescricao, setBoletoDescricao] = useState<string>('');
+  const [boletoDescricao, setBoletoDescricao] = useState<string>('Prestação de Serviços Avulsos');
   const [boletoEmail, setBoletoEmail] = useState<string>('');
   const [boletoValor, setBoletoValor] = useState<string>('0,00');
   const [boletoResultData, setBoletoResultData] = useState<any | null>(null);
@@ -1293,7 +1293,11 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
     }
 
     if (!boletoDescricao.trim()) {
-      setBoletoDescricao(`Serviços de Home Care - Ref: ${getReferenciaMesNome(referenciaMes)}/${referenciaAno}`);
+      setBoletoDescricao(
+        selectedPagadorType === 'paciente'
+          ? `Serviços de Home Care - Ref: ${getReferenciaMesNome(referenciaMes)}/${referenciaAno}`
+          : 'Prestação de Serviços Avulsos'
+      );
     }
     if (!boletoEmail.trim() && selectedPagadorType === 'paciente' && selectedPacienteId) {
       const pac = activePacientes.find(p => p.id === selectedPacienteId);
@@ -1334,12 +1338,14 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
     const seuNum = `BOL-${Date.now().toString().slice(-8)}`;
 
     const emailLimpo = (boletoEmail || '').trim();
-    const descricaoFinal = (boletoDescricao || `Prestação de Serviços de Home Care - Ref: ${getReferenciaMesNome(referenciaMes)}/${referenciaAno}`).trim();
+    const descricaoFinal = (boletoDescricao || (selectedPagadorType === 'paciente' ? `Serviços de Home Care - Ref: ${getReferenciaMesNome(referenciaMes)}/${referenciaAno}` : 'Prestação de Serviços Avulsos')).trim();
 
     const payloadBoleto: any = {
       seuNumero: seuNum,
       valorNominal: valNum,
       dataVencimento: boletoVencimento,
+      mensagem: descricaoFinal,
+      descricao: descricaoFinal,
       pagador: {
         cpfCnpj: cleanCpfCnpj, // Apenas dígitos
         tipoPessoa: cleanCpfCnpj.length > 11 ? "JURIDICA" : "FISICA",
@@ -1362,6 +1368,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
         valor: valNum,
         dataVencimento: boletoVencimento,
         descricao: descricaoFinal,
+        mensagem: descricaoFinal,
         pagador: payloadBoleto.pagador
       };
 
@@ -2828,6 +2835,9 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                           onChange={(e) => {
                             const val = e.target.value as any;
                             setSelectedPagadorType(val);
+                            if (val === 'manual' && (!boletoDescricao || boletoDescricao.startsWith('Serviços de Home Care'))) {
+                              setBoletoDescricao('Prestação de Serviços Avulsos');
+                            }
                           }}
                           className="p-1.5 border border-slate-200 rounded-md text-xs bg-white text-slate-700 font-medium cursor-pointer"
                         >
@@ -3039,15 +3049,28 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                         </div>
                       </div>
 
-                      <div>
-                        <label className="block text-xs font-bold text-slate-600 mb-1">Endereço de Cobrança (Opcional)</label>
-                        <input
-                          type="text"
-                          placeholder="Rua / Av., Nº, Bairro, Cidade - UF"
-                          value={boletoEndereco}
-                          onChange={(e) => setBoletoEndereco(e.target.value)}
-                          className="w-full p-2 border border-slate-200 rounded-lg text-sm bg-white"
-                        />
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-600 mb-1">Descrição / Mensagem do Boleto</label>
+                          <input
+                            type="text"
+                            placeholder="Ex: Prestação de Serviços Avulsos"
+                            value={boletoDescricao}
+                            onChange={(e) => setBoletoDescricao(e.target.value)}
+                            className="w-full p-2 border border-slate-200 rounded-lg text-sm bg-white font-medium text-slate-800"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-600 mb-1">Endereço de Cobrança (Opcional)</label>
+                          <input
+                            type="text"
+                            placeholder="Rua / Av., Nº, Bairro, Cidade - UF"
+                            value={boletoEndereco}
+                            onChange={(e) => setBoletoEndereco(e.target.value)}
+                            className="w-full p-2 border border-slate-200 rounded-lg text-sm bg-white"
+                          />
+                        </div>
                       </div>
 
                       <div className="flex justify-end pt-2">
@@ -3134,7 +3157,7 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                                 <label className="block font-bold text-slate-500">Descrição / Mensagem do Boleto:</label>
                                 <input
                                   type="text"
-                                  placeholder="Ex: Serviços de Home Care - Ref. 10/2026"
+                                  placeholder="Ex: Prestação de Serviços Avulsos"
                                   value={boletoDescricao}
                                   onChange={(e) => setBoletoDescricao(e.target.value)}
                                   className="w-full p-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 outline-none"

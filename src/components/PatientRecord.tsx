@@ -3979,6 +3979,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         valor: valor,
         dataVencimento: dataVencimento,
         descricao: descTrim,
+        mensagem: descTrim,
         pagador: {
           cpfCnpj: cleanDoc,
           nome: clienteNome.trim(),

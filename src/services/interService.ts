@@ -89,6 +89,7 @@ export interface GerarBoletoInterParams {
   dataVencimento: string; // Formato YYYY-MM-DD
   pagador: BoletoPagadorInput;
   mensagem?: string;
+  descricao?: string;
 }
 
 export interface BoletoInterResponse {
