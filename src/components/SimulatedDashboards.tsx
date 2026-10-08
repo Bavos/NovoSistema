@@ -2138,9 +2138,10 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
       const pData = Object.entries(agendamentosPorProfissional) as [string, Agendamento[]][];
       pData.forEach(([profName, agends]) => {
         agends.forEach((ag) => {
-          const pacId = ag.idPaciente;
-          const paciente = pacientes.find((p) => p.id === pacId);
-          const nomePac = paciente ? paciente.nome : 'Paciente Desconhecido';
+          const agAny = ag as any;
+          const pacId = ag.idPaciente || agAny.pacienteId || agAny.idClient;
+          const paciente = pacientes.find((p) => String(p.id || (p as any).idDoc) === String(pacId));
+          const nomePac = agAny.nomePaciente || agAny.pacienteNome || paciente?.nome || (paciente as any)?.nomeCompleto || agAny.nome || 'Paciente Desconhecido';
           const vals = getAgendamentoCalculatedValues(ag);
           csvContent += `"${profName}";"${ag.data.split('-').reverse().join('/')}";"${nomePac}";${vals.valorRepasseFinal.toFixed(2).replace('.', ',')};${vals.ajudaCusto.toFixed(2).replace('.', ',')};"${ag.tipoDia && ag.tipoDia !== 'Normal' ? ag.tipoDia : '-'}"\n`;
         });
@@ -4083,8 +4084,16 @@ export const FinanceiroDashboard: React.FC<{ initialSubTab?: 'folhas' | 'debitos
                                                 </thead>
                                                 <tbody className="divide-y divide-slate-50">
                                                   {p.agends.sort((a,b) => a.data.localeCompare(b.data)).map(ag => {
-                                                    const paciente = pacientes.find(pat => pat.id === ag.idPaciente);
-                                                    const nomePac = paciente ? paciente.nome : 'Paciente Desconhecido';
+                                                    const agAny = ag as any;
+                                                    const pacIdAlvo = String(ag.idPaciente || agAny.pacienteId || agAny.idClient || agAny.clienteId || '').trim();
+                                                    const paciente = pacientes.find(pat => {
+                                                      const pId = String(pat.id || (pat as any).idDoc || '').trim();
+                                                      if (pId && pacIdAlvo && pId === pacIdAlvo) return true;
+                                                      const rawPac = String(ag.idPaciente || agAny.pacienteId || agAny.paciente || '').trim().toLowerCase();
+                                                      if (rawPac && pat.nome && pat.nome.toLowerCase() === rawPac) return true;
+                                                      return false;
+                                                    });
+                                                    const nomePac = agAny.nomePaciente || agAny.pacienteNome || paciente?.nome || (paciente as any)?.nomeCompleto || agAny.nome || 'Paciente Desconhecido';
                                                     const vals = getAgendamentoCalculatedValues(ag);
                                                     return (
                                                       <tr key={ag.id} className="hover:bg-slate-50/30">

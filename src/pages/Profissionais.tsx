@@ -278,7 +278,12 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
   useEffect(() => {
     if (editingProf && activeTab === 'agenda') {
       setLoadingAgenda(true);
-      const agList = (agendamentos || []).filter(a => a.idProfissional === editingProf.id);
+      const targetProfId = String(editingProf.id || (editingProf as any).idDoc || '').trim();
+      const agList = (agendamentos || []).filter(a => {
+        const aAny = a as any;
+        const profId = String(a.idProfissional || aAny.profissionalId || aAny.cuidadorId || aAny.idFuncionario || '').trim();
+        return (profId && targetProfId && profId === targetProfId) || a.idProfissional === editingProf.id;
+      });
       agList.sort((a, b) => {
         const dateA = a.data || '';
         const dateB = b.data || '';
@@ -2542,11 +2547,28 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                 case 'cracha': return <BadgeGerador profData={formData as any} />;
                 case 'agenda': {
                   if (plantaoSelecionado) {
-                    const patientObj = pacientes.find(p => p.id === plantaoSelecionado.idPaciente);
-                    const patientName = patientObj ? patientObj.nome : 'Paciente Desconhecido';
+                    const pAny = plantaoSelecionado as any;
+                    const pacIdAlvo = String(pAny.idPaciente || pAny.pacienteId || pAny.idClient || pAny.clienteId || '').trim();
+                    const patientObj = (pacientes || []).find(p => {
+                      const pId = String(p.id || (p as any).idDoc || '').trim();
+                      if (pId && pacIdAlvo && pId === pacIdAlvo) return true;
+                      const rawPac = String(pAny.idPaciente || pAny.pacienteId || pAny.paciente || '').trim().toLowerCase();
+                      if (rawPac && p.nome && p.nome.toLowerCase() === rawPac) return true;
+                      return false;
+                    });
+                    
+                    const patientName = 
+                      pAny.nomePaciente || 
+                      pAny.pacienteNome || 
+                      patientObj?.nome || 
+                      (patientObj as any)?.nomeCompleto || 
+                      (typeof pAny.paciente === 'string' && isNaN(Number(pAny.paciente)) ? pAny.paciente : '') ||
+                      pAny.nome || 
+                      'Paciente não identificado';
+
                     const patientAddress = patientObj && patientObj.endereco
-                      ? `${patientObj.endereco.rua || ''}, ${patientObj.endereco.numero || ''} - ${patientObj.bairro || patientObj.endereco.bairro || ''}, ${patientObj.endereco.cidade || ''}`
-                      : patientObj?.bairro || '';
+                      ? `${patientObj.endereco.rua || (patientObj.endereco as any).logradouro || ''}, ${patientObj.endereco.numero || ''} - ${patientObj.bairro || patientObj.endereco.bairro || ''}, ${patientObj.endereco.cidade || ''}`
+                      : patientObj?.bairro || pAny.enderecoPaciente || pAny.endereco || '';
                     
                     const valorBase = Number(plantaoSelecionado.valorPlantao) || 0;
                     const ajudaCusto = Number(plantaoSelecionado.ajudaCusto || (plantaoSelecionado as any).ajudaDeCusto) || 0;
@@ -2711,8 +2733,24 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                       ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           {agendamentosProf.map((ag) => {
-                            const patientObj = pacientes.find(p => p.id === ag.idPaciente);
-                            const patientName = patientObj ? patientObj.nome : 'Paciente Desconhecido';
+                            const agAny = ag as any;
+                            const pacIdAlvo = String(ag.idPaciente || agAny.pacienteId || agAny.idClient || agAny.clienteId || '').trim();
+                            const patientObj = (pacientes || []).find(p => {
+                              const pId = String(p.id || (p as any).idDoc || '').trim();
+                              if (pId && pacIdAlvo && pId === pacIdAlvo) return true;
+                              const rawPac = String(ag.idPaciente || agAny.pacienteId || agAny.paciente || '').trim().toLowerCase();
+                              if (rawPac && p.nome && p.nome.toLowerCase() === rawPac) return true;
+                              return false;
+                            });
+                            
+                            const patientName = 
+                              agAny.nomePaciente || 
+                              agAny.pacienteNome || 
+                              patientObj?.nome || 
+                              (patientObj as any)?.nomeCompleto || 
+                              (typeof agAny.paciente === 'string' && isNaN(Number(agAny.paciente)) ? agAny.paciente : '') ||
+                              agAny.nome || 
+                              'Paciente não identificado';
                             
                             // Formatar data em bloco "Dia / Mês"
                             let day = "--";
