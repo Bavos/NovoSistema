@@ -203,7 +203,7 @@ export function sanitizarPayloadAntesDeEnviar(dados: MetricasConsolidadasInput) 
       id: anonId,
       status: p.status || 'Ativo',
       complexidade: p.complexidade || p.grauComplexidade || p.informacoesMedicas?.grauDependencia || 'Média',
-      planoCuidado: p.planoCuidado || p.tipoPlantao || p.planoAtendimento?.tipoEscala || 'Plantão 12h',
+      planoCuidado: p.planoCuidado || p.tipoPlantao || p.planoAtendimento?.tipoEscala || (p.planoAtendimento?.tiposPlantao?.[0]?.tipoEscala) || 'Plantão 24h',
       quantidadePlantoesMes: Number(p.quantidadePlantoesMes || p.plantoesMes || 0),
       valorMensal: Number(p.valorMensal || p.mensalidade || p.valorTotal || 0),
       especialidade: p.especialidade || p.categoriaNecessaria || 'Técnico de Enfermagem',

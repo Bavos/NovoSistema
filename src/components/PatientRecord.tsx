@@ -154,9 +154,12 @@ const getDaysInMonthGrid = (monthIndex: number, year: number, customHolidays?: R
   return gridCells;
 };
 
-export const getPlantaoCargaHoraria = (s: any): string => {
-  if (!s) return '12h';
-  const explicit = s.tipoEscala || s.cargaHoraria || s.duracao;
+export const getPlantaoCargaHoraria = (s: any, fallbackPlano?: string): string => {
+  if (!s) {
+    if (fallbackPlano && (fallbackPlano.includes('24h') || fallbackPlano.includes('24'))) return '24h';
+    return '12h';
+  }
+  const explicit = s.tipoEscala || s.tipoPlantao || s.turno || s.tipo || s.planoCuidado || s.cargaHoraria || s.duracao;
   if (explicit && typeof explicit === 'string') {
     if (explicit.includes('24h') || explicit.includes('24')) return '24h';
     if (explicit.includes('12h') || explicit.includes('12')) return '12h';
@@ -165,10 +168,10 @@ export const getPlantaoCargaHoraria = (s: any): string => {
   }
 
   const horarioStr = s.horario || '';
-  if (horarioStr.includes('24h')) return '24h';
-  if (horarioStr.includes('12h')) return '12h';
-  if (horarioStr.includes('48h')) return '48h';
-  if (horarioStr.includes('6h')) return '6h';
+  if (horarioStr.includes('24h') || horarioStr.includes('24')) return '24h';
+  if (horarioStr.includes('12h') || horarioStr.includes('12')) return '12h';
+  if (horarioStr.includes('48h') || horarioStr.includes('48')) return '48h';
+  if (horarioStr.includes('6h') || horarioStr.includes('6')) return '6h';
 
   const timeMatch = horarioStr.match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
   if (timeMatch) {
@@ -188,6 +191,9 @@ export const getPlantaoCargaHoraria = (s: any): string => {
     const hours = Math.round(diffMinutes / 60);
     return `${hours}h`;
   }
+
+  if (s.pacientePlano && (s.pacientePlano.includes('24h') || s.pacientePlano.includes('24'))) return '24h';
+  if (fallbackPlano && (fallbackPlano.includes('24h') || fallbackPlano.includes('24'))) return '24h';
 
   return '12h';
 };
@@ -664,8 +670,9 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     }
 
     // Escuta do Tipo de Turno selecionado no formulário
+    const defaultTipo = paciente?.planoAtendimento?.tipoEscala || tipoEscala || 'Plantão 24h';
     const selectedOpt = avulsoPlantaoOptionId === 'principal'
-      ? { tipoEscala: tipoEscala || 'Diurno 12h' }
+      ? { tipoEscala: defaultTipo }
       : tiposPlantao.find(tp => tp.id === avulsoPlantaoOptionId);
     const is48h = selectedOpt?.tipoEscala?.includes('48h');
 
@@ -1904,33 +1911,36 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       setObservacoesClinicas(paciente.informacoesMedicas.observacoesClinicas || '');
 
       const loadedTipos = paciente.planoAtendimento?.tiposPlantao || [];
+      const hasPlan24h = paciente.planoAtendimento?.tipoEscala?.includes('24');
       if (loadedTipos.length > 0) {
         const hasPrincipal = loadedTipos.some(t => t.isPrincipal);
         if (!hasPrincipal) {
           loadedTipos[0].isPrincipal = true;
         }
         const principal = loadedTipos.find(t => t.isPrincipal) || loadedTipos[0];
-        setTipoEscala(principal.tipoEscala);
-        setHoraInicioPadrao(principal.horaInicio);
-        setValorSugeridoPlantao(formatarMoeda(principal.valorPlantao));
-        setAjudaCusto(formatarMoeda(principal.ajudaCusto));
-        setValorTransporte(formatarMoeda(principal.valorTransporte ?? principal.ajudaCusto ?? 0));
-        setValorAlimentacao(formatarMoeda(principal.valorAlimentacao ?? 0));
-        setTaxaAdm(formatarMoeda(principal.taxaAdm));
+        const effectiveEscala = (hasPlan24h ? paciente.planoAtendimento?.tipoEscala : (principal.tipoEscala || paciente.planoAtendimento?.tipoEscala)) || 'Plantão 24h';
+        setTipoEscala(effectiveEscala);
+        setHoraInicioPadrao(principal.horaInicio || paciente.planoAtendimento?.horaInicioPadrao || '07:00');
+        setValorSugeridoPlantao(formatarMoeda(principal.valorPlantao || paciente.planoAtendimento?.valorSugeridoPlantao || (hasPlan24h ? 300 : 150)));
+        setAjudaCusto(formatarMoeda(principal.ajudaCusto || paciente.planoAtendimento?.ajudaCusto || 0));
+        setValorTransporte(formatarMoeda(principal.valorTransporte ?? principal.ajudaCusto ?? paciente.planoAtendimento?.valorTransporte ?? paciente.planoAtendimento?.ajudaCusto ?? 0));
+        setValorAlimentacao(formatarMoeda(principal.valorAlimentacao ?? paciente.planoAtendimento?.valorAlimentacao ?? 0));
+        setTaxaAdm(formatarMoeda(principal.taxaAdm || paciente.planoAtendimento?.taxaAdm || 0));
         setTiposPlantao(loadedTipos);
       } else {
-        setTipoEscala(paciente.planoAtendimento?.tipoEscala || 'Diurno 12h');
+        const effectiveEscala = paciente.planoAtendimento?.tipoEscala || 'Plantão 24h';
+        setTipoEscala(effectiveEscala);
         setHoraInicioPadrao(paciente.planoAtendimento?.horaInicioPadrao || '07:00');
-        setValorSugeridoPlantao(formatarMoeda(paciente.planoAtendimento?.valorSugeridoPlantao || 150));
+        setValorSugeridoPlantao(formatarMoeda(paciente.planoAtendimento?.valorSugeridoPlantao || (hasPlan24h ? 300 : 150)));
         setAjudaCusto(formatarMoeda(paciente.planoAtendimento?.ajudaCusto || 0));
         setValorTransporte(formatarMoeda(paciente.planoAtendimento?.valorTransporte ?? paciente.planoAtendimento?.ajudaCusto ?? 0));
         setValorAlimentacao(formatarMoeda(paciente.planoAtendimento?.valorAlimentacao ?? 0));
         setTaxaAdm(formatarMoeda(paciente.planoAtendimento?.taxaAdm || 0));
         const defaultTp: EscalacaoPlano = {
           id: `tp-${Date.now()}`,
-          tipoEscala: paciente.planoAtendimento?.tipoEscala || 'Diurno 12h',
+          tipoEscala: effectiveEscala,
           horaInicio: paciente.planoAtendimento?.horaInicioPadrao || '07:00',
-          valorPlantao: paciente.planoAtendimento?.valorSugeridoPlantao || 150,
+          valorPlantao: paciente.planoAtendimento?.valorSugeridoPlantao || (hasPlan24h ? 300 : 150),
           ajudaCusto: paciente.planoAtendimento?.ajudaCusto || 0,
           valorTransporte: paciente.planoAtendimento?.valorTransporte ?? paciente.planoAtendimento?.ajudaCusto ?? 0,
           valorAlimentacao: paciente.planoAtendimento?.valorAlimentacao ?? 0,
@@ -2045,33 +2055,36 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       if (found && found.planoAtendimento) {
         hasInitializedPlanoTabRef.current = paciente.id;
         const loadedTipos = found.planoAtendimento.tiposPlantao || [];
+        const hasPlan24h = found.planoAtendimento.tipoEscala?.includes('24');
         if (loadedTipos.length > 0) {
           const hasPrincipal = loadedTipos.some(t => t.isPrincipal);
           if (!hasPrincipal) {
             loadedTipos[0].isPrincipal = true;
           }
           const principal = loadedTipos.find(t => t.isPrincipal) || loadedTipos[0];
-          setTipoEscala(principal.tipoEscala);
-          setHoraInicioPadrao(principal.horaInicio);
-          setValorSugeridoPlantao(formatarMoeda(principal.valorPlantao));
-          setAjudaCusto(formatarMoeda(principal.ajudaCusto));
-          setValorTransporte(formatarMoeda(principal.valorTransporte ?? principal.ajudaCusto ?? 0));
-          setValorAlimentacao(formatarMoeda(principal.valorAlimentacao ?? 0));
-          setTaxaAdm(formatarMoeda(principal.taxaAdm));
+          const effectiveEscala = (hasPlan24h ? found.planoAtendimento.tipoEscala : (principal.tipoEscala || found.planoAtendimento.tipoEscala)) || 'Plantão 24h';
+          setTipoEscala(effectiveEscala);
+          setHoraInicioPadrao(principal.horaInicio || found.planoAtendimento.horaInicioPadrao || '07:00');
+          setValorSugeridoPlantao(formatarMoeda(principal.valorPlantao || (found.planoAtendimento.valorSugeridoPlantao ?? (hasPlan24h ? 300 : 150))));
+          setAjudaCusto(formatarMoeda(principal.ajudaCusto || (found.planoAtendimento.ajudaCusto ?? 0)));
+          setValorTransporte(formatarMoeda(principal.valorTransporte ?? principal.ajudaCusto ?? found.planoAtendimento.valorTransporte ?? found.planoAtendimento.ajudaCusto ?? 0));
+          setValorAlimentacao(formatarMoeda(principal.valorAlimentacao ?? found.planoAtendimento.valorAlimentacao ?? 0));
+          setTaxaAdm(formatarMoeda(principal.taxaAdm || (found.planoAtendimento.taxaAdm ?? 0)));
           setTiposPlantao(loadedTipos);
         } else {
-          setTipoEscala(found.planoAtendimento.tipoEscala || 'Diurno 12h');
+          const effectiveEscala = found.planoAtendimento.tipoEscala || 'Plantão 24h';
+          setTipoEscala(effectiveEscala);
           setHoraInicioPadrao(found.planoAtendimento.horaInicioPadrao || '07:00');
-          setValorSugeridoPlantao(formatarMoeda(found.planoAtendimento.valorSugeridoPlantao ?? 150));
+          setValorSugeridoPlantao(formatarMoeda(found.planoAtendimento.valorSugeridoPlantao ?? (hasPlan24h ? 300 : 150)));
           setAjudaCusto(formatarMoeda(found.planoAtendimento.ajudaCusto ?? 0));
           setValorTransporte(formatarMoeda(found.planoAtendimento.valorTransporte ?? found.planoAtendimento.ajudaCusto ?? 0));
           setValorAlimentacao(formatarMoeda(found.planoAtendimento.valorAlimentacao ?? 0));
           setTaxaAdm(formatarMoeda(found.planoAtendimento.taxaAdm ?? 0));
           const defaultTp: EscalacaoPlano = {
             id: `tp-${Date.now()}`,
-            tipoEscala: found.planoAtendimento.tipoEscala || 'Diurno 12h',
+            tipoEscala: effectiveEscala,
             horaInicio: found.planoAtendimento.horaInicioPadrao || '07:00',
-            valorPlantao: found.planoAtendimento.valorSugeridoPlantao || 150,
+            valorPlantao: found.planoAtendimento.valorSugeridoPlantao || (hasPlan24h ? 300 : 150),
             ajudaCusto: found.planoAtendimento.ajudaCusto || 0,
             valorTransporte: found.planoAtendimento.valorTransporte ?? found.planoAtendimento.ajudaCusto ?? 0,
             valorAlimentacao: found.planoAtendimento.valorAlimentacao ?? 0,
@@ -2698,10 +2711,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       const executeAvulsoBatch = async () => {
         setIsSaving(true);
         try {
+          const defaultTipo = paciente?.planoAtendimento?.tipoEscala || tipoEscala || 'Plantão 24h';
           const shiftsList = [
             {
               id: 'principal',
-              tipoEscala: tipoEscala || 'Diurno 12h',
+              tipoEscala: defaultTipo,
               horaInicio: horaInicioPadrao || '07:00',
               valorPlantao: parseNum(valorSugeridoPlantao, 150),
               ajudaCusto: parseNum(ajudaCusto, 0),
@@ -2819,7 +2833,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               tipoDia: avulsoTipoDia as 'Normal' | 'Feriado 20%' | 'Feriado 50%',
               isCuringa: avulsoCuringa,
               ciclo: curCycle,
-              idAgendamentoPai: activeParentId || null
+              idAgendamentoPai: activeParentId || null,
+              tipoEscala: chosenTipoEscalaStr,
+              tipoPlantao: chosenTipoEscalaStr,
+              duracao: `${durationHrs}h`,
+              cargaHoraria: `${durationHrs}h`
             });
           }
 
@@ -3353,7 +3371,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       plantoesValidos.forEach((p: any) => {
         worksheet.getCell(`A${currentRow}`).value = formatDateBR(p.data || '');
         worksheet.getCell(`B${currentRow}`).value = formatNomeComEspacos(p.nomeProfissional || p.profissional);
-        worksheet.getCell(`C${currentRow}`).value = getPlantaoCargaHoraria(p);
+        worksheet.getCell(`C${currentRow}`).value = getPlantaoCargaHoraria(p, tipoEscala || paciente?.planoAtendimento?.tipoEscala);
         worksheet.getCell(`D${currentRow}`).value = p.tipoDia || 'Plantão Normal';
 
         const valCell = worksheet.getCell(`E${currentRow}`);
@@ -4340,15 +4358,16 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   };
 
   // Compiled options representing all configured shifts (Principal + Additionals)
+  const defaultEscalaPrincipal = paciente?.planoAtendimento?.tipoEscala || tipoEscala || 'Plantão 24h';
   const availableShifts = [
     {
       id: 'principal',
-      tipoEscala: tipoEscala || 'Diurno 12h',
+      tipoEscala: defaultEscalaPrincipal,
       horaInicio: horaInicioPadrao || '07:00',
       valorPlantao: parseNum(valorSugeridoPlantao, 150),
       ajudaCusto: parseNum(ajudaCusto, 0),
       taxaAdm: parseNum(taxaAdm, 0),
-      label: `${tipoEscala || 'Diurno 12h'} (Principal)`
+      label: `${defaultEscalaPrincipal} (Principal)`
     },
     ...tiposPlantao.map(tp => ({
       id: tp.id,
@@ -4362,6 +4381,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   ];
 
   const getShiftNameForAgendamento = (ag: Agendamento) => {
+    const directName = (ag as any).tipoPlantao || (ag as any).tipoEscala || (ag as any).turno || (ag as any).tipo;
+    if (directName && typeof directName === 'string') {
+      return directName;
+    }
+
     let multiplier = 1.0;
     if (ag.tipoDia === 'Feriado 20%') {
       multiplier = 1.2;
@@ -4370,6 +4394,15 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     }
     const baseValue = (ag.valorPlantao || 0) / multiplier;
     const startHour = ag.horario?.split('-')[0] || '';
+
+    const ch = getPlantaoCargaHoraria(ag, tipoEscala || paciente?.planoAtendimento?.tipoEscala);
+    if (ch === '24h') {
+      const match24 = availableShifts.find(opt => opt.tipoEscala.includes('24'));
+      if (match24) return match24.tipoEscala;
+      if (tipoEscala?.includes('24')) return tipoEscala;
+      if (paciente?.planoAtendimento?.tipoEscala?.includes('24')) return paciente.planoAtendimento.tipoEscala;
+      return 'Plantão 24h';
+    }
 
     // Tenta encontrar correspondência exata no horário de início e valor base
     let match = availableShifts.find(opt => 
@@ -4387,7 +4420,8 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       match = availableShifts.find(opt => Math.abs(opt.valorPlantao - baseValue) < 0.5);
     }
 
-    return match ? match.tipoEscala : (tipoEscala || 'Diurno 12h');
+    const defaultEscala = paciente?.planoAtendimento?.tipoEscala || tipoEscala || 'Plantão 24h';
+    return match ? match.tipoEscala : defaultEscala;
   };
 
   const selectedAvulsoOpt = availableShifts.find(s => s.id === avulsoPlantaoOptionId) || availableShifts[0];
@@ -4499,7 +4533,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 Bairro: {bairro || 'Sem Bairro'}
               </span>
               <span className="inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#1A3626]/8 text-[#1A3626] border border-slate-100">
-                Turno: {tipoEscala || 'Diurno 12h'} ({horaInicioPadrao || '07:00'})
+                Turno: {tipoEscala || paciente?.planoAtendimento?.tipoEscala || 'Plantão 24h'} ({horaInicioPadrao || '07:00'})
               </span>
             </div>
           )}
@@ -8713,7 +8747,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                 observacao: cleanObs,
                                 considerarFalta,
                                 motivoFalta: considerarFalta ? motivoFalta : '',
-                                atendimentoRealizado
+                                atendimentoRealizado,
+                                tipoEscala: chosenTipoEscalaStr,
+                                tipoPlantao: chosenTipoEscalaStr,
+                                duracao: `${durationHrs}h`,
+                                cargaHoraria: `${durationHrs}h`
                               };
 
                               await updateAgendamento(updatedAg);
@@ -10009,7 +10047,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     </div>
                     <div>
                       <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Tipo da Escala Contratada:</span>
-                      <p className="font-black text-slate-805 text-slate-800 mt-1">{tipoEscala || 12} Horas</p>
+                      <p className="font-black text-slate-805 text-slate-800 mt-1">{tipoEscala || paciente?.planoAtendimento?.tipoEscala || 'Plantão 24h'}</p>
                     </div>
                     <div>
                       <span className="text-[9px] font-bold text-slate-450 block uppercase leading-none">Hora de Início Padrão do Plantão:</span>
@@ -10662,7 +10700,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                   return (
                                     <tr key={s.id || idx} className="hover:bg-slate-50/80 transition-colors">
                                       <td className="py-2.5 px-4 font-mono font-medium text-slate-800">{formattedDate}</td>
-                                      <td className="py-2.5 px-4 font-sans">{s.horario || '12h'}</td>
+                                      <td className="py-2.5 px-4 font-sans">{s.horario || getPlantaoCargaHoraria(s, tipoEscala || paciente?.planoAtendimento?.tipoEscala)}</td>
                                       <td className="py-2.5 px-4 font-sans">
                                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold ${
                                           isCuringa 
@@ -10676,7 +10714,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                       </td>
                                       <td className="py-2.5 px-4 font-sans font-medium text-slate-800">
                                         <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold font-mono bg-slate-100 text-slate-700 border border-slate-200">
-                                          {getPlantaoCargaHoraria(s)}
+                                          {getPlantaoCargaHoraria(s, tipoEscala || paciente?.planoAtendimento?.tipoEscala)}
                                         </span>
                                       </td>
                                       <td className="py-2.5 px-4 text-right font-mono font-bold text-slate-900">
@@ -10978,7 +11016,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                             <td className="py-2.5 px-3 text-left font-semibold text-slate-900 text-xs whitespace-normal break-words" style={{ fontFamily: 'Arial, Helvetica, sans-serif', letterSpacing: 'normal' }}>
                               {formatNomeComEspacos(p.profissional || p.nomeProfissional)}
                             </td>
-                            <td className="py-2.5 px-3 text-center text-slate-700 font-medium text-xs" style={{ fontFamily: 'Arial, Helvetica, sans-serif', letterSpacing: 'normal' }}>{getPlantaoCargaHoraria(p)}</td>
+                            <td className="py-2.5 px-3 text-center text-slate-700 font-medium text-xs" style={{ fontFamily: 'Arial, Helvetica, sans-serif', letterSpacing: 'normal' }}>{getPlantaoCargaHoraria(p, tipoEscala || paciente?.planoAtendimento?.tipoEscala)}</td>
                             <td className="py-2.5 px-3 text-center text-slate-700 text-xs font-medium" style={{ fontFamily: 'Arial, Helvetica, sans-serif', letterSpacing: 'normal' }}>{p.tipoDia || 'Plantão Normal'}</td>
                             <td className="py-2.5 px-3 text-right text-slate-900 font-bold text-xs whitespace-nowrap" style={{ fontFamily: 'Arial, Helvetica, sans-serif', letterSpacing: 'normal' }}>
                               R$ {valorLinha.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

@@ -94,8 +94,12 @@ export const getFaturaRowVal = (p: any): number => {
 /**
  * Retorna a carga horária em formato compacto (ex: 12h, 24h, 6h).
  */
-export const getPlantaoCargaHoraria = (s: any): string => {
-  const explicit = s?.tipoEscala || s?.cargaHoraria || s?.duracao;
+export const getPlantaoCargaHoraria = (s: any, fallbackPlano?: string): string => {
+  if (!s) {
+    if (fallbackPlano && (fallbackPlano.includes('24h') || fallbackPlano.includes('24'))) return '24h';
+    return '12h';
+  }
+  const explicit = s?.tipoEscala || s?.tipoPlantao || s?.turno || s?.tipo || s?.planoCuidado || s?.cargaHoraria || s?.duracao;
   if (explicit && typeof explicit === 'string') {
     if (explicit.includes('24h') || explicit.includes('24')) return '24h';
     if (explicit.includes('12h') || explicit.includes('12')) return '12h';
@@ -104,9 +108,9 @@ export const getPlantaoCargaHoraria = (s: any): string => {
   }
 
   const horarioStr = s?.horario || '';
-  if (horarioStr.includes('24h')) return '24h';
-  if (horarioStr.includes('12h')) return '12h';
-  if (horarioStr.includes('48h')) return '48h';
+  if (horarioStr.includes('24h') || horarioStr.includes('24')) return '24h';
+  if (horarioStr.includes('12h') || horarioStr.includes('12')) return '12h';
+  if (horarioStr.includes('48h') || horarioStr.includes('48')) return '48h';
   if (horarioStr.includes('6h')) return '6h';
 
   const timeMatch = horarioStr.match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
@@ -123,6 +127,9 @@ export const getPlantaoCargaHoraria = (s: any): string => {
     const hours = Math.round(diffMinutes / 60);
     return `${hours}h`;
   }
+
+  if (s.pacientePlano && (s.pacientePlano.includes('24h') || s.pacientePlano.includes('24'))) return '24h';
+  if (fallbackPlano && (fallbackPlano.includes('24h') || fallbackPlano.includes('24'))) return '24h';
 
   return '12h';
 };

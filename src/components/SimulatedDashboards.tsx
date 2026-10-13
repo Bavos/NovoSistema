@@ -7140,7 +7140,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
             };
 
             const getPlantaoCargaHoraria = (s: any): string => {
-                const explicit = s?.tipoEscala || s?.cargaHoraria || s?.duracao;
+                const explicit = s?.tipoEscala || s?.tipoPlantao || s?.turno || s?.tipo || s?.planoCuidado || s?.cargaHoraria || s?.duracao;
                 if (explicit && typeof explicit === 'string') {
                     if (explicit.includes('24h') || explicit.includes('24')) return '24h';
                     if (explicit.includes('12h') || explicit.includes('12')) return '12h';

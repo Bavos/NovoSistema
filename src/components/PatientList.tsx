@@ -461,7 +461,7 @@ export const PatientList: React.FC<PatientListProps> = ({
                     {/* Escala Row */}
                     <div className="flex flex-wrap gap-1.5 items-center">
                       <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-150 px-2 py-0.5 rounded shadow-xs">
-                        {p.planoAtendimento?.tipoEscala || 'Diurno 12h'} • {p.planoAtendimento?.horaInicioPadrao || '07:00'}
+                        {p.planoAtendimento?.tipoEscala || (p.planoAtendimento?.tiposPlantao?.[0]?.tipoEscala) || 'Plantão 24h'} • {p.planoAtendimento?.horaInicioPadrao || '07:00'}
                       </span>
                       {p.planoAtendimento?.tiposPlantao && p.planoAtendimento.tiposPlantao.map((sub) => (
                         <span key={sub.id} className="text-[10px] font-medium text-slate-600 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded" title={`Valor: R$ ${sub.valorPlantao}`}>

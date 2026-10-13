@@ -6,9 +6,9 @@ import { toast } from 'react-hot-toast';
 
 export function usePacienteData(pacienteId: string | null | undefined, initialPaciente?: Paciente | null) {
   const { pacientes, updatePaciente } = useFirebase();
-  const [tipoEscala, setTipoEscala] = useState<string>('Diurno 12h');
+  const [tipoEscala, setTipoEscala] = useState<string>('Plantão 24h');
   const [horaInicioPadrao, setHoraInicioPadrao] = useState('07:00');
-  const [valorSugeridoPlantao, setValorSugeridoPlantao] = useState<string>('150,00');
+  const [valorSugeridoPlantao, setValorSugeridoPlantao] = useState<string>('300,00');
   const [ajudaCusto, setAjudaCusto] = useState<string>('0,00');
   const [valorTransporte, setValorTransporte] = useState<string>('0,00');
   const [valorAlimentacao, setValorAlimentacao] = useState<string>('0,00');
@@ -31,9 +31,10 @@ export function usePacienteData(pacienteId: string | null | undefined, initialPa
         if (found) {
           lastInitializedId.current = pacienteId;
           if (found.planoAtendimento) {
-            setTipoEscala(found.planoAtendimento.tipoEscala || 'Diurno 12h');
+            const hasPlan24 = found.planoAtendimento.tipoEscala?.includes('24');
+            setTipoEscala(found.planoAtendimento.tipoEscala || (found.planoAtendimento.tiposPlantao?.[0]?.tipoEscala) || 'Plantão 24h');
             setHoraInicioPadrao(found.planoAtendimento.horaInicioPadrao || '07:00');
-            setValorSugeridoPlantao(formatarMoeda(found.planoAtendimento.valorSugeridoPlantao ?? 150));
+            setValorSugeridoPlantao(formatarMoeda(found.planoAtendimento.valorSugeridoPlantao ?? (hasPlan24 ? 300 : 150)));
             setAjudaCusto(formatarMoeda(found.planoAtendimento.ajudaCusto ?? 0));
             setValorTransporte(formatarMoeda(found.planoAtendimento.valorTransporte ?? found.planoAtendimento.ajudaCusto ?? 0));
             setValorAlimentacao(formatarMoeda(found.planoAtendimento.valorAlimentacao ?? 0));

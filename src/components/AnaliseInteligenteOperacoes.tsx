@@ -1302,7 +1302,7 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
           nome: pseudonimo,
           status: pac.status || 'Ativo',
           complexidade: pAny.complexidade || pAny.grauComplexidade || pAny.informacoesMedicas?.grauDependencia || 'Média',
-          planoCuidado: pAny.planoCuidado || pAny.tipoPlantao || pAny.planoAtendimento?.tipoEscala || 'Plantão 12h',
+          planoCuidado: pAny.planoCuidado || pAny.tipoPlantao || pAny.planoAtendimento?.tipoEscala || (pAny.planoAtendimento?.tiposPlantao?.[0]?.tipoEscala) || 'Plantão 24h',
           quantidadePlantoesMes: Number(pAny.quantidadePlantoesMes || pAny.plantoesMes || 0),
           valorMensal: Number(pAny.valorMensal || pAny.mensalidade || pAny.valorTotal || 0),
           especialidade: pAny.especialidade || pAny.categoriaNecessaria || 'Técnico de Enfermagem',
