@@ -14,5 +14,8 @@
     "firebase-functions": "^5.0.0",
     "zod": "^3.23.8"
   },
+  "overrides": {
+    "@google-cloud/storage": "^7.22.0"
+  },
   "private": true
 }
