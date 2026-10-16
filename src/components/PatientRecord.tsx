@@ -576,25 +576,23 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const [autoPadraoEscala, setAutoPadraoEscala] = useState<"12x36" | "24x48" | "48x48" | "todos" | "uteis">("12x36");
   const [autoPagarTransporte48hDia2, setAutoPagarTransporte48hDia2] = useState<boolean>(false);
 
-  // Função geradora de datas automáticas conforme ciclo
-  const handleGerarEscalaAutomatica = () => {
-    if (!autoDataInicio || !autoDataFim) {
-      toast.error("Informe a Data Início e a Data Fim.");
-      return;
-    }
+  // Função auxiliar para calcular datas conforme ciclo e período
+  const calcularDatasAutomaticas = (
+    dataInicioStr: string,
+    dataFimStr: string,
+    padrao: "12x36" | "24x48" | "48x48" | "todos" | "uteis"
+  ): { date: string; cycle: number }[] => {
+    if (!dataInicioStr || !dataFimStr) return [];
 
-    const dInicio = new Date(autoDataInicio + "T12:00:00");
-    const dFim = new Date(autoDataFim + "T12:00:00");
+    const dInicio = new Date(dataInicioStr + "T12:00:00");
+    const dFim = new Date(dataFimStr + "T12:00:00");
 
-    if (dInicio > dFim) {
-      toast.error("A Data Início não pode ser maior que a Data Fim.");
-      return;
-    }
+    if (dInicio > dFim) return [];
 
     const novasDatas: { date: string; cycle: number }[] = [];
     const curr = new Date(dInicio);
 
-    if (autoPadraoEscala === "12x36") {
+    if (padrao === "12x36") {
       // Trabalha 1 dia, folga 1 dia (avança de 2 em 2 dias)
       while (curr <= dFim) {
         const str = curr.toISOString().slice(0, 10);
@@ -603,7 +601,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         }
         curr.setDate(curr.getDate() + 2);
       }
-    } else if (autoPadraoEscala === "24x48") {
+    } else if (padrao === "24x48") {
       // Trabalha 1 dia, folga 2 dias (avança de 3 em 3 dias)
       while (curr <= dFim) {
         const str = curr.toISOString().slice(0, 10);
@@ -612,7 +610,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         }
         curr.setDate(curr.getDate() + 3);
       }
-    } else if (autoPadraoEscala === "48x48") {
+    } else if (padrao === "48x48") {
       // Trabalha 2 dias consecutivos (Dia 1 e Dia 2), folga 2 dias (avança de 4 em 4 dias)
       while (curr <= dFim) {
         const str1 = curr.toISOString().slice(0, 10);
@@ -631,7 +629,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
 
         curr.setDate(curr.getDate() + 4);
       }
-    } else if (autoPadraoEscala === "todos") {
+    } else if (padrao === "todos") {
       while (curr <= dFim) {
         const str = curr.toISOString().slice(0, 10);
         if (!isMesConcluido(str)) {
@@ -639,7 +637,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         }
         curr.setDate(curr.getDate() + 1);
       }
-    } else if (autoPadraoEscala === "uteis") {
+    } else if (padrao === "uteis") {
       while (curr <= dFim) {
         const dayOfWeek = curr.getDay();
         if (dayOfWeek >= 1 && dayOfWeek <= 5) {
@@ -652,13 +650,62 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       }
     }
 
+    return novasDatas;
+  };
+
+  // Auto-população reativa quando em modo automático ou ao alterar período/padrão
+  useEffect(() => {
+    if (avulsoModalOpen && agendamentoModo === "automatico") {
+      if (autoDataInicio && autoDataFim) {
+        const dInicio = new Date(autoDataInicio + "T12:00:00");
+        const dFim = new Date(autoDataFim + "T12:00:00");
+        if (dInicio <= dFim) {
+          const geradas = calcularDatasAutomaticas(autoDataInicio, autoDataFim, autoPadraoEscala);
+          setSelectedDates(geradas);
+        }
+      }
+    }
+  }, [avulsoModalOpen, agendamentoModo, autoPadraoEscala, autoDataInicio, autoDataFim]);
+
+  // Sincroniza o calendário para o mês da data de início no modo automático
+  useEffect(() => {
+    if (agendamentoModo === "automatico" && autoDataInicio) {
+      const parts = autoDataInicio.split("-");
+      if (parts.length === 3) {
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10) - 1;
+        if (!isNaN(y) && !isNaN(m)) {
+          setAgnCalendarYear(y);
+          setAgnCalendarMonth(m);
+        }
+      }
+    }
+  }, [agendamentoModo, autoDataInicio]);
+
+  // Função para re-geração manual ou cálculo explícito
+  const handleGerarEscalaAutomatica = () => {
+    if (!autoDataInicio || !autoDataFim) {
+      toast.error("Informe a Data Início e a Data Fim.");
+      return;
+    }
+
+    const dInicio = new Date(autoDataInicio + "T12:00:00");
+    const dFim = new Date(autoDataFim + "T12:00:00");
+
+    if (dInicio > dFim) {
+      toast.error("A Data Início não pode ser maior que a Data Fim.");
+      return;
+    }
+
+    const novasDatas = calcularDatasAutomaticas(autoDataInicio, autoDataFim, autoPadraoEscala);
+
     if (novasDatas.length === 0) {
       toast.error("Nenhuma data válida pôde ser gerada no intervalo (ou as escalas do período já estão concluídas).");
       return;
     }
 
     setSelectedDates(novasDatas);
-    toast.success(`${novasDatas.length} plantões calculados automaticamente!`);
+    toast.success(`${novasDatas.length} plantões calculados e adicionados ao lote!`);
   };
 
   const handleDateClick = (formattedDate: string) => {
@@ -2782,7 +2829,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             const curData = curItem.date;
             const curCycle = curItem.cycle || 1;
 
-            const is48h = chosenTipoEscalaStr.toLowerCase().includes('48h');
+            const is48h = chosenTipoEscalaStr.toLowerCase().includes('48h') || (agendamentoModo === 'automatico' && autoPadraoEscala === '48x48');
             if (is48h) {
               if (curCycle === 1) {
                 activeParentId = `pai-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
@@ -7587,6 +7634,41 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             )}
 
             <div className="space-y-3.5 max-h-[65vh] overflow-y-auto pr-2 pb-4">
+              {/* Alternância Visual no Topo do Modal: Modo Manual vs Automático / Lote */}
+              <div className="bg-slate-100 p-1.5 rounded-xl border border-slate-200">
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setAgendamentoModo("manual")}
+                    className={`flex items-center justify-center gap-2 py-2 px-3 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      agendamentoModo === "manual"
+                        ? "bg-white text-sky-700 shadow-xs border border-slate-200/80"
+                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/50"
+                    }`}
+                  >
+                    <Calendar size={14} className={agendamentoModo === "manual" ? "text-sky-600" : "text-slate-400"} />
+                    <span>Manual (Calendário)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAgendamentoModo("automatico")}
+                    className={`flex items-center justify-center gap-2 py-2 px-3 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      agendamentoModo === "automatico"
+                        ? "bg-white text-indigo-700 shadow-xs border border-indigo-200/80"
+                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/50"
+                    }`}
+                  >
+                    <CalendarDays size={14} className={agendamentoModo === "automatico" ? "text-indigo-600" : "text-slate-400"} />
+                    <span>Automático / Lote</span>
+                  </button>
+                </div>
+                <div className="text-[10px] text-center text-slate-500 mt-1">
+                  {agendamentoModo === "manual"
+                    ? "Seleção manual: clique nos dias do calendário para selecionar os plantões."
+                    : "Automático / Lote: defina o período e o padrão da escala para popular as datas automaticamente."}
+                </div>
+              </div>
+
               {/* Professional Autocomplete Search Field */}
               <div className="space-y-1 relative">
                 <label className="block text-xs font-bold text-slate-700">Alocar Profissional</label>
@@ -7670,27 +7752,19 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 })()}
               </div>
 
-              {/* Seletor de Modo: Seleção Manual vs Gerador Automático */}
-              <div className="bg-slate-100 p-1 rounded-xl flex items-center border border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setAgendamentoModo("manual")}
-                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${agendamentoModo === "manual" ? "bg-white text-blue-700 shadow-xs" : "text-slate-600 hover:text-slate-900"}`}
-                >
-                  🖱️ Seleção Manual
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAgendamentoModo("automatico")}
-                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${agendamentoModo === "automatico" ? "bg-white text-indigo-700 shadow-xs" : "text-slate-600 hover:text-slate-900"}`}
-                >
-                  ⚡ Escala Automática
-                </button>
-              </div>
-
-              {/* Bloco de Configuração da Escala Automática */}
+              {/* Bloco de Configuração da Escala Automática / Lote */}
               {agendamentoModo === "automatico" && (
-                <div className="bg-indigo-50/70 border border-indigo-200 rounded-xl p-3.5 space-y-3 animate-in fade-in-30">
+                <div className="bg-indigo-50/70 border border-indigo-200 rounded-xl p-3.5 space-y-3 animate-in fade-in-30 font-sans">
+                  <div className="flex items-center justify-between border-b border-indigo-100 pb-2">
+                    <span className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
+                      <CalendarDays size={15} className="text-indigo-600" />
+                      <span>Configuração do Lote Automático</span>
+                    </span>
+                    <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-100/90 px-2.5 py-0.5 rounded-full border border-indigo-200">
+                      {selectedDates.length} {selectedDates.length === 1 ? 'plantão gerado' : 'plantões gerados'}
+                    </span>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     <div>
                       <label className="block text-[11px] font-bold text-slate-700 mb-1">Data Início</label>
@@ -7698,7 +7772,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         type="date"
                         value={autoDataInicio}
                         onChange={(e) => setAutoDataInicio(e.target.value)}
-                        className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-indigo-500 font-sans"
+                        className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-indigo-500 font-sans font-medium"
                       />
                     </div>
                     <div>
@@ -7707,7 +7781,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                         type="date"
                         value={autoDataFim}
                         onChange={(e) => setAutoDataFim(e.target.value)}
-                        className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-indigo-500 font-sans"
+                        className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-indigo-500 font-sans font-medium"
                       />
                     </div>
                     <div>
@@ -7715,42 +7789,48 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       <select
                         value={autoPadraoEscala}
                         onChange={(e: any) => setAutoPadraoEscala(e.target.value)}
-                        className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-indigo-500 font-sans font-bold text-indigo-900"
+                        className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-indigo-500 font-sans font-bold text-indigo-900 cursor-pointer"
                       >
-                        <option value="12x36">12 x 36</option>
-                        <option value="24x48">24 x 48</option>
-                        <option value="48x48">48 x 48</option>
-                        <option value="todos">Todos os Dias (Diário)</option>
-                        <option value="uteis">Dias Úteis (Seg a Sex)</option>
+                        <option value="12x36">12x36</option>
+                        <option value="24x48">24x48</option>
+                        <option value="48x48">48x48</option>
+                        <option value="todos">Todos os dias</option>
+                        <option value="uteis">Dias úteis</option>
                       </select>
                     </div>
                   </div>
 
                   {autoPadraoEscala === "48x48" && (
-                    <div className="bg-white/80 p-2.5 rounded-lg border border-indigo-200/80 flex items-center justify-between text-xs">
+                    <div className="bg-white/90 p-2.5 rounded-lg border border-indigo-200/80 flex items-center justify-between text-xs">
                       <div>
                         <span className="font-bold text-slate-800 block">Regra de Transporte em 48h:</span>
-                        <span className="text-[10px] text-slate-500">O bloco de 48h é dividido em dois plantões de 24h.</span>
+                        <span className="text-[10px] text-slate-500">O bloco de 48h é dividido em dois plantões de 24h consecutivos.</span>
                       </div>
-                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <label className="flex items-center gap-2 cursor-pointer select-none ml-2">
                         <input
                           type="checkbox"
                           checked={autoPagarTransporte48hDia2}
                           onChange={(e) => setAutoPagarTransporte48hDia2(e.target.checked)}
                           className="rounded text-indigo-600 focus:ring-0 cursor-pointer"
                         />
-                        <span className="text-xs font-semibold text-slate-700">Pagar transporte também no 2º dia</span>
+                        <span className="text-xs font-semibold text-slate-700">Transporte no 2º dia em escalas de 48h</span>
                       </label>
                     </div>
                   )}
 
-                  <button
-                    type="button"
-                    onClick={handleGerarEscalaAutomatica}
-                    className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg shadow-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-98"
-                  >
-                    ⚡ Calcular e Povoar Plantões do Período
-                  </button>
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[11px] text-indigo-800 font-medium">
+                      ⚡ As datas são populadas automaticamente no lote conforme o padrão e o período selecionados.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleGerarEscalaAutomatica}
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-98 shrink-0"
+                    >
+                      <RotateCcw size={13} />
+                      <span>Recalcular Lote</span>
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -7758,7 +7838,17 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
                   <label className="block text-xs font-bold text-slate-700">
-                    Data do(s) Plantão(ões) <span className="text-slate-400 font-normal">(Clique nos dias para compor o lote)</span>
+                    {agendamentoModo === "manual" ? (
+                      <>
+                        Data do(s) Plantão(ões){" "}
+                        <span className="text-slate-400 font-normal">(Clique nos dias do calendário para compor o lote)</span>
+                      </>
+                    ) : (
+                      <>
+                        Plantões Populados no Calendário{" "}
+                        <span className="text-indigo-600 font-normal">(Dias do lote destacados abaixo)</span>
+                      </>
+                    )}
                   </label>
                   {selectedDates.length > 0 && (
                     <button
