@@ -1,3 +1,4 @@
+import { Relatorios } from './pages/Relatorios';
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -306,7 +307,7 @@ function DashboardContent() {
       try {
         const params = new URLSearchParams(window.location.search);
         const tabParam = params.get('tab');
-        if (tabParam && ['dashboard', 'pacientes', 'profissionais', 'financeiro', 'empresa'].includes(tabParam)) {
+        if (tabParam && ['dashboard', 'pacientes', 'profissionais', 'financeiro', 'usuarios', 'empresa', 'relatorios'].includes(tabParam)) {
           setActiveSidebarTab(tabParam);
         } else {
           setActiveSidebarTab('dashboard');
@@ -336,6 +337,7 @@ function DashboardContent() {
     if (activeSidebarTab === 'financeiro') return 'Financeiro';
     if (activeSidebarTab === 'usuarios') return 'Gestão de Usuários';
     if (activeSidebarTab === 'empresa') return 'Informações Gerais';
+    if (activeSidebarTab === 'relatorios') return 'Relatórios';
     return 'Vallidare - Gestão Médica e Auditoria';
   };
 

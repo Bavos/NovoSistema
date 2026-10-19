@@ -10,7 +10,7 @@ import {
   Briefcase,
   Calendar,
   DollarSign,
-  Building2,
+  Building2, FileText,
   UserCheck,
   ChevronRight,
   Menu,
@@ -69,6 +69,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'financeiro', label: 'Faturas & Pagamentos', icon: DollarSign },
     { id: 'usuarios', label: 'Usuários', icon: UserCheck },
     { id: 'empresa', label: 'Empresa', icon: Building2 },
+    { id: 'relatorios', label: 'Relatórios', icon: FileText },
   ];
 
   // Restrict access for 'colaborador' role: Empresa and Usuários are exclusively for 'Administrador'
