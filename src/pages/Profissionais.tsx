@@ -2043,13 +2043,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
             <span>Novo Profissional</span>
           </GlossyButton>
 
-          <GlossyButton
-            onClick={() => setIsRelatorioCuringasOpen(true)}
-            variant="red"
-          >
-            <UserX size={14} />
-            <span>Relatório de Curingas</span>
-          </GlossyButton>
+
         </div>
       </div>
 
