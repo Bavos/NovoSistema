@@ -740,6 +740,7 @@ interface MensagemInterativa {
 }
 
 export const AnaliseInteligenteOperacoes: React.FC = () => {
+  return null;
   const { 
     user, 
     userRole, 
