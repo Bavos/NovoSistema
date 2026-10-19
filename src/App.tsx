@@ -475,6 +475,8 @@ function DashboardContent() {
                 ) : (
                   <AccessDeniedView />
                 )
+              ) : activeSidebarTab === 'relatorios' ? (
+                <Relatorios />
               ) : null}
             </Suspense>
           </ErrorBoundary>
