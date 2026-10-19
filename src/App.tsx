@@ -1,4 +1,3 @@
-import { Relatorios } from './pages/Relatorios';
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -137,6 +136,7 @@ const Profissionais = lazyWithRetry(() => import('./pages/Profissionais').then(m
 const FinanceiroDashboard = lazyWithRetry(() => import('./components/SimulatedDashboards').then(m => ({ default: m.FinanceiroDashboard })), 'FinanceiroDashboard');
 const EmpresaDashboard = lazyWithRetry(() => import('./components/SimulatedDashboards').then(m => ({ default: m.EmpresaDashboard })), 'EmpresaDashboard');
 const UserManagement = lazyWithRetry(() => import('./components/UserManagement').then(m => ({ default: m.UserManagement })), 'UserManagement');
+const Relatorios = lazyWithRetry(() => import('./pages/Relatorios').then(m => ({ default: m.Relatorios })), 'Relatorios');
 
 const PageLoadingFallback: React.FC = () => (
   <div className="flex flex-col items-center justify-center p-12 space-y-3 min-h-[300px]">
@@ -307,7 +307,7 @@ function DashboardContent() {
       try {
         const params = new URLSearchParams(window.location.search);
         const tabParam = params.get('tab');
-        if (tabParam && ['dashboard', 'pacientes', 'profissionais', 'financeiro', 'usuarios', 'empresa', 'relatorios'].includes(tabParam)) {
+        if (tabParam && ['dashboard', 'pacientes', 'profissionais', 'financeiro', 'relatorios', 'empresa', 'usuarios'].includes(tabParam)) {
           setActiveSidebarTab(tabParam);
         } else {
           setActiveSidebarTab('dashboard');
@@ -335,9 +335,9 @@ function DashboardContent() {
     }
     if (activeSidebarTab === 'profissionais') return 'Gestão de Profissionais';
     if (activeSidebarTab === 'financeiro') return 'Financeiro';
+    if (activeSidebarTab === 'relatorios') return 'Central de Relatórios';
     if (activeSidebarTab === 'usuarios') return 'Gestão de Usuários';
     if (activeSidebarTab === 'empresa') return 'Informações Gerais';
-    if (activeSidebarTab === 'relatorios') return 'Relatórios';
     return 'Vallidare - Gestão Médica e Auditoria';
   };
 
@@ -463,6 +463,8 @@ function DashboardContent() {
                 ) : (
                   <AccessDeniedView />
                 )
+              ) : activeSidebarTab === 'relatorios' ? (
+                <Relatorios />
               ) : activeSidebarTab === 'usuarios' ? (
                 userRole?.toLowerCase() === 'administrador' ? (
                   <UserManagement />
@@ -475,8 +477,6 @@ function DashboardContent() {
                 ) : (
                   <AccessDeniedView />
                 )
-              ) : activeSidebarTab === 'relatorios' ? (
-                <Relatorios />
               ) : null}
             </Suspense>
           </ErrorBoundary>

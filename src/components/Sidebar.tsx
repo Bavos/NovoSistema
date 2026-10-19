@@ -14,7 +14,8 @@ import {
   UserCheck,
   ChevronRight,
   Menu,
-  Activity
+  Activity,
+  FileText
 } from 'lucide-react';
 import { useFirebase } from '../context/FirebaseContext';
 import { doc, onSnapshot } from 'firebase/firestore';
@@ -67,6 +68,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'pacientes', label: 'Pacientes', icon: Users },
     { id: 'profissionais', label: 'Profissionais', icon: Briefcase },
     { id: 'financeiro', label: 'Faturas & Pagamentos', icon: DollarSign },
+    { id: 'relatorios', label: 'Relatórios', icon: FileText },
     { id: 'usuarios', label: 'Usuários', icon: UserCheck },
     { id: 'empresa', label: 'Empresa', icon: Building2 },
     { id: 'relatorios', label: 'Relatórios', icon: FileText },
