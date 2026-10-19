@@ -653,35 +653,6 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     return novasDatas;
   };
 
-  // Auto-população reativa quando em modo automático ou ao alterar período/padrão
-  useEffect(() => {
-    if (avulsoModalOpen && agendamentoModo === "automatico") {
-      if (autoDataInicio && autoDataFim) {
-        const dInicio = new Date(autoDataInicio + "T12:00:00");
-        const dFim = new Date(autoDataFim + "T12:00:00");
-        if (dInicio <= dFim) {
-          const geradas = calcularDatasAutomaticas(autoDataInicio, autoDataFim, autoPadraoEscala);
-          setSelectedDates(geradas);
-        }
-      }
-    }
-  }, [avulsoModalOpen, agendamentoModo, autoPadraoEscala, autoDataInicio, autoDataFim]);
-
-  // Sincroniza o calendário para o mês da data de início no modo automático
-  useEffect(() => {
-    if (agendamentoModo === "automatico" && autoDataInicio) {
-      const parts = autoDataInicio.split("-");
-      if (parts.length === 3) {
-        const y = parseInt(parts[0], 10);
-        const m = parseInt(parts[1], 10) - 1;
-        if (!isNaN(y) && !isNaN(m)) {
-          setAgnCalendarYear(y);
-          setAgnCalendarMonth(m);
-        }
-      }
-    }
-  }, [agendamentoModo, autoDataInicio]);
-
   // Função para re-geração manual ou cálculo explícito
   const handleGerarEscalaAutomatica = () => {
     if (!autoDataInicio || !autoDataFim) {
@@ -1837,6 +1808,35 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   const [avulsoTaxaType, setAvulsoTaxaType] = useState<'Percentual' | 'Fixa'>('Fixa');
   const [avulsoTaxaAdm, setAvulsoTaxaAdm] = useState<number>(60);
   const [avulsoObs, setAvulsoObs] = useState('');
+
+  // Auto-população reativa quando em modo automático ou ao alterar período/padrão
+  useEffect(() => {
+    if (avulsoModalOpen && agendamentoModo === "automatico") {
+      if (autoDataInicio && autoDataFim) {
+        const dInicio = new Date(autoDataInicio + "T12:00:00");
+        const dFim = new Date(autoDataFim + "T12:00:00");
+        if (dInicio <= dFim) {
+          const geradas = calcularDatasAutomaticas(autoDataInicio, autoDataFim, autoPadraoEscala);
+          setSelectedDates(geradas);
+        }
+      }
+    }
+  }, [avulsoModalOpen, agendamentoModo, autoPadraoEscala, autoDataInicio, autoDataFim]);
+
+  // Sincroniza o calendário para o mês da data de início no modo automático
+  useEffect(() => {
+    if (agendamentoModo === "automatico" && autoDataInicio) {
+      const parts = autoDataInicio.split("-");
+      if (parts.length === 3) {
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10) - 1;
+        if (!isNaN(y) && !isNaN(m)) {
+          setAgnCalendarYear(y);
+          setAgnCalendarMonth(m);
+        }
+      }
+    }
+  }, [agendamentoModo, autoDataInicio]);
   const [avulsoSelectedDates, setAvulsoSelectedDates] = useState<string[]>([]);
   const [showAvulsoProfDropdown, setShowAvulsoProfDropdown] = useState(false);
   const [avulsoPlantaoOptionId, setAvulsoPlantaoOptionId] = useState<string>('principal');

@@ -38,13 +38,12 @@ interface ReportCategory {
 }
 
 export const Relatorios: React.FC = () => {
-  const {
-    agendamentos = [],
-    plantoes = [],
-    profissionais = [],
-    pacientes = [],
-    empresa
-  } = useFirebase();
+  const firebaseContext = useFirebase() as any;
+  const agendamentos: any[] = firebaseContext.agendamentos || [];
+  const plantoes: any[] = firebaseContext.plantoes || [];
+  const profissionais: any[] = firebaseContext.profissionais || [];
+  const pacientes: any[] = firebaseContext.pacientes || [];
+  const empresa: any = firebaseContext.empresa;
 
   // Helper date generators for default period (Current Month)
   const getDefaultDates = () => {
@@ -81,17 +80,21 @@ export const Relatorios: React.FC = () => {
     const list: any[] = [];
     const seenIds = new Set<string>();
 
-    agendamentos.forEach((ag) => {
-      if (ag && ag.id && !seenIds.has(ag.id)) {
-        seenIds.add(ag.id);
-        list.push(ag);
+    (agendamentos || []).forEach((ag: any, idx: number) => {
+      if (!ag) return;
+      const key = ag.id || ag.docId || `ag_${idx}_${ag.data}_${ag.idProfissional || ag.nomeProfissional}`;
+      if (!seenIds.has(key)) {
+        seenIds.add(key);
+        list.push({ ...ag, id: key });
       }
     });
 
-    plantoes.forEach((pl) => {
-      if (pl && pl.id && !seenIds.has(pl.id)) {
-        seenIds.add(pl.id);
-        list.push(pl);
+    (plantoes || []).forEach((pl: any, idx: number) => {
+      if (!pl) return;
+      const key = pl.id || pl.docId || `pl_${idx}_${pl.data}_${pl.idProfissional || pl.profissional || pl.nomeProfissional}`;
+      if (!seenIds.has(key)) {
+        seenIds.add(key);
+        list.push({ ...pl, id: key });
       }
     });
 
@@ -109,10 +112,18 @@ export const Relatorios: React.FC = () => {
   // Calculate shift end timestamp
   const calculateShiftEnd = (dateStr: string, timeStr: string = '07:00', durationHours: number = 12) => {
     try {
-      const [year, month, day] = dateStr.split('-').map(Number);
-      const [hours, minutes] = (timeStr || '07:00').split(':').map(Number);
+      if (!dateStr) return 'Término Previsto';
+      const cleanDate = dateStr.trim();
+      const parts = cleanDate.split('-').map(Number);
+      if (parts.length !== 3 || parts.some(isNaN)) return `${formatDateBR(dateStr)} - Término Previsto`;
 
-      const startDate = new Date(year, month - 1, day, hours || 0, minutes || 0);
+      const [year, month, day] = parts;
+
+      const timeMatch = (timeStr || '').match(/(\d{1,2}):(\d{2})/);
+      const hours = timeMatch ? parseInt(timeMatch[1], 10) : 7;
+      const minutes = timeMatch ? parseInt(timeMatch[2], 10) : 0;
+
+      const startDate = new Date(year, month - 1, day, hours, minutes);
       const endDate = new Date(startDate.getTime() + durationHours * 60 * 60 * 1000);
 
       const endD = String(endDate.getDate()).padStart(2, '0');
@@ -129,28 +140,36 @@ export const Relatorios: React.FC = () => {
 
   // Group shifts by Professional for "Relação de Atendimentos por Profissional"
   const relatorioProfissionalData = useMemo(() => {
-    const filtered = allShifts.filter((shift) => {
-      if (!shift.data) return false;
+    const filtered = allShifts.filter((shift: any) => {
+      if (!shift || !shift.data) return false;
 
-      const isCanceled =
-        shift.status?.toLowerCase() === 'cancelado' ||
-        shift.status?.toLowerCase() === 'cancelada';
+      const statusLower = (shift.status || '').toLowerCase();
+      const isCanceled = statusLower === 'cancelado' || statusLower === 'cancelada';
 
       if (isCanceled) return false;
 
       return shift.data >= dataInicial && shift.data <= dataFinal;
     });
 
-    const matchedShifts = filtered.filter((shift) => {
+    const matchedShifts = filtered.filter((shift: any) => {
       if (!profissionalSelecionado) return true;
 
       const profId = shift.idProfissional || shift.profissionalId;
       const profNome = shift.nomeProfissional || shift.profissionalNome || shift.profissional;
 
+      const foundProf = profissionais.find(
+        (p: any) =>
+          (profId && p.id === profId) ||
+          (profNome && p.nome && p.nome.trim().toLowerCase() === profNome.trim().toLowerCase())
+      );
+
+      const searchLower = profissionalSelecionado.toLowerCase().trim();
+
       return (
         profId === profissionalSelecionado ||
-        profNome === profissionalSelecionado ||
-        profNome?.toLowerCase().includes(profissionalSelecionado.toLowerCase())
+        foundProf?.id === profissionalSelecionado ||
+        (profNome && profNome.toLowerCase().includes(searchLower)) ||
+        (foundProf?.nome && foundProf.nome.toLowerCase().includes(searchLower))
       );
     });
 
@@ -173,13 +192,18 @@ export const Relatorios: React.FC = () => {
       }>;
     }>();
 
-    matchedShifts.forEach((shift) => {
-      const profId = shift.idProfissional || shift.profissionalId || shift.nomeProfissional || 'nao_informado';
-      const profNome = shift.nomeProfissional || shift.profissionalNome || shift.profissional || 'Profissional Não Informado';
+    matchedShifts.forEach((shift: any) => {
+      const rawProfId = shift.idProfissional || shift.profissionalId;
+      const rawProfNome = shift.nomeProfissional || shift.profissionalNome || shift.profissional;
 
-      const foundProf = profissionais.find(
-        (p) => p.id === profId || p.nome?.toLowerCase() === profNome.toLowerCase()
-      );
+      const foundProf = profissionais.find((p: any) => {
+        if (rawProfId && p.id === rawProfId) return true;
+        if (rawProfNome && p.nome && p.nome.trim().toLowerCase() === rawProfNome.trim().toLowerCase()) return true;
+        return false;
+      });
+
+      const profId = foundProf?.id || rawProfId || (rawProfNome ? rawProfNome.trim() : 'nao_informado');
+      const profNome = foundProf?.nome || rawProfNome || 'Profissional Não Informado';
 
       const especialidade =
         foundProf?.especialidade ||
@@ -188,7 +212,7 @@ export const Relatorios: React.FC = () => {
 
       const conselho =
         foundProf?.conselho ||
-        (foundProf?.rg ? `RG: ${foundProf.rg}` : 'COREN/RJ: Não Informado');
+        (foundProf?.coren ? `COREN: ${foundProf.coren}` : foundProf?.rg ? `RG: ${foundProf.rg}` : 'COREN/RJ: Não Informado');
 
       if (!groupsMap.has(profId)) {
         groupsMap.set(profId, {
@@ -203,11 +227,14 @@ export const Relatorios: React.FC = () => {
       }
 
       const pacId = shift.idPaciente || shift.pacienteId;
-      const pacNome = shift.nomePaciente || shift.pacienteNome || shift.paciente || 'Paciente Não Informado';
-      const foundPac = pacientes.find(
-        (p) => p.id === pacId || p.nome?.toLowerCase() === pacNome.toLowerCase()
-      );
+      const pacNomeRaw = shift.nomePaciente || shift.pacienteNome || shift.paciente;
+      const foundPac = pacientes.find((p: any) => {
+        if (pacId && p.id === pacId) return true;
+        if (pacNomeRaw && p.nome && p.nome.trim().toLowerCase() === pacNomeRaw.trim().toLowerCase()) return true;
+        return false;
+      });
 
+      const pacNome = foundPac?.nome || pacNomeRaw || 'Paciente Não Informado';
       const contratante =
         foundPac?.contratante ||
         foundPac?.responsavel ||
@@ -216,7 +243,7 @@ export const Relatorios: React.FC = () => {
         'Não Informado';
 
       const horario = shift.horario || shift.horaInicio || '07:00';
-      const duracao = shift.horario?.includes('24') || shift.tipoEscala?.includes('24') ? 24 : 12;
+      const duracao = (shift.horario?.includes('24') || shift.tipoEscala?.includes('24') || shift.duracao === 24) ? 24 : 12;
 
       groupsMap.get(profId)!.items.push({
         id: shift.id || Math.random().toString(),
@@ -237,25 +264,33 @@ export const Relatorios: React.FC = () => {
 
   // Group shifts by Patient for "Relação de Atendimentos por Paciente"
   const relatorioPacienteData = useMemo(() => {
-    const filtered = allShifts.filter((shift) => {
-      if (!shift.data) return false;
-      const isCanceled =
-        shift.status?.toLowerCase() === 'cancelado' ||
-        shift.status?.toLowerCase() === 'cancelada';
+    const filtered = allShifts.filter((shift: any) => {
+      if (!shift || !shift.data) return false;
+      const statusLower = (shift.status || '').toLowerCase();
+      const isCanceled = statusLower === 'cancelado' || statusLower === 'cancelada';
       if (isCanceled) return false;
 
       return shift.data >= dataInicial && shift.data <= dataFinal;
     });
 
-    const matchedShifts = filtered.filter((shift) => {
+    const matchedShifts = filtered.filter((shift: any) => {
       if (!pacienteSelecionado) return true;
       const pacId = shift.idPaciente || shift.pacienteId;
       const pacNome = shift.nomePaciente || shift.pacienteNome || shift.paciente;
 
+      const foundPac = pacientes.find(
+        (p: any) =>
+          (pacId && p.id === pacId) ||
+          (pacNome && p.nome && p.nome.trim().toLowerCase() === pacNome.trim().toLowerCase())
+      );
+
+      const searchLower = pacienteSelecionado.toLowerCase().trim();
+
       return (
         pacId === pacienteSelecionado ||
-        pacNome === pacienteSelecionado ||
-        pacNome?.toLowerCase().includes(pacienteSelecionado.toLowerCase())
+        foundPac?.id === pacienteSelecionado ||
+        (pacNome && pacNome.toLowerCase().includes(searchLower)) ||
+        (foundPac?.nome && foundPac.nome.toLowerCase().includes(searchLower))
       );
     });
 
@@ -276,18 +311,24 @@ export const Relatorios: React.FC = () => {
       }>;
     }>();
 
-    matchedShifts.forEach((shift) => {
-      const pacId = shift.idPaciente || shift.pacienteId || shift.nomePaciente || 'nao_informado';
-      const pacNome = shift.nomePaciente || shift.pacienteNome || shift.paciente || 'Paciente Não Informado';
+    matchedShifts.forEach((shift: any) => {
+      const rawPacId = shift.idPaciente || shift.pacienteId;
+      const rawPacNome = shift.nomePaciente || shift.pacienteNome || shift.paciente;
 
-      const foundPac = pacientes.find(
-        (p) => p.id === pacId || p.nome?.toLowerCase() === pacNome.toLowerCase()
-      );
+      const foundPac = pacientes.find((p: any) => {
+        if (rawPacId && p.id === rawPacId) return true;
+        if (rawPacNome && p.nome && p.nome.trim().toLowerCase() === rawPacNome.trim().toLowerCase()) return true;
+        return false;
+      });
+
+      const pacId = foundPac?.id || rawPacId || (rawPacNome ? rawPacNome.trim() : 'nao_informado');
+      const pacNome = foundPac?.nome || rawPacNome || 'Paciente Não Informado';
 
       const contratante =
         foundPac?.contratante ||
         foundPac?.responsavel ||
         foundPac?.convenio ||
+        shift.contratante ||
         'Não Informado';
 
       if (!groupsMap.has(pacId)) {
@@ -301,9 +342,17 @@ export const Relatorios: React.FC = () => {
         });
       }
 
-      const profNome = shift.nomeProfissional || shift.profissionalNome || shift.profissional || 'Profissional Não Alocado';
+      const profId = shift.idProfissional || shift.profissionalId;
+      const profNomeRaw = shift.nomeProfissional || shift.profissionalNome || shift.profissional;
+      const foundProf = profissionais.find((p: any) => {
+        if (profId && p.id === profId) return true;
+        if (profNomeRaw && p.nome && p.nome.trim().toLowerCase() === profNomeRaw.trim().toLowerCase()) return true;
+        return false;
+      });
+
+      const profNome = foundProf?.nome || profNomeRaw || 'Profissional Não Alocado';
       const horario = shift.horario || shift.horaInicio || '07:00';
-      const duracao = shift.horario?.includes('24') || shift.tipoEscala?.includes('24') ? 24 : 12;
+      const duracao = (shift.horario?.includes('24') || shift.tipoEscala?.includes('24') || shift.duracao === 24) ? 24 : 12;
 
       groupsMap.get(pacId)!.items.push({
         id: shift.id || Math.random().toString(),
@@ -319,7 +368,7 @@ export const Relatorios: React.FC = () => {
     return Array.from(groupsMap.values()).sort((a, b) =>
       a.pacienteInfo.nome.localeCompare(b.pacienteInfo.nome)
     );
-  }, [allShifts, dataInicial, dataFinal, pacienteSelecionado, pacientes]);
+  }, [allShifts, dataInicial, dataFinal, pacienteSelecionado, pacientes, profissionais]);
 
   // Report Categories Structure matching exact UI
   const categories: ReportCategory[] = [
@@ -395,12 +444,12 @@ export const Relatorios: React.FC = () => {
 
   // Open report handler
   const handleOpenReport = (item: ReportItem) => {
-    const idLower = item.id.toLowerCase();
-    const titleLower = item.title.toLowerCase();
+    const idLower = (item.id || '').toLowerCase();
+    const titleLower = (item.title || '').toLowerCase();
 
-    if (idLower.includes('profissional') || titleLower.includes('profissional')) {
+    if (idLower === 'atend_profissional' || idLower.includes('profissional') || titleLower.includes('profissional')) {
       setModalRelatorioProfissionalAtivo(true);
-    } else if (idLower.includes('paciente') || titleLower.includes('paciente')) {
+    } else if (idLower === 'atend_paciente' || idLower.includes('paciente') || titleLower.includes('paciente')) {
       setModalRelatorioPacienteAtivo(true);
     } else {
       setModalRelatorioProfissionalAtivo(true);

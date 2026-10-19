@@ -10,12 +10,12 @@ import {
   Briefcase,
   Calendar,
   DollarSign,
-  Building2, FileText,
+  Building2,
+  FileText,
   UserCheck,
   ChevronRight,
   Menu,
-  Activity,
-  FileText
+  Activity
 } from 'lucide-react';
 import { useFirebase } from '../context/FirebaseContext';
 import { doc, onSnapshot } from 'firebase/firestore';
@@ -71,7 +71,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'relatorios', label: 'Relatórios', icon: FileText },
     { id: 'usuarios', label: 'Usuários', icon: UserCheck },
     { id: 'empresa', label: 'Empresa', icon: Building2 },
-    { id: 'relatorios', label: 'Relatórios', icon: FileText },
   ];
 
   // Restrict access for 'colaborador' role: Empresa and Usuários are exclusively for 'Administrador'
