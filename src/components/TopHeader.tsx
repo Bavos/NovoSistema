@@ -1,3 +1,4 @@
+import { ConnectionStatus } from "./ConnectionStatus";
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -97,6 +98,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
       {/* Control Actions */}
       <div className="flex items-center max-md:pr-6 md:pr-0 space-x-2 sm:space-x-3 md:space-x-4 lg:space-x-5 shrink-0" id="control-actions-container">
         {/* Modo de Testes / Sandbox Toggle Switch - Ocultado */}
+
+        <ConnectionStatus />
 
         {/* Notification Center */}
         <div className="relative shrink-0">
