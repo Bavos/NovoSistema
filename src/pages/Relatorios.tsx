@@ -116,19 +116,7 @@ export const Relatorios: React.FC = () => {
   };
 
   const handleAbrirRelatorio = (item: RelatorioItem) => {
-    if (item.id === 'log_agendamentos') {
-      setModalRelatorioAtivo('log_agendamentos');
-    } else if (item.id === 'previa_curingas') {
-      setModalRelatorioAtivo('previa_curingas');
-    } else if (item.id === 'previa_folha') {
-      setModalRelatorioAtivo('previa_folha');
-    } else if (item.id === 'atend_paciente') {
-      setModalRelatorioAtivo('atend_paciente');
-    } else if (item.id === 'faltas_profissional') {
-      setModalRelatorioAtivo('faltas_profissional');
-    } else if (item.id === 'atend_profissional') {
-      setModalRelatorioAtivo('atend_profissional');
-    }
+    setModalRelatorioAtivo(item.id);
   };
 
   const formatarDataBr = (dataIso: string) => {
