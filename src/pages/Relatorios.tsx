@@ -464,13 +464,15 @@ export const Relatorios: React.FC = () => {
     return Object.values(profMap).filter((p: any) => p.qtd > 0).sort((a: any, b: any) => a.nome.localeCompare(b.nome));
   }, [modalRelatorioAtivo, profissionais, agendamentos, plantoes, dataInicial, dataFinal]);
 
-    // Dados da Prévia Financeira de Curingas (Filtro Estrito)
+    // Dados da Prévia Financeira de Curingas (Protegido e Estrito)
   const dadosPreviaCuringas = useMemo(() => {
     if (modalRelatorioAtivo !== 'previa_curingas') return [];
     const listaCompleta: any[] = [];
+    const pacMap = new Map((pacientes || []).map(p => [p.id, p]));
 
     const lista = [...(agendamentos || []), ...(plantoes || [])];
     lista.forEach((item: any) => {
+      if (!item) return;
       const dataItem = (item.data || '').slice(0, 10);
       if (dataInicial && dataItem < dataInicial) return;
       if (dataFinal && dataItem > dataFinal) return;
@@ -487,51 +489,45 @@ export const Relatorios: React.FC = () => {
       );
 
       if (isCuringa) {
-        const prod = Number(item.valorProfissional || item.valor || 175.00);
-        const txAdm = Number(item.taxaAdministrativa || (prod * 0.25) || 45.00);
+        const prod = Number(item.valorProfissional || item.valor || item.valorRepasse || 175) || 0;
+        const txAdm = Number(item.taxaAdministrativa || (prod * 0.25) || 45) || 0;
+        const pId = item.idProfissional || item.profissionalId || item.profissional;
+        const pNome = item.nomeProfissional || item.profissional || 'Profissional Não Informado';
+        const pacId = item.idPaciente || item.pacienteId;
+        const pac = pacMap.get(pacId);
+        const nomePac = item.nomePaciente || (typeof item.paciente === 'string' && item.paciente.length > 3 ? item.paciente : pac?.nome) || 'Paciente Não Informado';
+
         listaCompleta.push({
-          id: item.id,
-          pacienteId: item.idPaciente || item.pacienteId,
-          profissionalId: item.idProfissional || item.profissionalId || item.profissional,
-          profissionalNome: item.nomeProfissional || item.profissional || 'Profissional',
-          data: item.data,
+          id: item.id || Math.random().toString(),
+          profissionalNome: pNome,
+          pacienteNome: nomePac,
+          data: item.data || '',
           horario: item.horario || item.horaInicio || '08:00',
           evento: item.tipoDia || (item.tipoEscala ? `Plantão ${item.tipoEscala}` : 'Plantão 24 x 48'),
           producao: prod,
-          vHora: Number((prod / 24).toFixed(2)),
+          vHora: prod > 0 ? Number((prod / 24).toFixed(2)) : 0,
           txAdm: txAdm
         });
       }
     });
 
-    const pacMap = new Map((pacientes || []).map(p => [p.id, p]));
-    const agrupado: Record<string, any> = {};
+    const agrupado: Record<string, { nome: string; itens: any[]; totalProducao: number; totalTxAdm: number }> = {};
 
     listaCompleta.forEach(it => {
       if (!agrupado[it.profissionalNome]) {
         agrupado[it.profissionalNome] = {
           nome: it.profissionalNome,
-          itens: [
-      {
-        id: 'log_agendamentos',
-        titulo: 'Log de Agendamentos por Usuários Administrativos',
-        descricao: 'Rastreabilidade e auditoria dos agendamentos criados no período, exibindo o usuário administrativo responsável pelo cadastro.',
-        ajuda: 'Exibe os registros de plantões agrupados por profissional informando quem cadastrou cada agendamento no sistema.'
-      },],
+          itens: [],
           totalProducao: 0,
           totalTxAdm: 0
         };
       }
-      const pac = pacMap.get(it.pacienteId);
-      agrupado[it.profissionalNome].itens.push({
-        ...it,
-        pacienteNome: pac?.nome || it.pacienteId || 'Paciente Não Informado'
-      });
+      agrupado[it.profissionalNome].itens.push(it);
       agrupado[it.profissionalNome].totalProducao += it.producao;
       agrupado[it.profissionalNome].totalTxAdm += it.txAdm;
     });
 
-    return Object.values(agrupado).sort((a: any, b: any) => a.nome.localeCompare(b.nome));
+    return Object.values(agrupado).sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
   }, [modalRelatorioAtivo, agendamentos, plantoes, pacientes, dataInicial, dataFinal]);
 
     // Dados do Relatório de Log de Agendamentos por Usuários Administrativos
@@ -1112,18 +1108,18 @@ export const Relatorios: React.FC = () => {
                               <td className="p-1.5">{formatarDataBr(it.data)} 08:00</td>
                               <td className="p-1.5 font-medium text-slate-900">{it.pacienteNome}</td>
                               <td className="p-1.5">{it.evento}</td>
-                              <td className="p-1.5 text-right">{it.producao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                              <td className="p-1.5 text-right">{it.vHora.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                              <td className="p-1.5 text-right">{it.txAdm.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                              <td className="p-1.5 text-right">{(it.producao || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                              <td className="p-1.5 text-right">{(it.vHora || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                              <td className="p-1.5 text-right">{(it.txAdm || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                             </tr>
                           ))}
                         </tbody>
                         <tfoot>
                           <tr className="bg-slate-50 font-bold border-t border-slate-300 text-slate-900">
                             <td className="p-1.5" colSpan={4}>Total {cur.nome} : {cur.itens.length}</td>
-                            <td className="p-1.5 text-right">{cur.totalProducao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                            <td className="p-1.5 text-right">{(cur.totalProducao || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                             <td className="p-1.5 text-right">-</td>
-                            <td className="p-1.5 text-right">{cur.totalTxAdm.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                            <td className="p-1.5 text-right">{(cur.totalTxAdm || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                           </tr>
                         </tfoot>
                       </table>
