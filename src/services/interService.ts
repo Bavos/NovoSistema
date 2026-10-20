@@ -32,7 +32,7 @@ export async function downloadBoletoPdf(base64Data?: string, seuNumero?: string,
   if (!finalBase64 && codigoSolicitacao) {
     const toastId = toast.loading('Buscando PDF oficial no Banco Inter...');
     try {
-      finalBase64 = await obterPdfBoletoInter(codigoSolicitacao);
+      finalBase64 = (await obterPdfBoletoInter(codigoSolicitacao)) || undefined;
       toast.dismiss(toastId);
     } catch (err: any) {
       toast.dismiss(toastId);

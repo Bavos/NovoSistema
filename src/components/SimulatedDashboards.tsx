@@ -5498,7 +5498,7 @@ export const HistoricoFinanceiroDashboard: React.FC = () => {
                     logging: false,
                     windowWidth: 794,
                     width: 794,
-                    onclone: (clonedDoc) => {
+                    onclone: (clonedDoc: any) => {
                         // 1. Sanitiza cores evitando conflitos com oklab/oklch
                         sanitizeClonedDocForHtml2Canvas(clonedDoc, '#ffffff', '#1e293b');
 

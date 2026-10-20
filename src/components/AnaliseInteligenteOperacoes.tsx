@@ -1224,9 +1224,9 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
         const pseudonimo = obterPseudonimoPac(pac.id, pac.nome || pAny.nomeCompleto);
 
         // Decomposição de custos unitários cadastrados na ficha do paciente (coleção 'pacientes')
-        const plano = pac.planoAtendimento || pAny.planoAtendimento || {};
+        const plano: any = pac.planoAtendimento || pAny.planoAtendimento || {};
         const tipos = Array.isArray(plano.tiposPlantao) ? plano.tiposPlantao : [];
-        const principal = tipos.find((t: any) => t.isPrincipal) || tipos[0] || {};
+        const principal: any = tipos.find((t: any) => t.isPrincipal) || tipos[0] || {};
 
         // Repasse ao cuidador/profissional por plantão
         const valorPlantaoProfissional = Number(
@@ -1659,9 +1659,9 @@ export const AnaliseInteligenteOperacoes: React.FC = () => {
         };
 
         // Custos unitários cadastrados na ficha do paciente
-        const plano = pac.planoAtendimento || pAny.planoAtendimento || {};
+        const plano: any = pac.planoAtendimento || pAny.planoAtendimento || {};
         const tipos = Array.isArray(plano.tiposPlantao) ? plano.tiposPlantao : [];
-        const principal = tipos.find((t: any) => t.isPrincipal) || tipos[0] || {};
+        const principal: any = tipos.find((t: any) => t.isPrincipal) || tipos[0] || {};
 
         const valorPlantaoUnitario = Number(
           principal.valorPlantao ||

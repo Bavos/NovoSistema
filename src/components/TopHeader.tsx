@@ -96,43 +96,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
       {/* Control Actions */}
       <div className="flex items-center max-md:pr-6 md:pr-0 space-x-2 sm:space-x-3 md:space-x-4 lg:space-x-5 shrink-0" id="control-actions-container">
-        {/* Modo de Testes / Sandbox Toggle Switch */}
-        <button
-          type="button"
-          id="sandbox-mode-toggle-container"
-          onClick={() => toggleTestMode()}
-          title={
-            isTestMode
-              ? 'Modo de Testes ATIVADO — Clique para alternar para o banco real'
-              : 'Modo de Testes DESATIVADO — Clique para ativar o modo de testes local'
-          }
-          className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 sm:py-1.5 rounded-full border transition-all duration-200 select-none cursor-pointer shrink-0 min-h-[44px] sm:min-h-0 ${
-            isTestMode
-              ? 'bg-amber-100/90 border-amber-400 text-amber-950 shadow-xs ring-2 ring-amber-400/30 hover:bg-amber-200/90'
-              : 'bg-[#e8e4db]/60 border-forest-green/15 text-forest-green/80 hover:border-forest-green/30 hover:bg-[#e8e4db]'
-          }`}
-        >
-          <span className="text-[11px] font-extrabold tracking-tight hidden sm:inline-block">
-            Modo de Testes / Sandbox
-          </span>
-          <span className="text-[10px] font-extrabold tracking-tight hidden min-[420px]:inline-block sm:hidden">
-            Sandbox
-          </span>
-          <div
-            role="switch"
-            aria-checked={isTestMode}
-            id="toggle-sandbox-switch"
-            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-              isTestMode ? 'bg-amber-600' : 'bg-slate-300'
-            }`}
-          >
-            <span
-              className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
-                isTestMode ? 'translate-x-4' : 'translate-x-0'
-              }`}
-            />
-          </div>
-        </button>
+        {/* Modo de Testes / Sandbox Toggle Switch - Ocultado */}
 
         {/* Notification Center */}
         <div className="relative shrink-0">
