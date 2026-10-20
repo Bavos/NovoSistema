@@ -116,21 +116,7 @@ export const Relatorios: React.FC = () => {
   };
 
   const handleAbrirRelatorio = (item: RelatorioItem) => {
-    if (item.id === 'log_agendamentos') {
-      setModalRelatorioAtivo('log_agendamentos');
-    } else if (item.id === 'previa_curingas') {
-      setModalRelatorioAtivo('previa_curingas');
-    } else if (item.id === 'previa_folha') {
-      setModalRelatorioAtivo('previa_folha');
-    } else if (item.id === 'atend_paciente') {
-      setModalRelatorioAtivo('atend_paciente');
-    } else if (item.id === 'faltas_profissional') {
-      setModalRelatorioAtivo('faltas_profissional');
-    } else if (item.id === 'atend_profissional') {
-      setModalRelatorioAtivo('atend_profissional');
-    } else if (item.id === 'bancos_profissional' || item.id === 'banco_profissional' || item.id.includes('banco') || item.titulo.toLowerCase().includes('banco')) {
-      setModalRelatorioAtivo('bancos_profissional');
-    }
+    setModalRelatorioAtivo(item.id);
   };
 
   const formatarDataBr = (dataIso: string) => {
@@ -175,7 +161,11 @@ export const Relatorios: React.FC = () => {
     }
 
     const filtrados = listaCompleta.filter(item => {
-      if (!item.data) return false;
+      if (!item.data || typeof item.data !== 'string' || item.data.trim() === '') return false;
+      if (!item.pacienteId || item.pacienteId === 'desconhecido') return false;
+      const pacExiste = (pacientes || []).some(p => p.id === item.pacienteId);
+      if (!pacExiste) return false;
+
       const dataItem = item.data.slice(0, 10);
       if (dataInicial && dataItem < dataInicial) return false;
       if (dataFinal && dataItem > dataFinal) return false;
