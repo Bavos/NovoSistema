@@ -261,11 +261,15 @@ export const Relatorios: React.FC = () => {
       lista = lista.filter(p => p.id === profissionalId);
     }
 
+    // Filtra profissionais válidos que possuem ao menos o nome preenchido
+    lista = lista.filter(p => p && p.nome && typeof p.nome === 'string' && p.nome.trim() !== '');
+
     const mapaBancos: Record<string, { bancoNome: string; itens: any[] }> = {};
 
     lista.forEach((prof: any) => {
       const db: any = prof.dadosBancarios || {};
-      const nomeBanco = (db.banco || prof.banco || '').trim() || 'Banco Não Informado / Pendente';
+      const bancoRaw = db.banco || prof.banco || '';
+      const nomeBanco = bancoRaw.trim() ? bancoRaw.trim() : 'Outros / Sem Banco Cadastrado';
 
       if (!mapaBancos[nomeBanco]) {
         mapaBancos[nomeBanco] = {
@@ -276,29 +280,30 @@ export const Relatorios: React.FC = () => {
 
       mapaBancos[nomeBanco].itens.push({
         id: prof.id,
-        nome: prof.nome || 'Não Informado',
+        nome: prof.nome,
         especialidade: prof.especialidade || prof.profissao || 'Cuidador(a)',
         cpf: prof.cpf || prof.cnpj || '-',
         telefone: prof.telefone || '-',
-        agencia: db.agencia || '-',
-        conta: db.conta || '-',
-        tipoConta: db.tipoConta || 'corrente',
-        pix: db.pix || '-',
+        banco: nomeBanco,
+        agencia: db.agencia || prof.agencia || '-',
+        conta: db.conta || prof.conta || '-',
+        tipoConta: db.tipoConta || prof.tipoConta || 'Corrente',
+        pix: db.pix || prof.pix || prof.chavePix || '-',
         isTitular: prof.isTitularConta !== false && prof.isTitularConta !== 'nao',
         nomeTitular: prof.nomeTitularConta || prof.nome || '',
         cpfTitular: prof.cpfTitularConta || prof.cpf || ''
       });
     });
 
-    // Ordena os profissionais dentro de cada banco por nome
+    // Ordena profissionais por nome dentro de cada banco
     Object.values(mapaBancos).forEach(g => {
       g.itens.sort((a, b) => a.nome.localeCompare(b.nome));
     });
 
-    // Retorna os bancos em ordem alfabética (deixando "Não Informado" no final)
+    // Ordena bancos em ordem alfabética (mantendo "Outros / Sem Banco" no final)
     return Object.values(mapaBancos).sort((a, b) => {
-      if (a.bancoNome === 'Banco Não Informado / Pendente') return 1;
-      if (b.bancoNome === 'Banco Não Informado / Pendente') return -1;
+      if (a.bancoNome.includes('Sem Banco')) return 1;
+      if (b.bancoNome.includes('Sem Banco')) return -1;
       return a.bancoNome.localeCompare(b.bancoNome);
     });
   }, [modalRelatorioAtivo, profissionais, profissionalId]);
@@ -854,9 +859,9 @@ export const Relatorios: React.FC = () => {
 
       {/* Modal: Relação de Bancos por Profissional */}
       {modalRelatorioAtivo === 'bancos_profissional' && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 bg-slate-800 text-white">
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden print:max-h-none print:shadow-none print:border-none">
+            <div className="flex items-center justify-between px-6 py-4 bg-slate-800 text-white print:hidden">
               <div className="flex items-center gap-2">
                 <Printer size={18} />
                 <h3 className="text-sm font-bold">Relação de Bancos por Profissional</h3>
@@ -867,7 +872,7 @@ export const Relatorios: React.FC = () => {
               </div>
             </div>
 
-            <div className="p-8 overflow-y-auto space-y-8 bg-slate-100 flex-1 print:bg-white print:p-0">
+            <div className="p-8 overflow-y-auto space-y-6 bg-slate-100 flex-1 print:bg-white print:p-0">
               <div className="bg-white p-8 rounded-xl shadow-xs border border-slate-200 max-w-4xl mx-auto space-y-6 print:shadow-none print:border-none">
                 <div className="flex items-center justify-between border-b border-slate-300 pb-4">
                   <div className="flex items-center gap-3">
@@ -879,57 +884,78 @@ export const Relatorios: React.FC = () => {
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-slate-500">Emitido em: {new Date().toLocaleDateString('pt-BR')}</p>
+                    <p className="text-[11px] text-slate-400">Total de Instituições: {dadosRelatorioBancos.length}</p>
                   </div>
                 </div>
 
                 <div className="border-t-2 border-b-2 border-slate-800 py-3 flex items-center justify-between">
-                  <h2 className="text-sm font-bold text-slate-900 uppercase">Relação de Bancos por Profissional</h2>
-                  <p className="text-xs font-semibold text-slate-700">Período de {formatarDataBr(dataInicial)} a {formatarDataBr(dataFinal)}</p>
+                  <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wide">Relação de Bancos por Profissional</h2>
+                  <span className="text-xs font-bold text-blue-700">
+                    Total de Profissionais: {dadosRelatorioBancos.reduce((acc, g) => acc + g.itens.length, 0)}
+                  </span>
                 </div>
 
                 {dadosRelatorioBancos.length === 0 ? (
-                  <div className="text-center py-12 text-slate-500 text-xs italic">Nenhum profissional cadastrado ou encontrado para os filtros selecionados.</div>
+                  <div className="text-center py-12 text-slate-500 text-xs italic">Nenhum profissional localizado.</div>
                 ) : (
-                  <div className="space-y-4">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead>
-                        <tr className="bg-slate-100 text-slate-700 border-b border-slate-300">
-                          <th className="p-2">Profissional</th>
-                          <th className="p-2">CPF</th>
-                          <th className="p-2">Banco</th>
-                          <th className="p-2">Agência / Conta</th>
-                          <th className="p-2">Chave PIX</th>
-                          <th className="p-2">Titular</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200 text-slate-700">
-                        {dadosRelatorioBancos.map((item, i) => (
-                          <tr key={i} className="hover:bg-slate-50/50">
-                            <td className="p-2">
-                              <div className="font-bold text-slate-900">{item.nome}</div>
-                              <div className="text-[10px] text-slate-500">{item.especialidade} {item.conselho ? `- COREN: ${item.conselho}` : ''}</div>
-                            </td>
-                            <td className="p-2 whitespace-nowrap">{item.cpf}</td>
-                            <td className="p-2 font-medium text-slate-800">{item.banco}</td>
-                            <td className="p-2 whitespace-nowrap">Ag: {item.agencia} | Cc: {item.conta} ({item.tipoConta})</td>
-                            <td className="p-2 font-mono text-slate-900 text-[11px]">{item.pix}</td>
-                            <td className="p-2">
-                              {item.isTitular ? (
-                                <span className="text-emerald-700 font-medium">Próprio Profissional</span>
-                              ) : (
-                                <div>
-                                  <div className="font-medium text-slate-800">{item.nomeTitular || 'Terceiro'}</div>
-                                  {item.cpfTitular && <div className="text-[10px] text-slate-500">CPF: {item.cpfTitular}</div>}
-                                </div>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div className="space-y-6">
+                    {dadosRelatorioBancos.map((grupo, gIdx) => (
+                      <div key={gIdx} className="border border-slate-200 rounded-lg overflow-hidden break-inside-avoid shadow-xs bg-white">
+                        {/* Header da Instituição Bancária */}
+                        <div className="bg-slate-100 border-b border-slate-200 px-4 py-2.5 flex items-center justify-between">
+                          <span className="font-bold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-2">
+                            <span>🏛️</span> {grupo.bancoNome}
+                          </span>
+                          <span className="text-[11px] font-semibold text-slate-700 bg-white border border-slate-300 px-2.5 py-0.5 rounded-full">
+                            {grupo.itens.length} {grupo.itens.length === 1 ? 'profissional' : 'profissionais'}
+                          </span>
+                        </div>
 
-                    <div className="text-center pt-4 pb-2 border-t border-dashed border-slate-300">
-                      <p className="text-xs font-bold text-slate-800">Total de Profissionais Listados : {dadosRelatorioBancos.length}</p>
+                        {/* Listagem dos profissionais deste banco */}
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-[11px]">
+                              <th className="p-2.5">Profissional</th>
+                              <th className="p-2.5">CPF</th>
+                              <th className="p-2.5">Agência</th>
+                              <th className="p-2.5">Conta</th>
+                              <th className="p-2.5">Tipo</th>
+                              <th className="p-2.5">Chave PIX</th>
+                              <th className="p-2.5">Titularidade</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-slate-700">
+                            {grupo.itens.map((it: any, iIdx: number) => (
+                              <tr key={it.id || iIdx} className="hover:bg-slate-50/60">
+                                <td className="p-2.5 font-medium text-slate-900">
+                                  {it.nome}
+                                  <div className="text-[10px] text-slate-500 font-normal">{it.especialidade}</div>
+                                </td>
+                                <td className="p-2.5 font-mono text-slate-600 text-[11px]">{it.cpf}</td>
+                                <td className="p-2.5 font-mono">{it.agencia}</td>
+                                <td className="p-2.5 font-mono">{it.conta}</td>
+                                <td className="p-2.5 capitalize text-slate-600">{it.tipoConta}</td>
+                                <td className="p-2.5 font-mono font-medium text-emerald-700">{it.pix}</td>
+                                <td className="p-2.5 text-slate-600 text-[11px]">
+                                  {it.isTitular ? 'Próprio' : (it.nomeTitular || 'Terceiro')}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="bg-slate-50/80 border-t border-slate-200 text-slate-600 font-medium text-[11px]">
+                              <td colSpan={7} className="p-2 text-right">
+                                Subtotal {grupo.bancoNome}: <strong>{grupo.itens.length}</strong>
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    ))}
+
+                    <div className="pt-4 border-t border-slate-200 flex justify-between items-center text-xs text-slate-600">
+                      <span>Total Geral de Profissionais Listados</span>
+                      <strong className="text-sm text-slate-900">{dadosRelatorioBancos.reduce((acc, g) => acc + g.itens.length, 0)}</strong>
                     </div>
                   </div>
                 )}
