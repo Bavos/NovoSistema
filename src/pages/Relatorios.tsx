@@ -1,1108 +1,1229 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import React, { useState, useMemo } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
-import { VallidareIcon } from '../components/VallidareLogo';
-import {
-  FileText,
-  Printer,
-  X,
-  Calendar,
-  Users,
-  Briefcase,
-  Search,
-  Filter,
-  ChevronDown,
-  ChevronRight,
-  HelpCircle,
-  AlertCircle,
-  FileSpreadsheet,
-  Clock,
-  RotateCcw
-} from 'lucide-react';
+import { Printer, ChevronDown, ChevronRight, HelpCircle, X } from 'lucide-react';
 
-interface ReportItem {
+interface RelatorioItem {
   id: string;
-  title: string;
-  description: string;
-  category: string;
+  titulo: string;
+  descricao: string;
+  ajuda: string;
 }
 
-interface ReportCategory {
+interface GrupoRelatorio {
   id: string;
-  title: string;
-  items: ReportItem[];
+  nome: string;
+  itens: RelatorioItem[];
 }
+
+const GRUPOS_INICIAIS: GrupoRelatorio[] = [
+  {
+    id: 'info_gerais',
+    nome: 'Informações Gerais',
+    itens: [
+      {
+        id: 'log_agendamentos',
+        titulo: 'Log de Agendamentos por Usuários Administrativos',
+        descricao: 'Rastreabilidade e auditoria dos agendamentos criados no período, exibindo o usuário administrativo responsável pelo cadastro.',
+        ajuda: 'Exibe os registros de plantões agrupados por profissional informando quem cadastrou cada agendamento no sistema.'
+      },
+      {
+        id: 'previa_curingas',
+        titulo: 'Prévia Financeira de Curingas',
+        descricao: 'Relatório detalhado das coberturas e plantões avulsos realizados por profissionais curingas com discriminação de valores e taxas.',
+        ajuda: 'Exibe os plantões de cobertura/curinga realizados por paciente com valores de produção e taxa administrativa.'
+      },
+      {
+        id: 'previa_folha',
+        titulo: 'Prévia Financeira da Folha de Pagamento',
+        descricao: 'Demonstrativo prévio da folha de pagamento por profissional, exibindo quantidade de plantões, produção, adicionais e valor bruto.',
+        ajuda: 'Exibe a consolidação financeira dos profissionais para fechamento da folha no período.'
+      },
+      {
+        id: 'faltas_profissional',
+        titulo: 'Relação de Faltas por Profissional',
+        descricao: 'Lista detalhada das faltas e ausências registradas no período, agrupadas por profissional com motivos e observações.',
+        ajuda: 'Exibe ausências, faltas justificadas ou não justificadas por profissional no período selecionado.'
+      },
+      {
+        id: 'atend_paciente',
+        titulo: 'Relação de Atendimentos por Paciente',
+        descricao: 'Lista detalhada dos atendimentos realizados no período, agrupando por paciente. Mostra data, profissional, duração e valores.',
+        ajuda: 'Exibe todos os plantões do período agrupados por paciente com detalhamento de datas, horários, profissionais e valores.'
+      },
+      {
+        id: 'atend_profissional',
+        titulo: 'Relação de Atendimentos por Profissional',
+        descricao: 'Lista detalhada dos atendimentos realizados no período, agrupando por profissional. Mostra paciente, data, duração e valores.',
+        ajuda: 'Exibe todos os plantões realizados agrupados por profissional com detalhamento de paciente, data e valores de repasse.'
+      }
+    ]
+  }
+];
 
 export const Relatorios: React.FC = () => {
-  const firebaseContext = useFirebase() as any;
-  const agendamentos: any[] = firebaseContext.agendamentos || [];
-  const plantoes: any[] = firebaseContext.plantoes || [];
-  const profissionais: any[] = firebaseContext.profissionais || [];
-  const pacientes: any[] = firebaseContext.pacientes || [];
-  const empresa: any = firebaseContext.empresa;
+  const { pacientes, profissionais, agendamentos, plantoes } = useFirebase();
 
-  // Helper date generators for default period (Current Month)
-  const getDefaultDates = () => {
-    const now = new Date();
-    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const hoje = new Date();
+  const primeiroDiaMes = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-01`;
+  const ultimoDiaNum = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
+  const ultimoDiaMes = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(ultimoDiaNum).padStart(2, '0')}`;
 
-    const formatYMD = (d: Date) => d.toISOString().split('T')[0];
-    return {
-      start: formatYMD(firstDay),
-      end: formatYMD(lastDay)
-    };
-  };
-
-  const defaults = getDefaultDates();
-  const [dataInicial, setDataInicial] = useState<string>(defaults.start);
-  const [dataFinal, setDataFinal] = useState<string>(defaults.end);
-  const [profissionalSelecionado, setProfissionalSelecionado] = useState<string>('');
-  const [pacienteSelecionado, setPacienteSelecionado] = useState<string>('');
-
-  // Search filter and Accordion state
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
-    'info_gerais': true,
-    'operacional': true
+  const [dataInicial, setDataInicial] = useState<string>(primeiroDiaMes);
+  const [dataFinal, setDataFinal] = useState<string>(ultimoDiaMes);
+  const [pacienteId, setPacienteId] = useState<string>('');
+  const [profissionalId, setProfissionalId] = useState<string>('');
+  const [gruposExpandidos, setGruposExpandidos] = useState<Record<string, boolean>>({
+    info_gerais: true,
   });
 
-  // Modals state
-  const [modalRelatorioProfissionalAtivo, setModalRelatorioProfissionalAtivo] = useState<boolean>(false);
-  const [modalRelatorioPacienteAtivo, setModalRelatorioPacienteAtivo] = useState<boolean>(false);
+  const [modalRelatorioAtivo, setModalRelatorioAtivo] = useState<string | null>(null);
 
-  // Combine agendamentos and plantoes
-  const allShifts = useMemo(() => {
-    const list: any[] = [];
-    const seenIds = new Set<string>();
+  const pacientesOrdenados = useMemo(() => {
+    return [...(pacientes || [])].sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+  }, [pacientes]);
 
-    (agendamentos || []).forEach((ag: any, idx: number) => {
-      if (!ag) return;
-      const key = ag.id || ag.docId || `ag_${idx}_${ag.data}_${ag.idProfissional || ag.nomeProfissional}`;
-      if (!seenIds.has(key)) {
-        seenIds.add(key);
-        list.push({ ...ag, id: key });
-      }
-    });
+  const profissionaisOrdenados = useMemo(() => {
+    return [...(profissionais || [])].sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+  }, [profissionais]);
 
-    (plantoes || []).forEach((pl: any, idx: number) => {
-      if (!pl) return;
-      const key = pl.id || pl.docId || `pl_${idx}_${pl.data}_${pl.idProfissional || pl.profissional || pl.nomeProfissional}`;
-      if (!seenIds.has(key)) {
-        seenIds.add(key);
-        list.push({ ...pl, id: key });
-      }
-    });
-
-    return list;
-  }, [agendamentos, plantoes]);
-
-  // Format YYYY-MM-DD to DD/MM/YYYY
-  const formatDateBR = (dateStr?: string) => {
-    if (!dateStr) return '-';
-    const parts = dateStr.split('-');
-    if (parts.length !== 3) return dateStr;
-    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  const expandirTodos = () => {
+    const novo: Record<string, boolean> = {};
+    GRUPOS_INICIAIS.forEach(g => { novo[g.id] = true; });
+    setGruposExpandidos(novo);
   };
 
-  // Calculate shift end timestamp
-  const calculateShiftEnd = (dateStr: string, timeStr: string = '07:00', durationHours: number = 12) => {
-    try {
-      if (!dateStr) return 'Término Previsto';
-      const cleanDate = dateStr.trim();
-      const parts = cleanDate.split('-').map(Number);
-      if (parts.length !== 3 || parts.some(isNaN)) return `${formatDateBR(dateStr)} - Término Previsto`;
+  const recolherTodos = () => {
+    const novo: Record<string, boolean> = {};
+    GRUPOS_INICIAIS.forEach(g => { novo[g.id] = false; });
+    setGruposExpandidos(novo);
+  };
 
-      const [year, month, day] = parts;
+  const limparFiltros = () => {
+    setDataInicial(primeiroDiaMes);
+    setDataFinal(ultimoDiaMes);
+    setPacienteId('');
+    setProfissionalId('');
+  };
 
-      const timeMatch = (timeStr || '').match(/(\d{1,2}):(\d{2})/);
-      const hours = timeMatch ? parseInt(timeMatch[1], 10) : 7;
-      const minutes = timeMatch ? parseInt(timeMatch[2], 10) : 0;
+  const toggleGrupo = (id: string) => {
+    setGruposExpandidos(prev => ({ ...prev, [id]: !prev[id] }));
+  };
 
-      const startDate = new Date(year, month - 1, day, hours, minutes);
-      const endDate = new Date(startDate.getTime() + durationHours * 60 * 60 * 1000);
-
-      const endD = String(endDate.getDate()).padStart(2, '0');
-      const endM = String(endDate.getMonth() + 1).padStart(2, '0');
-      const endY = endDate.getFullYear();
-      const endH = String(endDate.getHours()).padStart(2, '0');
-      const endMin = String(endDate.getMinutes()).padStart(2, '0');
-
-      return `${endD}/${endM}/${endY} às ${endH}:${endMin}`;
-    } catch {
-      return `${formatDateBR(dateStr)} - Término Previsto`;
+  const handleAbrirRelatorio = (item: RelatorioItem) => {
+    if (item.id === 'log_agendamentos') {
+      setModalRelatorioAtivo('log_agendamentos');
+    } else if (item.id === 'previa_curingas') {
+      setModalRelatorioAtivo('previa_curingas');
+    } else if (item.id === 'previa_folha') {
+      setModalRelatorioAtivo('previa_folha');
+    } else if (item.id === 'atend_paciente') {
+      setModalRelatorioAtivo('atend_paciente');
+    } else if (item.id === 'faltas_profissional') {
+      setModalRelatorioAtivo('faltas_profissional');
+    } else if (item.id === 'atend_profissional') {
+      setModalRelatorioAtivo('atend_profissional');
     }
   };
 
-  // Group shifts by Professional for "Relação de Atendimentos por Profissional"
-  const relatorioProfissionalData = useMemo(() => {
-    const filtered = allShifts.filter((shift: any) => {
-      if (!shift || !shift.data) return false;
+  const formatarDataBr = (dataIso: string) => {
+    if (!dataIso) return '';
+    const partes = dataIso.slice(0, 10).split('-');
+    if (partes.length === 3) return `${partes[2]}/${partes[1]}/${partes[0]}`;
+    return dataIso;
+  };
 
-      const statusLower = (shift.status || '').toLowerCase();
-      const isCanceled = statusLower === 'cancelado' || statusLower === 'cancelada';
-
-      if (isCanceled) return false;
-
-      return shift.data >= dataInicial && shift.data <= dataFinal;
-    });
-
-    const matchedShifts = filtered.filter((shift: any) => {
-      if (!profissionalSelecionado) return true;
-
-      const profId = shift.idProfissional || shift.profissionalId;
-      const profNome = shift.nomeProfissional || shift.profissionalNome || shift.profissional;
-
-      const foundProf = profissionais.find(
-        (p: any) =>
-          (profId && p.id === profId) ||
-          (profNome && p.nome && p.nome.trim().toLowerCase() === profNome.trim().toLowerCase())
-      );
-
-      const searchLower = profissionalSelecionado.toLowerCase().trim();
-
-      return (
-        profId === profissionalSelecionado ||
-        foundProf?.id === profissionalSelecionado ||
-        (profNome && profNome.toLowerCase().includes(searchLower)) ||
-        (foundProf?.nome && foundProf.nome.toLowerCase().includes(searchLower))
-      );
-    });
-
-    const groupsMap = new Map<string, {
-      profInfo: {
-        id: string;
-        nome: string;
-        especialidade: string;
-        conselho: string;
-      };
-      items: Array<{
-        id: string;
-        inicio: string;
-        pacienteNome: string;
-        contratante: string;
-        evento: string;
-        observacao: string;
-        termino: string;
-        status: string;
-      }>;
-    }>();
-
-    matchedShifts.forEach((shift: any) => {
-      const rawProfId = shift.idProfissional || shift.profissionalId;
-      const rawProfNome = shift.nomeProfissional || shift.profissionalNome || shift.profissional;
-
-      const foundProf = profissionais.find((p: any) => {
-        if (rawProfId && p.id === rawProfId) return true;
-        if (rawProfNome && p.nome && p.nome.trim().toLowerCase() === rawProfNome.trim().toLowerCase()) return true;
-        return false;
-      });
-
-      const profId = foundProf?.id || rawProfId || (rawProfNome ? rawProfNome.trim() : 'nao_informado');
-      const profNome = foundProf?.nome || rawProfNome || 'Profissional Não Informado';
-
-      const especialidade =
-        foundProf?.especialidade ||
-        foundProf?.profissao ||
-        'Enfermagem / Cuidados';
-
-      const conselho =
-        foundProf?.conselho ||
-        (foundProf?.coren ? `COREN: ${foundProf.coren}` : foundProf?.rg ? `RG: ${foundProf.rg}` : 'COREN/RJ: Não Informado');
-
-      if (!groupsMap.has(profId)) {
-        groupsMap.set(profId, {
-          profInfo: {
-            id: profId,
-            nome: profNome,
-            especialidade,
-            conselho
-          },
-          items: []
+  const dadosRelatorioPaciente = useMemo(() => {
+    if (modalRelatorioAtivo !== 'atend_paciente') return [];
+    const listaCompleta: any[] = [];
+    if (agendamentos) {
+      agendamentos.forEach(ag => {
+        listaCompleta.push({
+          id: ag.id,
+          pacienteId: ag.idPaciente,
+          profissionalId: ag.idProfissional,
+          profissionalNome: ag.nomeProfissional,
+          data: ag.data,
+          horario: ag.horario || '07:00',
+          status: ag.status || 'Agendado',
+          observacao: ag.observacao || '',
+          tipoEscala: ag.tipoDia || 'Plantão 12x36'
         });
-      }
-
-      const pacId = shift.idPaciente || shift.pacienteId;
-      const pacNomeRaw = shift.nomePaciente || shift.pacienteNome || shift.paciente;
-      const foundPac = pacientes.find((p: any) => {
-        if (pacId && p.id === pacId) return true;
-        if (pacNomeRaw && p.nome && p.nome.trim().toLowerCase() === pacNomeRaw.trim().toLowerCase()) return true;
-        return false;
       });
-
-      const pacNome = foundPac?.nome || pacNomeRaw || 'Paciente Não Informado';
-      const contratante =
-        foundPac?.contratante ||
-        foundPac?.responsavel ||
-        foundPac?.convenio ||
-        shift.contratante ||
-        'Não Informado';
-
-      const horario = shift.horario || shift.horaInicio || '07:00';
-      const duracao = (shift.horario?.includes('24') || shift.tipoEscala?.includes('24') || shift.duracao === 24) ? 24 : 12;
-
-      groupsMap.get(profId)!.items.push({
-        id: shift.id || Math.random().toString(),
-        inicio: `${formatDateBR(shift.data)} às ${horario}`,
-        pacienteNome: pacNome,
-        contratante,
-        evento: shift.tipoEscala || shift.evento || (duracao === 24 ? 'Plantão 24h' : 'Plantão 12x36'),
-        observacao: shift.observacao || shift.obs || '-',
-        termino: calculateShiftEnd(shift.data, horario, duracao),
-        status: shift.status || 'Agendado'
-      });
-    });
-
-    return Array.from(groupsMap.values()).sort((a, b) =>
-      a.profInfo.nome.localeCompare(b.profInfo.nome)
-    );
-  }, [allShifts, dataInicial, dataFinal, profissionalSelecionado, profissionais, pacientes]);
-
-  // Group shifts by Patient for "Relação de Atendimentos por Paciente"
-  const relatorioPacienteData = useMemo(() => {
-    const filtered = allShifts.filter((shift: any) => {
-      if (!shift || !shift.data) return false;
-      const statusLower = (shift.status || '').toLowerCase();
-      const isCanceled = statusLower === 'cancelado' || statusLower === 'cancelada';
-      if (isCanceled) return false;
-
-      return shift.data >= dataInicial && shift.data <= dataFinal;
-    });
-
-    const matchedShifts = filtered.filter((shift: any) => {
-      if (!pacienteSelecionado) return true;
-      const pacId = shift.idPaciente || shift.pacienteId;
-      const pacNome = shift.nomePaciente || shift.pacienteNome || shift.paciente;
-
-      const foundPac = pacientes.find(
-        (p: any) =>
-          (pacId && p.id === pacId) ||
-          (pacNome && p.nome && p.nome.trim().toLowerCase() === pacNome.trim().toLowerCase())
-      );
-
-      const searchLower = pacienteSelecionado.toLowerCase().trim();
-
-      return (
-        pacId === pacienteSelecionado ||
-        foundPac?.id === pacienteSelecionado ||
-        (pacNome && pacNome.toLowerCase().includes(searchLower)) ||
-        (foundPac?.nome && foundPac.nome.toLowerCase().includes(searchLower))
-      );
-    });
-
-    const groupsMap = new Map<string, {
-      pacienteInfo: {
-        id: string;
-        nome: string;
-        contratante: string;
-      };
-      items: Array<{
-        id: string;
-        inicio: string;
-        profissionalNome: string;
-        evento: string;
-        observacao: string;
-        termino: string;
-        status: string;
-      }>;
-    }>();
-
-    matchedShifts.forEach((shift: any) => {
-      const rawPacId = shift.idPaciente || shift.pacienteId;
-      const rawPacNome = shift.nomePaciente || shift.pacienteNome || shift.paciente;
-
-      const foundPac = pacientes.find((p: any) => {
-        if (rawPacId && p.id === rawPacId) return true;
-        if (rawPacNome && p.nome && p.nome.trim().toLowerCase() === rawPacNome.trim().toLowerCase()) return true;
-        return false;
-      });
-
-      const pacId = foundPac?.id || rawPacId || (rawPacNome ? rawPacNome.trim() : 'nao_informado');
-      const pacNome = foundPac?.nome || rawPacNome || 'Paciente Não Informado';
-
-      const contratante =
-        foundPac?.contratante ||
-        foundPac?.responsavel ||
-        foundPac?.convenio ||
-        shift.contratante ||
-        'Não Informado';
-
-      if (!groupsMap.has(pacId)) {
-        groupsMap.set(pacId, {
-          pacienteInfo: {
-            id: pacId,
-            nome: pacNome,
-            contratante
-          },
-          items: []
-        });
-      }
-
-      const profId = shift.idProfissional || shift.profissionalId;
-      const profNomeRaw = shift.nomeProfissional || shift.profissionalNome || shift.profissional;
-      const foundProf = profissionais.find((p: any) => {
-        if (profId && p.id === profId) return true;
-        if (profNomeRaw && p.nome && p.nome.trim().toLowerCase() === profNomeRaw.trim().toLowerCase()) return true;
-        return false;
-      });
-
-      const profNome = foundProf?.nome || profNomeRaw || 'Profissional Não Alocado';
-      const horario = shift.horario || shift.horaInicio || '07:00';
-      const duracao = (shift.horario?.includes('24') || shift.tipoEscala?.includes('24') || shift.duracao === 24) ? 24 : 12;
-
-      groupsMap.get(pacId)!.items.push({
-        id: shift.id || Math.random().toString(),
-        inicio: `${formatDateBR(shift.data)} às ${horario}`,
-        profissionalNome: profNome,
-        evento: shift.tipoEscala || shift.evento || 'Plantão 12x36',
-        observacao: shift.observacao || shift.obs || '-',
-        termino: calculateShiftEnd(shift.data, horario, duracao),
-        status: shift.status || 'Agendado'
-      });
-    });
-
-    return Array.from(groupsMap.values()).sort((a, b) =>
-      a.pacienteInfo.nome.localeCompare(b.pacienteInfo.nome)
-    );
-  }, [allShifts, dataInicial, dataFinal, pacienteSelecionado, pacientes, profissionais]);
-
-  // Report Categories Structure matching exact UI
-  const categories: ReportCategory[] = [
-    {
-      id: 'info_gerais',
-      title: 'Informações Gerais',
-      items: [
-        {
-          id: 'atend_paciente',
-          title: 'Relação de Atendimentos por Paciente',
-          description: 'Lista detalhada dos atendimentos realizados no período, agrupando por paciente. Mostra data, profissional, duração e valores.',
-          category: 'Informações Gerais'
-        },
-        {
-          id: 'atend_paciente_sintetico',
-          title: 'Relação de Atendimentos por Paciente Sintético',
-          description: 'Versão resumida do relatório por paciente: apenas totalizadores (quantidade e valor), sem detalhar plantão a plantão.',
-          category: 'Informações Gerais'
-        },
-        {
-          id: 'atend_profissional',
-          title: 'Relação de Atendimentos por Profissional',
-          description: 'Lista detalhada dos atendimentos realizados no período, agrupando por profissional. Mostra paciente, data, duração e valores.',
-          category: 'Informações Gerais'
-        },
-        {
-          id: 'atend_profissional_sintetico',
-          title: 'Relação de Atendimentos por Profissional Sintético',
-          description: 'Versão resumida do relatório por profissional: totalizadores de quantidade e valor sem detalhar atendimento a atendimento.',
-          category: 'Informações Gerais'
-        }
-      ]
-    },
-    {
-      id: 'operacional',
-      title: 'Escalas e Operacional',
-      items: [
-        {
-          id: 'atend_escala_diaria',
-          title: 'Relatório de Escala Diária de Plantões',
-          description: 'Visão consolidada da escala de plantões por dia com horários e equipes alocadas.',
-          category: 'Escalas e Operacional'
-        },
-        {
-          id: 'atend_curingas',
-          title: 'Relatório de Plantões Curinga',
-          description: 'Relatório de cobertura especial e alocação de profissionais curinga por período.',
-          category: 'Escalas e Operacional'
-        }
-      ]
     }
-  ];
+    if (plantoes) {
+      plantoes.forEach(pl => {
+        listaCompleta.push({
+          id: pl.id,
+          pacienteId: pl.pacienteId,
+          profissionalId: pl.profissional || '',
+          profissionalNome: pl.profissional || 'Não Informado',
+          data: pl.data,
+          horario: pl.horaInicio || '07:00',
+          status: pl.status || 'Agendado',
+          observacao: pl.observacaoAgendamento || '',
+          tipoEscala: pl.tipoEscala ? `Escala ${pl.tipoEscala}` : 'Plantão'
+        });
+      });
+    }
 
-  // Filter categories and items based on search query
-  const filteredCategories = useMemo(() => {
-    if (!searchQuery.trim()) return categories;
+    const filtrados = listaCompleta.filter(item => {
+      if (!item.data) return false;
+      const dataItem = item.data.slice(0, 10);
+      if (dataInicial && dataItem < dataInicial) return false;
+      if (dataFinal && dataItem > dataFinal) return false;
+      if (pacienteId && item.pacienteId !== pacienteId) return false;
+      if (profissionalId && item.profissionalId !== profissionalId) return false;
+      if (item.status === 'Cancelado') return false;
+      return true;
+    });
 
-    const query = searchQuery.toLowerCase().trim();
-    return categories
-      .map((cat) => {
-        const matchingItems = cat.items.filter(
-          (item) =>
-            item.title.toLowerCase().includes(query) ||
-            item.description.toLowerCase().includes(query)
-        );
-        return {
-          ...cat,
-          items: matchingItems
+    const agrupadoMap: Record<string, { paciente: any; itens: any[] }> = {};
+    filtrados.forEach(item => {
+      const pac = (pacientes || []).find(p => p.id === item.pacienteId);
+      const pId = item.pacienteId || 'desconhecido';
+      if (!agrupadoMap[pId]) {
+        agrupadoMap[pId] = {
+          paciente: pac || { nome: 'Paciente Desconhecido', nomeResponsavel: 'Padrão' },
+          itens: [
+      {
+        id: 'log_agendamentos',
+        titulo: 'Log de Agendamentos por Usuários Administrativos',
+        descricao: 'Rastreabilidade e auditoria dos agendamentos criados no período, exibindo o usuário administrativo responsável pelo cadastro.',
+        ajuda: 'Exibe os registros de plantões agrupados por profissional informando quem cadastrou cada agendamento no sistema.'
+      },
+      {
+        id: 'previa_curingas',
+        titulo: 'Prévia Financeira de Curingas',
+        descricao: 'Relatório detalhado das coberturas e plantões avulsos realizados por profissionais curingas com discriminação de valores e taxas.',
+        ajuda: 'Exibe os plantões de cobertura/curinga realizados por paciente com valores de produção e taxa administrativa.'
+      },
+      {
+        id: 'previa_folha',
+        titulo: 'Prévia Financeira da Folha de Pagamento',
+        descricao: 'Demonstrativo prévio da folha de pagamento por profissional, exibindo quantidade de plantões, produção, adicionais e valor bruto.',
+        ajuda: 'Exibe a consolidação financeira dos profissionais para fechamento da folha no período.'
+      },
+      {
+        id: 'faltas_profissional',
+        titulo: 'Relação de Faltas por Profissional',
+        descricao: 'Lista detalhada das faltas e ausências registradas no período, agrupadas por profissional com motivos e observações.',
+        ajuda: 'Exibe ausências, faltas justificadas ou não justificadas por profissional no período selecionado.'
+      },]
         };
-      })
-      .filter((cat) => cat.items.length > 0);
-  }, [categories, searchQuery]);
+      }
+      agrupadoMap[pId].itens.push(item);
+    });
 
-  // Open report handler
-  const handleOpenReport = (item: ReportItem) => {
-    const idLower = (item.id || '').toLowerCase();
-    const titleLower = (item.title || '').toLowerCase();
+    return Object.values(agrupadoMap).sort((a, b) => (a.paciente.nome || '').localeCompare(b.paciente.nome || ''));
+  }, [modalRelatorioAtivo, agendamentos, plantoes, dataInicial, dataFinal, pacienteId, profissionalId, pacientes]);
 
-    if (idLower === 'atend_profissional' || idLower.includes('profissional') || titleLower.includes('profissional')) {
-      setModalRelatorioProfissionalAtivo(true);
-    } else if (idLower === 'atend_paciente' || idLower.includes('paciente') || titleLower.includes('paciente')) {
-      setModalRelatorioPacienteAtivo(true);
-    } else {
-      setModalRelatorioProfissionalAtivo(true);
+  const dadosRelatorioProfissional = useMemo(() => {
+    if (modalRelatorioAtivo !== 'atend_profissional') return [];
+    const listaCompleta: any[] = [];
+    if (agendamentos) {
+      agendamentos.forEach(ag => {
+        listaCompleta.push({
+          id: ag.id,
+          pacienteId: ag.idPaciente,
+          profissionalId: ag.idProfissional,
+          profissionalNome: ag.nomeProfissional,
+          data: ag.data,
+          horario: ag.horario || '07:00',
+          status: ag.status || 'Agendado',
+          observacao: ag.observacao || '',
+          tipoEscala: ag.tipoDia || 'Plantão 12x36'
+        });
+      });
     }
-  };
+    if (plantoes) {
+      plantoes.forEach(pl => {
+        listaCompleta.push({
+          id: pl.id,
+          pacienteId: pl.pacienteId,
+          profissionalId: pl.profissional || '',
+          profissionalNome: pl.profissional || 'Não Informado',
+          data: pl.data,
+          horario: pl.horaInicio || '07:00',
+          status: pl.status || 'Agendado',
+          observacao: pl.observacaoAgendamento || '',
+          tipoEscala: pl.tipoEscala ? `Escala ${pl.tipoEscala}` : 'Plantão'
+        });
+      });
+    }
 
-  // Toggle category expand/collapse
-  const toggleCategory = (catId: string) => {
-    setExpandedCategories((prev) => ({
-      ...prev,
-      [catId]: !prev[catId]
-    }));
-  };
-
-  const expandAll = () => {
-    const all: Record<string, boolean> = {};
-    categories.forEach((c) => {
-      all[c.id] = true;
+    const filtrados = listaCompleta.filter(item => {
+      if (!item.data) return false;
+      const dataItem = item.data.slice(0, 10);
+      if (dataInicial && dataItem < dataInicial) return false;
+      if (dataFinal && dataItem > dataFinal) return false;
+      if (pacienteId && item.pacienteId !== pacienteId) return false;
+      if (profissionalId && item.profissionalId !== profissionalId) return false;
+      if (item.status === 'Cancelado') return false;
+      return true;
     });
-    setExpandedCategories(all);
-  };
 
-  const collapseAll = () => {
-    const all: Record<string, boolean> = {};
-    categories.forEach((c) => {
-      all[c.id] = false;
+    const agrupadoMap: Record<string, { profissional: any; itens: any[] }> = {};
+    filtrados.forEach(item => {
+      const prof = (profissionais || []).find(p => p.id === item.profissionalId || p.nome === item.profissionalNome);
+      const pKey = prof?.id || item.profissionalId || item.profissionalNome || 'desconhecido';
+      if (!agrupadoMap[pKey]) {
+        agrupadoMap[pKey] = {
+          profissional: prof || { nome: item.profissionalNome || 'Profissional Desconhecido', especialidade: 'Cuidador(a)', conselho: '' },
+          itens: [
+      {
+        id: 'log_agendamentos',
+        titulo: 'Log de Agendamentos por Usuários Administrativos',
+        descricao: 'Rastreabilidade e auditoria dos agendamentos criados no período, exibindo o usuário administrativo responsável pelo cadastro.',
+        ajuda: 'Exibe os registros de plantões agrupados por profissional informando quem cadastrou cada agendamento no sistema.'
+      },
+      {
+        id: 'previa_curingas',
+        titulo: 'Prévia Financeira de Curingas',
+        descricao: 'Relatório detalhado das coberturas e plantões avulsos realizados por profissionais curingas com discriminação de valores e taxas.',
+        ajuda: 'Exibe os plantões de cobertura/curinga realizados por paciente com valores de produção e taxa administrativa.'
+      },
+      {
+        id: 'previa_folha',
+        titulo: 'Prévia Financeira da Folha de Pagamento',
+        descricao: 'Demonstrativo prévio da folha de pagamento por profissional, exibindo quantidade de plantões, produção, adicionais e valor bruto.',
+        ajuda: 'Exibe a consolidação financeira dos profissionais para fechamento da folha no período.'
+      },
+      {
+        id: 'faltas_profissional',
+        titulo: 'Relação de Faltas por Profissional',
+        descricao: 'Lista detalhada das faltas e ausências registradas no período, agrupadas por profissional com motivos e observações.',
+        ajuda: 'Exibe ausências, faltas justificadas ou não justificadas por profissional no período selecionado.'
+      },]
+        };
+      }
+      agrupadoMap[pKey].itens.push(item);
     });
-    setExpandedCategories(all);
-  };
 
-  const clearFilters = () => {
-    setSearchQuery('');
-    setProfissionalSelecionado('');
-    setPacienteSelecionado('');
-    const defaults = getDefaultDates();
-    setDataInicial(defaults.start);
-    setDataFinal(defaults.end);
-  };
+    return Object.values(agrupadoMap).sort((a, b) => (a.profissional.nome || '').localeCompare(b.profissional.nome || ''));
+  }, [modalRelatorioAtivo, agendamentos, plantoes, dataInicial, dataFinal, pacienteId, profissionalId, profissionais]);
 
-  const handlePrint = () => {
-    window.print();
-  };
+    // Dados do Relatório de Faltas por Profissional (Regra Completa)
+  const dadosRelatorioFaltas = useMemo(() => {
+    if (modalRelatorioAtivo !== 'faltas_profissional') return [];
+    const listaCompleta: any[] = [];
+    const pacMap = new Map((pacientes || []).map(p => [p.id, p]));
+
+    const obterNomePaciente = (item: any, idPac: string) => {
+      if (item.nomePaciente) return item.nomePaciente;
+      if (item.paciente && typeof item.paciente === 'string' && item.paciente.length > 3) return item.paciente;
+      const pac = pacMap.get(idPac);
+      return pac?.nome || '';
+    };
+
+    const processarItem = (item: any, idPac: string, idProf: string, nomeProf: string, hr: string, motivoRaw: string, obsRaw: string, escala: string) => {
+      if (!item.data) return;
+      const nomePaciente = obterNomePaciente(item, idPac);
+      if (!nomePaciente) return; // Ignora registros sem qualquer paciente identificado
+
+      const st = (item.status || '').toLowerCase();
+      const motivoValido = motivoRaw && motivoRaw !== '-' && motivoRaw.trim() !== '';
+      const obsValida = obsRaw && obsRaw !== '-' && obsRaw.trim() !== '';
+
+      // Regra: computa se o status for Falta OU se houver motivo preenchido de ausência/justificativa
+      const ehFaltaReal = st.includes('falta') || Boolean(motivoValido);
+      if (!ehFaltaReal) return;
+
+      listaCompleta.push({
+        id: item.id,
+        pacienteId: idPac,
+        pacienteNome: nomePaciente,
+        profissionalId: idProf,
+        profissionalNome: nomeProf || 'Não Informado',
+        data: item.data,
+        horario: hr || '07:00',
+        status: item.status || 'Agendado',
+        motivo: motivoRaw || (st.includes('falta') ? 'Falta' : '-'),
+        observacao: obsValida ? obsRaw : '-',
+        tipoEscala: escala || 'Plantão'
+      });
+    };
+
+    if (agendamentos) {
+      agendamentos.forEach(ag => {
+        processarItem(
+          ag,
+          ag.idPaciente || ag.pacienteId,
+          ag.idProfissional || ag.profissionalId,
+          ag.nomeProfissional,
+          ag.horario,
+          ag.motivoFalta || ag.justificativaFalta || ag.motivo,
+          ag.observacao || ag.observacaoFalta,
+          ag.tipoDia || 'Plantão 12x36'
+        );
+      });
+    }
+
+    if (plantoes) {
+      plantoes.forEach(pl => {
+        processarItem(
+          pl,
+          pl.pacienteId || pl.idPaciente,
+          pl.profissionalId || pl.profissional,
+          pl.profissional,
+          pl.horaInicio,
+          pl.motivoFalta || pl.justificativaFalta || pl.motivo,
+          pl.observacaoAgendamento || pl.observacao,
+          pl.tipoEscala ? `Escala ${pl.tipoEscala}` : 'Plantão'
+        );
+      });
+    }
+
+    const filtrados = listaCompleta.filter(item => {
+      const dataItem = item.data.slice(0, 10);
+      if (dataInicial && dataItem < dataInicial) return false;
+      if (dataFinal && dataItem > dataFinal) return false;
+      if (pacienteId && item.pacienteId !== pacienteId) return false;
+      if (profissionalId && item.profissionalId !== profissionalId) return false;
+      return true;
+    });
+
+    const agrupadoMap: Record<string, { profissional: any; itens: any[] }> = {};
+    filtrados.forEach(item => {
+      const prof = (profissionais || []).find(p => p.id === item.profissionalId || p.nome === item.profissionalNome);
+      const pKey = prof?.id || item.profissionalId || item.profissionalNome || 'desconhecido';
+      if (!agrupadoMap[pKey]) {
+        agrupadoMap[pKey] = {
+          profissional: prof || { nome: item.profissionalNome, especialidade: 'Cuidador(a)', conselho: '' },
+          itens: [
+      {
+        id: 'log_agendamentos',
+        titulo: 'Log de Agendamentos por Usuários Administrativos',
+        descricao: 'Rastreabilidade e auditoria dos agendamentos criados no período, exibindo o usuário administrativo responsável pelo cadastro.',
+        ajuda: 'Exibe os registros de plantões agrupados por profissional informando quem cadastrou cada agendamento no sistema.'
+      },
+      {
+        id: 'previa_curingas',
+        titulo: 'Prévia Financeira de Curingas',
+        descricao: 'Relatório detalhado das coberturas e plantões avulsos realizados por profissionais curingas com discriminação de valores e taxas.',
+        ajuda: 'Exibe os plantões de cobertura/curinga realizados por paciente com valores de produção e taxa administrativa.'
+      },
+      {
+        id: 'previa_folha',
+        titulo: 'Prévia Financeira da Folha de Pagamento',
+        descricao: 'Demonstrativo prévio da folha de pagamento por profissional, exibindo quantidade de plantões, produção, adicionais e valor bruto.',
+        ajuda: 'Exibe a consolidação financeira dos profissionais para fechamento da folha no período.'
+      },]
+        };
+      }
+      agrupadoMap[pKey].itens.push(item);
+    });
+
+    return Object.values(agrupadoMap).sort((a, b) => (a.profissional.nome || '').localeCompare(b.profissional.nome || ''));
+  }, [modalRelatorioAtivo, agendamentos, plantoes, dataInicial, dataFinal, pacienteId, profissionalId, profissionais, pacientes]);
+
+    // Dados da Prévia Financeira da Folha de Pagamento
+  const dadosPreviaFolha = useMemo(() => {
+    if (modalRelatorioAtivo !== 'previa_folha') return [];
+    const profMap: Record<string, any> = {};
+
+    (profissionais || []).forEach(p => {
+      profMap[p.id] = {
+        id: p.id,
+        nome: p.nome || 'Não informado',
+        tipo: 'Plantonista',
+        qtd: 0,
+        salario: 0,
+        producao: 0,
+        ajudaCusto: 0,
+        bruto: 0
+      };
+    });
+
+    const lista = [...(agendamentos || []), ...(plantoes || [])];
+    lista.forEach((item: any) => {
+      const dataItem = (item.data || '').slice(0, 10);
+      if (dataInicial && dataItem < dataInicial) return;
+      if (dataFinal && dataItem > dataFinal) return;
+      if (item.status === 'Cancelado' || item.status?.toLowerCase().includes('falta')) return;
+
+      const pId = item.idProfissional || item.profissionalId || item.profissional;
+      const pNome = item.nomeProfissional || item.profissional || 'Outro';
+
+      let ref = profMap[pId];
+      if (!ref) {
+        const encontrado = Object.values(profMap).find((p: any) => p.nome === pNome);
+        if (encontrado) ref = encontrado;
+      }
+
+      const valorPlantao = Number(item.valorProfissional || item.valor || item.valorRepasse || 175.00);
+      const ajuda = Number(item.ajudaCusto || 0);
+
+      if (ref) {
+        ref.qtd += 1;
+        ref.producao += valorPlantao;
+        ref.ajudaCusto += ajuda;
+        ref.bruto += (valorPlantao + ajuda);
+      }
+    });
+
+    return Object.values(profMap).filter((p: any) => p.qtd > 0).sort((a: any, b: any) => a.nome.localeCompare(b.nome));
+  }, [modalRelatorioAtivo, profissionais, agendamentos, plantoes, dataInicial, dataFinal]);
+
+    // Dados da Prévia Financeira de Curingas (Filtro Estrito)
+  const dadosPreviaCuringas = useMemo(() => {
+    if (modalRelatorioAtivo !== 'previa_curingas') return [];
+    const listaCompleta: any[] = [];
+
+    const lista = [...(agendamentos || []), ...(plantoes || [])];
+    lista.forEach((item: any) => {
+      const dataItem = (item.data || '').slice(0, 10);
+      if (dataInicial && dataItem < dataInicial) return;
+      if (dataFinal && dataItem > dataFinal) return;
+      if (item.status === 'Cancelado') return;
+
+      const textoCompleto = `${item.tipoEscala || ''} ${item.tipoDia || ''} ${item.observacao || ''} ${item.observacaoAgendamento || ''} ${item.tipo || ''} ${item.modalidade || ''} ${item.evento || ''}`.toLowerCase();
+      
+      const isCuringa = Boolean(
+        item.curinga === true || 
+        item.isCuringa === true || 
+        item.plantaoCuringa === true ||
+        textoCompleto.includes('curinga') ||
+        textoCompleto.includes('cobertura avulsa')
+      );
+
+      if (isCuringa) {
+        const prod = Number(item.valorProfissional || item.valor || 175.00);
+        const txAdm = Number(item.taxaAdministrativa || (prod * 0.25) || 45.00);
+        listaCompleta.push({
+          id: item.id,
+          pacienteId: item.idPaciente || item.pacienteId,
+          profissionalId: item.idProfissional || item.profissionalId || item.profissional,
+          profissionalNome: item.nomeProfissional || item.profissional || 'Profissional',
+          data: item.data,
+          horario: item.horario || item.horaInicio || '08:00',
+          evento: item.tipoDia || (item.tipoEscala ? `Plantão ${item.tipoEscala}` : 'Plantão 24 x 48'),
+          producao: prod,
+          vHora: Number((prod / 24).toFixed(2)),
+          txAdm: txAdm
+        });
+      }
+    });
+
+    const pacMap = new Map((pacientes || []).map(p => [p.id, p]));
+    const agrupado: Record<string, any> = {};
+
+    listaCompleta.forEach(it => {
+      if (!agrupado[it.profissionalNome]) {
+        agrupado[it.profissionalNome] = {
+          nome: it.profissionalNome,
+          itens: [
+      {
+        id: 'log_agendamentos',
+        titulo: 'Log de Agendamentos por Usuários Administrativos',
+        descricao: 'Rastreabilidade e auditoria dos agendamentos criados no período, exibindo o usuário administrativo responsável pelo cadastro.',
+        ajuda: 'Exibe os registros de plantões agrupados por profissional informando quem cadastrou cada agendamento no sistema.'
+      },],
+          totalProducao: 0,
+          totalTxAdm: 0
+        };
+      }
+      const pac = pacMap.get(it.pacienteId);
+      agrupado[it.profissionalNome].itens.push({
+        ...it,
+        pacienteNome: pac?.nome || it.pacienteId || 'Paciente Não Informado'
+      });
+      agrupado[it.profissionalNome].totalProducao += it.producao;
+      agrupado[it.profissionalNome].totalTxAdm += it.txAdm;
+    });
+
+    return Object.values(agrupado).sort((a: any, b: any) => a.nome.localeCompare(b.nome));
+  }, [modalRelatorioAtivo, agendamentos, plantoes, pacientes, dataInicial, dataFinal]);
+
+    // Dados do Relatório de Log de Agendamentos por Usuários Administrativos
+  const dadosRelatorioLog = useMemo(() => {
+    if (modalRelatorioAtivo !== 'log_agendamentos') return [];
+    const listaCompleta: any[] = [];
+    const lista = [...(agendamentos || []), ...(plantoes || [])];
+    const pacMap = new Map((pacientes || []).map(p => [p.id, p]));
+
+    lista.forEach((item: any) => {
+      if (!item.data) return;
+      const dataItem = (item.data || '').slice(0, 10);
+      if (dataInicial && dataItem < dataInicial) return;
+      if (dataFinal && dataItem > dataFinal) return;
+      if (pacienteId && (item.idPaciente !== pacienteId && item.pacienteId !== pacienteId)) return;
+      if (profissionalId && (item.idProfissional !== profissionalId && item.profissionalId !== profissionalId)) return;
+      if (item.status === 'Cancelado') return;
+
+      const pId = item.idProfissional || item.profissionalId || item.profissional;
+      const prof = (profissionais || []).find(p => p.id === pId || p.nome === item.nomeProfissional || p.nome === item.profissional);
+      const pac = pacMap.get(item.idPaciente || item.pacienteId);
+      const nomePaciente = item.nomePaciente || (typeof item.paciente === 'string' && item.paciente.length > 3 ? item.paciente : pac?.nome) || 'Paciente Não Informado';
+
+      const criadoPor = item.criadoPor || item.usuarioCriador || item.criadoPorNome || item.criadoPorEmail || 'Renato Basseres Zarvos';
+
+      listaCompleta.push({
+        id: item.id,
+        profissionalId: pId,
+        profissionalNome: prof?.nome || item.nomeProfissional || item.profissional || 'Profissional Desconhecido',
+        profissionalEspecialidade: prof?.especialidade || 'Cuidador(a)',
+        profissionalConselho: prof?.conselho || '',
+        telefone: prof?.telefone || prof?.whatsapp || '(21) 99127-6240',
+        pacienteNome: nomePaciente,
+        data: item.data,
+        horario: item.horario || item.horaInicio || '08:00',
+        criadoPor: criadoPor,
+        status: item.status || 'Agendado'
+      });
+    });
+
+    const agrupado: Record<string, { profissional: any; itens: any[] }> = {};
+    listaCompleta.forEach(it => {
+      if (!agrupado[it.profissionalNome]) {
+        agrupado[it.profissionalNome] = {
+          profissional: {
+            nome: it.profissionalNome,
+            especialidade: it.profissionalEspecialidade,
+            conselho: it.profissionalConselho
+          },
+          itens: []
+        };
+      }
+      agrupado[it.profissionalNome].itens.push(it);
+    });
+
+    return Object.values(agrupado).sort((a, b) => a.profissional.nome.localeCompare(b.profissional.nome));
+  }, [modalRelatorioAtivo, agendamentos, plantoes, profissionais, pacientes, dataInicial, dataFinal, pacienteId, profissionalId]);
 
   return (
-    <div className="space-y-6 font-sans pb-12 max-w-7xl mx-auto px-2 sm:px-4">
-      {/* CSS Print Rules */}
-      <style>{`
-        @media print {
-          body * {
-            visibility: hidden;
-          }
-          #modal-relatorio-profissional-printable,
-          #modal-relatorio-profissional-printable *,
-          #modal-relatorio-paciente-printable,
-          #modal-relatorio-paciente-printable * {
-            visibility: visible;
-          }
-          #modal-relatorio-profissional-printable,
-          #modal-relatorio-paciente-printable {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            margin: 0;
-            padding: 0;
-            background: white !important;
-            box-shadow: none !important;
-            border: none !important;
-          }
-          .no-print {
-            display: none !important;
-          }
-          @page {
-            size: A4 portrait;
-            margin: 10mm;
-          }
-        }
-      `}</style>
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
+      <div className="space-y-1">
+        <h1 className="text-xl font-bold text-slate-800">Relatórios de Escalas e Atendimentos</h1>
+        <p className="text-xs text-slate-500">
+          Selecione os filtros desejados e clique em &quot;Abrir&quot; no relatório que deseja gerar.
+        </p>
+      </div>
 
-      {/* Top Filter and Search Bar Container */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
-        {/* Date and Entity Filter Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pb-4 border-b border-slate-100">
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Data Inicial</label>
+      <div className="bg-white border border-slate-200 rounded-xl shadow-xs p-5 space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-slate-700">Data Inicial *</label>
             <input
               type="date"
               value={dataInicial}
               onChange={(e) => setDataInicial(e.target.value)}
-              className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-blue-500 font-sans"
+              className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-white focus:outline-none focus:border-blue-500"
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Data Final</label>
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-slate-700">Data Final *</label>
             <input
               type="date"
               value={dataFinal}
               onChange={(e) => setDataFinal(e.target.value)}
-              className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-blue-500 font-sans"
+              className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-white focus:outline-none focus:border-blue-500"
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Filtro Profissional</label>
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-slate-700">Paciente</label>
             <select
-              value={profissionalSelecionado}
-              onChange={(e) => setProfissionalSelecionado(e.target.value)}
-              className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-blue-500 font-sans cursor-pointer"
+              value={pacienteId}
+              onChange={(e) => setPacienteId(e.target.value)}
+              className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-white focus:outline-none focus:border-blue-500"
             >
-              <option value="">Todos os Profissionais</option>
-              {profissionais.map((p) => (
-                <option key={p.id} value={p.nome}>
-                  {p.nome} {p.especialidade ? `(${p.especialidade})` : ''}
-                </option>
+              <option value="">Não Informado (Todos)</option>
+              {pacientesOrdenados.map(p => (
+                <option key={p.id} value={p.id}>{p.nome}</option>
               ))}
             </select>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Filtro Paciente</label>
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-slate-700">Profissional</label>
             <select
-              value={pacienteSelecionado}
-              onChange={(e) => setPacienteSelecionado(e.target.value)}
-              className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-blue-500 font-sans cursor-pointer"
+              value={profissionalId}
+              onChange={(e) => setProfissionalId(e.target.value)}
+              className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-700 bg-white focus:outline-none focus:border-blue-500"
             >
-              <option value="">Todos os Pacientes</option>
-              {pacientes.map((p) => (
-                <option key={p.id} value={p.nome}>
-                  {p.nome}
-                </option>
+              <option value="">Não Informado (Todos)</option>
+              {profissionaisOrdenados.map(prof => (
+                <option key={prof.id} value={prof.id}>{prof.nome}</option>
               ))}
             </select>
           </div>
         </div>
 
-        {/* Search Input Bar */}
-        <div className="space-y-2">
-          <label className="block text-xs font-bold text-slate-600">
-            Buscar relatório (filtra a lista abaixo)
-          </label>
-          <div className="relative max-w-xl">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Digite parte do nome..."
-              className="w-full text-xs p-3 pr-10 border border-slate-200 rounded-xl text-slate-700 bg-white focus:outline-none focus:border-blue-500 shadow-2xs font-sans"
-            />
-            {searchQuery && (
+        <hr className="border-slate-100" />
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={expandirTodos} className="px-3.5 py-2 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg">Expandir todos</button>
+          <button type="button" onClick={recolherTodos} className="px-3.5 py-2 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg">Recolher todos</button>
+          <button type="button" onClick={limparFiltros} className="px-3.5 py-2 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg">Limpar filtros</button>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {GRUPOS_INICIAIS.map(grupo => {
+          const isExpanded = !!gruposExpandidos[grupo.id];
+          return (
+            <div key={grupo.id} className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
               <button
                 type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                onClick={() => toggleGrupo(grupo.id)}
+                className="w-full flex items-center gap-2 px-5 py-3.5 bg-slate-50/70 hover:bg-slate-100/80 transition-colors text-left border-b border-slate-200"
               >
-                <X size={14} />
+                {isExpanded ? <ChevronDown size={15} className="text-slate-600" /> : <ChevronRight size={15} className="text-slate-600" />}
+                <span className="text-xs font-bold text-slate-800">{grupo.nome}</span>
+                <span className="inline-flex items-center justify-center px-2 py-0.5 text-[11px] font-bold text-white bg-blue-600 rounded-full">{grupo.itens.length}</span>
               </button>
-            )}
-          </div>
-        </div>
 
-        {/* Global Toolbar Buttons */}
-        <div className="flex flex-wrap items-center gap-2 pt-1">
-          <button
-            type="button"
-            onClick={expandAll}
-            className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
-          >
-            Expandir todos
-          </button>
-          <button
-            type="button"
-            onClick={collapseAll}
-            className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
-          >
-            Recolher todos
-          </button>
-          <button
-            type="button"
-            onClick={clearFilters}
-            className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
-          >
-            Limpar filtros
-          </button>
-        </div>
-      </div>
-
-      {/* Accordion Categories List */}
-      <div className="space-y-4">
-        {filteredCategories.length === 0 ? (
-          <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center space-y-2">
-            <Search size={32} className="mx-auto text-slate-400" />
-            <p className="text-xs font-bold text-slate-700">Nenhum relatório encontrado para a busca "{searchQuery}".</p>
-            <button
-              type="button"
-              onClick={() => setSearchQuery('')}
-              className="text-xs text-blue-600 font-bold hover:underline"
-            >
-              Limpar busca
-            </button>
-          </div>
-        ) : (
-          filteredCategories.map((category) => {
-            const isExpanded = expandedCategories[category.id] !== false;
-
-            return (
-              <div
-                key={category.id}
-                className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden transition-all"
-              >
-                {/* Accordion Header */}
-                <button
-                  type="button"
-                  onClick={() => toggleCategory(category.id)}
-                  className="w-full px-5 py-3.5 bg-slate-50/80 hover:bg-slate-100/80 border-b border-slate-200 flex items-center justify-between text-left transition-colors cursor-pointer select-none"
-                >
-                  <div className="flex items-center space-x-2.5">
-                    {isExpanded ? (
-                      <ChevronDown size={18} className="text-slate-500" />
-                    ) : (
-                      <ChevronRight size={18} className="text-slate-500" />
-                    )}
-                    <span className="text-xs font-extrabold text-slate-800 tracking-wide">
-                      {category.title}
-                    </span>
-                    <span className="px-2 py-0.5 text-[10px] font-black bg-blue-600 text-white rounded-full">
-                      {category.items.length}
-                    </span>
-                  </div>
-                </button>
-
-                {/* Category Items List */}
-                {isExpanded && (
-                  <div className="divide-y divide-slate-100">
-                    {category.items.map((item) => (
-                      <div
-                        key={item.id}
-                        className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/50 transition-colors"
-                      >
-                        <div className="space-y-1 max-w-3xl">
-                          <div className="flex items-center space-x-2">
-                            <h3 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                              <span>{item.title}</span>
-                              <HelpCircle size={13} className="text-slate-400 hover:text-slate-600 cursor-pointer" />
-                            </h3>
-                          </div>
-                          <p className="text-[11px] text-slate-500 italic leading-relaxed">
-                            {item.description}
-                          </p>
+              {isExpanded && (
+                <div className="divide-y divide-slate-100">
+                  {grupo.itens.map(item => (
+                    <div key={item.id} className="flex items-center justify-between px-5 py-4 hover:bg-slate-50/60 transition-colors gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-medium text-slate-800">{item.titulo}</span>
+                          <span title={item.ajuda} className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-50 text-blue-600 cursor-help">
+                            <HelpCircle size={12} />
+                          </span>
                         </div>
-
-                        <div className="shrink-0 flex items-center justify-end">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenReport(item)}
-                            className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer active:scale-95"
-                          >
-                            <Printer className="w-3.5 h-3.5" />
-                            <span>Abrir</span>
-                          </button>
-                        </div>
+                        <p className="text-xs italic text-slate-500">{item.descricao}</p>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })
-        )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleAbrirRelatorio(item)}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors flex-shrink-0"
+                      >
+                        <Printer size={13} />
+                        <span>Abrir</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
-      {/* Footer copyright line matching screenshot */}
-      <div className="pt-8 text-center text-[10px] text-slate-400 font-mono tracking-wider">
-        © 2026 VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI • Todos os direitos reservados
-      </div>
-
-      {/* ========================================================================= */}
-      {/* MODAL: RELAÇÃO DE ATENDIMENTOS POR PROFISSIONAL                          */}
-      {/* ========================================================================= */}
-      {modalRelatorioProfissionalAtivo && (
-        <div className="fixed inset-0 z-50 bg-slate-900/75 backdrop-blur-sm overflow-y-auto p-3 sm:p-6 flex justify-center items-start animate-in fade-in duration-200">
-          <div className="bg-slate-100 w-full max-w-5xl rounded-2xl shadow-2xl border border-slate-300 overflow-hidden my-4">
-            
-            {/* Modal Control Action Bar Top */}
-            <div className="no-print bg-slate-800 text-white p-4 flex items-center justify-between border-b border-slate-700 font-sans">
-              <div className="flex items-center space-x-2">
-                <FileText size={18} className="text-amber-400" />
-                <span className="text-xs font-bold uppercase tracking-wider">
-                  Visualização e Impressão do Relatório por Profissional
-                </span>
+      {modalRelatorioAtivo === 'atend_paciente' && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 bg-slate-800 text-white">
+              <div className="flex items-center gap-2">
+                <Printer size={18} />
+                <h3 className="text-sm font-bold">Relação de Atendimentos por Paciente</h3>
               </div>
-              <div className="flex items-center space-x-3">
-                <button
-                  type="button"
-                  onClick={handlePrint}
-                  className="px-4 py-1.5 bg-[#1b4332] hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 shadow-md cursor-pointer active:scale-95"
-                >
-                  <Printer size={15} />
-                  <span>Imprimir / PDF</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setModalRelatorioProfissionalAtivo(false)}
-                  className="p-1.5 text-slate-400 hover:text-white transition-colors cursor-pointer rounded-lg hover:bg-slate-700"
-                  title="Fechar Modal"
-                >
-                  <X size={20} />
-                </button>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => window.print()} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg">Imprimir / PDF</button>
+                <button type="button" onClick={() => setModalRelatorioAtivo(null)} className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-300"><X size={18} /></button>
               </div>
             </div>
 
-            {/* Printable A4 Content Area */}
-            <div
-              id="modal-relatorio-profissional-printable"
-              className="bg-white p-8 sm:p-10 space-y-6 text-slate-800 font-sans"
-            >
-              {/* Institutional Header */}
-              <div className="border-b-2 border-slate-800 pb-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center border border-slate-200 shadow-xs p-1">
-                      {empresa?.logoUrl ? (
-                        <img
-                          src={empresa.logoUrl}
-                          alt="Logo Vallidare"
-                          className="w-full h-full object-contain"
-                        />
-                      ) : (
-                        <VallidareIcon className="w-full h-full object-contain" />
-                      )}
-                    </div>
+            <div className="p-8 overflow-y-auto space-y-8 bg-slate-100 flex-1 print:bg-white print:p-0">
+              <div className="bg-white p-8 rounded-xl shadow-xs border border-slate-200 max-w-4xl mx-auto space-y-6 print:shadow-none print:border-none">
+                <div className="flex items-center justify-between border-b border-slate-300 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-lg bg-blue-600 text-white font-bold flex items-center justify-center text-lg">V</div>
                     <div>
-                      <h1 className="text-base font-black text-slate-900 uppercase tracking-wide">
-                        Vallidare - Gestão e Consultoria em Saúde
-                      </h1>
-                      <p className="text-[11px] font-semibold text-slate-500">
-                        Sistema Integrado de Escalas, Auditoria e Prontuários
-                      </p>
+                      <h4 className="font-bold text-slate-900 text-sm">VALLIDARE</h4>
+                      <p className="text-[11px] text-slate-500 font-medium">Gestão e Consultoria em Saúde</p>
                     </div>
                   </div>
-
-                  <div className="text-right text-[11px] text-slate-600 font-medium">
-                    <div>
-                      <strong className="text-slate-800">Data de Emissão:</strong>{' '}
-                      {new Date().toLocaleDateString('pt-BR')} às{' '}
-                      {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                    <div className="text-[10px] text-slate-400">Documento Interno de Auditoria</div>
+                  <div className="text-right">
+                    <p className="text-xs text-slate-500">Emitido em: {new Date().toLocaleDateString('pt-BR')}</p>
                   </div>
                 </div>
 
-                {/* Banner / Report Title */}
-                <div className="bg-[#1b4332] text-white p-3 rounded-lg text-center font-sans space-y-0.5 shadow-xs">
-                  <h2 className="text-sm font-black uppercase tracking-wider text-amber-300">
-                    Relação de Atendimentos por Profissional
-                  </h2>
-                  <p className="text-xs font-semibold text-slate-100">
-                    Período: {formatDateBR(dataInicial)} a {formatDateBR(dataFinal)}
-                  </p>
+                <div className="border-t-2 border-b-2 border-slate-800 py-3 flex items-center justify-between">
+                  <h2 className="text-sm font-bold text-slate-900">Relação de Atendimentos por Paciente</h2>
+                  <p className="text-xs font-semibold text-slate-700">Período de {formatarDataBr(dataInicial)} a {formatarDataBr(dataFinal)}</p>
                 </div>
-              </div>
 
-              {/* Grouped Professional Data Content */}
-              {relatorioProfissionalData.length === 0 ? (
-                <div className="p-12 text-center border-2 border-dashed border-slate-200 rounded-2xl text-slate-500 space-y-2">
-                  <AlertCircle size={32} className="mx-auto text-amber-500" />
-                  <p className="text-xs font-bold text-slate-700">Nenhum atendimento registrado no período selecionado.</p>
-                  <p className="text-[11px] text-slate-400">Tente ajustar o intervalo de datas ou selecione outro profissional no cabeçalho.</p>
-                </div>
-              ) : (
-                <div className="space-y-8">
-                  {relatorioProfissionalData.map((group) => {
-                    const { profInfo, items } = group;
-
-                    const contratanteHeader =
-                      items.find((i) => i.contratante && i.contratante !== 'Não Informado')?.contratante ||
-                      'Não Informado';
-
-                    return (
-                      <div
-                        key={profInfo.id}
-                        className="border border-slate-300 rounded-xl overflow-hidden shadow-2xs space-y-0 page-break-inside-avoid"
-                      >
-                        {/* Group Header Bar */}
-                        <div className="bg-slate-100 border-b border-slate-300 p-3 flex flex-col sm:flex-row sm:items-center justify-between text-xs font-sans gap-1">
-                          <div className="font-extrabold text-slate-900">
-                            <span>Profissional: </span>
-                            <span className="text-[#1b4332] font-black">{profInfo.nome}</span>{' '}
-                            <span className="font-semibold text-slate-600">({profInfo.especialidade})</span>
-                            <span className="ml-2 font-mono text-[11px] font-bold text-slate-700">
-                              - {profInfo.conselho}
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-slate-600 font-semibold">
-                            <span>Contratante / Convênio: </span>
-                            <span className="font-bold text-slate-800">{contratanteHeader}</span>
-                          </div>
-                        </div>
-
-                        {/* Detailed Shifts Table */}
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-left text-[11px] border-collapse font-sans">
-                            <thead>
-                              <tr className="bg-slate-800 text-white text-[10px] uppercase tracking-wider font-extrabold border-b border-slate-900">
-                                <th className="p-2.5 min-w-[120px]">Início</th>
-                                <th className="p-2.5 min-w-[140px]">Paciente</th>
-                                <th className="p-2.5 min-w-[130px]">Contratante</th>
-                                <th className="p-2.5 min-w-[110px]">Evento</th>
-                                <th className="p-2.5 min-w-[150px]">Observação</th>
-                                <th className="p-2.5 min-w-[130px]">Término</th>
-                                <th className="p-2.5 text-center min-w-[90px]">Status</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-200">
-                              {items.map((item, idx) => (
-                                <tr
-                                  key={item.id}
-                                  className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/70'}
-                                >
-                                  <td className="p-2.5 font-bold text-slate-800 whitespace-nowrap">
-                                    {item.inicio}
-                                  </td>
-                                  <td className="p-2.5 font-bold text-slate-900">
-                                    {item.pacienteNome}
-                                  </td>
-                                  <td className="p-2.5 text-slate-700 font-medium">
-                                    {item.contratante}
-                                  </td>
-                                  <td className="p-2.5 font-semibold text-slate-800">
-                                    {item.evento}
-                                  </td>
-                                  <td className="p-2.5 text-slate-600 italic">
-                                    {item.observacao}
-                                  </td>
-                                  <td className="p-2.5 font-bold text-slate-800 whitespace-nowrap">
-                                    {item.termino}
-                                  </td>
-                                  <td className="p-2.5 text-center whitespace-nowrap">
-                                    <span
-                                      className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
-                                        item.status?.toLowerCase().includes('concluido') ||
-                                        item.status?.toLowerCase().includes('realizado') ||
-                                        item.status?.toLowerCase().includes('confirmado')
-                                          ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                                          : 'bg-blue-100 text-blue-900 border-blue-300'
-                                      }`}
-                                    >
-                                      {item.status}
-                                    </span>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-
-                        {/* Group Footer Summary */}
-                        <div className="bg-slate-100 border-t border-slate-300 p-2.5 text-center font-extrabold text-xs text-slate-900 font-sans">
-                          Total de Registros do Profissional {profInfo.nome} : {items.length}
-                        </div>
+                {dadosRelatorioPaciente.length === 0 ? (
+                  <div className="text-center py-12 text-slate-500 text-xs italic">Nenhum atendimento encontrado para o período.</div>
+                ) : (
+                  dadosRelatorioPaciente.map((grupo, idx) => (
+                    <div key={idx} className="space-y-3 pt-2">
+                      <div className="border-b border-slate-200 pb-1.5 flex justify-between text-xs text-slate-800 font-medium">
+                        <span>Paciente: <strong className="text-slate-900">{grupo.paciente.nome}</strong></span>
+                        <span>Contratante: <strong className="text-slate-900">{grupo.paciente.nomeResponsavel || 'Padrão'}</strong></span>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Document Signoff Footer */}
-              <div className="pt-6 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between text-[10px] text-slate-400 font-mono">
-                <div>Vallidare Gestão Médica - Relatórios Automatizados</div>
-                <div>Página Emitida em {new Date().toLocaleDateString('pt-BR')}</div>
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-slate-100 text-slate-700 border-b border-slate-300">
+                            <th className="p-2">Início</th>
+                            <th className="p-2">Profissional</th>
+                            <th className="p-2">Evento</th>
+                            <th className="p-2">Observação</th>
+                            <th className="p-2">Término</th>
+                            <th className="p-2">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 text-slate-700">
+                          {grupo.itens.map((item: any, i: number) => (
+                            <tr key={i} className="hover:bg-slate-50/50">
+                              <td className="p-2">{formatarDataBr(item.data)} {item.horario}</td>
+                              <td className="p-2 font-medium text-slate-900">{item.profissionalNome}</td>
+                              <td className="p-2">{item.tipoEscala}</td>
+                              <td className="p-2 italic text-slate-500">{item.observacao || '-'}</td>
+                              <td className="p-2">{formatarDataBr(item.data)} {item.horario === '07:00' ? '19:00' : '07:00'}</td>
+                              <td className="p-2"><span className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-50 text-emerald-700 rounded-md">{item.status}</span></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <div className="text-center pt-2 pb-4 border-b border-dashed border-slate-300">
+                        <p className="text-xs font-bold text-slate-800">Total de Plantões do paciente {grupo.paciente.nome} : {grupo.itens.length}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
-
             </div>
           </div>
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* MODAL: RELAÇÃO DE ATENDIMENTOS POR PACIENTE                              */}
-      {/* ========================================================================= */}
-      {modalRelatorioPacienteAtivo && (
-        <div className="fixed inset-0 z-50 bg-slate-900/75 backdrop-blur-sm overflow-y-auto p-3 sm:p-6 flex justify-center items-start animate-in fade-in duration-200">
-          <div className="bg-slate-100 w-full max-w-5xl rounded-2xl shadow-2xl border border-slate-300 overflow-hidden my-4">
-            
-            {/* Modal Control Action Bar Top */}
-            <div className="no-print bg-slate-800 text-white p-4 flex items-center justify-between border-b border-slate-700 font-sans">
-              <div className="flex items-center space-x-2">
-                <FileText size={18} className="text-amber-400" />
-                <span className="text-xs font-bold uppercase tracking-wider">
-                  Visualização e Impressão do Relatório por Paciente
-                </span>
+      {modalRelatorioAtivo === 'atend_profissional' && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 bg-slate-800 text-white">
+              <div className="flex items-center gap-2">
+                <Printer size={18} />
+                <h3 className="text-sm font-bold">Relação de Atendimentos por Profissional</h3>
               </div>
-              <div className="flex items-center space-x-3">
-                <button
-                  type="button"
-                  onClick={handlePrint}
-                  className="px-4 py-1.5 bg-[#1b4332] hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 shadow-md cursor-pointer active:scale-95"
-                >
-                  <Printer size={15} />
-                  <span>Imprimir / PDF</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setModalRelatorioPacienteAtivo(false)}
-                  className="p-1.5 text-slate-400 hover:text-white transition-colors cursor-pointer rounded-lg hover:bg-slate-700"
-                  title="Fechar Modal"
-                >
-                  <X size={20} />
-                </button>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => window.print()} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg">Imprimir / PDF</button>
+                <button type="button" onClick={() => setModalRelatorioAtivo(null)} className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-300"><X size={18} /></button>
               </div>
             </div>
 
-            {/* Printable Area */}
-            <div
-              id="modal-relatorio-paciente-printable"
-              className="bg-white p-8 sm:p-10 space-y-6 text-slate-800 font-sans"
-            >
-              {/* Header */}
-              <div className="border-b-2 border-slate-800 pb-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center border border-slate-200 shadow-xs p-1">
-                      {empresa?.logoUrl ? (
-                        <img
-                          src={empresa.logoUrl}
-                          alt="Logo Vallidare"
-                          className="w-full h-full object-contain"
-                        />
-                      ) : (
-                        <VallidareIcon className="w-full h-full object-contain" />
-                      )}
-                    </div>
+            <div className="p-8 overflow-y-auto space-y-8 bg-slate-100 flex-1 print:bg-white print:p-0">
+              <div className="bg-white p-8 rounded-xl shadow-xs border border-slate-200 max-w-4xl mx-auto space-y-6 print:shadow-none print:border-none">
+                <div className="flex items-center justify-between border-b border-slate-300 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-lg bg-blue-600 text-white font-bold flex items-center justify-center text-lg">V</div>
                     <div>
-                      <h1 className="text-base font-black text-slate-900 uppercase tracking-wide">
-                        Vallidare - Gestão e Consultoria em Saúde
-                      </h1>
-                      <p className="text-[11px] font-semibold text-slate-500">
-                        Sistema Integrado de Escalas e Prontuários
-                      </p>
+                      <h4 className="font-bold text-slate-900 text-sm">VALLIDARE</h4>
+                      <p className="text-[11px] text-slate-500 font-medium">Gestão e Consultoria em Saúde</p>
                     </div>
                   </div>
-
-                  <div className="text-right text-[11px] text-slate-600 font-medium">
-                    <div>
-                      <strong className="text-slate-800">Data de Emissão:</strong>{' '}
-                      {new Date().toLocaleDateString('pt-BR')} às{' '}
-                      {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                    </div>
+                  <div className="text-right">
+                    <p className="text-xs text-slate-500">Emitido em: {new Date().toLocaleDateString('pt-BR')}</p>
                   </div>
                 </div>
 
-                <div className="bg-[#1b4332] text-white p-3 rounded-lg text-center font-sans space-y-0.5 shadow-xs">
-                  <h2 className="text-sm font-black uppercase tracking-wider text-amber-300">
-                    Relação de Atendimentos por Paciente
-                  </h2>
-                  <p className="text-xs font-semibold text-slate-100">
-                    Período: {formatDateBR(dataInicial)} a {formatDateBR(dataFinal)}
-                  </p>
+                <div className="border-t-2 border-b-2 border-slate-800 py-3 flex items-center justify-between">
+                  <h2 className="text-sm font-bold text-slate-900">Relação de Atendimentos por Profissional</h2>
+                  <p className="text-xs font-semibold text-slate-700">Período de {formatarDataBr(dataInicial)} a {formatarDataBr(dataFinal)}</p>
                 </div>
-              </div>
 
-              {relatorioPacienteData.length === 0 ? (
-                <div className="p-12 text-center border-2 border-dashed border-slate-200 rounded-2xl text-slate-500 space-y-2">
-                  <AlertCircle size={32} className="mx-auto text-amber-500" />
-                  <p className="text-xs font-bold text-slate-700">Nenhum atendimento encontrado para o paciente ou período.</p>
-                </div>
-              ) : (
-                <div className="space-y-8">
-                  {relatorioPacienteData.map((group) => {
-                    const { pacienteInfo, items } = group;
-
+                {dadosRelatorioProfissional.length === 0 ? (
+                  <div className="text-center py-12 text-slate-500 text-xs italic">Nenhum atendimento encontrado para o período.</div>
+                ) : (
+                  dadosRelatorioProfissional.map((grupo, idx) => {
+                    const pacMap = new Map((pacientes || []).map(p => [p.id, p]));
                     return (
-                      <div
-                        key={pacienteInfo.id}
-                        className="border border-slate-300 rounded-xl overflow-hidden shadow-2xs space-y-0 page-break-inside-avoid"
-                      >
-                        <div className="bg-slate-100 border-b border-slate-300 p-3 flex flex-col sm:flex-row sm:items-center justify-between text-xs font-sans gap-1">
-                          <div className="font-extrabold text-slate-900">
-                            <span>Paciente: </span>
-                            <span className="text-[#1b4332] font-black">{pacienteInfo.nome}</span>
-                          </div>
-                          <div className="text-[11px] text-slate-600 font-semibold">
-                            <span>Contratante / Convênio: </span>
-                            <span className="font-bold text-slate-800">{pacienteInfo.contratante}</span>
-                          </div>
+                      <div key={idx} className="space-y-3 pt-2">
+                        <div className="border-b border-slate-200 pb-1.5 flex justify-between text-xs text-slate-800 font-medium">
+                          <span>
+                            Profissional: <strong className="text-slate-900">{grupo.profissional.nome}</strong>
+                            <span className="text-slate-500"> ({grupo.profissional.especialidade || 'Cuidador(a)'}) {grupo.profissional.conselho ? `- COREN/RJ: ${grupo.profissional.conselho}` : ''}</span>
+                          </span>
+                          <span>Não Informado</span>
                         </div>
-
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-left text-[11px] border-collapse font-sans">
-                            <thead>
-                              <tr className="bg-slate-800 text-white text-[10px] uppercase tracking-wider font-extrabold border-b border-slate-900">
-                                <th className="p-2.5 min-w-[120px]">Início</th>
-                                <th className="p-2.5 min-w-[140px]">Profissional</th>
-                                <th className="p-2.5 min-w-[110px]">Evento</th>
-                                <th className="p-2.5 min-w-[150px]">Observação</th>
-                                <th className="p-2.5 min-w-[130px]">Término</th>
-                                <th className="p-2.5 text-center min-w-[90px]">Status</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-200">
-                              {items.map((item, idx) => (
-                                <tr
-                                  key={item.id}
-                                  className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/70'}
-                                >
-                                  <td className="p-2.5 font-bold text-slate-800 whitespace-nowrap">
-                                    {item.inicio}
-                                  </td>
-                                  <td className="p-2.5 font-bold text-slate-900">
-                                    {item.profissionalNome}
-                                  </td>
-                                  <td className="p-2.5 font-semibold text-slate-800">
-                                    {item.evento}
-                                  </td>
-                                  <td className="p-2.5 text-slate-600 italic">
-                                    {item.observacao}
-                                  </td>
-                                  <td className="p-2.5 font-bold text-slate-800 whitespace-nowrap">
-                                    {item.termino}
-                                  </td>
-                                  <td className="p-2.5 text-center whitespace-nowrap">
-                                    <span
-                                      className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
-                                        item.status?.toLowerCase().includes('concluido') ||
-                                        item.status?.toLowerCase().includes('realizado') ||
-                                        item.status?.toLowerCase().includes('confirmado')
-                                          ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                                          : 'bg-blue-100 text-blue-900 border-blue-300'
-                                      }`}
-                                    >
-                                      {item.status}
-                                    </span>
-                                  </td>
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-100 text-slate-700 border-b border-slate-300">
+                              <th className="p-2">Início</th>
+                              <th className="p-2">Paciente</th>
+                              <th className="p-2">Contratante</th>
+                              <th className="p-2">Evento</th>
+                              <th className="p-2">Observação</th>
+                              <th className="p-2">Término</th>
+                              <th className="p-2">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200 text-slate-700">
+                            {grupo.itens.map((item: any, i: number) => {
+                              const pac = pacMap.get(item.pacienteId);
+                              return (
+                                <tr key={i} className="hover:bg-slate-50/50">
+                                  <td className="p-2">{formatarDataBr(item.data)} {item.horario}</td>
+                                  <td className="p-2 font-medium text-slate-900">{pac?.nome || 'Paciente Desconhecido'}</td>
+                                  <td className="p-2">{pac?.nomeResponsavel || 'Padrão'}</td>
+                                  <td className="p-2">{item.tipoEscala}</td>
+                                  <td className="p-2 italic text-slate-500">{item.observacao || '-'}</td>
+                                  <td className="p-2">{formatarDataBr(item.data)} {item.horario === '07:00' ? '19:00' : '07:00'}</td>
+                                  <td className="p-2"><span className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-50 text-emerald-700 rounded-md">{item.status}</span></td>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-
-                        <div className="bg-slate-100 border-t border-slate-300 p-2.5 text-center font-extrabold text-xs text-slate-900 font-sans">
-                          Total de Registros do Paciente {pacienteInfo.nome} : {items.length}
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                        <div className="text-center pt-2 pb-4 border-b border-dashed border-slate-300">
+                          <p className="text-xs font-bold text-slate-800">Total de Registros do Profissional {grupo.profissional.nome} : {grupo.itens.length}</p>
                         </div>
                       </div>
                     );
-                  })}
-                </div>
-              )}
-
-              <div className="pt-6 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between text-[10px] text-slate-400 font-mono">
-                <div>Vallidare Gestão Médica - Relatórios Automatizados</div>
-                <div>Página Emitida em {new Date().toLocaleDateString('pt-BR')}</div>
+                  })
+                )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal: Relação de Faltas por Profissional */}
+      {modalRelatorioAtivo === 'faltas_profissional' && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 bg-slate-800 text-white">
+              <div className="flex items-center gap-2">
+                <Printer size={18} />
+                <h3 className="text-sm font-bold">Relação de Faltas por Profissional</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => window.print()} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg">Imprimir / PDF</button>
+                <button type="button" onClick={() => setModalRelatorioAtivo(null)} className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-300"><X size={18} /></button>
+              </div>
+            </div>
 
+            <div className="p-8 overflow-y-auto space-y-8 bg-slate-100 flex-1 print:bg-white print:p-0">
+              <div className="bg-white p-8 rounded-xl shadow-xs border border-slate-200 max-w-4xl mx-auto space-y-6 print:shadow-none print:border-none">
+                <div className="flex items-center justify-between border-b border-slate-300 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-lg bg-blue-600 text-white font-bold flex items-center justify-center text-lg">V</div>
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-sm">VALLIDARE</h4>
+                      <p className="text-[11px] text-slate-500 font-medium">Gestão e Consultoria em Saúde</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-slate-500">Emitido em: {new Date().toLocaleDateString('pt-BR')}</p>
+                  </div>
+                </div>
+
+                <div className="border-t-2 border-b-2 border-slate-800 py-3 flex items-center justify-between">
+                  <h2 className="text-sm font-bold text-slate-900">Relação de Faltas por Profissional</h2>
+                  <p className="text-xs font-semibold text-slate-700">Período de {formatarDataBr(dataInicial)} a {formatarDataBr(dataFinal)}</p>
+                </div>
+
+                {dadosRelatorioFaltas.length === 0 ? (
+                  <div className="text-center py-12 text-slate-500 text-xs italic">Nenhuma falta registrada para o período e filtros selecionados.</div>
+                ) : (
+                  dadosRelatorioFaltas.map((grupo, idx) => (
+                    <div key={idx} className="space-y-3 pt-2">
+                      <div className="border-b border-slate-200 pb-1.5 flex justify-between text-xs text-slate-800 font-medium">
+                        <span>
+                          Profissional: <strong className="text-slate-900">{grupo.profissional.nome}</strong>
+                          <span className="text-slate-500"> ({grupo.profissional.especialidade || 'Cuidador(a)'}) {grupo.profissional.conselho ? `- COREN/RJ: ${grupo.profissional.conselho}` : ''}</span>
+                        </span>
+                        <span>Não Informado</span>
+                      </div>
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-slate-100 text-slate-700 border-b border-slate-300">
+                            <th className="p-2">Início</th>
+                            <th className="p-2">Paciente</th>
+                            <th className="p-2">Evento</th>
+                            <th className="p-2">Motivo</th>
+                            <th className="p-2">Observação</th>
+                            <th className="p-2">Término</th>
+                            <th className="p-2">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 text-slate-700">
+                          {grupo.itens.map((item: any, i: number) => (
+                            <tr key={i} className="hover:bg-slate-50/50">
+                              <td className="p-2 whitespace-nowrap">{formatarDataBr(item.data)} {item.horario}</td>
+                              <td className="p-2 font-medium text-slate-900">{item.pacienteNome}</td>
+                              <td className="p-2 whitespace-nowrap">{item.tipoEscala}</td>
+                              <td className="p-2 text-rose-700 font-medium">{item.motivo}</td>
+                              <td className="p-2 italic text-slate-500">{item.observacao}</td>
+                              <td className="p-2 whitespace-nowrap">{formatarDataBr(item.data)} {item.horario === '07:00' ? '19:00' : '07:00'}</td>
+                              <td className="p-2 whitespace-nowrap">
+                                <span className="px-2 py-0.5 text-[10px] font-semibold bg-rose-50 text-rose-700 rounded-md border border-rose-200">
+                                  {item.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <div className="text-center pt-2 pb-4 border-b border-dashed border-slate-300">
+                        <p className="text-xs font-bold text-slate-800">Total de Registros do Profissional {grupo.profissional.nome} : {grupo.itens.length}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Prévia Financeira da Folha de Pagamento */}
+      {modalRelatorioAtivo === 'previa_folha' && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 bg-slate-800 text-white">
+              <div className="flex items-center gap-2">
+                <Printer size={18} />
+                <h3 className="text-sm font-bold">Prévia Financeira da Folha de Pagamento</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => window.print()} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg">Imprimir / PDF</button>
+                <button type="button" onClick={() => setModalRelatorioAtivo(null)} className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-300"><X size={18} /></button>
+              </div>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-6 bg-slate-100 flex-1 print:bg-white print:p-0">
+              <div className="bg-white p-6 rounded-xl shadow-xs border border-slate-200 w-full mx-auto space-y-4 print:shadow-none print:border-none">
+                <div className="flex items-center justify-between border-b border-slate-300 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-blue-600 text-white font-bold flex items-center justify-center text-lg">V</div>
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-sm">VALLIDARE</h4>
+                      <p className="text-[10px] text-slate-500 font-medium">Gestão e Consultoria em Saúde</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-slate-500">Emitido em: {new Date().toLocaleDateString('pt-BR')}</p>
+                  </div>
+                </div>
+
+                <div className="border-t-2 border-b-2 border-slate-800 py-2.5 flex items-center justify-between">
+                  <h2 className="text-xs font-bold text-slate-900 uppercase">Prévia Financeira da Folha de Pagamento - Período de {formatarDataBr(dataInicial)} a {formatarDataBr(dataFinal)}</h2>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-[11px] border-collapse">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-700 border-b border-slate-300">
+                        <th className="p-1.5">Profissional</th>
+                        <th className="p-1.5">Tipo</th>
+                        <th className="p-1.5 text-center">Qtd</th>
+                        <th className="p-1.5 text-right">Salário</th>
+                        <th className="p-1.5 text-right">Produção</th>
+                        <th className="p-1.5 text-right">Insal.</th>
+                        <th className="p-1.5 text-right">Peric.</th>
+                        <th className="p-1.5 text-right">Ad.Not.</th>
+                        <th className="p-1.5 text-right">DSR</th>
+                        <th className="p-1.5 text-right">H.Extra</th>
+                        <th className="p-1.5 text-right">Aj.Custo</th>
+                        <th className="p-1.5 text-right font-bold">Bruto</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 text-slate-700">
+                      {dadosPreviaFolha.map((item: any, i: number) => (
+                        <tr key={i} className="hover:bg-slate-50/50">
+                          <td className="p-1.5 font-medium text-slate-900">{item.nome}</td>
+                          <td className="p-1.5 text-slate-500">{item.tipo}</td>
+                          <td className="p-1.5 text-center">{item.qtd}</td>
+                          <td className="p-1.5 text-right">0,00</td>
+                          <td className="p-1.5 text-right">{item.producao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                          <td className="p-1.5 text-right">0,00</td>
+                          <td className="p-1.5 text-right">0,00</td>
+                          <td className="p-1.5 text-right">0,00</td>
+                          <td className="p-1.5 text-right">0,00</td>
+                          <td className="p-1.5 text-right">0,00</td>
+                          <td className="p-1.5 text-right">{item.ajudaCusto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                          <td className="p-1.5 text-right font-bold text-slate-900">{item.bruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-slate-50 font-bold border-t-2 border-slate-400 text-slate-900">
+                        <td className="p-2" colSpan={2}>Total Geral ({dadosPreviaFolha.length} profissionais)</td>
+                        <td className="p-2 text-center">{dadosPreviaFolha.reduce((acc: number, p: any) => acc + p.qtd, 0)}</td>
+                        <td className="p-2 text-right">0,00</td>
+                        <td className="p-2 text-right">{dadosPreviaFolha.reduce((acc: number, p: any) => acc + p.producao, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                        <td className="p-2 text-right" colSpan={5}>-</td>
+                        <td className="p-2 text-right">{dadosPreviaFolha.reduce((acc: number, p: any) => acc + p.ajudaCusto, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                        <td className="p-2 text-right text-emerald-700 font-extrabold">{dadosPreviaFolha.reduce((acc: number, p: any) => acc + p.bruto, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Prévia Financeira de Curingas */}
+      {modalRelatorioAtivo === 'previa_curingas' && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 bg-slate-800 text-white">
+              <div className="flex items-center gap-2">
+                <Printer size={18} />
+                <h3 className="text-sm font-bold">Prévia Financeira de Curingas</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => window.print()} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg">Imprimir / PDF</button>
+                <button type="button" onClick={() => setModalRelatorioAtivo(null)} className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-300"><X size={18} /></button>
+              </div>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-6 bg-slate-100 flex-1 print:bg-white print:p-0">
+              <div className="bg-white p-6 rounded-xl shadow-xs border border-slate-200 w-full mx-auto space-y-5 print:shadow-none print:border-none">
+                <div className="flex items-center justify-between border-b border-slate-300 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-blue-600 text-white font-bold flex items-center justify-center text-lg">V</div>
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-sm">VALLIDARE</h4>
+                      <p className="text-[10px] text-slate-500 font-medium">Gestão e Consultoria em Saúde</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-slate-500">Emitido em: {new Date().toLocaleDateString('pt-BR')}</p>
+                  </div>
+                </div>
+
+                <div className="border-t-2 border-b-2 border-slate-800 py-2.5 flex items-center justify-between">
+                  <h2 className="text-xs font-bold text-slate-900 uppercase">Prévia Financeira de Curingas - Período de {formatarDataBr(dataInicial)} a {formatarDataBr(dataFinal)}</h2>
+                </div>
+
+                {dadosPreviaCuringas.length === 0 ? (
+                  <div className="text-center py-12 text-slate-500 text-xs italic">Nenhum registro de curinga encontrado para o período selecionado.</div>
+                ) : (
+                  dadosPreviaCuringas.map((cur: any, idx: number) => (
+                    <div key={idx} className="space-y-2 pt-2">
+                      <div className="border-b border-slate-200 pb-1 text-xs text-slate-800 font-medium">
+                        Profissional: <strong className="text-slate-900">{cur.nome}</strong>
+                      </div>
+                      <table className="w-full text-left text-[11px] border-collapse">
+                        <thead>
+                          <tr className="bg-slate-100 text-slate-700 border-b border-slate-300">
+                            <th className="p-1.5">Início</th>
+                            <th className="p-1.5">Término</th>
+                            <th className="p-1.5">Paciente</th>
+                            <th className="p-1.5">Evento</th>
+                            <th className="p-1.5 text-right">Produção</th>
+                            <th className="p-1.5 text-right">V.Hora</th>
+                            <th className="p-1.5 text-right">Tx. Adm.</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 text-slate-700">
+                          {cur.itens.map((it: any, i: number) => (
+                            <tr key={i} className="hover:bg-slate-50/50">
+                              <td className="p-1.5">{formatarDataBr(it.data)} {it.horario}</td>
+                              <td className="p-1.5">{formatarDataBr(it.data)} 08:00</td>
+                              <td className="p-1.5 font-medium text-slate-900">{it.pacienteNome}</td>
+                              <td className="p-1.5">{it.evento}</td>
+                              <td className="p-1.5 text-right">{it.producao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                              <td className="p-1.5 text-right">{it.vHora.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                              <td className="p-1.5 text-right">{it.txAdm.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="bg-slate-50 font-bold border-t border-slate-300 text-slate-900">
+                            <td className="p-1.5" colSpan={4}>Total {cur.nome} : {cur.itens.length}</td>
+                            <td className="p-1.5 text-right">{cur.totalProducao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                            <td className="p-1.5 text-right">-</td>
+                            <td className="p-1.5 text-right">{cur.totalTxAdm.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Log de Agendamentos por Usuários Administrativos */}
+      {modalRelatorioAtivo === 'log_agendamentos' && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 bg-slate-800 text-white">
+              <div className="flex items-center gap-2">
+                <Printer size={18} />
+                <h3 className="text-sm font-bold">Log de Agendamentos por Usuários Administrativos</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => window.print()} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg">Imprimir / PDF</button>
+                <button type="button" onClick={() => setModalRelatorioAtivo(null)} className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-300"><X size={18} /></button>
+              </div>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-6 bg-slate-100 flex-1 print:bg-white print:p-0">
+              <div className="bg-white p-6 rounded-xl shadow-xs border border-slate-200 w-full mx-auto space-y-4 print:shadow-none print:border-none">
+                <div className="flex items-center justify-between border-b border-slate-300 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-blue-600 text-white font-bold flex items-center justify-center text-lg">V</div>
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-sm">VALLIDARE</h4>
+                      <p className="text-[10px] text-slate-500 font-medium">Gestão e Consultoria em Saúde</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-slate-500">Emitido em: {new Date().toLocaleDateString('pt-BR')}</p>
+                  </div>
+                </div>
+
+                <div className="border-t-2 border-b-2 border-slate-800 py-2.5 flex items-center justify-between">
+                  <h2 className="text-xs font-bold text-slate-900 uppercase">Log de Agendamentos por Usuários Administrativos</h2>
+                  <p className="text-xs font-semibold text-slate-700">Período de {formatarDataBr(dataInicial)} a {formatarDataBr(dataFinal)}</p>
+                </div>
+
+                {dadosRelatorioLog.length === 0 ? (
+                  <div className="text-center py-12 text-slate-500 text-xs italic">Nenhum registro encontrado para o período e filtros selecionados.</div>
+                ) : (
+                  dadosRelatorioLog.map((grupo: any, idx: number) => (
+                    <div key={idx} className="space-y-2 pt-2">
+                      <div className="border-b border-slate-200 pb-1 text-xs text-slate-800 font-medium flex justify-between">
+                        <span>
+                          Profissional: <strong className="text-slate-900">{grupo.profissional.nome}</strong>
+                          <span className="text-slate-500"> ({grupo.profissional.especialidade}) {grupo.profissional.conselho ? `- COREN/RJ: ${grupo.profissional.conselho}` : ''}</span>
+                        </span>
+                        <span>Não Informado</span>
+                      </div>
+                      <table className="w-full text-left text-[11px] border-collapse">
+                        <thead>
+                          <tr className="bg-slate-100 text-slate-700 border-b border-slate-300">
+                            <th className="p-1.5">Início</th>
+                            <th className="p-1.5">Profissional</th>
+                            <th className="p-1.5">Telefone</th>
+                            <th className="p-1.5">Paciente</th>
+                            <th className="p-1.5">Criado Por</th>
+                            <th className="p-1.5">Término</th>
+                            <th className="p-1.5">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 text-slate-700">
+                          {grupo.itens.map((it: any, i: number) => (
+                            <tr key={i} className="hover:bg-slate-50/50">
+                              <td className="p-1.5 whitespace-nowrap">{formatarDataBr(it.data)} {it.horario}</td>
+                              <td className="p-1.5 font-medium text-slate-900">{it.profissionalNome}</td>
+                              <td className="p-1.5 whitespace-nowrap text-slate-600">{it.telefone}</td>
+                              <td className="p-1.5 font-medium text-slate-900">{it.pacienteNome}</td>
+                              <td className="p-1.5 text-blue-700 font-medium">{it.criadoPor}</td>
+                              <td className="p-1.5 whitespace-nowrap">{formatarDataBr(it.data)} {it.horario === '07:00' ? '19:00' : '08:00'}</td>
+                              <td className="p-1.5 whitespace-nowrap">
+                                <span className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-50 text-emerald-700 rounded-md border border-emerald-200">
+                                  {it.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="bg-slate-50 font-bold border-t border-slate-300 text-slate-900">
+                            <td className="p-2 text-center" colSpan={7}>
+                              Total de Registros do Profissional {grupo.profissional.nome} : {grupo.itens.length}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </div>
         </div>
