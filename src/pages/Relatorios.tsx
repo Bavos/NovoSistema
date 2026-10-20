@@ -257,21 +257,29 @@ export const Relatorios: React.FC = () => {
     if (modalRelatorioAtivo !== 'bancos_profissional') return [];
 
     let lista = [...(profissionais || [])];
-
     if (profissionalId) {
       lista = lista.filter(p => p.id === profissionalId);
     }
 
-    return lista.map((prof: any) => {
+    const mapaBancos: Record<string, { bancoNome: string; itens: any[] }> = {};
+
+    lista.forEach((prof: any) => {
       const db: any = prof.dadosBancarios || {};
-      return {
+      const nomeBanco = (db.banco || prof.banco || '').trim() || 'Banco Não Informado / Pendente';
+
+      if (!mapaBancos[nomeBanco]) {
+        mapaBancos[nomeBanco] = {
+          bancoNome: nomeBanco,
+          itens: []
+        };
+      }
+
+      mapaBancos[nomeBanco].itens.push({
         id: prof.id,
         nome: prof.nome || 'Não Informado',
         especialidade: prof.especialidade || prof.profissao || 'Cuidador(a)',
-        conselho: prof.conselho || '',
-        cpf: prof.cpf || '-',
+        cpf: prof.cpf || prof.cnpj || '-',
         telefone: prof.telefone || '-',
-        banco: db.banco || prof.banco || 'Não Informado',
         agencia: db.agencia || '-',
         conta: db.conta || '-',
         tipoConta: db.tipoConta || 'corrente',
@@ -279,8 +287,20 @@ export const Relatorios: React.FC = () => {
         isTitular: prof.isTitularConta !== false && prof.isTitularConta !== 'nao',
         nomeTitular: prof.nomeTitularConta || prof.nome || '',
         cpfTitular: prof.cpfTitularConta || prof.cpf || ''
-      };
-    }).sort((a, b) => a.nome.localeCompare(b.nome));
+      });
+    });
+
+    // Ordena os profissionais dentro de cada banco por nome
+    Object.values(mapaBancos).forEach(g => {
+      g.itens.sort((a, b) => a.nome.localeCompare(b.nome));
+    });
+
+    // Retorna os bancos em ordem alfabética (deixando "Não Informado" no final)
+    return Object.values(mapaBancos).sort((a, b) => {
+      if (a.bancoNome === 'Banco Não Informado / Pendente') return 1;
+      if (b.bancoNome === 'Banco Não Informado / Pendente') return -1;
+      return a.bancoNome.localeCompare(b.bancoNome);
+    });
   }, [modalRelatorioAtivo, profissionais, profissionalId]);
 
   // Dados do Relatório de Faltas por Profissional
