@@ -51,16 +51,16 @@ const GRUPOS_INICIAIS: GrupoRelatorio[] = [
         ajuda: 'Exibe todos os plantões do período agrupados por paciente com detalhamento de datas, horários, profissionais e valores.'
       },
       {
-        id: 'bancos_profissional',
-        titulo: 'Relação de Bancos por Profissional',
-        descricao: 'Listagem dos profissionais agrupados por instituição bancária, exibindo agência, conta, tipo de conta, chave PIX e CPF.',
-        ajuda: 'Exibe a relação completa dos dados bancários cadastrados dos profissionais para conferência e repasses financeiros.'
-      },
-      {
         id: 'atend_profissional',
         titulo: 'Relação de Atendimentos por Profissional',
         descricao: 'Lista detalhada dos atendimentos realizados no período, agrupando por profissional. Mostra paciente, data, duração e valores.',
         ajuda: 'Exibe todos os plantões realizados agrupados por profissional com detalhamento de paciente, data e valores de repasse.'
+      },
+      {
+        id: 'bancos_profissional',
+        titulo: 'Relação de Bancos por Profissional',
+        descricao: 'Lista e conferência de dados bancários, agências, contas e chaves PIX cadastradas por profissional.',
+        ajuda: 'Exibe os dados bancários dos profissionais cadastrados no sistema para conferência e folha de pagamento.'
       }
     ]
   }
@@ -128,6 +128,8 @@ export const Relatorios: React.FC = () => {
       setModalRelatorioAtivo('faltas_profissional');
     } else if (item.id === 'atend_profissional') {
       setModalRelatorioAtivo('atend_profissional');
+    } else if (item.id === 'bancos_profissional' || item.id === 'banco_profissional' || item.id.includes('banco') || item.titulo.toLowerCase().includes('banco')) {
+      setModalRelatorioAtivo('bancos_profissional');
     }
   };
 
@@ -190,31 +192,7 @@ export const Relatorios: React.FC = () => {
       if (!agrupadoMap[pId]) {
         agrupadoMap[pId] = {
           paciente: pac || { nome: 'Paciente Desconhecido', nomeResponsavel: 'Padrão' },
-          itens: [
-      {
-        id: 'log_agendamentos',
-        titulo: 'Log de Agendamentos por Usuários Administrativos',
-        descricao: 'Rastreabilidade e auditoria dos agendamentos criados no período, exibindo o usuário administrativo responsável pelo cadastro.',
-        ajuda: 'Exibe os registros de plantões agrupados por profissional informando quem cadastrou cada agendamento no sistema.'
-      },
-      {
-        id: 'previa_curingas',
-        titulo: 'Prévia Financeira de Curingas',
-        descricao: 'Relatório detalhado das coberturas e plantões avulsos realizados por profissionais curingas com discriminação de valores e taxas.',
-        ajuda: 'Exibe os plantões de cobertura/curinga realizados por paciente com valores de produção e taxa administrativa.'
-      },
-      {
-        id: 'previa_folha',
-        titulo: 'Prévia Financeira da Folha de Pagamento',
-        descricao: 'Demonstrativo prévio da folha de pagamento por profissional, exibindo quantidade de plantões, produção, adicionais e valor bruto.',
-        ajuda: 'Exibe a consolidação financeira dos profissionais para fechamento da folha no período.'
-      },
-      {
-        id: 'faltas_profissional',
-        titulo: 'Relação de Faltas por Profissional',
-        descricao: 'Lista detalhada das faltas e ausências registradas no período, agrupadas por profissional com motivos e observações.',
-        ajuda: 'Exibe ausências, faltas justificadas ou não justificadas por profissional no período selecionado.'
-      },]
+          itens: []
         };
       }
       agrupadoMap[pId].itens.push(item);
@@ -275,31 +253,7 @@ export const Relatorios: React.FC = () => {
       if (!agrupadoMap[pKey]) {
         agrupadoMap[pKey] = {
           profissional: prof || { nome: item.profissionalNome || 'Profissional Desconhecido', especialidade: 'Cuidador(a)', conselho: '' },
-          itens: [
-      {
-        id: 'log_agendamentos',
-        titulo: 'Log de Agendamentos por Usuários Administrativos',
-        descricao: 'Rastreabilidade e auditoria dos agendamentos criados no período, exibindo o usuário administrativo responsável pelo cadastro.',
-        ajuda: 'Exibe os registros de plantões agrupados por profissional informando quem cadastrou cada agendamento no sistema.'
-      },
-      {
-        id: 'previa_curingas',
-        titulo: 'Prévia Financeira de Curingas',
-        descricao: 'Relatório detalhado das coberturas e plantões avulsos realizados por profissionais curingas com discriminação de valores e taxas.',
-        ajuda: 'Exibe os plantões de cobertura/curinga realizados por paciente com valores de produção e taxa administrativa.'
-      },
-      {
-        id: 'previa_folha',
-        titulo: 'Prévia Financeira da Folha de Pagamento',
-        descricao: 'Demonstrativo prévio da folha de pagamento por profissional, exibindo quantidade de plantões, produção, adicionais e valor bruto.',
-        ajuda: 'Exibe a consolidação financeira dos profissionais para fechamento da folha no período.'
-      },
-      {
-        id: 'faltas_profissional',
-        titulo: 'Relação de Faltas por Profissional',
-        descricao: 'Lista detalhada das faltas e ausências registradas no período, agrupadas por profissional com motivos e observações.',
-        ajuda: 'Exibe ausências, faltas justificadas ou não justificadas por profissional no período selecionado.'
-      },]
+          itens: []
         };
       }
       agrupadoMap[pKey].itens.push(item);
@@ -308,61 +262,38 @@ export const Relatorios: React.FC = () => {
     return Object.values(agrupadoMap).sort((a, b) => (a.profissional.nome || '').localeCompare(b.profissional.nome || ''));
   }, [modalRelatorioAtivo, agendamentos, plantoes, dataInicial, dataFinal, pacienteId, profissionalId, profissionais]);
 
-    // Dados do Relatório de Faltas por Profissional (Regra Completa)
-    // Dados do Relatório de Bancos por Profissional
+  // Dados do Relatório de Relação de Bancos por Profissional
   const dadosRelatorioBancos = useMemo(() => {
-    const listaProf = (profissionaisOrdenados || []).filter(p => {
-      if (profissionalId && p.id !== profissionalId) return false;
-      return true;
-    });
+    if (modalRelatorioAtivo !== 'bancos_profissional') return [];
 
-    const mapaBancos: Record<string, { bancoNome: string; profissionais: any[] }> = {};
+    let lista = [...(profissionais || [])];
 
-    listaProf.forEach(prof => {
-      const bNome = (prof.dadosBancarios?.banco || '').trim() || 'Banco Não Informado / Pendente';
-      if (!mapaBancos[bNome]) {
-        mapaBancos[bNome] = {
-          bancoNome: bNome,
-          profissionais: []
-        };
-      }
-      mapaBancos[bNome].profissionais.push({
+    if (profissionalId) {
+      lista = lista.filter(p => p.id === profissionalId);
+    }
+
+    return lista.map((prof: any) => {
+      const db: any = prof.dadosBancarios || {};
+      return {
         id: prof.id,
-        nome: prof.nome,
-        cpf: prof.cpf || prof.cnpj || '—',
-        telefone: prof.telefone || '—',
-        especialidade: prof.especialidade || '—',
-        status: prof.status || 'Ativo',
-        agencia: prof.dadosBancarios?.agencia || '—',
-        conta: prof.dadosBancarios?.conta || '—',
-        tipoConta: prof.dadosBancarios?.tipoConta || 'corrente',
-        pix: prof.dadosBancarios?.pix || '—'
-      });
-    });
+        nome: prof.nome || 'Não Informado',
+        especialidade: prof.especialidade || prof.profissao || 'Cuidador(a)',
+        conselho: prof.conselho || '',
+        cpf: prof.cpf || '-',
+        telefone: prof.telefone || '-',
+        banco: db.banco || prof.banco || 'Não Informado',
+        agencia: db.agencia || '-',
+        conta: db.conta || '-',
+        tipoConta: db.tipoConta || 'corrente',
+        pix: db.pix || '-',
+        isTitular: prof.isTitularConta !== false && prof.isTitularConta !== 'nao',
+        nomeTitular: prof.nomeTitularConta || prof.nome || '',
+        cpfTitular: prof.cpfTitularConta || prof.cpf || ''
+      };
+    }).sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [modalRelatorioAtivo, profissionais, profissionalId]);
 
-    return Object.values(mapaBancos).sort((a, b) => {
-      if (a.bancoNome === 'Banco Não Informado / Pendente') return 1;
-      if (b.bancoNome === 'Banco Não Informado / Pendente') return -1;
-      return a.bancoNome.localeCompare(b.bancoNome);
-    });
-  }, [profissionaisOrdenados, profissionalId]);
-
-  const totaisBancos = useMemo(() => {
-    let totalProf = 0;
-    let comPix = 0;
-    dadosRelatorioBancos.forEach(g => {
-      totalProf += g.profissionais.length;
-      g.profissionais.forEach(p => {
-        if (p.pix && p.pix !== '—') comPix++;
-      });
-    });
-    return {
-      totalBancos: dadosRelatorioBancos.filter(b => b.bancoNome !== 'Banco Não Informado / Pendente').length,
-      totalProf,
-      comPix
-    };
-  }, [dadosRelatorioBancos]);
-
+  // Dados do Relatório de Faltas por Profissional
   const dadosRelatorioFaltas = useMemo(() => {
     if (modalRelatorioAtivo !== 'faltas_profissional') return [];
     const listaCompleta: any[] = [];
@@ -378,13 +309,12 @@ export const Relatorios: React.FC = () => {
     const processarItem = (item: any, idPac: string, idProf: string, nomeProf: string, hr: string, motivoRaw: string, obsRaw: string, escala: string) => {
       if (!item.data) return;
       const nomePaciente = obterNomePaciente(item, idPac);
-      if (!nomePaciente) return; // Ignora registros sem qualquer paciente identificado
+      if (!nomePaciente) return;
 
       const st = (item.status || '').toLowerCase();
       const motivoValido = motivoRaw && motivoRaw !== '-' && motivoRaw.trim() !== '';
       const obsValida = obsRaw && obsRaw !== '-' && obsRaw.trim() !== '';
 
-      // Regra: computa se o status for Falta OU se houver motivo preenchido de ausência/justificativa
       const ehFaltaReal = st.includes('falta') || Boolean(motivoValido);
       if (!ehFaltaReal) return;
 
@@ -404,13 +334,13 @@ export const Relatorios: React.FC = () => {
     };
 
     if (agendamentos) {
-      agendamentos.forEach(ag => {
+      agendamentos.forEach((ag: any) => {
         processarItem(
           ag,
           ag.idPaciente || ag.pacienteId,
           ag.idProfissional || ag.profissionalId,
           ag.nomeProfissional,
-          ag.horario,
+          ag.horario || '07:00',
           ag.motivoFalta || ag.justificativaFalta || ag.motivo,
           ag.observacao || ag.observacaoFalta,
           ag.tipoDia || 'Plantão 12x36'
@@ -419,13 +349,13 @@ export const Relatorios: React.FC = () => {
     }
 
     if (plantoes) {
-      plantoes.forEach(pl => {
+      plantoes.forEach((pl: any) => {
         processarItem(
           pl,
           pl.pacienteId || pl.idPaciente,
           pl.profissionalId || pl.profissional,
           pl.profissional,
-          pl.horaInicio,
+          pl.horaInicio || '07:00',
           pl.motivoFalta || pl.justificativaFalta || pl.motivo,
           pl.observacaoAgendamento || pl.observacao,
           pl.tipoEscala ? `Escala ${pl.tipoEscala}` : 'Plantão'
@@ -449,25 +379,7 @@ export const Relatorios: React.FC = () => {
       if (!agrupadoMap[pKey]) {
         agrupadoMap[pKey] = {
           profissional: prof || { nome: item.profissionalNome, especialidade: 'Cuidador(a)', conselho: '' },
-          itens: [
-      {
-        id: 'log_agendamentos',
-        titulo: 'Log de Agendamentos por Usuários Administrativos',
-        descricao: 'Rastreabilidade e auditoria dos agendamentos criados no período, exibindo o usuário administrativo responsável pelo cadastro.',
-        ajuda: 'Exibe os registros de plantões agrupados por profissional informando quem cadastrou cada agendamento no sistema.'
-      },
-      {
-        id: 'previa_curingas',
-        titulo: 'Prévia Financeira de Curingas',
-        descricao: 'Relatório detalhado das coberturas e plantões avulsos realizados por profissionais curingas com discriminação de valores e taxas.',
-        ajuda: 'Exibe os plantões de cobertura/curinga realizados por paciente com valores de produção e taxa administrativa.'
-      },
-      {
-        id: 'previa_folha',
-        titulo: 'Prévia Financeira da Folha de Pagamento',
-        descricao: 'Demonstrativo prévio da folha de pagamento por profissional, exibindo quantidade de plantões, produção, adicionais e valor bruto.',
-        ajuda: 'Exibe a consolidação financeira dos profissionais para fechamento da folha no período.'
-      },]
+          itens: []
         };
       }
       agrupadoMap[pKey].itens.push(item);
@@ -476,7 +388,7 @@ export const Relatorios: React.FC = () => {
     return Object.values(agrupadoMap).sort((a, b) => (a.profissional.nome || '').localeCompare(b.profissional.nome || ''));
   }, [modalRelatorioAtivo, agendamentos, plantoes, dataInicial, dataFinal, pacienteId, profissionalId, profissionais, pacientes]);
 
-    // Dados da Prévia Financeira da Folha de Pagamento
+  // Dados da Prévia Financeira da Folha de Pagamento
   const dadosPreviaFolha = useMemo(() => {
     if (modalRelatorioAtivo !== 'previa_folha') return [];
     const profMap: Record<string, any> = {};
@@ -524,15 +436,13 @@ export const Relatorios: React.FC = () => {
     return Object.values(profMap).filter((p: any) => p.qtd > 0).sort((a: any, b: any) => a.nome.localeCompare(b.nome));
   }, [modalRelatorioAtivo, profissionais, agendamentos, plantoes, dataInicial, dataFinal]);
 
-    // Dados da Prévia Financeira de Curingas (Protegido e Estrito)
+  // Dados da Prévia Financeira de Curingas
   const dadosPreviaCuringas = useMemo(() => {
     if (modalRelatorioAtivo !== 'previa_curingas') return [];
     const listaCompleta: any[] = [];
-    const pacMap = new Map((pacientes || []).map(p => [p.id, p]));
 
     const lista = [...(agendamentos || []), ...(plantoes || [])];
     lista.forEach((item: any) => {
-      if (!item) return;
       const dataItem = (item.data || '').slice(0, 10);
       if (dataInicial && dataItem < dataInicial) return;
       if (dataFinal && dataItem > dataFinal) return;
@@ -549,29 +459,25 @@ export const Relatorios: React.FC = () => {
       );
 
       if (isCuringa) {
-        const prod = Number(item.valorProfissional || item.valor || item.valorRepasse || 175) || 0;
-        const txAdm = Number(item.taxaAdministrativa || (prod * 0.25) || 45) || 0;
-        const pId = item.idProfissional || item.profissionalId || item.profissional;
-        const pNome = item.nomeProfissional || item.profissional || 'Profissional Não Informado';
-        const pacId = item.idPaciente || item.pacienteId;
-        const pac = pacMap.get(pacId);
-        const nomePac = item.nomePaciente || (typeof item.paciente === 'string' && item.paciente.length > 3 ? item.paciente : pac?.nome) || 'Paciente Não Informado';
-
+        const prod = Number(item.valorProfissional || item.valor || 175.00);
+        const txAdm = Number(item.taxaAdministrativa || (prod * 0.25) || 45.00);
         listaCompleta.push({
-          id: item.id || Math.random().toString(),
-          profissionalNome: pNome,
-          pacienteNome: nomePac,
-          data: item.data || '',
+          id: item.id,
+          pacienteId: item.idPaciente || item.pacienteId,
+          profissionalId: item.idProfissional || item.profissionalId || item.profissional,
+          profissionalNome: item.nomeProfissional || item.profissional || 'Profissional',
+          data: item.data,
           horario: item.horario || item.horaInicio || '08:00',
           evento: item.tipoDia || (item.tipoEscala ? `Plantão ${item.tipoEscala}` : 'Plantão 24 x 48'),
           producao: prod,
-          vHora: prod > 0 ? Number((prod / 24).toFixed(2)) : 0,
+          vHora: Number((prod / 24).toFixed(2)),
           txAdm: txAdm
         });
       }
     });
 
-    const agrupado: Record<string, { nome: string; itens: any[]; totalProducao: number; totalTxAdm: number }> = {};
+    const pacMap = new Map((pacientes || []).map(p => [p.id, p]));
+    const agrupado: Record<string, any> = {};
 
     listaCompleta.forEach(it => {
       if (!agrupado[it.profissionalNome]) {
@@ -582,15 +488,19 @@ export const Relatorios: React.FC = () => {
           totalTxAdm: 0
         };
       }
-      agrupado[it.profissionalNome].itens.push(it);
+      const pac = pacMap.get(it.pacienteId);
+      agrupado[it.profissionalNome].itens.push({
+        ...it,
+        pacienteNome: pac?.nome || it.pacienteId || 'Paciente Não Informado'
+      });
       agrupado[it.profissionalNome].totalProducao += it.producao;
       agrupado[it.profissionalNome].totalTxAdm += it.txAdm;
     });
 
-    return Object.values(agrupado).sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+    return Object.values(agrupado).sort((a: any, b: any) => a.nome.localeCompare(b.nome));
   }, [modalRelatorioAtivo, agendamentos, plantoes, pacientes, dataInicial, dataFinal]);
 
-    // Dados do Relatório de Log de Agendamentos por Usuários Administrativos
+  // Dados do Relatório de Log de Agendamentos por Usuários Administrativos
   const dadosRelatorioLog = useMemo(() => {
     if (modalRelatorioAtivo !== 'log_agendamentos') return [];
     const listaCompleta: any[] = [];
@@ -619,7 +529,7 @@ export const Relatorios: React.FC = () => {
         profissionalNome: prof?.nome || item.nomeProfissional || item.profissional || 'Profissional Desconhecido',
         profissionalEspecialidade: prof?.especialidade || 'Cuidador(a)',
         profissionalConselho: prof?.conselho || '',
-        telefone: prof?.telefone || prof?.whatsapp || '(21) 99127-6240',
+        telefone: prof?.telefone || (prof as any)?.whatsapp || '(21) 99127-6240',
         pacienteNome: nomePaciente,
         data: item.data,
         horario: item.horario || item.horaInicio || '08:00',
@@ -761,6 +671,7 @@ export const Relatorios: React.FC = () => {
         })}
       </div>
 
+      {/* Modal: Relação de Atendimentos por Paciente */}
       {modalRelatorioAtivo === 'atend_paciente' && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
@@ -840,6 +751,7 @@ export const Relatorios: React.FC = () => {
         </div>
       )}
 
+      {/* Modal: Relação de Atendimentos por Profissional */}
       {modalRelatorioAtivo === 'atend_profissional' && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
@@ -929,6 +841,94 @@ export const Relatorios: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Modal: Relação de Bancos por Profissional */}
+      {modalRelatorioAtivo === 'bancos_profissional' && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 bg-slate-800 text-white">
+              <div className="flex items-center gap-2">
+                <Printer size={18} />
+                <h3 className="text-sm font-bold">Relação de Bancos por Profissional</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => window.print()} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg">Imprimir / PDF</button>
+                <button type="button" onClick={() => setModalRelatorioAtivo(null)} className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-300"><X size={18} /></button>
+              </div>
+            </div>
+
+            <div className="p-8 overflow-y-auto space-y-8 bg-slate-100 flex-1 print:bg-white print:p-0">
+              <div className="bg-white p-8 rounded-xl shadow-xs border border-slate-200 max-w-4xl mx-auto space-y-6 print:shadow-none print:border-none">
+                <div className="flex items-center justify-between border-b border-slate-300 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-lg bg-blue-600 text-white font-bold flex items-center justify-center text-lg">V</div>
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-sm">VALLIDARE</h4>
+                      <p className="text-[11px] text-slate-500 font-medium">Gestão e Consultoria em Saúde</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-slate-500">Emitido em: {new Date().toLocaleDateString('pt-BR')}</p>
+                  </div>
+                </div>
+
+                <div className="border-t-2 border-b-2 border-slate-800 py-3 flex items-center justify-between">
+                  <h2 className="text-sm font-bold text-slate-900 uppercase">Relação de Bancos por Profissional</h2>
+                  <p className="text-xs font-semibold text-slate-700">Período de {formatarDataBr(dataInicial)} a {formatarDataBr(dataFinal)}</p>
+                </div>
+
+                {dadosRelatorioBancos.length === 0 ? (
+                  <div className="text-center py-12 text-slate-500 text-xs italic">Nenhum profissional cadastrado ou encontrado para os filtros selecionados.</div>
+                ) : (
+                  <div className="space-y-4">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-100 text-slate-700 border-b border-slate-300">
+                          <th className="p-2">Profissional</th>
+                          <th className="p-2">CPF</th>
+                          <th className="p-2">Banco</th>
+                          <th className="p-2">Agência / Conta</th>
+                          <th className="p-2">Chave PIX</th>
+                          <th className="p-2">Titular</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 text-slate-700">
+                        {dadosRelatorioBancos.map((item, i) => (
+                          <tr key={i} className="hover:bg-slate-50/50">
+                            <td className="p-2">
+                              <div className="font-bold text-slate-900">{item.nome}</div>
+                              <div className="text-[10px] text-slate-500">{item.especialidade} {item.conselho ? `- COREN: ${item.conselho}` : ''}</div>
+                            </td>
+                            <td className="p-2 whitespace-nowrap">{item.cpf}</td>
+                            <td className="p-2 font-medium text-slate-800">{item.banco}</td>
+                            <td className="p-2 whitespace-nowrap">Ag: {item.agencia} | Cc: {item.conta} ({item.tipoConta})</td>
+                            <td className="p-2 font-mono text-slate-900 text-[11px]">{item.pix}</td>
+                            <td className="p-2">
+                              {item.isTitular ? (
+                                <span className="text-emerald-700 font-medium">Próprio Profissional</span>
+                              ) : (
+                                <div>
+                                  <div className="font-medium text-slate-800">{item.nomeTitular || 'Terceiro'}</div>
+                                  {item.cpfTitular && <div className="text-[10px] text-slate-500">CPF: {item.cpfTitular}</div>}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+
+                    <div className="text-center pt-4 pb-2 border-t border-dashed border-slate-300">
+                      <p className="text-xs font-bold text-slate-800">Total de Profissionais Listados : {dadosRelatorioBancos.length}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal: Relação de Faltas por Profissional */}
       {modalRelatorioAtivo === 'faltas_profissional' && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 overflow-y-auto">
@@ -1168,18 +1168,18 @@ export const Relatorios: React.FC = () => {
                               <td className="p-1.5">{formatarDataBr(it.data)} 08:00</td>
                               <td className="p-1.5 font-medium text-slate-900">{it.pacienteNome}</td>
                               <td className="p-1.5">{it.evento}</td>
-                              <td className="p-1.5 text-right">{(it.producao || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                              <td className="p-1.5 text-right">{(it.vHora || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                              <td className="p-1.5 text-right">{(it.txAdm || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                              <td className="p-1.5 text-right">{it.producao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                              <td className="p-1.5 text-right">{it.vHora.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                              <td className="p-1.5 text-right">{it.txAdm.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                             </tr>
                           ))}
                         </tbody>
                         <tfoot>
                           <tr className="bg-slate-50 font-bold border-t border-slate-300 text-slate-900">
                             <td className="p-1.5" colSpan={4}>Total {cur.nome} : {cur.itens.length}</td>
-                            <td className="p-1.5 text-right">{(cur.totalProducao || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                            <td className="p-1.5 text-right">{cur.totalProducao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                             <td className="p-1.5 text-right">-</td>
-                            <td className="p-1.5 text-right">{(cur.totalTxAdm || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                            <td className="p-1.5 text-right">{cur.totalTxAdm.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                           </tr>
                         </tfoot>
                       </table>
@@ -1280,118 +1280,6 @@ export const Relatorios: React.FC = () => {
                   ))
                 )}
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal: Relação de Bancos por Profissional */}
-      {modalRelatorioAtivo === 'bancos_profissional' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4 print:p-0 print:bg-white print:static">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden print:max-h-none print:shadow-none print:border-none">
-            {/* Header Modal */}
-            <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white shrink-0 print:hidden">
-              <div className="flex items-center space-x-3">
-                <span className="p-2 bg-emerald-500/20 text-emerald-400 rounded-lg text-lg font-bold">🏦</span>
-                <div>
-                  <h3 className="text-sm font-bold">Relação de Bancos por Profissional</h3>
-                  <p className="text-xs text-slate-400">Listagem analítica agrupada por instituição financeira para repasses</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => window.print()}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <span>🖨️ Imprimir / PDF</span>
-                </button>
-                <button
-                  onClick={() => setModalRelatorioAtivo(null)}
-                  className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-
-            {/* Conteúdo Relatório */}
-            <div className="p-6 overflow-y-auto print:overflow-visible print:p-0 space-y-6">
-              {/* Cabeçalho Oficial VallidARE para Impressão */}
-              <div className="border-b border-slate-200 pb-4 flex justify-between items-start">
-                <div>
-                  <h2 className="text-base font-bold text-slate-900">VALLIDARE GESTÃO EM SAÚDE</h2>
-                  <p className="text-xs text-slate-500 font-medium mt-0.5">Relatório Analítico de Dados Bancários por Instituição</p>
-                  <p className="text-[11px] text-slate-400 mt-1">Gerado em: {new Date().toLocaleDateString('pt-BR')} às {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
-                </div>
-                <div className="text-right flex flex-col items-end gap-1">
-                  <span className="px-2.5 py-1 text-[11px] font-bold bg-slate-100 text-slate-700 rounded-md border border-slate-200">
-                    Bancos Ativos: {totaisBancos.totalBancos}
-                  </span>
-                  <span className="text-[11px] text-slate-500 font-medium">
-                    Total Profissionais: {totaisBancos.totalProf} | Chaves PIX: {totaisBancos.comPix}
-                  </span>
-                </div>
-              </div>
-
-              {/* Listagem Agrupada */}
-              {dadosRelatorioBancos.length === 0 ? (
-                <div className="text-center py-12 text-slate-400 text-xs font-medium">
-                  Nenhum profissional cadastrado ou localizado com os filtros selecionados.
-                </div>
-              ) : (
-                dadosRelatorioBancos.map((grupo, idx) => (
-                  <div key={idx} className="border border-slate-200 rounded-xl overflow-hidden shadow-xs print:border-slate-300 print:shadow-none break-inside-avoid">
-                    {/* Header do Banco */}
-                    <div className="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-800 text-xs uppercase tracking-wide">
-                          🏦 {grupo.bancoNome}
-                        </span>
-                        <span className="text-[10px] bg-white border border-slate-300 px-2 py-0.5 rounded-full text-slate-600 font-semibold">
-                          {grupo.profissionais.length} {grupo.profissionais.length === 1 ? 'profissional' : 'profissionais'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Tabela dos Profissionais vinculados ao Banco */}
-                    <table className="w-full text-left text-xs">
-                      <thead>
-                        <tr className="bg-white border-b border-slate-200 text-slate-500 font-semibold text-[11px]">
-                          <th className="p-2">Profissional</th>
-                          <th className="p-2">Especialidade</th>
-                          <th className="p-2">CPF / CNPJ</th>
-                          <th className="p-2">Agência</th>
-                          <th className="p-2">Conta / Tipo</th>
-                          <th className="p-2">Chave PIX</th>
-                          <th className="p-2">Telefone</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 text-slate-700">
-                        {grupo.profissionais.map((prof: any) => (
-                          <tr key={prof.id} className="hover:bg-slate-50/50">
-                            <td className="p-2 font-medium text-slate-900">{prof.nome}</td>
-                            <td className="p-2 text-slate-600">{prof.especialidade}</td>
-                            <td className="p-2 font-mono text-[11px] text-slate-600">{prof.cpf}</td>
-                            <td className="p-2 font-mono text-slate-800">{prof.agencia}</td>
-                            <td className="p-2">
-                              <span className="font-mono text-slate-800">{prof.conta}</span>
-                              {prof.tipoConta && (
-                                <span className="ml-1 text-[9px] uppercase px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">
-                                  {prof.tipoConta}
-                                </span>
-                              )}
-                            </td>
-                            <td className="p-2 font-mono text-emerald-700 font-semibold text-[11px] break-all max-w-[200px]">
-                              {prof.pix}
-                            </td>
-                            <td className="p-2 text-slate-500">{prof.telefone}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ))
-              )}
             </div>
           </div>
         </div>
