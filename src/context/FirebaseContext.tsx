@@ -194,46 +194,94 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const CONTINGENCY_SECRET = 'vallidare-contingency-key-v1';
+
+  const encryptContingencyPayload = (plainText: string): string => {
+    try {
+      const encoded = encodeURIComponent(plainText);
+      let xored = '';
+      for (let i = 0; i < encoded.length; i++) {
+        const charCode = encoded.charCodeAt(i) ^ CONTINGENCY_SECRET.charCodeAt(i % CONTINGENCY_SECRET.length);
+        xored += String.fromCharCode(charCode);
+      }
+      return 'enc:v1:' + btoa(xored);
+    } catch {
+      return plainText;
+    }
+  };
+
+  const decryptContingencyPayload = (stored: string): string => {
+    try {
+      if (!stored.startsWith('enc:v1:')) {
+        return stored;
+      }
+      const raw = atob(stored.slice(7));
+      let decoded = '';
+      for (let i = 0; i < raw.length; i++) {
+        const charCode = raw.charCodeAt(i) ^ CONTINGENCY_SECRET.charCodeAt(i % CONTINGENCY_SECRET.length);
+        decoded += String.fromCharCode(charCode);
+      }
+      return decodeURIComponent(decoded);
+    } catch {
+      return stored;
+    }
+  };
+
+  const saveContingencyItem = (key: string, data: unknown): void => {
+    try {
+      const serialized = JSON.stringify(data);
+      localStorage.setItem(key, encryptContingencyPayload(serialized));
+    } catch (e) {
+      console.error(`Erro ao salvar ${key}:`, e);
+    }
+  };
+
+  const getContingencyItem = (key: string): string | null => {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    return decryptContingencyPayload(raw);
+  };
+
   const loadLocalData = () => {
     try {
       console.warn("[Firebase Quota Fallback] Carregando dados de contingência do localStorage...");
-      const cachedPacientes = localStorage.getItem('contingency_pacientes');
-      const cachedPlantoes = localStorage.getItem('contingency_plantoes');
-      const cachedAgendamentos = localStorage.getItem('contingency_agendamentos');
-      const cachedProfissionais = localStorage.getItem('contingency_profissionais');
-      const cachedDebitos = localStorage.getItem('contingency_debitos');
-      const cachedFaturas = localStorage.getItem('contingency_faturas');
-      const cachedFolhas = localStorage.getItem('contingency_folhas');
-      const cachedLogs = localStorage.getItem('contingency_logs');
-      const cachedUsers = localStorage.getItem('contingency_users');
+      const cachedPacientes = getContingencyItem('contingency_pacientes');
+      const cachedPlantoes = getContingencyItem('contingency_plantoes');
+      const cachedAgendamentos = getContingencyItem('contingency_agendamentos');
+      const cachedProfissionais = getContingencyItem('contingency_profissionais');
+      const cachedDebitos = getContingencyItem('contingency_debitos');
+      const cachedFaturas = getContingencyItem('contingency_faturas');
+      const cachedFolhas = getContingencyItem('contingency_folhas');
+      const cachedLogs = getContingencyItem('contingency_logs');
+      const cachedUsers = getContingencyItem('contingency_users');
 
       if (cachedPacientes) {
         const parsed: Paciente[] = JSON.parse(cachedPacientes);
         const filtered = parsed.filter(p => !isExcludedPatient(p));
         setPacientes(filtered);
-        localStorage.setItem('contingency_pacientes', JSON.stringify(filtered));
+        saveContingencyItem('contingency_pacientes', filtered);
       } else {
         const filtered = INITIAL_PACIENTES.filter(p => !isExcludedPatient(p));
         setPacientes(filtered);
-        localStorage.setItem('contingency_pacientes', JSON.stringify(filtered));
+        saveContingencyItem('contingency_pacientes', filtered);
       }
 
       if (cachedPlantoes) {
         const parsed: Plantao[] = JSON.parse(cachedPlantoes);
         const filtered = parsed.filter(p => !EXCLUDED_PATIENT_IDS.includes(p.pacienteId));
         setPlantoes(filtered);
-        localStorage.setItem('contingency_plantoes', JSON.stringify(filtered));
+        saveContingencyItem('contingency_plantoes', filtered);
       } else {
         const filtered = INITIAL_PLANTOES.filter(p => !EXCLUDED_PATIENT_IDS.includes(p.pacienteId));
         setPlantoes(filtered);
-        localStorage.setItem('contingency_plantoes', JSON.stringify(filtered));
+        saveContingencyItem('contingency_plantoes', filtered);
       }
 
       if (cachedAgendamentos) {
         setAgendamentos(JSON.parse(cachedAgendamentos));
       } else {
         setAgendamentos([]);
-        localStorage.setItem('contingency_agendamentos', JSON.stringify([]));
+        saveContingencyItem('contingency_agendamentos', []);
       }
 
       if (cachedProfissionais) {
@@ -250,35 +298,35 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           profissao: prof.role.includes('Médica') ? 'Médica(o)' : prof.role.includes('Enfermagem') ? 'Téc. Enfermagem' : prof.role.includes('Enfermeira') ? 'Enfermeira(o)' : prof.role.includes('Fisioterapeuta') ? 'Fisioterapeuta' : 'Cuidadora(o)',
         }));
         setProfissionais(mapped);
-        localStorage.setItem('contingency_profissionais', JSON.stringify(mapped));
+        saveContingencyItem('contingency_profissionais', mapped);
       }
 
       if (cachedDebitos) {
         setDebitosProfissionais(JSON.parse(cachedDebitos));
       } else {
         setDebitosProfissionais([]);
-        localStorage.setItem('contingency_debitos', JSON.stringify([]));
+        saveContingencyItem('contingency_debitos', []);
       }
 
       if (cachedFaturas) {
         setFaturasPacientes(JSON.parse(cachedFaturas));
       } else {
         setFaturasPacientes([]);
-        localStorage.setItem('contingency_faturas', JSON.stringify([]));
+        saveContingencyItem('contingency_faturas', []);
       }
 
       if (cachedFolhas) {
         setFolhasPagamento(JSON.parse(cachedFolhas));
       } else {
         setFolhasPagamento([]);
-        localStorage.setItem('contingency_folhas', JSON.stringify([]));
+        saveContingencyItem('contingency_folhas', []);
       }
 
       if (cachedLogs) {
         setLogsAuditoria(JSON.parse(cachedLogs));
       } else {
         setLogsAuditoria([]);
-        localStorage.setItem('contingency_logs', JSON.stringify([]));
+        saveContingencyItem('contingency_logs', []);
       }
 
       if (cachedUsers) {
@@ -294,7 +342,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           }
         ];
         setUsuariosSistema(initialUsers);
-        localStorage.setItem('contingency_users', JSON.stringify(initialUsers));
+        saveContingencyItem('contingency_users', initialUsers);
       }
 
       setLoading(false);
@@ -734,7 +782,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           const wasQuota = handleQuotaError(e, 'validação-login');
           if (wasQuota) {
             try {
-              const localUsersStr = localStorage.getItem('contingency_users');
+              const localUsersStr = getContingencyItem('contingency_users');
               if (localUsersStr) {
                 const localUsers = JSON.parse(localUsersStr);
                 const localUser = localUsers.find((u: any) => u.email?.toLowerCase() === emailLower);
@@ -1103,7 +1151,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       };
       const updatedList = [log, ...logsAuditoria];
       setLogsAuditoria(updatedList);
-      localStorage.setItem('contingency_logs', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_logs', updatedList);
       return;
     }
 
@@ -1142,7 +1190,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (isQuotaExceeded) {
       const updatedList = [fullPaciente, ...pacientes];
       setPacientes(updatedList);
-      localStorage.setItem('contingency_pacientes', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_pacientes', updatedList);
       if (!skipNotification) {
         setNotification(`Paciente '${fullPaciente.nome}' cadastrado com sucesso (Contingência Local).`);
       }
@@ -1168,7 +1216,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (isQuotaExceeded) {
       const updatedList = pacientes.map((p) => (p.id === updatedPac.id ? updatedPac : p));
       setPacientes(updatedList);
-      localStorage.setItem('contingency_pacientes', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_pacientes', updatedList);
       if (!skipNotification) {
         setNotification(`Paciente '${updatedPac.nome}' atualizado com sucesso (Contingência Local).`);
       }
@@ -1201,7 +1249,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           : p
       );
       setPacientes(updatedList);
-      localStorage.setItem('contingency_pacientes', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_pacientes', updatedList);
       setNotification(`Paciente desativado com sucesso (Contingência Local).`);
       return;
     }
@@ -1236,7 +1284,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           : p
       );
       setPacientes(updatedList);
-      localStorage.setItem('contingency_pacientes', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_pacientes', updatedList);
       setNotification(`Paciente reativado com sucesso (Contingência Local).`);
       return;
     }
@@ -1271,7 +1319,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           : p
       );
       setPlantoes(updatedList);
-      localStorage.setItem('contingency_plantoes', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_plantoes', updatedList);
       setNotification(`Plantão cancelado com sucesso (Contingência Local).`);
       return;
     }
@@ -1299,7 +1347,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (isQuotaExceeded) {
       const updatedList = [fullPlantao, ...plantoes];
       setPlantoes(updatedList);
-      localStorage.setItem('contingency_plantoes', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_plantoes', updatedList);
       setNotification(`Plantão criado com sucesso (Contingência Local).`);
       return fullPlantao;
     }
@@ -1319,7 +1367,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (isQuotaExceeded) {
       const updatedList = plantoes.map((p) => (p.id === updatedPlantao.id ? updatedPlantao : p));
       setPlantoes(updatedList);
-      localStorage.setItem('contingency_plantoes', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_plantoes', updatedList);
       setNotification(`Plantão atualizado com sucesso (Contingência Local).`);
       return;
     }
@@ -1338,7 +1386,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (isQuotaExceeded) {
       const updatedList = plantoes.filter((p) => p.id !== id);
       setPlantoes(updatedList);
-      localStorage.setItem('contingency_plantoes', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_plantoes', updatedList);
       setNotification(`Plantão excluído com sucesso (Contingência Local).`);
       return;
     }
@@ -1357,7 +1405,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (isQuotaExceeded) {
       const updatedList = plantoes.filter((p) => !ids.includes(p.id));
       setPlantoes(updatedList);
-      localStorage.setItem('contingency_plantoes', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_plantoes', updatedList);
       return;
     }
 
@@ -1411,7 +1459,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const fullAg: Agendamento = { ...newAg, id: `ag-${Date.now()}`, status: 'Aberta' as const };
       const updatedList = [fullAg, ...agendamentos];
       setAgendamentos(updatedList);
-      localStorage.setItem('contingency_agendamentos', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_agendamentos', updatedList);
       setNotification('Agendamento criado com sucesso (Contingência Local).');
       return fullAg;
     }
@@ -1434,7 +1482,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const fullAg: Agendamento = { ...newAg, id: `ag-${Date.now()}`, status: newAg.status || ('Aberta' as const) };
         const updatedList = [fullAg, ...agendamentos];
         setAgendamentos(updatedList);
-        localStorage.setItem('contingency_agendamentos', JSON.stringify(updatedList));
+        saveContingencyItem('contingency_agendamentos', updatedList);
         setNotification('Agendamento criado com sucesso (Contingência Local).');
         return fullAg;
       }
@@ -1462,7 +1510,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }));
       const updatedList = [...fullAgs, ...agendamentos];
       setAgendamentos(updatedList);
-      localStorage.setItem('contingency_agendamentos', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_agendamentos', updatedList);
       setNotification(`${fullAgs.length} agendamentos criados com sucesso (Contingência Local).`);
       return fullAgs;
     }
@@ -1501,7 +1549,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }));
         const updatedList = [...fullAgs, ...agendamentos];
         setAgendamentos(updatedList);
-        localStorage.setItem('contingency_agendamentos', JSON.stringify(updatedList));
+        saveContingencyItem('contingency_agendamentos', updatedList);
         setNotification(`${fullAgs.length} agendamentos criados com sucesso (Contingência Local).`);
         return fullAgs;
       }
@@ -1514,7 +1562,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (isQuotaExceeded) {
       const updatedList = agendamentos.map((a) => (a.id === ag.id ? ag : a));
       setAgendamentos(updatedList);
-      localStorage.setItem('contingency_agendamentos', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_agendamentos', updatedList);
       setNotification('Agendamento atualizado (Contingência Local).');
       return;
     }
@@ -1533,7 +1581,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (handleQuotaError(err, 'updateAgendamento')) {
         const updatedList = agendamentos.map((a) => (a.id === ag.id ? ag : a));
         setAgendamentos(updatedList);
-        localStorage.setItem('contingency_agendamentos', JSON.stringify(updatedList));
+        saveContingencyItem('contingency_agendamentos', updatedList);
         setNotification('Agendamento atualizado (Contingência Local).');
         return;
       }
@@ -1551,7 +1599,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           const update = agendamentosToUpdate.find(u => u.id === item.id);
           return update ? ({ ...item, ...update } as Agendamento) : item;
         });
-        localStorage.setItem('contingency_agendamentos', JSON.stringify(updatedList));
+        saveContingencyItem('contingency_agendamentos', updatedList);
         return updatedList;
       });
       setNotification(`${agendamentosToUpdate.length} agendamentos atualizados (Contingência Local).`);
@@ -1586,7 +1634,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           return update ? ({ ...item, ...update } as Agendamento) : item;
         });
         try {
-          localStorage.setItem('contingency_agendamentos', JSON.stringify(updatedList));
+          saveContingencyItem('contingency_agendamentos', updatedList);
         } catch {
           // ignore
         }
@@ -1600,7 +1648,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             const update = agendamentosToUpdate.find(u => u.id === item.id);
             return update ? ({ ...item, ...update } as Agendamento) : item;
           });
-          localStorage.setItem('contingency_agendamentos', JSON.stringify(updatedList));
+          saveContingencyItem('contingency_agendamentos', updatedList);
           return updatedList;
         });
         setNotification(`${agendamentosToUpdate.length} agendamentos atualizados (Contingência Local).`);
@@ -1625,7 +1673,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (isQuotaExceeded) {
       const updatedList = agendamentos.filter((a) => a.id !== id);
       setAgendamentos(updatedList);
-      localStorage.setItem('contingency_agendamentos', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_agendamentos', updatedList);
       setNotification('Agendamento excluído (Contingência Local).');
       return;
     }
@@ -1639,7 +1687,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (handleQuotaError(err, 'deleteAgendamento')) {
         const updatedList = agendamentos.filter((a) => a.id !== id);
         setAgendamentos(updatedList);
-        localStorage.setItem('contingency_agendamentos', JSON.stringify(updatedList));
+        saveContingencyItem('contingency_agendamentos', updatedList);
         setNotification('Agendamento excluído (Contingência Local).');
         return;
       }
@@ -1664,7 +1712,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (isQuotaExceeded) {
       const updatedList = agendamentos.filter((a) => !ids.includes(a.id));
       setAgendamentos(updatedList);
-      localStorage.setItem('contingency_agendamentos', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_agendamentos', updatedList);
       setNotification(`${ids.length} agendamentos excluídos (Contingência Local).`);
       return;
     }
@@ -1686,7 +1734,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (handleQuotaError(err, 'deleteAgendamentosBatch')) {
         const updatedList = agendamentos.filter((a) => !ids.includes(a.id));
         setAgendamentos(updatedList);
-        localStorage.setItem('contingency_agendamentos', JSON.stringify(updatedList));
+        saveContingencyItem('contingency_agendamentos', updatedList);
         setNotification(`${ids.length} agendamentos excluídos (Contingência Local).`);
         return;
       }
@@ -1707,7 +1755,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (isQuotaExceeded) {
       const updatedList = [fullProfissional, ...profissionais];
       setProfissionais(updatedList);
-      localStorage.setItem('contingency_profissionais', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_profissionais', updatedList);
       if (!skipNotification) {
         setNotification(`Cuidador '${fullProfissional.nome}' cadastrado com sucesso (Contingência Local).`);
       }
@@ -1726,7 +1774,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       console.warn("Aviso no addProfissional (usando fallback local):", err);
       setProfissionais(prev => [fullProfissional, ...prev.filter(p => p.id !== id)]);
       try {
-        const currentList = JSON.parse(localStorage.getItem('contingency_profissionais') || '[]');
+        const currentList = JSON.parse(getContingencyItem('contingency_profissionais') || '[]');
         localStorage.setItem('contingency_profissionais', JSON.stringify([fullProfissional, ...currentList.filter((p: any) => p.id !== id)]));
       } catch (e) {}
       if (!skipNotification) {
@@ -1742,7 +1790,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const fullUser: UsuarioSistema = { ...newUser, id };
       const updatedList = [fullUser, ...usuariosSistema];
       setUsuariosSistema(updatedList);
-      localStorage.setItem('contingency_users', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_users', updatedList);
       setNotification(`Utilizador '${newUser.nome}' adicionado com sucesso (Contingência Local).`);
       return fullUser;
     }
@@ -1765,7 +1813,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (isQuotaExceeded) {
       const updatedList = usuariosSistema.filter((u) => u.id !== id);
       setUsuariosSistema(updatedList);
-      localStorage.setItem('contingency_users', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_users', updatedList);
       setNotification('Utilizador removido com sucesso (Contingência Local).');
       return;
     }
@@ -1794,7 +1842,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (isQuotaExceeded) {
       const updatedList = usuariosSistema.map((u) => (u.id === user.id ? user : u));
       setUsuariosSistema(updatedList);
-      localStorage.setItem('contingency_users', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_users', updatedList);
       setNotification(`Utilizador '${user.nome}' atualizado com sucesso (Contingência Local).`);
       return;
     }
@@ -1814,7 +1862,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (isQuotaExceeded) {
       const updatedList = profissionais.map((p) => (p.id === updatedProf.id ? updatedProf : p));
       setProfissionais(updatedList);
-      localStorage.setItem('contingency_profissionais', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_profissionais', updatedList);
       if (!skipNotification) {
         setNotification(`Cuidador '${updatedProf.nome}' atualizado com sucesso (Contingência Local).`);
       }
@@ -1832,9 +1880,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       console.warn("Aviso no updateProfissional (usando fallback local):", err);
       setProfissionais(prev => prev.map(p => p.id === updatedProf.id ? updatedProf : p));
       try {
-        const currentList = JSON.parse(localStorage.getItem('contingency_profissionais') || '[]');
+        const currentList = JSON.parse(getContingencyItem('contingency_profissionais') || '[]');
         const updatedList = currentList.map((p: any) => p.id === updatedProf.id ? updatedProf : p);
-        localStorage.setItem('contingency_profissionais', JSON.stringify(updatedList));
+        saveContingencyItem('contingency_profissionais', updatedList);
       } catch (e) {}
       if (!skipNotification) {
         setNotification(`Cuidador '${updatedProf.nome}' atualizado com sucesso.`);
@@ -1846,7 +1894,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (isQuotaExceeded) {
       const updatedList = profissionais.filter((p) => p.id !== id);
       setProfissionais(updatedList);
-      localStorage.setItem('contingency_profissionais', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_profissionais', updatedList);
       setNotification('Cuidador excluído com sucesso (Contingência Local).');
       return;
     }
@@ -1876,7 +1924,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           : p
       );
       setPacientes(updatedList);
-      localStorage.setItem('contingency_pacientes', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_pacientes', updatedList);
       setNotification('Paciente desativado logicamente com sucesso (Contingência Local).');
       return;
     }
@@ -1920,7 +1968,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (isQuotaExceeded) {
       const updatedList = [dataToSave, ...debitosProfissionais];
       setDebitosProfissionais(updatedList);
-      localStorage.setItem('contingency_debitos', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_debitos', updatedList);
       setNotification(`Débito de R$ ${debito.valor} registrado com sucesso para ${debito.nomeProfissional} (Contingência Local).`);
       return dataToSave;
     }
@@ -1982,7 +2030,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (handleQuotaError(err, 'addDebitoProfissional')) {
         const updatedList = [dataToSave, ...debitosProfissionais];
         setDebitosProfissionais(updatedList);
-        localStorage.setItem('contingency_debitos', JSON.stringify(updatedList));
+        saveContingencyItem('contingency_debitos', updatedList);
         setNotification(`Débito de R$ ${debito.valor} registrado com sucesso para ${debito.nomeProfissional} (Contingência Local).`);
         return dataToSave;
       }
@@ -1995,7 +2043,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (isQuotaExceeded) {
       const updatedList = debitosProfissionais.filter((d) => d.id !== id);
       setDebitosProfissionais(updatedList);
-      localStorage.setItem('contingency_debitos', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_debitos', updatedList);
       setNotification('Débito removido com sucesso (Contingência Local).');
       return;
     }
@@ -2026,7 +2074,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (handleQuotaError(err, 'deleteDebitoProfissional')) {
         const updatedList = debitosProfissionais.filter((d) => d.id !== id);
         setDebitosProfissionais(updatedList);
-        localStorage.setItem('contingency_debitos', JSON.stringify(updatedList));
+        saveContingencyItem('contingency_debitos', updatedList);
         setNotification('Débito removido com sucesso (Contingência Local).');
         return;
       }
@@ -2039,7 +2087,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (isQuotaExceeded) {
       const updatedList = debitosProfissionais.map((d) => (d.id === debito.id ? debito : d));
       setDebitosProfissionais(updatedList);
-      localStorage.setItem('contingency_debitos', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_debitos', updatedList);
       setNotification(`Débito de R$ ${debito.valor} atualizado com sucesso (Contingência Local).`);
       return;
     }
@@ -2053,7 +2101,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (handleQuotaError(err, 'updateDebitoProfissional')) {
         const updatedList = debitosProfissionais.map((d) => (d.id === debito.id ? debito : d));
         setDebitosProfissionais(updatedList);
-        localStorage.setItem('contingency_debitos', JSON.stringify(updatedList));
+        saveContingencyItem('contingency_debitos', updatedList);
         setNotification(`Débito de R$ ${debito.valor} atualizado com sucesso (Contingência Local).`);
         return;
       }
@@ -2085,7 +2133,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (isQuotaExceeded) {
       const updatedList = [dataToSave, ...faturasPacientes];
       setFaturasPacientes(updatedList);
-      localStorage.setItem('contingency_faturas', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_faturas', updatedList);
       setNotification('Fatura salva com sucesso (Contingência Local).');
       return dataToSave;
     }
@@ -2102,7 +2150,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (handleQuotaError(err, 'addFaturaPaciente')) {
         const updatedList = [dataToSave, ...faturasPacientes];
         setFaturasPacientes(updatedList);
-        localStorage.setItem('contingency_faturas', JSON.stringify(updatedList));
+        saveContingencyItem('contingency_faturas', updatedList);
         setNotification('Fatura salva com sucesso (Contingência Local).');
         return dataToSave;
       }
@@ -2115,7 +2163,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (isQuotaExceeded) {
       const updatedList = faturasPacientes.filter((f) => f.id !== id);
       setFaturasPacientes(updatedList);
-      localStorage.setItem('contingency_faturas', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_faturas', updatedList);
       setNotification('Fatura removida com sucesso (Contingência Local).');
       return;
     }
@@ -2129,7 +2177,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (handleQuotaError(err, 'deleteFaturaPaciente')) {
         const updatedList = faturasPacientes.filter((f) => f.id !== id);
         setFaturasPacientes(updatedList);
-        localStorage.setItem('contingency_faturas', JSON.stringify(updatedList));
+        saveContingencyItem('contingency_faturas', updatedList);
         setNotification('Fatura removida com sucesso (Contingência Local).');
         return;
       }
@@ -2178,7 +2226,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (isQuotaExceeded) {
       const updatedList = folhasPagamento.filter((f) => f.id !== id);
       setFolhasPagamento(updatedList);
-      localStorage.setItem('contingency_folhas', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_folhas', updatedList);
       setNotification('Folha removida com sucesso (Contingência Local).');
       return;
     }
@@ -2192,7 +2240,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (handleQuotaError(err, 'deleteFolhaPagamento')) {
         const updatedList = folhasPagamento.filter((f) => f.id !== id);
         setFolhasPagamento(updatedList);
-        localStorage.setItem('contingency_folhas', JSON.stringify(updatedList));
+        saveContingencyItem('contingency_folhas', updatedList);
         setNotification('Folha removida com sucesso (Contingência Local).');
         return;
       }
@@ -2333,7 +2381,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (isQuotaExceeded) {
       const updatedList = [dataToSave, ...folhasPagamento];
       setFolhasPagamento(updatedList);
-      localStorage.setItem('contingency_folhas', JSON.stringify(updatedList));
+      saveContingencyItem('contingency_folhas', updatedList);
       setNotification('Folha fechada com sucesso (Contingência Local).');
       return dataToSave;
     }
@@ -2350,7 +2398,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (handleQuotaError(err, 'addFolhaPagamento')) {
         const updatedList = [dataToSave, ...folhasPagamento];
         setFolhasPagamento(updatedList);
-        localStorage.setItem('contingency_folhas', JSON.stringify(updatedList));
+        saveContingencyItem('contingency_folhas', updatedList);
         setNotification('Folha fechada com sucesso (Contingência Local).');
         return dataToSave;
       }

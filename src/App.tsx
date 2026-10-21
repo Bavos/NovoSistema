@@ -200,7 +200,7 @@ function DashboardContent() {
     if (!localSessionId) {
       localSessionId = typeof crypto !== 'undefined' && crypto.randomUUID
         ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).substring(2)}`;
+        : `${Date.now()}-${Array.from(crypto.getRandomValues(new Uint32Array(2)), n => n.toString(36)).join('')}`;
       window.sessionStorage.setItem('rh_session_token', localSessionId);
     }
 
