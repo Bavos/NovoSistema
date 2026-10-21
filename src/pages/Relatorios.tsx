@@ -132,6 +132,11 @@ export const Relatorios: React.FC = () => {
     return dataIso;
   };
 
+  const formatarMoeda = (valor: number | undefined | null) => {
+    const num = Number(valor || 0);
+    return num.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  };
+
   const dadosRelatorioPaciente = useMemo(() => {
     if (modalRelatorioAtivo !== 'atend_paciente') return [];
     const listaCompleta: any[] = [];
