@@ -39,6 +39,12 @@ const GRUPOS_INICIAIS: GrupoRelatorio[] = [
         ajuda: 'Exibe a consolidação financeira dos profissionais para fechamento da folha no período.'
       },
       {
+        id: 'previa_folha_bancos',
+        titulo: 'Prévia Financeira da Folha de Pagamento Por Bancos',
+        descricao: 'Demonstrativo financeiro da folha de pagamento agrupado por instituição bancária, detalhando produção, ajuda de custo, valor bruto e dados de pagamento.',
+        ajuda: 'Exibe a folha de pagamento dividida por cada banco com subtotais financeiros e dados bancários de cada profissional.'
+      },
+      {
         id: 'faltas_profissional',
         titulo: 'Relação de Faltas por Profissional',
         descricao: 'Lista detalhada das faltas e ausências registradas no período, agrupadas por profissional com motivos e observações.',
@@ -449,6 +455,98 @@ export const Relatorios: React.FC = () => {
     });
 
     return Object.values(profMap).filter((p: any) => p.qtd > 0).sort((a: any, b: any) => a.nome.localeCompare(b.nome));
+  }, [modalRelatorioAtivo, profissionais, agendamentos, plantoes, dataInicial, dataFinal]);
+
+  // Dados da Prévia Financeira da Folha de Pagamento Por Bancos
+  const dadosPreviaFolhaPorBancos = useMemo(() => {
+    if (modalRelatorioAtivo !== 'previa_folha_bancos') return [];
+    const profMap: Record<string, any> = {};
+
+    (profissionais || []).forEach(p => {
+      const db: any = p.dadosBancarios || {};
+      const bancoRaw = (db.banco || p.banco || '').trim();
+      const nomeBanco = bancoRaw ? bancoRaw : 'Outros / Sem Banco Cadastrado';
+
+      profMap[p.id] = {
+        id: p.id,
+        nome: p.nome || 'Não informado',
+        cpf: p.cpf || p.cnpj || '-',
+        banco: nomeBanco,
+        agencia: db.agencia || p.agencia || '-',
+        conta: db.conta || p.conta || '-',
+        tipoConta: db.tipoConta || p.tipoConta || 'Corrente',
+        pix: db.pix || p.pix || p.chavePix || '-',
+        tipo: 'Plantonista',
+        qtd: 0,
+        salario: 0,
+        producao: 0,
+        ajudaCusto: 0,
+        bruto: 0
+      };
+    });
+
+    const lista = [...(agendamentos || []), ...(plantoes || [])];
+    lista.forEach((item: any) => {
+      const dataItem = (item.data || '').slice(0, 10);
+      if (dataInicial && dataItem < dataInicial) return;
+      if (dataFinal && dataItem > dataFinal) return;
+      if (item.status === 'Cancelado' || item.status?.toLowerCase().includes('falta')) return;
+
+      const pId = item.idProfissional || item.profissionalId || item.profissional;
+      const pNome = item.nomeProfissional || item.profissional || 'Outro';
+
+      let ref = profMap[pId];
+      if (!ref) {
+        const encontrado = Object.values(profMap).find((p: any) => p.nome === pNome);
+        if (encontrado) ref = encontrado;
+      }
+
+      const valorPlantao = Number(item.valorProfissional || item.valor || item.valorRepasse || 175.00);
+      const ajuda = Number(item.ajudaCusto || 0);
+
+      if (ref) {
+        ref.qtd += 1;
+        ref.producao += valorPlantao;
+        ref.ajudaCusto += ajuda;
+        ref.bruto += (valorPlantao + ajuda);
+      }
+    });
+
+    // Filtra apenas profissionais com produção > 0
+    const profissionaisComProducao = Object.values(profMap).filter((p: any) => p.qtd > 0);
+
+    // Agrupa por banco
+    const mapaBancos: Record<string, { bancoNome: string; itens: any[]; totalQtd: number; totalBruto: number; totalProducao: number; totalAjuda: number }> = {};
+
+    profissionaisComProducao.forEach((p: any) => {
+      if (!mapaBancos[p.banco]) {
+        mapaBancos[p.banco] = {
+          bancoNome: p.banco,
+          itens: [],
+          totalQtd: 0,
+          totalBruto: 0,
+          totalProducao: 0,
+          totalAjuda: 0
+        };
+      }
+      mapaBancos[p.banco].itens.push(p);
+      mapaBancos[p.banco].totalQtd += p.qtd;
+      mapaBancos[p.banco].totalProducao += p.producao;
+      mapaBancos[p.banco].totalAjuda += p.ajudaCusto;
+      mapaBancos[p.banco].totalBruto += p.bruto;
+    });
+
+    // Ordena profissionais por nome dentro de cada banco
+    Object.values(mapaBancos).forEach(g => {
+      g.itens.sort((a, b) => a.nome.localeCompare(b.nome));
+    });
+
+    // Ordena bancos alfabeticamente
+    return Object.values(mapaBancos).sort((a, b) => {
+      if (a.bancoNome.includes('Sem Banco')) return 1;
+      if (b.bancoNome.includes('Sem Banco')) return -1;
+      return a.bancoNome.localeCompare(b.bancoNome);
+    });
   }, [modalRelatorioAtivo, profissionais, agendamentos, plantoes, dataInicial, dataFinal]);
 
   // Dados da Prévia Financeira de Curingas
