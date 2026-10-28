@@ -42,6 +42,7 @@ import * as https from "https";
 if (!admin.apps.length) {
   admin.initializeApp();
 }
+const db = admin.firestore("ai-studio-ec969b01-95ac-467f-b5b7-48efe433d663");
 
 // -----------------------------------------------------------------------------------------
 // DECLARAÇÃO DOS SEGREDOS DO BANCO INTER (GERENCIADOS VIA GOOGLE SECRET MANAGER)
@@ -243,7 +244,7 @@ export const gerarCobrancaInter = onCall(
 
       // 8. Registro de Log de Auditoria no Firestore
       try {
-        await admin.firestore().collection("logs_auditoria").add({
+        await db.collection("logs_auditoria").add({
           timestamp: new Date().toISOString(),
           userId: request.auth.uid,
           userEmail: request.auth.token.email || "desconhecido",
@@ -471,7 +472,7 @@ export const processarFolhaInter = onCall(
 
       // Registro de Auditoria no Firestore
       try {
-        await admin.firestore().collection("logs_auditoria").add({
+        await db.collection("logs_auditoria").add({
           timestamp: new Date().toISOString(),
           userId: request.auth.uid,
           userEmail: request.auth.token.email || "desconhecido",

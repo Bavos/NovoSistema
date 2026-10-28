@@ -6,7 +6,7 @@ const https = require("https");
 if (!admin.apps.length) {
   admin.initializeApp();
 }
-const db = admin.firestore();
+const db = admin.firestore('ai-studio-ec969b01-95ac-467f-b5b7-48efe433d663');
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -262,8 +262,31 @@ exports.analisarMetricasHomeCare = onCall(
       return profMap.get(k);
     };
 
-    const pacientesRaw = Array.isArray(source.pacientes) ? source.pacientes : [];
-    const profissionaisRaw = Array.isArray(source.profissionais) ? source.profissionais : [];
+    let pacientesRaw = Array.isArray(source.pacientes) ? source.pacientes : [];
+    let profissionaisRaw = Array.isArray(source.profissionais) ? source.profissionais : [];
+
+    // Localização das coleções no banco nomeado do Firestore caso não venham no payload
+    if (pacientesRaw.length === 0) {
+      try {
+        const snapPac = await db.collection("pacientes").get();
+        if (!snapPac.empty) {
+          pacientesRaw = snapPac.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        }
+      } catch (errPac) {
+        console.warn("[analisarMetricasHomeCare] Aviso ao buscar pacientes do Firestore:", errPac.message);
+      }
+    }
+
+    if (profissionaisRaw.length === 0) {
+      try {
+        const snapProf = await db.collection("profissionais").get();
+        if (!snapProf.empty) {
+          profissionaisRaw = snapProf.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        }
+      } catch (errProf) {
+        console.warn("[analisarMetricasHomeCare] Aviso ao buscar profissionais do Firestore:", errProf.message);
+      }
+    }
     const escalasRaw = Array.isArray(source.escalas || source.agendamentos || source.plantoes) ? (source.escalas || source.agendamentos || source.plantoes) : [];
     const financeiroRaw = Array.isArray(source.financeiro) ? source.financeiro : [];
 

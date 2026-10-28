@@ -7,6 +7,8 @@
 import * as admin from "firebase-admin";
 import { HttpsError } from "firebase-functions/v2/https";
 
+const db = admin.firestore("ai-studio-ec969b01-95ac-467f-b5b7-48efe433d663");
+
 export interface LimiteConfig {
   maxPorMinuto: number;
   maxPorDia: number;
@@ -28,9 +30,9 @@ export async function validarLimiteRequisicoesIA(
   config: LimiteConfig = CONFIG_PADRAO
 ): Promise<{ requisicoesRestantesMinuto: number }> {
   const agora = Date.now();
-  const limiteRef = admin.firestore().collection("rate_limits_ia").doc(uid);
+  const limiteRef = db.collection("rate_limits_ia").doc(uid);
 
-  return await admin.firestore().runTransaction(async (transaction) => {
+  return await db.runTransaction(async (transaction) => {
     const doc = await transaction.get(limiteRef);
     const dados = doc.data();
 

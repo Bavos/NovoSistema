@@ -11,6 +11,8 @@ import { z } from "zod";
 import { GoogleGenAI, Type } from "@google/genai";
 import { validarLimiteRequisicoesIA } from "./middleware/rateLimiter";
 
+const db = admin.firestore("ai-studio-ec969b01-95ac-467f-b5b7-48efe433d663");
+
 // 1. Definição da Credencial Segura gerenciada pelo Google Cloud Secret Manager
 export const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
 
@@ -58,7 +60,7 @@ export const gerarResumoClinico = onCall(
 
     if (!isMasterAdmin && userRole !== "Administrador" && userRole !== "Profissional" && userRole !== "Coordenador") {
       // Verificação em fallback no Firestore caso não esteja gravado em custom claims
-      const userDoc = await admin.firestore().collection("usuarios_sistema").doc(uid).get();
+      const userDoc = await db.collection("usuarios_sistema").doc(uid).get();
       const nivelAcesso = userDoc.data()?.nivelAcesso;
       if (nivelAcesso !== "Administrador" && nivelAcesso !== "Profissional" && nivelAcesso !== "Coordenador") {
         throw new HttpsError("permission-denied", "Apenas profissionais de saúde e administradores podem gerar resumos clínicos.");
@@ -184,7 +186,7 @@ ${dadosClinicos.trim()}
       }
 
       // I. Trilha de Auditoria (Audit Log)
-      await admin.firestore().collection("logs_auditoria").add({
+      await db.collection("logs_auditoria").add({
         acao: "IA_GERAR_RESUMO_CLINICO",
         pacienteId,
         executadoPorUid: uid,
@@ -530,7 +532,7 @@ export const analisarMetricasHomeCare = onCall(
     const isMasterAdmin = userEmail === "renatobz@gmail.com" || userEmail === "rhgestaodomiciliar@gmail.com";
 
     if (!isMasterAdmin && userRole !== "administrador" && userRole !== "admin") {
-      const userDoc = await admin.firestore().collection("usuarios_sistema").doc(uid).get();
+      const userDoc = await db.collection("usuarios_sistema").doc(uid).get();
       const nivelAcesso = String(userDoc.data()?.nivelAcesso || userDoc.data()?.role || "").toLowerCase();
       if (nivelAcesso !== "administrador" && nivelAcesso !== "admin") {
         throw new HttpsError("permission-denied", "Apenas administradores do sistema têm permissão para executar a Análise de Inteligência Operacional.");
