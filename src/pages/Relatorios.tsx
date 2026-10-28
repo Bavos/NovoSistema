@@ -467,7 +467,7 @@ export const Relatorios: React.FC = () => {
     if (modalRelatorioAtivo !== 'previa_folha_bancos') return [];
     const profMap: Record<string, any> = {};
 
-    (profissionais || []).forEach(p => {
+    (profissionais || []).forEach((p: any) => {
       const db: any = p.dadosBancarios || {};
       const bancoRaw = (db.banco || p.banco || '').trim();
       const nomeBanco = bancoRaw ? bancoRaw : 'Outros / Sem Banco Cadastrado';
@@ -1288,136 +1288,6 @@ export const Relatorios: React.FC = () => {
         </div>
       )}
 
-      {/* Modal: Prévia Financeira da Folha de Pagamento Por Bancos */}
-      {modalRelatorioAtivo === 'previa_folha_bancos' && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden print:max-h-none print:shadow-none print:border-none">
-            <div className="flex items-center justify-between px-6 py-4 bg-slate-800 text-white print:hidden">
-              <div className="flex items-center gap-2">
-                <Printer size={18} />
-                <h3 className="text-sm font-bold">Prévia Financeira da Folha de Pagamento Por Bancos</h3>
-              </div>
-              <div className="flex items-center gap-2">
-                <button type="button" onClick={() => window.print()} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg">Imprimir / PDF</button>
-                <button type="button" onClick={() => setModalRelatorioAtivo(null)} className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-300"><X size={18} /></button>
-              </div>
-            </div>
-
-            <div className="p-8 overflow-y-auto space-y-6 bg-slate-100 flex-1 print:bg-white print:p-0">
-              <div className="bg-white p-8 rounded-xl shadow-xs border border-slate-200 max-w-5xl mx-auto space-y-6 print:shadow-none print:border-none">
-                <div className="flex items-center justify-between border-b border-slate-300 pb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-lg bg-blue-600 text-white font-bold flex items-center justify-center text-lg">V</div>
-                    <div>
-                      <h4 className="font-bold text-slate-900 text-sm">VALLIDARE</h4>
-                      <p className="text-[11px] text-slate-500 font-medium">Gestão e Consultoria em Saúde</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-slate-500">Emitido em: {new Date().toLocaleDateString('pt-BR')}</p>
-                    <p className="text-[11px] text-slate-400">Total de Instituições: {dadosPreviaFolhaPorBancos.length}</p>
-                  </div>
-                </div>
-
-                <div className="border-t-2 border-b-2 border-slate-800 py-3 flex items-center justify-between">
-                  <div>
-                    <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wide">Prévia Financeira da Folha de Pagamento Por Bancos</h2>
-                    <p className="text-xs text-slate-600 font-medium">Período: {formatarDataBr(dataInicial)} a {formatarDataBr(dataFinal)}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-xs text-slate-500 block">Total Geral Previsto</span>
-                    <strong className="text-base font-bold text-emerald-700">
-                      {formatarMoeda(dadosPreviaFolhaPorBancos.reduce((acc, g) => acc + g.totalBruto, 0))}
-                    </strong>
-                  </div>
-                </div>
-
-                {dadosPreviaFolhaPorBancos.length === 0 ? (
-                  <div className="text-center py-12 text-slate-500 text-xs italic">Nenhum plantão ou valor localizado para o período selecionado.</div>
-                ) : (
-                  <div className="space-y-6">
-                    {dadosPreviaFolhaPorBancos.map((grupo, gIdx) => (
-                      <div key={gIdx} className="border border-slate-200 rounded-lg overflow-hidden break-inside-avoid shadow-xs bg-white">
-                        {/* Cabeçalho do Banco */}
-                        <div className="bg-slate-100 border-b border-slate-200 px-4 py-2.5 flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="text-base">🏦</span>
-                            <span className="font-bold text-slate-800 text-xs uppercase tracking-wider">{grupo.bancoNome}</span>
-                            <span className="text-[11px] font-semibold text-slate-600 bg-white border border-slate-300 px-2 py-0.5 rounded-full ml-2">
-                              {grupo.itens.length} {grupo.itens.length === 1 ? 'profissional' : 'profissionais'} ({grupo.totalQtd} plantões)
-                            </span>
-                          </div>
-                          <div className="text-right">
-                            <span className="text-[11px] text-slate-500 mr-2">Subtotal Banco:</span>
-                            <strong className="text-xs font-bold text-slate-900">{formatarMoeda(grupo.totalBruto)}</strong>
-                          </div>
-                        </div>
-
-                        {/* Tabela dos Profissionais */}
-                        <table className="w-full text-left text-xs border-collapse">
-                          <thead>
-                            <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-[11px]">
-                              <th className="p-2.5">Profissional</th>
-                              <th className="p-2.5">CPF</th>
-                              <th className="p-2.5">Agência / Conta</th>
-                              <th className="p-2.5">Chave PIX</th>
-                              <th className="p-2.5 text-center">Plantões</th>
-                              <th className="p-2.5 text-right">Produção</th>
-                              <th className="p-2.5 text-right">Adicionais</th>
-                              <th className="p-2.5 text-right font-bold text-slate-900">Total Bruto</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100 text-slate-700">
-                            {grupo.itens.map((it: any, iIdx: number) => (
-                              <tr key={it.id || iIdx} className="hover:bg-slate-50/60">
-                                <td className="p-2.5 font-medium text-slate-900">{it.nome}</td>
-                                <td className="p-2.5 font-mono text-slate-600 text-[11px]">{it.cpf}</td>
-                                <td className="p-2.5 font-mono text-[11px]">
-                                  {it.agencia !== '-' || it.conta !== '-' ? `Ag: ${it.agencia} | Cc: ${it.conta}` : '-'}
-                                </td>
-                                <td className="p-2.5 font-mono font-medium text-emerald-700 text-[11px]">{it.pix}</td>
-                                <td className="p-2.5 text-center font-semibold">{it.qtd}</td>
-                                <td className="p-2.5 text-right">{formatarMoeda(it.producao)}</td>
-                                <td className="p-2.5 text-right">{it.ajudaCusto > 0 ? formatarMoeda(it.ajudaCusto) : '-'}</td>
-                                <td className="p-2.5 text-right font-bold text-slate-900">{formatarMoeda(it.bruto)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                          <tfoot>
-                            <tr className="bg-slate-50/90 border-t border-slate-200 text-slate-700 font-semibold text-[11px]">
-                              <td colSpan={4} className="p-2.5 text-right uppercase text-slate-500">Subtotal {grupo.bancoNome}:</td>
-                              <td className="p-2.5 text-center">{grupo.totalQtd}</td>
-                              <td className="p-2.5 text-right">{formatarMoeda(grupo.totalProducao)}</td>
-                              <td className="p-2.5 text-right">{formatarMoeda(grupo.totalAjuda)}</td>
-                              <td className="p-2.5 text-right font-bold text-emerald-700">{formatarMoeda(grupo.totalBruto)}</td>
-                            </tr>
-                          </tfoot>
-                        </table>
-                      </div>
-                    ))}
-
-                    {/* Consolidação Geral */}
-                    <div className="p-4 bg-slate-900 text-white rounded-lg flex items-center justify-between text-xs">
-                      <div>
-                        <span className="font-bold uppercase tracking-wider block">Consolidação Geral da Folha</span>
-                        <span className="text-slate-400 text-[11px]">
-                          {dadosPreviaFolhaPorBancos.reduce((acc, g) => acc + g.itens.length, 0)} profissionais em {dadosPreviaFolhaPorBancos.length} bancos | Total de {dadosPreviaFolhaPorBancos.reduce((acc, g) => acc + g.totalQtd, 0)} plantões
-                        </span>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-slate-400 text-[11px] block">Valor Total Líquido/Bruto Previsto</span>
-                        <span className="text-base font-bold text-emerald-400">
-                          {formatarMoeda(dadosPreviaFolhaPorBancos.reduce((acc, g) => acc + g.totalBruto, 0))}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Modal: Prévia Financeira da Folha de Pagamento */}
       {modalRelatorioAtivo === 'previa_folha' && (

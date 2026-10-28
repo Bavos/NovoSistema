@@ -5,26 +5,32 @@ import { getStorage } from 'firebase/storage';
 import { getFunctions } from 'firebase/functions';
 import { logError } from './diagnostics';
 
-setLogLevel('error');
 import staticConfig from '../../firebase-applet-config.json';
 
+setLogLevel('error');
+
 // Resolvendo as configurações do Firebase a partir de variáveis de ambiente com fallback para o arquivo local
-const getEnvVal = (envVal: any, fallbackVal: string): string => {
-  if (envVal === undefined || envVal === null) return fallbackVal;
-  const str = String(envVal).trim();
-  if (str === '' || str === 'undefined' || str === 'null') return fallbackVal;
-  return str;
+const getEnvVal = (envVal: any, fallbackVal?: string): string => {
+  if (envVal !== undefined && envVal !== null) {
+    const str = String(envVal).trim();
+    if (str !== '' && str !== 'undefined' && str !== 'null') return str;
+  }
+  if (fallbackVal !== undefined && fallbackVal !== null) {
+    const str = String(fallbackVal).trim();
+    if (str !== '' && str !== 'undefined' && str !== 'null') return str;
+  }
+  return '';
 };
 
 const firebaseConfig = {
-  apiKey: getEnvVal(import.meta.env.VITE_FIREBASE_API_KEY, staticConfig.apiKey),
-  authDomain: getEnvVal(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN, staticConfig.authDomain),
-  projectId: getEnvVal(import.meta.env.VITE_FIREBASE_PROJECT_ID, staticConfig.projectId),
-  storageBucket: getEnvVal(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET, staticConfig.storageBucket),
-  messagingSenderId: getEnvVal(import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID, staticConfig.messagingSenderId),
-  appId: getEnvVal(import.meta.env.VITE_FIREBASE_APP_ID, staticConfig.appId),
-  measurementId: getEnvVal(import.meta.env.VITE_FIREBASE_MEASUREMENT_ID, staticConfig.measurementId),
-  firestoreDatabaseId: getEnvVal(import.meta.env.VITE_FIREBASE_DATABASE_ID, staticConfig.firestoreDatabaseId || "ai-studio-ec969b01-95ac-467f-b5b7-48efe433d663"),
+  apiKey: getEnvVal(import.meta.env.VITE_FIREBASE_API_KEY, staticConfig?.apiKey),
+  authDomain: getEnvVal(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN, staticConfig?.authDomain),
+  projectId: getEnvVal(import.meta.env.VITE_FIREBASE_PROJECT_ID, staticConfig?.projectId || 'ai-studio-ec969b01-95ac-467f-b5b7-48efe433d663'),
+  storageBucket: getEnvVal(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET, staticConfig?.storageBucket),
+  messagingSenderId: getEnvVal(import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID, staticConfig?.messagingSenderId),
+  appId: getEnvVal(import.meta.env.VITE_FIREBASE_APP_ID, staticConfig?.appId),
+  measurementId: getEnvVal(import.meta.env.VITE_FIREBASE_MEASUREMENT_ID, staticConfig?.measurementId),
+  firestoreDatabaseId: getEnvVal(import.meta.env.VITE_FIREBASE_DATABASE_ID, staticConfig?.firestoreDatabaseId || "ai-studio-ec969b01-95ac-467f-b5b7-48efe433d663"),
 };
 
 export const app = initializeApp(firebaseConfig);
