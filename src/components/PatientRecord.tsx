@@ -5654,7 +5654,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-200 transform hover:-translate-y-0.5 bg-sky-600 hover:bg-sky-700 shadow-md shadow-sky-500/30 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none cursor-pointer flex items-center space-x-1.5 text-xs active:scale-95"
                     >
                       <Plus size={14} />
-                      <span>+ Agendar</span>
+                      <span>Agendar</span>
                     </button>
 
                     <button
@@ -5670,7 +5670,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       className="px-4 py-2 rounded-lg font-semibold text-white transition-all duration-200 transform hover:-translate-y-0.5 bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none cursor-pointer flex items-center space-x-1.5 text-xs active:scale-95"
                     >
                       <PlusCircle size={14} />
-                      <span>+ Serviço Extra</span>
+                      <span>Serviço Extra</span>
                     </button>
 
                     <button
