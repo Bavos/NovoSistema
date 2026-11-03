@@ -81,6 +81,9 @@ vi.mock('../types', async (importOriginal) => {
     validarDominioCorporativo: vi.fn(() => Promise.resolve(true)),
   };
 });
+vi.mock('../assets/images/rh_logo_oficial_horizontal.jpg', () => ({
+  default: 'mock-logo-url',
+}));
 vi.mock('../assets/images/rh_logo_1781469900395.jpg', () => ({
   default: 'mock-logo-url',
 }));

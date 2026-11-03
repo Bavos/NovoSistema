@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
-import rhLogo from '../assets/images/rh_logo_1781469900395.jpg';
+import rhLogo from '../assets/images/rh_logo_oficial_horizontal.jpg';
 import { validarDominioCorporativo } from '../types';
 import { getFriendlyErrorMessage } from '../utils/errorSanitizer';
 import { toast } from 'react-hot-toast';
@@ -308,11 +308,11 @@ export const LoginPage: React.FC<{ onNavigateToFirstAccess: () => void }> = ({ o
             <div id="mfa-login-recaptcha-container"></div>
 
             <div className="bg-white px-8 pt-8 pb-10 rounded-[28px] shadow-2xl w-full max-w-[400px] border border-slate-100">
-                <div className="flex justify-center mb-5">
+                <div className="flex justify-center">
                     <img 
                         src={rhLogo} 
                         alt="RH Gestão Domiciliar" 
-                        className="w-full max-w-[240px] h-auto object-contain select-none"
+                        className="w-56 h-auto mx-auto mb-4 object-contain select-none"
                     />
                 </div>
                 <h1 className="text-2xl font-bold text-[#1e293b] mb-6 text-center">Login</h1>
