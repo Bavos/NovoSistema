@@ -7330,12 +7330,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     </div>
                   ) : (
                     <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                      <table className="w-full text-left border-collapse text-sm">
+                      <table className="w-full min-w-[760px] text-left border-collapse text-sm">
                         <thead>
                           <tr className="bg-slate-50 border-b border-slate-300 text-gray-800 font-semibold text-xs uppercase tracking-wider">
                             <th className="py-3 px-4 text-sm font-semibold text-slate-800">Data</th>
                             <th className="py-3 px-4 text-sm font-semibold text-slate-800">Profissional</th>
-                            <th className="py-3 px-4 text-sm font-semibold text-slate-800">Descrição / Relato</th>
+                            <th className="py-3 px-4 text-sm font-semibold text-slate-800 min-w-[360px]">Descrição / Relato</th>
                             <th className="py-3 px-4 text-center text-sm font-semibold text-slate-800">Status</th>
                             {!isColaborador && <th className="py-3 px-4 text-right text-sm font-semibold text-slate-800">Ações</th>}
                           </tr>
@@ -7354,7 +7354,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                               <td className="py-3 px-4 whitespace-nowrap font-semibold text-gray-900">
                                 {oc.profissionalNome}
                               </td>
-                              <td className="py-3 px-4 max-w-sm break-words text-gray-600 font-normal">
+                              <td className="py-3 px-4 min-w-[360px] whitespace-pre-wrap break-words text-slate-700 font-normal leading-relaxed text-sm">
                                 {oc.descricao}
                               </td>
                               <td className="py-3 px-4 text-center whitespace-nowrap">
