@@ -1,673 +1,780 @@
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const functions = require("firebase-functions");
 const admin = require("firebase-admin");
-const axios = require("axios");
-const https = require("https");
+const { getFirestore } = require("firebase-admin/firestore");
 
-if (!admin.apps.length) {
-  admin.initializeApp();
-}
-const db = admin.firestore('ai-studio-ec969b01-95ac-467f-b5b7-48efe433d663');
+const app = !admin.apps.length ? admin.initializeApp() : admin.app();
+const db = getFirestore(app, "ai-studio-ec969b01-95ac-467f-b5b7-48efe433d663");
+const BEARER_TOKEN = process.env.AGENT_API_TOKEN;
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function getInterAccessToken() {
-  const cert = process.env.INTER_CERT;
-  const key = process.env.INTER_KEY;
-  const clientId = process.env.INTER_CLIENT_ID;
-  const clientSecret = process.env.INTER_CLIENT_SECRET;
-
-  if (!cert || !key || !clientId || !clientSecret) {
-    throw new Error("Credenciais do Banco Inter incompletas no Secret Manager.");
-  }
-
-  const httpsAgent = new https.Agent({
-    cert: cert,
-    key: key,
-    rejectUnauthorized: true,
-  });
-
-  const params = new URLSearchParams();
-  params.append("client_id", clientId.trim());
-  params.append("client_secret", clientSecret.trim());
-  params.append("grant_type", "client_credentials");
-  params.append("scope", "extrato.read cob.write cob.read boleto-cobranca.read boleto-cobranca.write");
-
-  const response = await axios.post(
-    "https://cdpj.partners.bancointer.com.br/oauth/v2/token",
-    params,
-    {
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      httpsAgent: httpsAgent,
-    }
-  );
-
-  return { token: response.data.access_token, httpsAgent };
+function norm(t) {
+  if (!t || typeof t !== "string") return "";
+  return t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
 }
 
-exports.emitirBoletoInter = onCall(
-  {
-    secrets: ["INTER_CERT", "INTER_KEY", "INTER_CLIENT_ID", "INTER_CLIENT_SECRET"],
-    region: "southamerica-east1",
-    timeoutSeconds: 60,
-  },
-  async (request) => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Usuário não autenticado.");
-    }
-
-    const { faturaId, clienteNome, clienteDocumento, clienteEmail, valor, dataVencimento, descricao } = request.data;
-
-    if (!faturaId || !clienteNome || !valor || !dataVencimento) {
-      throw new HttpsError("invalid-argument", "Dados obrigatórios da fatura ausentes.");
-    }
-
-    try {
-      const { token, httpsAgent } = await getInterAccessToken();
-
-      const docLimpo = (clienteDocumento || "00000000000").replace(/\D/g, "");
-      const tipoPessoa = docLimpo.length > 11 ? "JURIDICA" : "FISICA";
-      const seuNumero = String(faturaId).substring(0, 15);
-
-      const payload = {
-        seuNumero: seuNumero,
-        valorNominal: Number(valor),
-        dataVencimento: dataVencimento,
-        numDiasAgenda: 30,
-        pagador: {
-          cpfCnpj: docLimpo,
-          tipoPessoa: tipoPessoa,
-          nome: clienteNome,
-          email: clienteEmail || "",
-          endereco: "Rua Principal",
-          numero: "SN",
-          bairro: "Centro",
-          cidade: "Rio de Janeiro",
-          uf: "RJ",
-          cep: "20000000"
-        },
-        mensagem: {
-          linha1: descricao || "Prestação de Serviços de Home Care"
-        }
-      };
-
-      // 1. Criar cobrança
-      const response = await axios.post(
-        "https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas",
-        payload,
-        {
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          httpsAgent: httpsAgent,
-        }
-      );
-
-      const codigoSolicitacao = response.data.codigoSolicitacao;
-      console.log("Cobrança criada com sucesso. CodigoSolicitacao:", codigoSolicitacao);
-
-      // 2. Polling para buscar detalhes (Linha Digitável, Código de Barras e Pix)
-      let detalhes = {};
-      for (let i = 0; i < 4; i++) {
-        await sleep(2000);
-        try {
-          const detResp = await axios.get(
-            `https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas/${codigoSolicitacao}`,
-            {
-              headers: { "Authorization": `Bearer ${token}` },
-              httpsAgent: httpsAgent,
-            }
-          );
-          detalhes = detResp.data || {};
-          if (detalhes.boleto?.linhaDigitavel || detalhes.pix?.pixCopiaECola) {
-            console.log("Detalhes obtidos na tentativa", i + 1);
-            break;
-          }
-        } catch (e) {
-          console.warn(`Tentativa ${i + 1} detalhes:`, e.response?.data || e.message);
-        }
-      }
-
-      // 3. Buscar PDF Base64
-      let pdfBase64 = "";
-      try {
-        const pdfResp = await axios.get(
-          `https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas/${codigoSolicitacao}/pdf`,
-          {
-            headers: { "Authorization": `Bearer ${token}` },
-            httpsAgent: httpsAgent,
-          }
-        );
-        pdfBase64 = pdfResp.data?.pdf || "";
-      } catch (e) {
-        console.warn("Aviso ao buscar PDF:", e.response?.data || e.message);
-      }
-
-      const dadosFatura = {
-        codigoSolicitacao: codigoSolicitacao,
-        nossoNumero: detalhes.cobranca?.nossoNumero || detalhes.boleto?.nossoNumero || codigoSolicitacao,
-        codigoBarras: detalhes.boleto?.codigoBarras || "",
-        linhaDigitavel: detalhes.boleto?.linhaDigitavel || "",
-        pixCopiaECola: detalhes.pix?.pixCopiaECola || "",
-        pdfBase64: pdfBase64,
-        status: "pendente",
-        formaPagamento: "boleto",
-        atualizadoEm: admin.firestore.FieldValue.serverTimestamp(),
-      };
-
-      await db.collection("faturas").doc(faturaId).set(dadosFatura, { merge: true });
-
-      return {
-        sucesso: true,
-        ...dadosFatura,
-      };
-    } catch (error) {
-      console.error("Erro na emissão do boleto Inter:", error.response?.data || error.message);
-      const msg = error.response?.data?.violacoes?.[0]?.razao || error.response?.data?.message || error.message;
-      throw new HttpsError("internal", `Falha no Banco Inter: ${msg}`);
-    }
+function formatarCPF(cpf) {
+  if (!cpf) return "";
+  const limpo = String(cpf).replace(/\D/g, "");
+  if (limpo.length === 11) {
+    return limpo.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
   }
-);
+  return cpf;
+}
 
-exports.obterPdfBoletoInter = onCall(
-  {
-    secrets: ["INTER_CERT", "INTER_KEY", "INTER_CLIENT_ID", "INTER_CLIENT_SECRET"],
-    region: "southamerica-east1",
-    timeoutSeconds: 60,
-  },
-  async (request) => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Usuário não autenticado.");
-    }
+function formatarMoeda(val) {
+  const num = Number(val) || 0;
+  const partes = num.toFixed(2).split(".");
+  partes[0] = partes[0].replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return "R$ " + partes.join(",");
+}
 
-    const { codigoSolicitacao } = request.data;
-    if (!codigoSolicitacao) {
-      throw new HttpsError("invalid-argument", "Código de solicitação obrigatório.");
-    }
-
-    try {
-      const { token, httpsAgent } = await getInterAccessToken();
-      const pdfResp = await axios.get(
-        `https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas/${codigoSolicitacao}/pdf`,
-        {
-          headers: { "Authorization": `Bearer ${token}` },
-          httpsAgent: httpsAgent,
-        }
-      );
-
-      return {
-        sucesso: true,
-        pdfBase64: pdfResp.data?.pdf || "",
-      };
-    } catch (error) {
-      console.error("Erro ao obter PDF:", error.response?.data || error.message);
-      throw new HttpsError("internal", "O PDF ainda está sendo gerado pelo banco. Tente novamente em 5 segundos.");
-    }
+function formatarDataBR(dt) {
+  if (!dt) return "-";
+  if (typeof dt === "string" && dt.includes("-")) {
+    const p = dt.split("T")[0].split("-");
+    if (p.length === 3) return `${p[2]}/${p[1]}/${p[0]}`;
   }
-);
+  return dt;
+}
 
-exports.analisarMetricasHomeCare = onCall(
-  {
-    region: "southamerica-east1",
-    secrets: ["GEMINI_API_KEY"],
-    timeoutSeconds: 180,
-    memory: "512MiB",
-  },
-  async (request) => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Usuário não autenticado.");
-    }
+function calcularValorItem(item) {
+  if (item.valorTotal !== undefined && item.valorTotal !== null && Number(item.valorTotal) > 0) {
+    return Number(item.valorTotal);
+  }
+  const base = Number(item.valorPlantao || item.valorRepasse || 0);
+  const taxa = Number(item.taxaAdm || 0);
+  const ajuda = Number(item.ajudaCusto || 0);
+  const soma = base + taxa + ajuda;
 
-    const uid = request.auth.uid;
-    const userEmail = (request.auth.token.email || "").toLowerCase();
-    const userRole = String(request.auth.token.role || request.auth.token.nivelAcesso || "").toLowerCase();
-    const isMasterAdmin = userEmail === "renatobz@gmail.com" || userEmail === "rhgestaodomiciliar@gmail.com";
+  if (item.tipoDia && item.tipoDia.toLowerCase().includes("feriado") && !item.valorTotal) {
+    return Number((soma * 1.2).toFixed(2));
+  }
+  return soma;
+}
 
-    if (!isMasterAdmin && userRole !== "administrador" && userRole !== "admin") {
-      const userDoc = await db.collection("usuarios_sistema").doc(uid).get();
-      const nivel = String(userDoc.data()?.nivelAcesso || userDoc.data()?.role || "").toLowerCase();
-      if (nivel !== "administrador" && nivel !== "admin") {
-        throw new HttpsError("permission-denied", "Acesso restrito exclusivamente a administradores.");
+// Extrai, filtra somente dias trabalhados (> 0) e ordena cronologicamente
+function extrairListaItensTrabalhados(fat) {
+  let lista = [];
+  if (Array.isArray(fat.plantoesCongelados) && fat.plantoesCongelados.length > 0) lista = fat.plantoesCongelados;
+  else if (Array.isArray(fat.itens) && fat.itens.length > 0) lista = fat.itens;
+  else if (Array.isArray(fat.servicos) && fat.servicos.length > 0) lista = fat.servicos;
+  else if (Array.isArray(fat.plantoes) && fat.plantoes.length > 0) lista = fat.plantoes;
+  else if (Array.isArray(fat.itensFatura) && fat.itensFatura.length > 0) lista = fat.itensFatura;
+  else if (Array.isArray(fat.detalhamento) && fat.detalhamento.length > 0) lista = fat.detalhamento;
+
+  return lista
+    .filter(item => {
+      // Ignora faltas, cancelamentos e valores zerados
+      if (item.status && (item.status.toLowerCase().includes("falta") || item.status.toLowerCase().includes("cancelado"))) {
+        return false;
       }
-    }
+      return calcularValorItem(item) > 0;
+    })
+    .sort((a, b) => {
+      const da = String(a.data || "");
+      const db = String(b.data || "");
+      return da.localeCompare(db);
+    });
+}
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new HttpsError("failed-precondition", "GEMINI_API_KEY não configurada no servidor.");
-    }
+function auth(req, res) {
+  const h = req.headers.authorization;
+  if (!h || h !== ("Bearer " + BEARER_TOKEN)) {
+    res.status(401).json({ status: "erro", mensagem: "Nao autorizado" });
+    return false;
+  }
+  return true;
+}
 
-    const rawData = request.data || {};
-    const source = rawData.metricas || rawData;
-    const pergunta = String(rawData.pergunta || "").trim();
-    
-    // Sanitização e Anonimização LGPD
-    const pacMap = new Map();
-    const profMap = new Map();
-    let pacNum = 1;
-    let profNum = 1;
+// 1. buscarFuncionario
+exports.buscarFuncionario = functions.region("southamerica-east1").https.onRequest(async (req, res) => {
+  if (req.method !== "GET") return res.status(405).json({ erro: "Use GET" });
+  if (!auth(req, res)) return;
 
-    const anonPac = (id) => {
-      const k = String(id || '').trim();
-      if (!k) return 'PAC_00';
-      if (/^PAC[_-]\d+/i.test(k)) return k;
-      if (!pacMap.has(k)) pacMap.set(k, `PAC_${String(pacNum++).padStart(2, '0')}`);
-      return pacMap.get(k);
-    };
+  const termo = norm(req.query.nome);
+  if (!termo) return res.json({ status: "sucesso", resultados: [] });
 
-    const anonProf = (id) => {
-      const k = String(id || '').trim();
-      if (!k) return 'NÃO_ALOCADO (GARGALO)';
-      if (/^PROF[_-]\d+/i.test(k) || /^P-\d+/i.test(k)) return k;
-      if (!profMap.has(k)) profMap.set(k, `PROF_${String(profNum++).padStart(2, '0')}`);
-      return profMap.get(k);
-    };
-
-    let pacientesRaw = Array.isArray(source.pacientes) ? source.pacientes : [];
-    let profissionaisRaw = Array.isArray(source.profissionais) ? source.profissionais : [];
-
-    // Localização das coleções no banco nomeado do Firestore caso não venham no payload
-    if (pacientesRaw.length === 0) {
-      try {
-        const snapPac = await db.collection("pacientes").get();
-        if (!snapPac.empty) {
-          pacientesRaw = snapPac.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        }
-      } catch (errPac) {
-        console.warn("[analisarMetricasHomeCare] Aviso ao buscar pacientes do Firestore:", errPac.message);
-      }
-    }
-
-    if (profissionaisRaw.length === 0) {
-      try {
-        const snapProf = await db.collection("profissionais").get();
-        if (!snapProf.empty) {
-          profissionaisRaw = snapProf.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        }
-      } catch (errProf) {
-        console.warn("[analisarMetricasHomeCare] Aviso ao buscar profissionais do Firestore:", errProf.message);
-      }
-    }
-    const escalasRaw = Array.isArray(source.escalas || source.agendamentos || source.plantoes) ? (source.escalas || source.agendamentos || source.plantoes) : [];
-    const financeiroRaw = Array.isArray(source.financeiro) ? source.financeiro : [];
-
-    const escalasProcessadas = escalasRaw.map(e => ({
-      pacienteCodigo: e.pacienteCodigo || anonPac(e.pacienteId || e.pacienteNome || e.idPaciente || e.nomePaciente || e.paciente),
-      paciente: e.pacienteCodigo || anonPac(e.pacienteId || e.pacienteNome || e.idPaciente || e.nomePaciente || e.paciente),
-      profissional: (e.profissionalCodigo || e.profissionalId || e.profissionalNome || e.idProfissional || e.nomeProfissional || e.cuidadorId || e.funcionarioId || e.idCuidador || e.idFuncionario || e.profissional) 
-        ? anonProf(e.profissionalCodigo || e.profissionalId || e.profissionalNome || e.idProfissional || e.nomeProfissional || e.cuidadorId || e.funcionarioId || e.idCuidador || e.idFuncionario || e.profissional) 
-        : 'NÃO_ALOCADO (GARGALO)',
-      data: e.data || e.dataPrevista || 'N/D',
-      diaSemana: e.diaSemana || 'N/D',
-      turno: e.turno || e.horario || e.tipoTurno || '12h Diurno',
-      horario: e.turno || e.horario || e.tipoTurno || '12h Diurno',
-      statusAlocacao: e.statusAlocacao || (e.profissionalCodigo || e.profissionalId || e.profissionalNome ? 'completa' : 'incompleta'),
-      status: e.status || 'Agendado',
-      curinga: Boolean(
-        e.curinga === true ||
-        e.isCuringa === true ||
-        (e.tipoEscala && String(e.tipoEscala).toLowerCase().includes('curinga')) ||
-        (e.observacao && String(e.observacao).toUpperCase().includes('CURINGA')) ||
-        (e.motivoFalta && String(e.motivoFalta).toUpperCase().includes('CURINGA'))
-      ),
-      valorRepasseProfissional: Number(e.valorProfissional || e.valorRepasse || e.valorPlantao || 0),
-      ajudaCusto: Number(e.ajudaCusto || e.valorTransporte || e.transporte || e.adicional || 0),
-      taxaAdm: Number(e.taxaAdm || e.taxaAdministrativa || 0),
-      valorCobradoCliente: Number(e.valorCobrado || e.valorFaturado || e.valorTotalCobradoPlantao || (Number(e.valorPlantao || e.valorProfissional || 0) + Number(e.ajudaCusto || e.valorTransporte || 0) + Number(e.taxaAdm || e.taxaAdministrativa || 0)) || 0)
-    }));
-
-    const financeiroProcessado = financeiroRaw.map(f => ({
-      tipo: f.tipo || 'debito',
-      valor: Number(f.valor || 0),
-      data: f.data || 'N/D',
-      diaSemana: f.diaSemana || 'N/D',
-      motivo: f.motivo || f.numeroFatura || f.descricao || '',
-      paciente: f.pacienteId ? anonPac(f.pacienteId) : undefined,
-      profissional: f.profissionalId ? anonProf(f.profissionalId) : undefined,
-      curinga: Boolean(f.curinga || (f.motivo && String(f.motivo).toLowerCase().includes('curinga'))),
-      status: f.status || 'concluido'
-    }));
-
-    const resumoFinanceiroRaw = Array.isArray(source.resumoFinanceiro) ? source.resumoFinanceiro : [];
-    const resumoFinanceiro = resumoFinanceiroRaw.map(rf => ({
-      id: anonPac(rf.id || rf.codigo || rf.pacienteId),
-      faturamento: Number(rf.faturamento ?? rf.faturamentoTotal ?? 0),
-      custoProf: Number(rf.custoProf ?? rf.custoProfissionaisTotal ?? 0),
-      ajudaCusto: Number(rf.ajudaCusto ?? rf.ajudaCustoTotal ?? 0),
-      totalCustos: Number(rf.totalCustos ?? rf.custosTotais ?? 0),
-      lucro: Number(rf.lucro ?? rf.lucroOperacional ?? 0),
-      margem: Number(rf.margem ?? rf.margemPercentual ?? 0)
-    }));
-
-    const diasSemanaOrdem = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'];
-
-    // Agregações determinísticas (recebidas do frontend ou calculadas no backend)
-    let escalasPorDiaSemana = source.escalasPorDiaSemana;
-    let escalasFimDeSemana = source.escalasFimDeSemana;
-    let gargalosEscala = source.gargalosEscala;
-    let estatisticasCuringas = source.estatisticasCuringas;
-    let financeiroConsolidado = source.financeiroConsolidado;
-    let resumoGeral = source.resumoGeral;
-
-    if (!escalasFimDeSemana || !gargalosEscala || !escalasPorDiaSemana) {
-      const porDia = {};
-      diasSemanaOrdem.forEach(d => { porDia[d] = { total: 0, completas: 0, vagas: 0, curingas: 0 }; });
-
-      const sabadoPacientesMap = new Map();
-      const domingoPacientesMap = new Map();
-      let sabCompletas = 0;
-      let sabVagas = 0;
-      let domCompletas = 0;
-      let domVagas = 0;
-      let totCuringas = 0;
-      const curingasPorDia = {};
-      diasSemanaOrdem.forEach(d => { curingasPorDia[d] = 0; });
-      const vagasPorPac = {};
-
-      escalasProcessadas.forEach(e => {
-        const diaRaw = String(e.diaSemana || '').trim();
-        let dia = 'N/D';
-        if (diaRaw.includes('Seg')) dia = 'Segunda-feira';
-        else if (diaRaw.includes('Ter')) dia = 'Terça-feira';
-        else if (diaRaw.includes('Qua')) dia = 'Quarta-feira';
-        else if (diaRaw.includes('Qui')) dia = 'Quinta-feira';
-        else if (diaRaw.includes('Sex')) dia = 'Sexta-feira';
-        else if (diaRaw.includes('Sáb') || diaRaw.includes('Sab')) dia = 'Sábado';
-        else if (diaRaw.includes('Dom')) dia = 'Domingo';
-
-        const isComp = e.statusAlocacao === 'completa';
-        const isCur = Boolean(e.curinga);
-
-        if (porDia[dia]) {
-          porDia[dia].total++;
-          if (isComp) porDia[dia].completas++;
-          else porDia[dia].vagas++;
-          if (isCur) porDia[dia].curingas++;
-        }
-
-        if (isCur) {
-          totCuringas++;
-          if (curingasPorDia[dia] !== undefined) curingasPorDia[dia]++;
-        }
-
-        if (!isComp) {
-          const pCod = e.pacienteCodigo || e.paciente || 'PAC_ND';
-          vagasPorPac[pCod] = (vagasPorPac[pCod] || 0) + 1;
-        }
-
-        if (dia === 'Sábado') {
-          if (isComp) sabCompletas++;
-          else sabVagas++;
-          const pCod = e.pacienteCodigo || e.paciente || 'PAC_ND';
-          const t = e.turno || e.horario || '12h Diurno';
-          if (!sabadoPacientesMap.has(pCod)) sabadoPacientesMap.set(pCod, new Set());
-          sabadoPacientesMap.get(pCod).add(t);
-        } else if (dia === 'Domingo') {
-          if (isComp) domCompletas++;
-          else domVagas++;
-          const pCod = e.pacienteCodigo || e.paciente || 'PAC_ND';
-          const t = e.turno || e.horario || '12h Diurno';
-          if (!domingoPacientesMap.has(pCod)) domingoPacientesMap.set(pCod, new Set());
-          domingoPacientesMap.get(pCod).add(t);
-        }
-      });
-
-      const sabadoPacientesAtendidos = [];
-      sabadoPacientesMap.forEach((turnos, pac) => {
-        turnos.forEach(t => sabadoPacientesAtendidos.push(`${pac} (${t})`));
-      });
-      sabadoPacientesAtendidos.sort();
-
-      const domingoPacientesAtendidos = [];
-      domingoPacientesMap.forEach((turnos, pac) => {
-        turnos.forEach(t => domingoPacientesAtendidos.push(`${pac} (${t})`));
-      });
-      domingoPacientesAtendidos.sort();
-
-      escalasPorDiaSemana = escalasPorDiaSemana || porDia;
-      escalasFimDeSemana = escalasFimDeSemana || {
-        sabado: {
-          total: porDia['Sábado']?.total || 0,
-          completas: sabCompletas,
-          vagas: sabVagas,
-          pacientesAtendidos: sabadoPacientesAtendidos
-        },
-        domingo: {
-          total: porDia['Domingo']?.total || 0,
-          completas: domCompletas,
-          vagas: domVagas,
-          pacientesAtendidos: domingoPacientesAtendidos
-        }
-      };
-
-      const totComp = escalasProcessadas.filter(e => e.statusAlocacao === 'completa').length;
-      const totVagas = escalasProcessadas.filter(e => e.statusAlocacao !== 'completa').length;
-      const pacAfetados = Object.entries(vagasPorPac)
-        .sort((a, b) => b[1] - a[1])
-        .map(([p, q]) => `${p} (${q} ${q > 1 ? 'vagas em aberto' : 'vaga em aberto'})`);
-
-      gargalosEscala = gargalosEscala || {
-        escalasVagasTotal: totVagas,
-        escalasCompletasTotal: totComp,
-        taxaOcupacaoPercentual: escalasProcessadas.length > 0 ? Number(((totComp / escalasProcessadas.length) * 100).toFixed(1)) : 100,
-        pacientesAfetados: pacAfetados
-      };
-
-      const distPerc = {};
-      diasSemanaOrdem.forEach(d => {
-        const q = curingasPorDia[d] || 0;
-        distPerc[d] = totCuringas > 0 ? ((q / totCuringas) * 100).toFixed(1) + '%' : '0%';
-      });
-
-      estatisticasCuringas = estatisticasCuringas || {
-        total: totCuringas,
-        percentualDoTotal: escalasProcessadas.length > 0 ? Number(((totCuringas / escalasProcessadas.length) * 100).toFixed(1)) : 0,
-        distribuicaoDias: curingasPorDia,
-        distribuicaoPercentual: distPerc
-      };
-
-      resumoGeral = resumoGeral || {
-        totalPacientes: pacientesRaw.length,
-        totalProfissionais: profissionaisRaw.length,
-        totalEscalas: escalasProcessadas.length
-      };
-    }
-
-    if (!financeiroConsolidado) {
-      const totDeb = financeiroProcessado.filter(f => f.tipo === 'debito').reduce((a, b) => a + Number(b.valor || 0), 0);
-      const totCred = financeiroProcessado.filter(f => f.tipo === 'credito').reduce((a, b) => a + Number(b.valor || 0), 0);
-      financeiroConsolidado = {
-        totalDebitos: totDeb,
-        totalCreditos: totCred,
-        saldoOperacional: totCred - totDeb
-      };
-    }
-
-    const metricasExatas = source.metricasExatas || source.metricasAuditadas || {
-      total: source.totalEscalasMes ?? escalasProcessadas.length,
-      preenchidas: source.concluidas ?? escalasProcessadas.filter(e => e.statusAlocacao === 'completa').length,
-      vagas: source.vagas ?? escalasProcessadas.filter(e => e.statusAlocacao !== 'completa').length,
-      curingas: source.curingas ?? escalasProcessadas.filter(e => e.curinga).length,
-      pacientesAtivosTotal: source.pacientesAtivosTotal ?? pacientesRaw.length
-    };
-    const alertasCriticos = Array.isArray(source.alertasCriticos) ? source.alertasCriticos : [];
-    const padroesDetectados = source.padroesDetectados || {};
-    const escalasFechadas = source.escalasFechadas;
-    const escalasEmAberto = source.escalasEmAberto;
-    const curingasAcionados = source.curingasAcionados ?? source.curingas ?? metricasExatas.curingas;
-
-    const dadosHigienizados = {
-      periodo: source.periodo || source.periodoReferencia || 'Setembro/2026',
-      periodoReferencia: source.periodoReferencia || source.periodo || 'Setembro/2026',
-      metricasExatas,
-      escalasFechadas,
-      escalasEmAberto,
-      curingasAcionados,
-      alertasCriticos,
-      padroesDetectados,
-      resumoFinanceiro,
-      resumoGeral,
-      escalasPorDiaSemana,
-      escalasFimDeSemana,
-      gargalosEscala,
-      estatisticasCuringas,
-      financeiroConsolidado,
-      metricasGerais: {
-        totalPacientes: pacientesRaw.length,
-        pacientesAtivos: pacientesRaw.filter(p => (p.status || '').toLowerCase() === 'ativo').length,
-        totalProfissionais: profissionaisRaw.length,
-        profissionaisAtivos: profissionaisRaw.filter(p => (p.status || '').toLowerCase() !== 'inativo').length,
-        totalEscalas: escalasRaw.length,
-        escalasCuringa: escalasProcessadas.filter(e => e.curinga).length,
-        escalasSemAlocacao: escalasRaw.filter(e => !e.profissionalId && !e.profissionalNome && !e.idProfissional && !e.nomeProfissional).length,
-      },
-      pacientes: pacientesRaw.slice(0, 30).map(p => ({
-        codigo: anonPac(p.id || p.nome),
-        status: p.status || 'Ativo',
-        complexidade: p.complexidade || p.grauComplexidade || 'Média',
-        planoCuidado: p.planoCuidado || p.tipoPlantao || 'Plantão 12h',
-        valorPlantaoProfissional: Number(p.valorPlantaoProfissional || 0),
-        valorAjudaCusto: Number(p.valorAjudaCusto || 0),
-        taxaAdministrativa: Number(p.taxaAdministrativa || 0),
-        valorTotalCobradoPlantao: Number(p.valorTotalCobradoPlantao || 0)
-      })),
-      profissionais: profissionaisRaw.slice(0, 30).map(p => ({
-        codigo: anonProf(p.id || p.nome),
-        categoria: p.categoria || p.funcao || 'Cuidador',
-        especialidade: p.especialidade || 'Geral',
-        status: p.status || 'Disponível'
-      })),
-      escalas: escalasProcessadas.slice(0, 60),
-      financeiro: financeiroProcessado.slice(0, 30)
-    };
-
-    function gerarRespostaAuditoriaDeterministica(dados) {
-      const totais = dados.totais || {
-        totalProgramadoMes: dados.totalEscalasMes ?? 362,
-        fechadasAteHoje: dados.escalasFechadas?.total ?? 326,
-        restantesAteFimDoMes: dados.escalasEmAberto?.total ?? 36,
-        vagasAbertas: dados.vagas ?? 0,
-        curingasSubstituicoes: dados.curingasAcionados ?? 12
-      };
-      const dataBase = dados.dataBaseConsulta || "28/09/2026";
-      const mesRef = dados.mesReferencia || "Setembro/2026";
-
-      let out = `• **Status de Fechamento de ${mesRef}**\n`;
-      out += `Na presente data base (${dataBase}), a operação registra **${totais.fechadasAteHoje}** escalas fechadas e realizadas (de um total de **${totais.totalProgramadoMes}** programadas para o mês). Restam **${totais.restantesAteFimDoMes}** escalas em aberto a serem cumpridas nos dias 29 e 30/09, portanto o período ainda não está concluído.\n\n`;
-
-      out += `• **Detalhamento dos Plantões Restantes**\n`;
-      out += `• Total de plantões a realizar (29 e 30/09): **${totais.restantesAteFimDoMes}** plantões\n`;
-      const detalhe = dados.detalhamentoRestantesPorPaciente || dados.escalasEmAberto?.detalhePorPaciente || [];
-      if (Array.isArray(detalhe) && detalhe.length > 0) {
-        detalhe.slice(0, 15).forEach(d => {
-          const pac = d.paciente || d.pacienteCodigo || 'PAC';
-          const qtd = d.plantoesRestantes ?? d.plantoes ?? 0;
-          out += `• **${pac}**: **${qtd}** plantões restantes\n`;
+  try {
+    const snap = await db.collection("profissionais").get();
+    const resultados = [];
+    for (const doc of snap.docs) {
+      const d = doc.data();
+      if (norm(d.nome).includes(termo)) {
+        resultados.push({
+          id: doc.id,
+          nomeCompleto: d.nome || "Sem Nome",
+          funcao: d.profissao || d.especialidade || "Cuidadora",
+          pacienteOuSetor: d.pacienteOuSetor || d.setor || "Geral",
+          temCracha: Boolean(d.foto && d.foto.trim())
         });
-      } else {
-        out += `• Plantões distribuídos normalmente entre os pacientes ativos da escala mensal.\n`;
       }
-      out += `\n`;
-
-      out += `• **Alertas Operacionais**\n`;
-      if (totais.vagasAbertas > 0) {
-        out += `• **Escalas Vagas**: Constam **${totais.vagasAbertas}** escalas descobertas sem profissional alocado que requerem cobertura imediata.\n`;
-      } else {
-        out += `• **Escalas Vagas**: Nenhuma escala desassistida identificada no momento (**0** vagas abertas).\n`;
-      }
-      out += `• **Substituições Curinga**: Foram acionados **${totais.curingasSubstituicoes}** plantões com profissionais curinga para atendimento de contingência.\n`;
-
-      return out;
+      if (resultados.length >= 20) break;
     }
-
-    const totais = source.totais || {
-      totalProgramadoMes: source.totalEscalasMes ?? 362,
-      fechadasAteHoje: source.escalasFechadas?.total ?? (source.concluidas ?? 326),
-      restantesAteFimDoMes: source.escalasEmAberto?.total ?? 36,
-      vagasAbertas: source.vagas ?? 0,
-      curingasSubstituicoes: source.curingasAcionados ?? source.curingas ?? 12
-    };
-
-    const dadosConsolidados = {
-      dataBaseConsulta: source.dataBaseConsulta || "28/09/2026",
-      mesReferencia: source.mesReferencia || "Setembro/2026",
-      totais,
-      detalhamentoRestantesPorPaciente: source.detalhamentoRestantesPorPaciente || source.escalasEmAberto?.detalhePorPaciente,
-      detalhamentoFechadasPorPaciente: source.detalhamentoFechadasPorPaciente || source.escalasFechadas?.detalhePorPaciente
-    };
-
-    const prompt = `Você é a inteligência analítica e assistente de operações da RH Gestão Domiciliar.
-
-1. AUTONOMIA TOTAL E ANÁLISE PROFUNDA (PACIENTES E PROFISSIONAIS):
-- Tem total liberdade para examinar, cruzar e correlacionar todo o conjunto de dados operacionais, clínicos, cadastrais e financeiros do sistema:
-  * PROFISSIONAIS: Histórico de plantões, disponibilidade, competências técnicas, restrições, preferências, conciliação de dados bancários (contas, chaves Pix para repasses) e bairros de residência/atuação.
-  * PACIENTES/UTENTES: Grau de dependência, rotinas clínicas, horários de cobertura necessários e bairros de atendimento.
-  * ESCALAS: Distribuição de turnos e plantões vagos.
-- Realize diagnósticos geo-operacionais ativos: avalie a proximidade entre o bairro do profissional e o bairro do paciente para otimizar o tempo de deslocação, custos de ajuda de custo e reduzir o risco de atrasos ou faltas.
-- Cruze as informações bancárias e de repasse com os plantões efetivamente cumpridos para apontar inconformidades antes dos pagamentos.
-
-2. SEGURANÇA E AMBIENTE FECHADO:
-- Todos os dados analisados (incluindo informações bancárias, cadastros de colaboradores e fichas clínicas) pertencem exclusivamente ao ecossistema interno deste sistema de gestão.
-- Não exporte, não simule integrações externas e não direcione dados para serviços ou ferramentas fora desta plataforma. O tratamento decorre estritamente dentro deste contexto.
-
-3. PERSONALIDADE E TOM DE VOZ:
-- Mantenha uma postura enérgica, animada, acolhedora e proativa, aliada a um rigor analítico impecável.
-- Seja direto, objetivo e focado em soluções operacionais acionáveis para o gestor.
-- Não use respostas pré-formatadas ou repetitivas. Adapte cada análise à complexidade do caso concreto.
-
-4. DIRETRIZES DE RESPOSTA:
-- Quando sugerir substituições ou montagens de escala, apresente com clareza: a compatibilidade técnica do profissional, a viabilidade logística (bairro) e o impacto no custo/repasse.
-- Se faltar algum dado relevante (como chave Pix, agência bancária, bairro ou escala em aberto), identifique explicitamente o campo em falta para que o gestor possa providenciar o ajuste.
-- Responda sempre em português do Brasil, priorizando a excelência assistencial, o equilíbrio das escalas e a precisão administrativa.
-- FORMATO DE SAÍDA (OUTPUT FORMAT): Retorne exclusivamente texto corrido e fluido em Markdown (Plaintext). Garanta terminantemente que a resposta não seja encapsulada em JSON.
-
-Identificadores de Profissionais e Pacientes: Ao citar colaboradores ou pacientes (ex: PAC-01, PAC-02, P-01), utilize SEMPRE e EXATAMENTE o código literal informado, para que a interface decodifique e restaure os nomes reais localmente no navegador do gestor.
-
-Dados Consolidados de Auditoria:
-${JSON.stringify(dadosConsolidados, null, 2)}
-
-Consulta do Gestor:
-${pergunta || 'Apresente o status de fechamento das escalas do mês, quantas já foram fechadas e quantas ainda faltam.'}`;
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
-
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': apiKey,
-        },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            maxOutputTokens: 2048,
-            temperature: 0.75
-          }
-        }),
-      });
-
-      if (!response.ok) {
-        console.warn('API Gemini retornou status de atenção/quota:', response.status);
-        // Fallback resiliente: se quota esgotada ou erro na API externa, gera auditoria determinística direta
-        return {
-          resposta: gerarRespostaAuditoriaDeterministica(dadosConsolidados)
-        };
-      }
-
-      const data = await response.json();
-      const respostaTexto = data.candidates?.[0]?.content?.parts?.[0]?.text || gerarRespostaAuditoriaDeterministica(dadosConsolidados);
-
-      // Efemeridade estrita: Nenhuma conversa, pergunta ou resposta é persistida no banco de dados.
-      return {
-        resposta: respostaTexto
-      };
-    } catch (err) {
-      console.warn('Exceção ao consultar API Gemini, gerando resposta determinística:', err?.message);
-      return {
-        resposta: gerarRespostaAuditoriaDeterministica(dadosConsolidados)
-      };
-    }
-
+    return res.json({ status: "sucesso", resultados });
+  } catch (err) {
+    return res.status(500).json({ status: "erro", mensagem: err.message });
   }
-);
+});
 
+// 2. baixarCracha
+exports.baixarCracha = functions.region("southamerica-east1").https.onRequest(async (req, res) => {
+  if (req.method !== "GET") return res.status(405).json({ erro: "Use GET" });
+  if (!auth(req, res)) return;
+
+  const id = req.query.id;
+  if (!id) return res.status(400).json({ status: "erro", mensagem: "id obrigatorio" });
+
+  try {
+    const docProf = await db.collection("profissionais").doc(id).get();
+    if (!docProf.exists) return res.status(404).json({ status: "erro", mensagem: "Profissional nao encontrado" });
+
+    const prof = docProf.data();
+    if (!prof.foto || !prof.foto.trim()) return res.json({ status: "erro", mensagem: "Cracha ainda nao gerado" });
+
+    const PDFDocument = require("pdfkit");
+    let bLogo = null;
+    try {
+      const cfg = await db.collection("configuracoes_empresa").doc("empresa").get();
+      if (cfg.exists && cfg.data().logoUrl) {
+        bLogo = Buffer.from(cfg.data().logoUrl.replace(/^data:image\/\w+;base64,/, ""), "base64");
+      }
+    } catch (e) {}
+
+    let bFoto = null;
+    try {
+      bFoto = Buffer.from(prof.foto.replace(/^data:image\/\w+;base64,/, ""), "base64");
+    } catch (e) {}
+
+    const docPdf = new PDFDocument({ size: [240, 380], margin: 15 });
+    const chunks = [];
+    docPdf.on("data", c => chunks.push(c));
+    docPdf.on("end", () => {
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", "inline; filename=cracha.pdf");
+      res.status(200).send(Buffer.concat(chunks));
+    });
+
+    docPdf.rect(5, 5, 230, 370).lineWidth(2).strokeColor("#0d47a1").stroke();
+
+    if (bLogo) {
+      try { docPdf.image(bLogo, 20, 15, { fit: [200, 45], align: "center" }); }
+      catch (e) { docPdf.rect(5, 5, 230, 50).fillColor("#0d47a1").fill(); }
+    } else {
+      docPdf.rect(5, 5, 230, 50).fillColor("#0d47a1").fill();
+    }
+
+    if (bFoto) {
+      try { docPdf.image(bFoto, 70, 75, { fit: [100, 125], align: "center" }); }
+      catch (e) { docPdf.rect(70, 75, 100, 125).strokeColor("#cccccc").stroke(); }
+    } else {
+      docPdf.rect(70, 75, 100, 125).strokeColor("#cccccc").stroke();
+    }
+
+    docPdf.fillColor("#1a1a1a").fontSize(13).font("Helvetica-Bold").text(prof.nome || "Colaborador", 10, 220, { align: "center", width: 220 });
+    const funcao = prof.profissao || prof.especialidade || "CUIDADORA DE IDOSOS";
+    docPdf.fillColor("#0d47a1").fontSize(10).font("Helvetica-Bold").text(funcao.toUpperCase(), 10, 245, { align: "center", width: 220 });
+
+    const docIdentificacao = formatarCPF(prof.cpf || prof.documento || "");
+    if (docIdentificacao) {
+      docPdf.fillColor("#555555").fontSize(9).font("Helvetica").text("CPF: " + docIdentificacao, 10, 265, { align: "center", width: 220 });
+    }
+
+    docPdf.end();
+  } catch (err) {
+    return res.status(500).json({ status: "erro", mensagem: err.message });
+  }
+});
+
+// 3. buscarPaciente
+exports.buscarPaciente = functions.region("southamerica-east1").https.onRequest(async (req, res) => {
+  if (req.method !== "GET") return res.status(405).json({ erro: "Use GET" });
+  if (!auth(req, res)) return;
+
+  const termo = norm(req.query.nome);
+  if (!termo) return res.json({ status: "sucesso", resultados: [] });
+
+  try {
+    const snap = await db.collection("pacientes").get();
+    const resultados = [];
+    for (const doc of snap.docs) {
+      const d = doc.data();
+      if (norm(d.nome).includes(termo)) {
+        resultados.push({
+          id: doc.id,
+          nomeCompleto: d.nome || "Sem Nome",
+          dataNascimento: d.dataNascimento || d.nascimento || "Nao informada"
+        });
+      }
+      if (resultados.length >= 20) break;
+    }
+    return res.json({ status: "sucesso", resultados });
+  } catch (err) {
+    return res.status(500).json({ status: "erro", mensagem: err.message });
+  }
+});
+
+// 4. dadosPaciente
+exports.dadosPaciente = functions.region("southamerica-east1").https.onRequest(async (req, res) => {
+  if (req.method !== "GET") return res.status(405).json({ erro: "Use GET" });
+  if (!auth(req, res)) return;
+
+  const id = req.query.id;
+  if (!id) return res.status(400).json({ status: "erro", mensagem: "id obrigatorio" });
+
+  try {
+    const doc = await db.collection("pacientes").doc(id).get();
+    if (!doc.exists) return res.status(404).json({ status: "erro", mensagem: "Nao encontrado" });
+
+    const p = doc.data();
+    const end = p.endereco || {};
+
+    // 1. Campo informacoesChegada (Logística de Chegada)
+    const informacoesChegada = String(end.logisticaChegada || p.logisticaChegada || "").trim();
+
+    // 2. Histórico da aba "Inf. Clínica" (ocorrencias)
+    const listaOcorrencias = Array.isArray(p.ocorrencias) ? p.ocorrencias : [];
+
+    const informacoesClinicas = listaOcorrencias
+      .map(item => {
+        // Formatar data para DD/MM/AAAA se vier em YYYY-MM-DD
+        let dataFmt = item.data || "";
+        if (dataFmt.includes("-")) {
+          const partes = dataFmt.split("T")[0].split("-");
+          if (partes.length === 3) {
+            dataFmt = `${partes[2].padStart(2, "0")}/${partes[1].padStart(2, "0")}/${partes[0]}`;
+          }
+        }
+
+        const profNome = item.profissionalNome || item.nomeProfissional || "";
+        const profissional = profNome.trim() ? profNome.trim() : "Nenhum";
+        const descricao = String(item.descricao || item.relato || item.motivo || "").trim();
+        const status = item.status || (item.bloquearProfissional ? "Bloqueado" : "Registrado");
+
+        // Timestamp para ordenação decrescente
+        let rawDate = item.data || "";
+        let timeVal = new Date(rawDate).getTime();
+        if (isNaN(timeVal)) timeVal = 0;
+
+        return {
+          data: dataFmt,
+          profissional,
+          descricao,
+          status,
+          _time: timeVal
+        };
+      })
+      .sort((a, b) => b._time - a._time)
+      .map(({ _time, ...resto }) => resto);
+
+    return res.json({
+      status: "sucesso",
+      paciente: {
+        id: doc.id,
+        nomeCompleto: p.nome || "Sem Nome",
+        dataNascimento: p.dataNascimento || p.nascimento || "Nao informada",
+        endereco: {
+          logradouro: end.rua || end.logradouro || "",
+          numero: end.numero || "",
+          complemento: end.complemento || "",
+          bairro: end.bairro || p.bairro || "",
+          cidade: end.cidade || "Rio de Janeiro",
+          uf: end.estado || end.uf || "RJ",
+          cep: end.cep || ""
+        },
+        informacoesChegada,
+        informacoesClinicas
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ status: "erro", mensagem: err.message });
+  }
+});
+
+// 5. buscarFatura
+exports.buscarFatura = functions.region("southamerica-east1").https.onRequest(async (req, res) => {
+  if (req.method !== "GET") return res.status(405).json({ erro: "Use GET" });
+  if (!auth(req, res)) return;
+
+  const termoNumero = norm(req.query.numero);
+  const termoPaciente = norm(req.query.paciente);
+  const termoMes = req.query.mes ? String(req.query.mes).trim() : "";
+  const termoValor = req.query.valor ? Number(req.query.valor) : null;
+
+  try {
+    const snap = await db.collection("faturas_pacientes").get();
+    const resultados = [];
+
+    for (const doc of snap.docs) {
+      const d = doc.data();
+      const numFat = d.numeroFatura || doc.id;
+      const pacNome = d.nomePaciente || d.pacienteNome || "";
+      const dtEmissao = d.dataEmissao || "";
+      const vlrTotal = Number(d.valorTotal ?? 0);
+      const itens = extrairListaItensTrabalhados(d);
+
+      let corresponde = true;
+      if (termoNumero && !norm(numFat).includes(termoNumero)) corresponde = false;
+      if (termoPaciente && !norm(pacNome).includes(termoPaciente)) corresponde = false;
+      if (termoMes && !dtEmissao.includes(termoMes)) corresponde = false;
+      if (termoValor !== null && Math.abs(vlrTotal - termoValor) > 1.0) corresponde = false;
+
+      if (corresponde) {
+        resultados.push({
+          id: doc.id,
+          numeroFatura: numFat,
+          paciente: pacNome,
+          dataEmissao: formatarDataBR(dtEmissao),
+          valorTotal: vlrTotal,
+          valorFormatado: formatarMoeda(vlrTotal),
+          status: d.statusPagamento || d.status || "Aberta",
+          quantidadePlantoes: itens.length
+        });
+      }
+      if (resultados.length >= 20) break;
+    }
+
+    return res.json({ status: "sucesso", totalEncontrado: resultados.length, resultados });
+  } catch (err) {
+    return res.status(500).json({ status: "erro", mensagem: err.message });
+  }
+});
+
+// 6. dadosFatura
+exports.dadosFatura = functions.region("southamerica-east1").https.onRequest(async (req, res) => {
+  if (req.method !== "GET") return res.status(405).json({ erro: "Use GET" });
+  if (!auth(req, res)) return;
+
+  const id = req.query.id;
+  if (!id) return res.status(400).json({ status: "erro", mensagem: "id obrigatorio" });
+
+  try {
+    let docFat = await db.collection("faturas_pacientes").doc(id).get();
+    if (!docFat.exists) {
+      const snap = await db.collection("faturas_pacientes").where("numeroFatura", "==", id).limit(1).get();
+      if (!snap.empty) docFat = snap.docs[0];
+    }
+
+    if (!docFat || !docFat.exists) {
+      return res.status(404).json({ status: "erro", mensagem: "Fatura nao encontrada" });
+    }
+
+    const d = docFat.data();
+    const itens = extrairListaItensTrabalhados(d);
+
+    return res.json({
+      status: "sucesso",
+      fatura: {
+        id: docFat.id,
+        numeroFatura: d.numeroFatura || docFat.id,
+        paciente: d.nomePaciente || d.pacienteNome || "Paciente Geral",
+        dataEmissao: formatarDataBR(d.dataEmissao),
+        status: d.statusPagamento || d.status || "Aberta",
+        valorTotal: Number(d.valorTotal ?? 0),
+        valorFormatado: formatarMoeda(d.valorTotal),
+        quantidadePlantoes: itens.length,
+        itens: itens.map(i => {
+          const vlr = calcularValorItem(i);
+          let nomeServico = "Plantão 24h";
+          if (i.tipoDia && i.tipoDia.toLowerCase().includes("feriado")) {
+            nomeServico = "Plantão 24h - Feriado 20%";
+          } else if (i.tipoDia && i.tipoDia !== "Normal") {
+            nomeServico = `Plantão 24h - ${i.tipoDia}`;
+          } else if (i.servico) {
+            nomeServico = i.servico;
+          }
+          return {
+            data: formatarDataBR(i.data),
+            horario: i.horario || "08:00-08:00",
+            profissional: i.nomeProfissional || i.profissional || "-",
+            servico: nomeServico,
+            valor: vlr,
+            valorFormatado: formatarMoeda(vlr)
+          };
+        })
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ status: "erro", mensagem: err.message });
+  }
+});
+
+// 7. baixarFatura (Dimensionada para caber em 1 página com até 31 plantões)
+exports.baixarFatura = functions.region("southamerica-east1").https.onRequest(async (req, res) => {
+  if (req.method !== "GET") return res.status(405).json({ erro: "Use GET" });
+  if (!auth(req, res)) return;
+
+  const id = req.query.id;
+  if (!id) return res.status(400).json({ status: "erro", mensagem: "id obrigatorio" });
+
+  try {
+    let docFat = await db.collection("faturas_pacientes").doc(id).get();
+    if (!docFat.exists) {
+      const snap = await db.collection("faturas_pacientes").where("numeroFatura", "==", id).limit(1).get();
+      if (!snap.empty) docFat = snap.docs[0];
+    }
+
+    if (!docFat || !docFat.exists) {
+      return res.status(404).json({ status: "erro", mensagem: "Fatura nao encontrada" });
+    }
+
+    const fat = docFat.data();
+    const itens = extrairListaItensTrabalhados(fat);
+    const PDFDocument = require("pdfkit");
+    
+    // Margens compactas para garantir folha única
+    const docPdf = new PDFDocument({ size: "A4", margin: 28, bufferPages: true });
+    const chunks = [];
+
+    docPdf.on("data", c => chunks.push(c));
+    docPdf.on("end", () => {
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", "inline; filename=Fatura_" + (fat.numeroFatura || id) + ".pdf");
+      res.status(200).send(Buffer.concat(chunks));
+    });
+
+    const drawHeader = () => {
+      docPdf.fontSize(9.5).font("Helvetica-Bold").fillColor("#1a1a1a").text("VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI", 28, 24);
+      docPdf.fontSize(7.5).font("Helvetica").fillColor("#444444").text("CNPJ: 27.770.797/0001-62", 28, 36);
+      docPdf.text("Endereço: Rua Martins Ferreira, 71 Botafogo / Rio de Janeiro", 28, 46);
+
+      // Bloco do Paciente
+      docPdf.rect(28, 58, 539, 32).fillColor("#f4f7f6").fill();
+      docPdf.fontSize(7).font("Helvetica-Bold").fillColor("#00695c").text("DADOS DA FATURA E PACIENTE", 34, 62);
+      
+      docPdf.fontSize(7.5).font("Helvetica").fillColor("#222222");
+      docPdf.text("Emissão: " + formatarDataBR(fat.dataEmissao) + " | Status: " + (fat.statusPagamento || fat.status || "Aberta"), 34, 71);
+      docPdf.text("Paciente: " + (fat.nomePaciente || fat.pacienteNome || "Paciente Geral") + " | Valor Total: " + formatarMoeda(fat.valorTotal), 34, 80);
+
+      // Bloco da Fatura
+      docPdf.rect(430, 58, 137, 32).fillColor("#e0f2f1").fill();
+      docPdf.fontSize(7).font("Helvetica-Bold").fillColor("#00695c").text("FATURA", 436, 62);
+      docPdf.fontSize(8.5).font("Helvetica-Bold").fillColor("#1a1a1a").text("Nº: " + (fat.numeroFatura || docFat.id), 436, 73);
+
+      // Cabeçalho da Tabela
+      let yHead = 96;
+      docPdf.rect(28, yHead, 539, 16).fillColor("#004d40").fill();
+      docPdf.fontSize(7.5).font("Helvetica-Bold").fillColor("#ffffff");
+      docPdf.text("Data", 34, yHead + 4);
+      docPdf.text("Profissional", 95, yHead + 4);
+      docPdf.text("Serviço", 310, yHead + 4);
+      docPdf.text("Valor", 485, yHead + 4, { align: "right", width: 75 });
+    };
+
+    drawHeader();
+    let y = 117;
+    const linhaAltura = 13.5; // Espaçamento compacto que cabe 31 plantões na folha 1
+
+    for (const item of itens) {
+      if (y > 780) {
+        docPdf.addPage();
+        drawHeader();
+        y = 117;
+      }
+
+      docPdf.fontSize(7).font("Helvetica").fillColor("#2b2b2b");
+      docPdf.text(formatarDataBR(item.data), 34, y);
+      docPdf.text(item.nomeProfissional || item.profissional || "-", 95, y, { width: 210 });
+      
+      let serv = "Plantão 24h";
+      if (item.tipoDia && item.tipoDia.toLowerCase().includes("feriado")) {
+        serv = "Plantão 24h - Feriado 20%";
+      } else if (item.tipoDia && item.tipoDia !== "Normal") {
+        serv = `Plantão 24h - ${item.tipoDia}`;
+      } else if (item.servico) {
+        serv = item.servico;
+      }
+      docPdf.text(serv, 310, y, { width: 155 });
+
+      const vlr = calcularValorItem(item);
+      docPdf.text(formatarMoeda(vlr), 485, y, { align: "right", width: 75 });
+
+      y += linhaAltura;
+      docPdf.moveTo(28, y - 2).lineTo(567, y - 2).strokeColor("#eceff1").lineWidth(0.5).stroke();
+    }
+
+    // Bloco do Total
+    y += 5;
+    if (y > 770) { docPdf.addPage(); drawHeader(); y = 117; }
+    docPdf.rect(387, y, 180, 22).fillColor("#004d40").fill();
+    docPdf.fontSize(8.5).font("Helvetica-Bold").fillColor("#ffffff").text("TOTAL: " + formatarMoeda(fat.valorTotal), 392, y + 6, { align: "center", width: 170 });
+
+    // Rodapé oficial
+    const range = docPdf.bufferedPageRange();
+    for (let i = range.start; i < range.start + range.count; i++) {
+      docPdf.switchToPage(i);
+      docPdf.fontSize(7).font("Helvetica").fillColor("#777777")
+        .text(`VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI   Página ${i + 1} de ${range.count}`, 28, 815, { align: "center", width: 539 });
+    }
+
+    docPdf.end();
+  } catch (err) {
+    return res.status(500).json({ status: "erro", mensagem: err.message });
+  }
+});
+
+// 8. solicitarCracha
+exports.solicitarCracha = functions.region("southamerica-east1").https.onRequest(async (req, res) => {
+  if (req.method !== "POST") return res.status(405).json({ erro: "Use POST" });
+  if (!auth(req, res)) return;
+  const { nomeFuncionario } = req.body;
+  if (!nomeFuncionario) return res.status(400).json({ erro: "Campo obrigatorio" });
+  const ref = await db.collection("solicitacoes_cracha").add({
+    nomeFuncionario,
+    status: "pendente",
+    criadoEm: admin.firestore.FieldValue.serverTimestamp()
+  });
+  return res.status(201).json({ status: "sucesso", idSolicitacao: ref.id });
+});
+
+
+
+// ==========================================
+// FUNÇÕES DE ESCRITA - ASSISTENTE VAL
+// ==========================================
+
+// Helper para formatar a resposta no mesmo padrão de dadosPaciente
+function formatarRespostaPaciente(id, p) {
+  const end = p.endereco || {};
+  const informacoesChegada = String(end.logisticaChegada || p.logisticaChegada || "").trim();
+  const listaOcorrencias = Array.isArray(p.ocorrencias) ? p.ocorrencias : [];
+
+  const informacoesClinicas = listaOcorrencias
+    .map(item => {
+      let dataFmt = item.data || "";
+      if (dataFmt.includes("-")) {
+        const partes = dataFmt.split("T")[0].split("-");
+        if (partes.length === 3) {
+          dataFmt = `${partes[2].padStart(2, "0")}/${partes[1].padStart(2, "0")}/${partes[0]}`;
+        }
+      }
+      const profNome = item.profissionalNome || item.nomeProfissional || "";
+      const profissional = profNome.trim() ? profNome.trim() : "Nenhum";
+      const descricao = String(item.descricao || item.relato || item.motivo || "").trim();
+      const status = item.status || (item.bloquearProfissional ? "Bloqueado" : "Registrado");
+      let rawDate = item.data || "";
+      let timeVal = new Date(rawDate).getTime();
+      if (isNaN(timeVal)) timeVal = 0;
+      return { data: dataFmt, profissional, descricao, status, _time: timeVal };
+    })
+    .sort((a, b) => b._time - a._time)
+    .map(({ _time, ...resto }) => resto);
+
+  return {
+    id: id,
+    nomeCompleto: p.nome || "Sem Nome",
+    dataNascimento: p.dataNascimento || p.nascimento || "Nao informada",
+    endereco: {
+      logradouro: end.rua || end.logradouro || "",
+      numero: end.numero || "",
+      complemento: end.complemento || "",
+      bairro: end.bairro || p.bairro || "",
+      cidade: end.cidade || "Rio de Janeiro",
+      uf: end.estado || end.uf || "RJ",
+      cep: end.cep || ""
+    },
+    informacoesChegada,
+    informacoesClinicas
+  };
+}
+
+// 1. POST atualizarEnderecoPaciente
+exports.atualizarEnderecoPaciente = functions.region("southamerica-east1").https.onRequest(async (req, res) => {
+  if (req.method !== "POST") return res.status(405).json({ erro: "Use POST" });
+  if (!auth(req, res)) return;
+
+  const body = req.body || {};
+  const id = body.id;
+  if (!id || typeof id !== "string" || !id.trim()) {
+    return res.status(400).json({ status: "erro", mensagem: "id é obrigatório" });
+  }
+
+  try {
+    const docRef = db.collection("pacientes").doc(id.trim());
+    const doc = await docRef.get();
+    if (!doc.exists) {
+      return res.status(404).json({ status: "erro", mensagem: "Paciente não encontrado" });
+    }
+
+    const p = doc.data();
+    const endAtual = Object.assign({}, p.endereco || {});
+    const alteracoes = [];
+
+    // Tratar campos de endereço
+    if (body.endereco && typeof body.endereco === "object") {
+      const novosCampos = body.endereco;
+      
+      const mapaCampos = [
+        { chaveCorpo: "logradouro", chaveBanco: "rua", label: "Logradouro" },
+        { chaveCorpo: "numero", chaveBanco: "numero", label: "Número" },
+        { chaveCorpo: "complemento", chaveBanco: "complemento", label: "Complemento" },
+        { chaveCorpo: "bairro", chaveBanco: "bairro", label: "Bairro" },
+        { chaveCorpo: "cidade", chaveBanco: "cidade", label: "Cidade" },
+        { chaveCorpo: "uf", chaveBanco: "estado", label: "UF" },
+        { chaveCorpo: "cep", chaveBanco: "cep", label: "CEP" }
+      ];
+
+      mapaCampos.forEach(({ chaveCorpo, chaveBanco, label }) => {
+        if (novosCampos[chaveCorpo] !== undefined && novosCampos[chaveCorpo] !== null) {
+          const valAntigo = String(endAtual[chaveBanco] || endAtual[chaveCorpo] || "").trim();
+          const valNovo = String(novosCampos[chaveCorpo]).trim();
+          if (valAntigo !== valNovo) {
+            alteracoes.push(`${label}: "${valAntigo}" -> "${valNovo}"`);
+            endAtual[chaveBanco] = valNovo;
+            if (chaveBanco === "rua") endAtual.logradouro = valNovo;
+            if (chaveBanco === "estado") endAtual.uf = valNovo;
+          }
+        }
+      });
+    }
+
+    // Tratar informações de chegada / logística
+    if (body.informacoesChegada !== undefined && body.informacoesChegada !== null) {
+      const textoChegadaNovo = String(body.informacoesChegada).trim();
+      const textoChegadaAtual = String(endAtual.logisticaChegada || p.logisticaChegada || "").trim();
+      const modo = (body.modoChegada || "acrescentar").toLowerCase().trim();
+
+      let textoFinal = "";
+      if (modo === "substituir") {
+        textoFinal = textoChegadaNovo;
+        alteracoes.push(`Logística de Chegada (substituição): "${textoChegadaAtual}" -> "${textoFinal}"`);
+      } else {
+        textoFinal = textoChegadaAtual ? `${textoChegadaAtual}\\n${textoChegadaNovo}` : textoChegadaNovo;
+        alteracoes.push(`Logística de Chegada (acrescentado): "${textoChegadaNovo}"`);
+      }
+      endAtual.logisticaChegada = textoFinal;
+    }
+
+    if (alteracoes.length === 0) {
+      return res.json({
+        status: "sucesso",
+        mensagem: "Nenhuma alteração necessária",
+        paciente: formatarRespostaPaciente(doc.id, p)
+      });
+    }
+
+    // Atualizar no Firestore
+    await docRef.update({
+      endereco: endAtual,
+      updatedAt: new Date().toISOString()
+    });
+
+    // Registrar auditoria
+    await db.collection("LogsAuditoria").add({
+      documentId: doc.id,
+      collection: "pacientes",
+      userId: "Val (assistente)",
+      action: "UPDATE",
+      description: `Atualização de Endereço/Logística: ${alteracoes.join("; ")}`,
+      timestamp: new Date().toISOString()
+    });
+
+    // Buscar dados atualizados
+    const docAtualizado = await docRef.get();
+    return res.json({
+      status: "sucesso",
+      paciente: formatarRespostaPaciente(doc.id, docAtualizado.data())
+    });
+  } catch (err) {
+    return res.status(500).json({ status: "erro", mensagem: err.message });
+  }
+});
+
+// 2. POST adicionarInformacaoClinica
+exports.adicionarInformacaoClinica = functions.region("southamerica-east1").https.onRequest(async (req, res) => {
+  if (req.method !== "POST") return res.status(405).json({ erro: "Use POST" });
+  if (!auth(req, res)) return;
+
+  const body = req.body || {};
+  const id = body.id;
+  if (!id || typeof id !== "string" || !id.trim()) {
+    return res.status(400).json({ status: "erro", mensagem: "id é obrigatório" });
+  }
+
+  const descricao = body.descricao;
+  if (!descricao || typeof descricao !== "string" || !descricao.trim()) {
+    return res.status(400).json({ status: "erro", mensagem: "descricao é obrigatória e não pode ser vazia" });
+  }
+
+  try {
+    const docRef = db.collection("pacientes").doc(id.trim());
+    const doc = await docRef.get();
+    if (!doc.exists) {
+      return res.status(404).json({ status: "erro", mensagem: "Paciente não encontrado" });
+    }
+
+    const p = doc.data();
+    const ocorrenciasAtuais = Array.isArray(p.ocorrencias) ? [...p.ocorrencias] : [];
+
+    // Tratar data (padrão hoje no fuso America/Sao_Paulo)
+    let dataFormatada = "";
+    if (body.data && typeof body.data === "string" && body.data.trim()) {
+      dataFormatada = body.data.trim();
+    } else {
+      const agoraSP = new Intl.DateTimeFormat("pt-BR", {
+        timeZone: "America/Sao_Paulo",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric"
+      }).format(new Date());
+      dataFormatada = agoraSP;
+    }
+
+    // Converter para formato YYYY-MM-DD para salvar no array de ocorrencias mantendo padrão do banco
+    let dataIso = "";
+    if (dataFormatada.includes("/")) {
+      const [dia, mes, ano] = dataFormatada.split("/");
+      dataIso = `${ano}-${mes.padStart(2, "0")}-${dia.padStart(2, "0")}`;
+    } else {
+      dataIso = dataFormatada;
+    }
+
+    const profissional = (body.profissional && String(body.profissional).trim())
+      ? String(body.profissional).trim()
+      : "Administrativa / Geral";
+
+    const novoIdOcorrencia = `oco-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+
+    const novoRegistroBanco = {
+      id: novoIdOcorrencia,
+      data: dataIso,
+      profissionalId: "",
+      profissionalNome: profissional,
+      descricao: descricao.trim(),
+      bloquearProfissional: false,
+      status: "Registrado"
+    };
+
+    ocorrenciasAtuais.push(novoRegistroBanco);
+
+    // Gravar no paciente
+    await docRef.update({
+      ocorrencias: ocorrenciasAtuais,
+      updatedAt: new Date().toISOString()
+    });
+
+    // Registrar na coleção LogsAuditoria
+    const resumoDescricao = descricao.trim().length > 60 
+      ? descricao.trim().substring(0, 60) + "..." 
+      : descricao.trim();
+
+    await db.collection("LogsAuditoria").add({
+      documentId: doc.id,
+      collection: "pacientes",
+      userId: "Val (assistente)",
+      action: "UPDATE",
+      description: `Nova Informação Clínica adicionada (Data: ${dataFormatada}, Profissional: ${profissional}): "${resumoDescricao}"`,
+      timestamp: new Date().toISOString()
+    });
+
+    return res.json({
+      status: "sucesso",
+      registro: {
+        data: dataFormatada,
+        profissional: profissional,
+        descricao: descricao.trim(),
+        status: "Registrado"
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ status: "erro", mensagem: err.message });
+  }
+});

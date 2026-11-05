@@ -1,3 +1,5 @@
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import React, { useState, useMemo } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
 import { Printer, ChevronDown, ChevronRight, HelpCircle, X } from 'lucide-react';
@@ -674,6 +676,749 @@ export const Relatorios: React.FC = () => {
     return Object.values(agrupado).sort((a, b) => a.profissional.nome.localeCompare(b.profissional.nome));
   }, [modalRelatorioAtivo, agendamentos, plantoes, profissionais, pacientes, dataInicial, dataFinal, pacienteId, profissionalId]);
 
+  
+      
+  const handleBaixarAtendPacientePDF = () => {
+    try {
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.setTextColor(24, 61, 51);
+      doc.text("VALLIDARE", 14, 15);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 100, 100);
+      doc.text("Gestão e Consultoria em Saúde", 14, 19);
+
+      doc.setFontSize(11);
+      doc.setTextColor(50, 50, 50);
+      doc.text("Relação de Atendimentos por Paciente", 14, 25);
+
+      doc.setFontSize(8);
+      doc.setTextColor(110, 110, 110);
+      doc.text(`Período: ${formatarDataBr(dataInicial)} a ${formatarDataBr(dataFinal)}   |   Emitido em: ${new Date().toLocaleDateString("pt-BR")}`, 14, 30);
+
+      doc.setDrawColor(210, 210, 210);
+      doc.setLineWidth(0.3);
+      doc.line(14, 32, 196, 32);
+
+      let startY = 38;
+
+      if (!dadosRelatorioPaciente || dadosRelatorioPaciente.length === 0) {
+        doc.setFontSize(9);
+        doc.setTextColor(120, 120, 120);
+        doc.text("Nenhum atendimento encontrado para o período selecionado.", 14, startY);
+      } else {
+        dadosRelatorioPaciente.forEach((grupo, idx) => {
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(10);
+          doc.setTextColor(24, 61, 51);
+          const pacNome = grupo.paciente?.nome || "Paciente Não Informado";
+          doc.text(`Paciente: ${pacNome}`, 14, startY);
+          startY += 4;
+
+          // Agrupa plantões por profissional e conta os dias/plantões
+          const contagemPorProf = {};
+          (grupo.itens || grupo.atendimentos || []).forEach((item) => {
+            const prof = item.profissionalNome || item.profissional || "Não informado";
+            contagemPorProf[prof] = (contagemPorProf[prof] || 0) + 1;
+          });
+
+          let totalPlantoesPac = 0;
+          const linhas = Object.entries(contagemPorProf).map(([profNome, qtd]) => {
+            totalPlantoesPac += qtd;
+            return [profNome, `${qtd} ${qtd === 1 ? "plantão / dia" : "plantões / dias"}`];
+          });
+
+          linhas.push([
+            "TOTAL DE PLANTÕES DO PACIENTE",
+            `${totalPlantoesPac} plantões`
+          ]);
+
+          autoTable(doc, {
+            startY: startY,
+            head: [["Profissional", "Dias / Plantões Realizados"]],
+            body: linhas,
+            theme: "plain",
+            tableWidth: 182,
+            margin: { left: 14, right: 14 },
+            headStyles: {
+              textColor: [30, 30, 30],
+              fontStyle: "bold",
+              fontSize: 8.5,
+              cellPadding: 2.5,
+              lineWidth: { bottom: 0.5 },
+              lineColor: [80, 80, 80]
+            },
+            bodyStyles: {
+              textColor: [40, 40, 40],
+              fontSize: 8,
+              cellPadding: 2.2,
+              lineWidth: { bottom: 0.1 },
+              lineColor: [230, 230, 230]
+            },
+            columnStyles: {
+              0: { cellWidth: 120, fontStyle: "bold" },
+              1: { cellWidth: 62, halign: "center" }
+            },
+            didParseCell: function(data) {
+              if (data.row.index === linhas.length - 1) {
+                data.cell.styles.fontStyle = "bold";
+                data.cell.styles.fillColor = [245, 245, 245];
+                data.cell.styles.lineWidth = { top: 0.4, bottom: 0.4 };
+                data.cell.styles.lineColor = [100, 100, 100];
+              }
+            }
+          });
+
+          startY = doc.lastAutoTable.finalY + 8;
+          if (startY > 265 && idx < dadosRelatorioPaciente.length - 1) {
+            doc.addPage();
+            startY = 16;
+          }
+        });
+      }
+
+      doc.save(`relatorio-atendimentos-paciente-${dataInicial || "periodo"}.pdf`);
+    } catch (err) {
+      console.error("Erro ao gerar PDF de atendimentos por paciente:", err);
+      alert("Ocorreu um erro ao gerar o PDF.");
+    }
+  };
+
+  
+  const handleBaixarPreviaFolhaPDF = () => {
+    try {
+      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.setTextColor(24, 61, 51);
+      doc.text("VALLIDARE", 14, 14);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 100, 100);
+      doc.text("Gestão e Consultoria em Saúde", 14, 18);
+
+      doc.setFontSize(11);
+      doc.setTextColor(50, 50, 50);
+      doc.text("Prévia Financeira da Folha de Pagamento", 14, 24);
+
+      doc.setFontSize(8);
+      doc.setTextColor(110, 110, 110);
+      doc.text(`Período: ${formatarDataBr(dataInicial)} a ${formatarDataBr(dataFinal)}   |   Emitido em: ${new Date().toLocaleDateString("pt-BR")}`, 14, 29);
+
+      doc.setDrawColor(210, 210, 210);
+      doc.setLineWidth(0.3);
+      doc.line(14, 31, 283, 31);
+
+      const linhas = (dadosPreviaFolha || []).map((item) => [
+        item.nome || "-",
+        item.tipo || "-",
+        String(item.qtd ?? 0),
+        Number(item.producao || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        Number(item.ajudaCusto || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        Number(item.bruto || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      ]);
+
+      const totalQtd = (dadosPreviaFolha || []).reduce((acc, cur) => acc + (Number(cur.qtd) || 0), 0);
+      const totalProducao = (dadosPreviaFolha || []).reduce((acc, cur) => acc + (Number(cur.producao) || 0), 0);
+      const totalAjuda = (dadosPreviaFolha || []).reduce((acc, cur) => acc + (Number(cur.ajudaCusto) || 0), 0);
+      const totalBruto = (dadosPreviaFolha || []).reduce((acc, cur) => acc + (Number(cur.bruto) || 0), 0);
+
+      const linhaTotal = [
+        "TOTAL GERAL",
+        "-",
+        String(totalQtd),
+        totalProducao.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        totalAjuda.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        totalBruto.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      ];
+
+      autoTable(doc, {
+        startY: 35,
+        head: [["Profissional", "Tipo / Função", "Qtd Plantões", "Produção (R$)", "Ajuda Custo (R$)", "Bruto Total (R$)"]],
+        body: linhas.length > 0 ? [...linhas, linhaTotal] : [["Nenhum registro encontrado", "-", "-", "-", "-", "-"]],
+        theme: "plain",
+        tableWidth: 269,
+        margin: { left: 14, right: 14 },
+        headStyles: {
+          textColor: [30, 30, 30],
+          fontStyle: "bold",
+          fontSize: 8.5,
+          cellPadding: 2.5,
+          lineWidth: { bottom: 0.5 },
+          lineColor: [80, 80, 80]
+        },
+        bodyStyles: {
+          textColor: [40, 40, 40],
+          fontSize: 8,
+          cellPadding: 2,
+          lineWidth: { bottom: 0.1 },
+          lineColor: [230, 230, 230]
+        },
+        columnStyles: {
+          0: { cellWidth: 95, fontStyle: "bold" },
+          1: { cellWidth: 44 },
+          2: { cellWidth: 26, halign: "center" },
+          3: { cellWidth: 34, halign: "right" },
+          4: { cellWidth: 34, halign: "right" },
+          5: { cellWidth: 36, halign: "right", fontStyle: "bold" }
+        },
+        didParseCell: function(data) {
+          if (linhas.length > 0 && data.row.index === linhas.length) {
+            data.cell.styles.fontStyle = "bold";
+            data.cell.styles.fillColor = [245, 245, 245];
+            data.cell.styles.lineWidth = { top: 0.4, bottom: 0.4 };
+            data.cell.styles.lineColor = [100, 100, 100];
+          }
+        }
+      });
+
+      doc.save(`previa-folha-${dataInicial || "periodo"}.pdf`);
+    } catch (err) {
+      console.error("Erro ao gerar PDF da prévia da folha:", err);
+      alert("Ocorreu um erro ao gerar o PDF.");
+    }
+  };
+
+  
+  const handleBaixarBancosProfissionalPDF = () => {
+    try {
+      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.setTextColor(24, 61, 51);
+      doc.text("VALLIDARE", 14, 14);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 100, 100);
+      doc.text("Gestão e Consultoria em Saúde", 14, 18);
+
+      doc.setFontSize(11);
+      doc.setTextColor(50, 50, 50);
+      doc.text("Relação de Bancos por Profissional", 14, 24);
+
+      const totalProfs = (dadosRelatorioBancos || []).reduce((acc, g) => acc + (g.itens ? g.itens.length : 0), 0);
+      doc.setFontSize(8);
+      doc.setTextColor(110, 110, 110);
+      doc.text(`Instituições: ${dadosRelatorioBancos?.length || 0}   |   Profissionais: ${totalProfs}   |   Emitido em: ${new Date().toLocaleDateString("pt-BR")}`, 14, 29);
+
+      doc.setDrawColor(210, 210, 210);
+      doc.setLineWidth(0.3);
+      doc.line(14, 31, 283, 31);
+
+      let startY = 36;
+
+      if (!dadosRelatorioBancos || dadosRelatorioBancos.length === 0) {
+        doc.setFontSize(9);
+        doc.setTextColor(120, 120, 120);
+        doc.text("Nenhum profissional localizado.", 14, startY);
+      } else {
+        dadosRelatorioBancos.forEach((grupo, idx) => {
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(9.5);
+          doc.setTextColor(24, 61, 51);
+          doc.text(`Instituição: ${grupo.bancoNome || "Outros / Sem Banco"} (${grupo.itens?.length || 0} profissionais)`, 14, startY);
+          startY += 3.5;
+
+          const linhas = (grupo.itens || []).map((it) => [
+            it.nome ? `${it.nome}${it.especialidade ? " (" + it.especialidade + ")" : ""}` : "-",
+            it.cpf || "-",
+            it.agencia || "-",
+            it.conta || "-",
+            it.tipoConta || "-",
+            it.pix || "-",
+            it.isTitular ? "Próprio" : (it.nomeTitular || "Terceiro")
+          ]);
+
+          autoTable(doc, {
+            startY: startY,
+            head: [["Profissional", "CPF", "Agência", "Conta", "Tipo", "Chave PIX", "Titularidade"]],
+            body: linhas.length > 0 ? linhas : [["Nenhum registro para este banco", "-", "-", "-", "-", "-", "-"]],
+            theme: "plain",
+            tableWidth: 269,
+            margin: { left: 14, right: 14 },
+            headStyles: {
+              textColor: [30, 30, 30],
+              fontStyle: "bold",
+              fontSize: 8,
+              cellPadding: 2,
+              lineWidth: { bottom: 0.5 },
+              lineColor: [80, 80, 80]
+            },
+            bodyStyles: {
+              textColor: [40, 40, 40],
+              fontSize: 7.5,
+              cellPadding: 1.8,
+              lineWidth: { bottom: 0.1 },
+              lineColor: [230, 230, 230],
+              overflow: "linebreak"
+            },
+            columnStyles: {
+              0: { cellWidth: 70, fontStyle: "bold" }, // Profissional
+              1: { cellWidth: 30 },                    // CPF
+              2: { cellWidth: 20 },                    // Agência
+              3: { cellWidth: 24 },                    // Conta
+              4: { cellWidth: 22 },                    // Tipo Conta
+              5: { cellWidth: 65, fontStyle: "bold" }, // Chave PIX
+              6: { cellWidth: 38 }                     // Titularidade
+            }
+          });
+
+          startY = doc.lastAutoTable.finalY + 7;
+          if (startY > 185 && idx < dadosRelatorioBancos.length - 1) {
+            doc.addPage();
+            startY = 16;
+          }
+        });
+      }
+
+      doc.save("relatorio-bancos-profissional.pdf");
+    } catch (err) {
+      console.error("Erro ao gerar PDF de bancos por profissional:", err);
+      alert("Ocorreu um erro ao gerar o PDF de bancos.");
+    }
+  };
+
+  
+  const handleBaixarPreviaCuringasPDF = () => {
+    try {
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+
+      // Cabeçalho Institucional VALLIDARE
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.setTextColor(24, 61, 51);
+      doc.text("VALLIDARE", 14, 15);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 100, 100);
+      doc.text("Gestão e Consultoria em Saúde", 14, 19);
+
+      doc.setFontSize(10.5);
+      doc.setTextColor(50, 50, 50);
+      doc.text("Prévia Financeira de Curingas (Adiantamentos de Cobertura)", 14, 25);
+
+      doc.setFontSize(8);
+      doc.setTextColor(110, 110, 110);
+      doc.text(`Período: ${formatarDataBr(dataInicial)} a ${formatarDataBr(dataFinal)}   |   Emitido em: ${new Date().toLocaleDateString("pt-BR")}`, 14, 30);
+
+      // Linha divisória limpa
+      doc.setDrawColor(210, 210, 210);
+      doc.setLineWidth(0.3);
+      doc.line(14, 32, 196, 32);
+
+      let totalGeralAdiantado = 0;
+      let totalGeralPlantoes = 0;
+      const todasLinhas = [];
+
+      (dadosPreviaCuringas || []).forEach((grupo) => {
+        (grupo.itens || []).forEach((it) => {
+          const val = Number(it.producao || 0);
+          totalGeralAdiantado += val;
+          totalGeralPlantoes += 1;
+          todasLinhas.push([
+            it.profissionalNome || grupo.nome || "-",
+            formatarDataBr(it.data) || "-",
+            it.pacienteNome || "-",
+            val.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          ]);
+        });
+      });
+
+      const linhaTotal = [
+        "TOTAL GERAL ADIANTADO",
+        `${totalGeralPlantoes} plantões`,
+        "-",
+        totalGeralAdiantado.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      ];
+
+      autoTable(doc, {
+        startY: 37,
+        head: [["Profissional", "Data Realizada", "Paciente", "Valor Plantão (R$)"]],
+        body: todasLinhas.length > 0 ? [...todasLinhas, linhaTotal] : [["Nenhum plantão curinga no período.", "-", "-", "0,00"]],
+        theme: "plain",
+        tableWidth: 182,
+        margin: { left: 14, right: 14 },
+        headStyles: {
+          textColor: [30, 30, 30],
+          fontStyle: "bold",
+          fontSize: 8.5,
+          cellPadding: 2.5,
+          lineWidth: { bottom: 0.5 },
+          lineColor: [80, 80, 80]
+        },
+        bodyStyles: {
+          textColor: [40, 40, 40],
+          fontSize: 8,
+          cellPadding: 2.2,
+          lineWidth: { bottom: 0.1 },
+          lineColor: [230, 230, 230],
+          valign: "top",
+          overflow: "linebreak"
+        },
+        columnStyles: {
+          0: { cellWidth: 62, fontStyle: "bold" },
+          1: { cellWidth: 32, halign: "center" },
+          2: { cellWidth: 53 },
+          3: { cellWidth: 35, halign: "right", fontStyle: "bold" }
+        },
+        didParseCell: function(data) {
+          if (todasLinhas.length > 0 && data.row.index === todasLinhas.length) {
+            data.cell.styles.fontStyle = "bold";
+            data.cell.styles.fillColor = [245, 245, 245];
+            data.cell.styles.lineWidth = { top: 0.4, bottom: 0.4 };
+            data.cell.styles.lineColor = [100, 100, 100];
+          }
+        }
+      });
+
+      doc.save(`previa-curingas-${dataInicial || "periodo"}.pdf`);
+    } catch (err) {
+      console.error("Erro ao gerar PDF de curingas:", err);
+      alert("Ocorreu um erro ao gerar o PDF da prévia de curingas.");
+    }
+  };
+
+  
+  const handleBaixarPreviaFolhaBancosPDF = () => {
+    try {
+      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.setTextColor(24, 61, 51);
+      doc.text("VALLIDARE", 14, 14);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 100, 100);
+      doc.text("Gestão e Consultoria em Saúde", 14, 18);
+
+      doc.setFontSize(11);
+      doc.setTextColor(50, 50, 50);
+      doc.text("Prévia Financeira da Folha de Pagamento por Bancos / PIX", 14, 24);
+
+      doc.setFontSize(8);
+      doc.setTextColor(110, 110, 110);
+      doc.text(`Período: ${formatarDataBr(dataInicial)} a ${formatarDataBr(dataFinal)}   |   Emitido em: ${new Date().toLocaleDateString("pt-BR")}`, 14, 29);
+
+      doc.setDrawColor(210, 210, 210);
+      doc.setLineWidth(0.3);
+      doc.line(14, 31, 283, 31);
+
+      let startY = 36;
+      let totalGeralRepasses = 0;
+
+      const grupos = dadosPreviaFolhaPorBancos || [];
+
+      if (grupos.length === 0) {
+        doc.setFontSize(9);
+        doc.setTextColor(120, 120, 120);
+        doc.text("Nenhum plantão ou valor localizado para o período selecionado.", 14, startY);
+      } else {
+        grupos.forEach((grupo, idx) => {
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(9.5);
+          doc.setTextColor(24, 61, 51);
+          doc.text(`Instituição Bancária: ${grupo.bancoNome || "Outros / Sem Banco"}`, 14, startY);
+          startY += 3.5;
+
+          const linhas = (grupo.itens || []).map((it) => {
+            const val = Number(it.totalBruto || it.bruto || it.producao || 0);
+            totalGeralRepasses += val;
+
+            return [
+              it.nome || "-",
+              it.cpf || "-",
+              it.agencia ? `Ag: ${it.agencia} / CC: ${it.conta || "-"}` : (it.conta || "-"),
+              it.pix || it.chavePix || "-",
+              String(it.plantores || it.qtd || it.totalQtd || 1),
+              val.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            ];
+          });
+
+          const subtotalBanco = Number(grupo.totalBruto || 0);
+          linhas.push([
+            `Subtotal ${grupo.bancoNome}`,
+            "-",
+            "-",
+            "-",
+            String(grupo.totalQtd || 0),
+            subtotalBanco.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          ]);
+
+          autoTable(doc, {
+            startY: startY,
+            head: [["Profissional", "CPF", "Agência / Conta", "Chave PIX", "Plantões", "Total Bruto (R$)"]],
+            body: linhas,
+            theme: "plain",
+            tableWidth: 269,
+            margin: { left: 14, right: 14 },
+            headStyles: {
+              textColor: [30, 30, 30],
+              fontStyle: "bold",
+              fontSize: 8,
+              cellPadding: 2,
+              lineWidth: { bottom: 0.5 },
+              lineColor: [80, 80, 80]
+            },
+            bodyStyles: {
+              textColor: [40, 40, 40],
+              fontSize: 7.5,
+              cellPadding: 1.8,
+              lineWidth: { bottom: 0.1 },
+              lineColor: [230, 230, 230]
+            },
+            columnStyles: {
+              0: { cellWidth: 70, fontStyle: "bold" },
+              1: { cellWidth: 32 },
+              2: { cellWidth: 42 },
+              3: { cellWidth: 55 },
+              4: { cellWidth: 25, halign: "center" },
+              5: { cellWidth: 45, halign: "right", fontStyle: "bold" }
+            },
+            didParseCell: function(data) {
+              if (data.row.index === linhas.length - 1) {
+                data.cell.styles.fontStyle = "bold";
+                data.cell.styles.fillColor = [245, 245, 245];
+                data.cell.styles.lineWidth = { top: 0.3, bottom: 0.3 };
+                data.cell.styles.lineColor = [120, 120, 120];
+              }
+            }
+          });
+
+          startY = doc.lastAutoTable.finalY + 7;
+          if (startY > 180 && idx < grupos.length - 1) {
+            doc.addPage();
+            startY = 16;
+          }
+        });
+
+        if (startY > 185) {
+          doc.addPage();
+          startY = 16;
+        }
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9.5);
+        doc.setTextColor(24, 61, 51);
+        doc.text(`TOTAL GERAL DA FOLHA: R$ ${totalGeralRepasses.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 14, startY + 4);
+      }
+
+      doc.save(`previa-folha-bancos-${dataInicial || "periodo"}.pdf`);
+    } catch (err) {
+      console.error("Erro ao gerar PDF da prévia por bancos:", err);
+      alert("Ocorreu um erro ao gerar o PDF da folha por bancos.");
+    }
+  };
+
+  
+  const handleBaixarLogAgendamentosPDF = () => {
+    try {
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.setTextColor(24, 61, 51);
+      doc.text("VALLIDARE", 14, 15);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 100, 100);
+      doc.text("Gestão e Consultoria em Saúde", 14, 19);
+
+      doc.setFontSize(10.5);
+      doc.setTextColor(50, 50, 50);
+      doc.text("Log de Agendamentos por Usuários Administrativos", 14, 25);
+
+      doc.setFontSize(8);
+      doc.setTextColor(110, 110, 110);
+      doc.text(`Período: ${formatarDataBr(dataInicial)} a ${formatarDataBr(dataFinal)}   |   Emitido em: ${new Date().toLocaleDateString("pt-BR")}`, 14, 30);
+
+      doc.setDrawColor(210, 210, 210);
+      doc.setLineWidth(0.3);
+      doc.line(14, 32, 196, 32);
+
+      let startY = 37;
+      const grupos = dadosRelatorioLog || [];
+
+      if (grupos.length === 0) {
+        doc.setFontSize(9);
+        doc.setTextColor(120, 120, 120);
+        doc.text("Nenhum registro encontrado para o período e filtros selecionados.", 14, startY);
+      } else {
+        grupos.forEach((grupo, idx) => {
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(9.5);
+          doc.setTextColor(24, 61, 51);
+          const esp = grupo.profissional?.especialidade ? ` (${grupo.profissional.especialidade})` : "";
+          doc.text(`Profissional: ${grupo.profissional?.nome || "Não informado"}${esp}`, 14, startY);
+          startY += 3.5;
+
+          const linhas = (grupo.itens || []).map((it) => [
+            `${formatarDataBr(it.data)} ${it.horario || ""}`,
+            it.pacienteNome || "-",
+            it.criadoPor || "Sistema",
+            it.status || "Ativo"
+          ]);
+
+          autoTable(doc, {
+            startY: startY,
+            head: [["Data / Início", "Paciente", "Criado Por", "Status"]],
+            body: linhas.length > 0 ? linhas : [["Nenhum registro", "-", "-", "-"]],
+            theme: "plain",
+            tableWidth: 182,
+            margin: { left: 14, right: 14 },
+            headStyles: {
+              textColor: [30, 30, 30],
+              fontStyle: "bold",
+              fontSize: 8,
+              cellPadding: 2,
+              lineWidth: { bottom: 0.5 },
+              lineColor: [80, 80, 80]
+            },
+            bodyStyles: {
+              textColor: [40, 40, 40],
+              fontSize: 7.5,
+              cellPadding: 1.8,
+              lineWidth: { bottom: 0.1 },
+              lineColor: [230, 230, 230]
+            },
+            columnStyles: {
+              0: { cellWidth: 35 },
+              1: { cellWidth: 65, fontStyle: "bold" },
+              2: { cellWidth: 52 },
+              3: { cellWidth: 30 }
+            }
+          });
+
+          startY = doc.lastAutoTable.finalY + 7;
+          if (startY > 265 && idx < grupos.length - 1) {
+            doc.addPage();
+            startY = 16;
+          }
+        });
+      }
+
+      doc.save(`log-agendamentos-${dataInicial || "periodo"}.pdf`);
+    } catch (err) {
+      console.error("Erro ao gerar PDF do log de agendamentos:", err);
+      alert("Ocorreu um erro ao gerar o PDF de log.");
+    }
+  };
+
+  const handleBaixarRelatorioFaltasPDF = () => {
+    try {
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+
+      // Cabeçalho Institucional Limpo
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(13);
+      doc.setTextColor(24, 61, 51);
+      doc.text("VALLIDARE", 14, 15);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(50, 50, 50);
+      doc.text("Relação de Faltas por Profissional", 14, 21);
+
+      doc.setFontSize(8);
+      doc.setTextColor(110, 110, 110);
+      doc.text(`Período: ${formatarDataBr(dataInicial)} a ${formatarDataBr(dataFinal)}   |   Emitido em: ${new Date().toLocaleDateString("pt-BR")}`, 14, 26);
+
+      // Linha sutil separadora
+      doc.setDrawColor(210, 210, 210);
+      doc.setLineWidth(0.3);
+      doc.line(14, 28, 196, 28);
+
+      let startY = 34;
+
+      if (!dadosRelatorioFaltas || dadosRelatorioFaltas.length === 0) {
+        doc.setFontSize(9);
+        doc.setTextColor(120, 120, 120);
+        doc.text("Nenhuma falta registrada para o período e filtros selecionados.", 14, startY);
+      } else {
+        dadosRelatorioFaltas.forEach((grupo, idx) => {
+          // Bloco de Identificação do Profissional
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(9.5);
+          doc.setTextColor(24, 61, 51);
+          const esp = grupo.profissional?.especialidade ? ` (${grupo.profissional.especialidade})` : "";
+          const coren = grupo.profissional?.conselho ? ` - COREN: ${grupo.profissional.conselho}` : "";
+          doc.text(`Profissional: ${grupo.profissional?.nome || "Não informado"}${esp}${coren}`, 14, startY);
+          startY += 3.5;
+
+          const linhas = (grupo.itens || grupo.faltas || []).map((item) => [
+            item.dataInicio || item.data || "-",
+            item.pacienteNome || item.paciente || "-",
+            item.evento || "Falta",
+            item.motivo || item.justificativa || "-",
+            item.observacao || item.obs || "-",
+            item.dataFim || item.termino || "-",
+            item.status || "Registrado"
+          ]);
+
+          autoTable(doc, {
+            startY: startY,
+            head: [["Início", "Paciente", "Evento", "Motivo", "Observação", "Término", "Status"]],
+            body: linhas.length > 0 ? linhas : [["Nenhum registro detalhado", "-", "-", "-", "-", "-", "-"]],
+            theme: "plain",
+            tableWidth: 182,
+            margin: { left: 14, right: 14 },
+            headStyles: {
+              textColor: [30, 30, 30],
+              fontStyle: "bold",
+              fontSize: 7.5,
+              cellPadding: 2,
+              lineWidth: { bottom: 0.5 },
+              lineColor: [80, 80, 80],
+              halign: "left"
+            },
+            bodyStyles: {
+              textColor: [40, 40, 40],
+              fontSize: 7,
+              cellPadding: 2,
+              lineWidth: { bottom: 0.1 },
+              lineColor: [225, 225, 225],
+              valign: "top",
+              overflow: "linebreak"
+            },
+            columnStyles: {
+              0: { cellWidth: 20 },                     // Início (DD/MM/AAAA)
+              1: { cellWidth: 38, fontStyle: "bold" },  // Paciente
+              2: { cellWidth: 16 },                     // Evento (Falta)
+              3: { cellWidth: 36 },                     // Motivo
+              4: { cellWidth: 40 },                     // Observação
+              5: { cellWidth: 16 },                     // Término
+              6: { cellWidth: 16 }                      // Status
+            }
+          });
+
+          startY = doc.lastAutoTable.finalY + 8;
+
+          // Quebra de página controlada
+          if (startY > 265 && idx < dadosRelatorioFaltas.length - 1) {
+            doc.addPage();
+            startY = 16;
+          }
+        });
+      }
+
+      doc.save(`relatorio-faltas-${dataInicial || "periodo"}.pdf`);
+    } catch (err) {
+      console.error("Erro ao gerar PDF de faltas:", err);
+      alert("Ocorreu um erro ao gerar o arquivo PDF.");
+    }
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <div className="space-y-1">
@@ -793,19 +1538,36 @@ export const Relatorios: React.FC = () => {
       {modalRelatorioAtivo === 'atend_paciente' && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 bg-slate-800 text-white">
+            
+      <style>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          #area-impressao-relatorio, #area-impressao-relatorio * { visibility: visible !important; }
+          #area-impressao-relatorio {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 20px !important;
+            background: white !important;
+          }
+          .no-print { display: none !important; }
+        }
+      `}</style>
+            <div className="flex items-center justify-between px-6 py-4 bg-slate-800 text-white no-print">
               <div className="flex items-center gap-2">
                 <Printer size={18} />
                 <h3 className="text-sm font-bold">Relação de Atendimentos por Paciente</h3>
               </div>
               <div className="flex items-center gap-2">
-                <button type="button" onClick={() => window.print()} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg">Imprimir / PDF</button>
+                <button type="button" onClick={handleBaixarAtendPacientePDF} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg">Imprimir / PDF</button>
                 <button type="button" onClick={() => setModalRelatorioAtivo(null)} className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-300"><X size={18} /></button>
               </div>
             </div>
 
             <div className="p-8 overflow-y-auto space-y-8 bg-slate-100 flex-1 print:bg-white print:p-0">
-              <div className="bg-white p-8 rounded-xl shadow-xs border border-slate-200 max-w-4xl mx-auto space-y-6 print:shadow-none print:border-none">
+              <div id="area-impressao-relatorio" className="bg-white p-8 rounded-xl shadow-xs border border-slate-200 max-w-4xl mx-auto space-y-6 print:shadow-none print:border-none">
                 <div className="flex items-center justify-between border-b border-slate-300 pb-4">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 rounded-lg bg-blue-600 text-white font-bold flex items-center justify-center text-lg">V</div>
@@ -879,7 +1641,7 @@ export const Relatorios: React.FC = () => {
                 <h3 className="text-sm font-bold">Relação de Atendimentos por Profissional</h3>
               </div>
               <div className="flex items-center gap-2">
-                <button type="button" onClick={() => window.print()} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg">Imprimir / PDF</button>
+                <button type="button" onClick={handleBaixarRelatorioFaltasPDF} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg">Imprimir / PDF</button>
                 <button type="button" onClick={() => setModalRelatorioAtivo(null)} className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-300"><X size={18} /></button>
               </div>
             </div>
@@ -970,7 +1732,7 @@ export const Relatorios: React.FC = () => {
                 <h3 className="text-sm font-bold">Relação de Bancos por Profissional</h3>
               </div>
               <div className="flex items-center gap-2">
-                <button type="button" onClick={() => window.print()} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg">Imprimir / PDF</button>
+                <button type="button" onClick={handleBaixarBancosProfissionalPDF} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg">Imprimir / PDF</button>
                 <button type="button" onClick={() => setModalRelatorioAtivo(null)} className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-300"><X size={18} /></button>
               </div>
             </div>
@@ -1078,7 +1840,7 @@ export const Relatorios: React.FC = () => {
                 <h3 className="text-sm font-bold">Relação de Faltas por Profissional</h3>
               </div>
               <div className="flex items-center gap-2">
-                <button type="button" onClick={() => window.print()} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg">Imprimir / PDF</button>
+                <button type="button" onClick={handleBaixarRelatorioFaltasPDF} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg">Imprimir / PDF</button>
                 <button type="button" onClick={() => setModalRelatorioAtivo(null)} className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-300"><X size={18} /></button>
               </div>
             </div>
@@ -1167,7 +1929,7 @@ export const Relatorios: React.FC = () => {
                 <h3 className="text-sm font-bold">Prévia Financeira da Folha de Pagamento Por Bancos</h3>
               </div>
               <div className="flex items-center gap-2">
-                <button type="button" onClick={() => window.print()} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg">Imprimir / PDF</button>
+                <button type="button" onClick={handleBaixarPreviaFolhaBancosPDF} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg">Imprimir / PDF</button>
                 <button type="button" onClick={() => setModalRelatorioAtivo(null)} className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-300"><X size={18} /></button>
               </div>
             </div>
@@ -1299,7 +2061,7 @@ export const Relatorios: React.FC = () => {
                 <h3 className="text-sm font-bold">Prévia Financeira da Folha de Pagamento</h3>
               </div>
               <div className="flex items-center gap-2">
-                <button type="button" onClick={() => window.print()} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg">Imprimir / PDF</button>
+                <button type="button" onClick={handleBaixarPreviaFolhaPDF} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg">Imprimir / PDF</button>
                 <button type="button" onClick={() => setModalRelatorioAtivo(null)} className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-300"><X size={18} /></button>
               </div>
             </div>
@@ -1388,7 +2150,7 @@ export const Relatorios: React.FC = () => {
                 <h3 className="text-sm font-bold">Prévia Financeira de Curingas</h3>
               </div>
               <div className="flex items-center gap-2">
-                <button type="button" onClick={() => window.print()} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg">Imprimir / PDF</button>
+                <button type="button" onClick={handleBaixarPreviaCuringasPDF} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg">Imprimir / PDF</button>
                 <button type="button" onClick={() => setModalRelatorioAtivo(null)} className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-300"><X size={18} /></button>
               </div>
             </div>
@@ -1473,7 +2235,7 @@ export const Relatorios: React.FC = () => {
                 <h3 className="text-sm font-bold">Log de Agendamentos por Usuários Administrativos</h3>
               </div>
               <div className="flex items-center gap-2">
-                <button type="button" onClick={() => window.print()} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg">Imprimir / PDF</button>
+                <button type="button" onClick={handleBaixarLogAgendamentosPDF} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg">Imprimir / PDF</button>
                 <button type="button" onClick={() => setModalRelatorioAtivo(null)} className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-300"><X size={18} /></button>
               </div>
             </div>

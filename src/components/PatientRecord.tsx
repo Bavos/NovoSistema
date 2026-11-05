@@ -2095,56 +2095,52 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   // Carregamento Inicial (useEffect) do Firestore na montagem da sub-aba 'Plano de Atendimento'
   useEffect(() => {
     if (activeTab === 'plano' && paciente) {
-      if (hasInitializedPlanoTabRef.current === paciente.id) {
-        return;
-      }
       const found = pacientes.find(p => p.id === paciente.id) || paciente;
       if (found && found.planoAtendimento) {
-        hasInitializedPlanoTabRef.current = paciente.id;
-        const loadedTipos = found.planoAtendimento.tiposPlantao || [];
-        const hasPlan24h = found.planoAtendimento.tipoEscala?.includes('24');
+        if (hasInitializedPlanoTabRef.current === found.id + JSON.stringify(found.planoAtendimento)) {
+          return;
+        }
+        hasInitializedPlanoTabRef.current = found.id + JSON.stringify(found.planoAtendimento);
+
+        const loadedTipos = Array.isArray(found.planoAtendimento.tiposPlantao) ? found.planoAtendimento.tiposPlantao : [];
+        const principal = loadedTipos.find(t => t.isPrincipal) || loadedTipos[0];
+
+        const escalaFinal = found.planoAtendimento.tipoEscala || principal?.tipoEscala || "Plantão 24h";
+        const horaFinal = found.planoAtendimento.horaInicioPadrao || principal?.horaInicio || "07:00";
+        const valorFinal = found.planoAtendimento.valorSugeridoPlantao ?? principal?.valorPlantao ?? 150;
+        const transporteFinal = found.planoAtendimento.valorTransporte ?? principal?.valorTransporte ?? 0;
+        const alimentacaoFinal = found.planoAtendimento.valorAlimentacao ?? principal?.valorAlimentacao ?? 0;
+        const ajudaFinal = found.planoAtendimento.ajudaCusto ?? principal?.ajudaCusto ?? (transporteFinal + alimentacaoFinal);
+        const taxaFinal = found.planoAtendimento.taxaAdm ?? principal?.taxaAdm ?? 0;
+
+        setTipoEscala(escalaFinal);
+        setHoraInicioPadrao(horaFinal);
+        setValorSugeridoPlantao(formatarMoeda(valorFinal));
+        setValorTransporte(formatarMoeda(transporteFinal));
+        setValorAlimentacao(formatarMoeda(alimentacaoFinal));
+        setAjudaCusto(formatarMoeda(ajudaFinal));
+        setTaxaAdm(formatarMoeda(taxaFinal));
+
         if (loadedTipos.length > 0) {
-          const hasPrincipal = loadedTipos.some(t => t.isPrincipal);
-          if (!hasPrincipal) {
-            loadedTipos[0].isPrincipal = true;
-          }
-          const principal = loadedTipos.find(t => t.isPrincipal) || loadedTipos[0];
-          const effectiveEscala = (hasPlan24h ? found.planoAtendimento.tipoEscala : (principal.tipoEscala || found.planoAtendimento.tipoEscala)) || 'Plantão 24h';
-          setTipoEscala(effectiveEscala);
-          setHoraInicioPadrao(principal.horaInicio || found.planoAtendimento.horaInicioPadrao || '07:00');
-          setValorSugeridoPlantao(formatarMoeda(principal.valorPlantao || (found.planoAtendimento.valorSugeridoPlantao ?? (hasPlan24h ? 300 : 150))));
-          setAjudaCusto(formatarMoeda(principal.ajudaCusto || (found.planoAtendimento.ajudaCusto ?? 0)));
-          setValorTransporte(formatarMoeda(principal.valorTransporte ?? principal.ajudaCusto ?? found.planoAtendimento.valorTransporte ?? found.planoAtendimento.ajudaCusto ?? 0));
-          setValorAlimentacao(formatarMoeda(principal.valorAlimentacao ?? found.planoAtendimento.valorAlimentacao ?? 0));
-          setTaxaAdm(formatarMoeda(principal.taxaAdm || (found.planoAtendimento.taxaAdm ?? 0)));
           setTiposPlantao(loadedTipos);
         } else {
-          const effectiveEscala = found.planoAtendimento.tipoEscala || 'Plantão 24h';
-          setTipoEscala(effectiveEscala);
-          setHoraInicioPadrao(found.planoAtendimento.horaInicioPadrao || '07:00');
-          setValorSugeridoPlantao(formatarMoeda(found.planoAtendimento.valorSugeridoPlantao ?? (hasPlan24h ? 300 : 150)));
-          setAjudaCusto(formatarMoeda(found.planoAtendimento.ajudaCusto ?? 0));
-          setValorTransporte(formatarMoeda(found.planoAtendimento.valorTransporte ?? found.planoAtendimento.ajudaCusto ?? 0));
-          setValorAlimentacao(formatarMoeda(found.planoAtendimento.valorAlimentacao ?? 0));
-          setTaxaAdm(formatarMoeda(found.planoAtendimento.taxaAdm ?? 0));
-          const defaultTp: EscalacaoPlano = {
-            id: `tp-${Date.now()}`,
-            tipoEscala: effectiveEscala,
-            horaInicio: found.planoAtendimento.horaInicioPadrao || '07:00',
-            valorPlantao: found.planoAtendimento.valorSugeridoPlantao || (hasPlan24h ? 300 : 150),
-            ajudaCusto: found.planoAtendimento.ajudaCusto || 0,
-            valorTransporte: found.planoAtendimento.valorTransporte ?? found.planoAtendimento.ajudaCusto ?? 0,
-            valorAlimentacao: found.planoAtendimento.valorAlimentacao ?? 0,
-            taxaAdm: found.planoAtendimento.taxaAdm || 0,
+          setTiposPlantao([{
+            id: "tp-" + Date.now(),
+            tipoEscala: escalaFinal,
+            horaInicio: horaFinal,
+            valorPlantao: Number(valorFinal) || 150,
+            valorTransporte: Number(transporteFinal) || 0,
+            valorAlimentacao: Number(alimentacaoFinal) || 0,
+            ajudaCusto: Number(ajudaFinal) || 0,
+            taxaAdm: Number(taxaFinal) || 0,
             isPrincipal: true,
-          };
-          setTiposPlantao([defaultTp]);
+          }]);
         }
       }
     } else if (activeTab !== 'plano') {
       hasInitializedPlanoTabRef.current = null;
     }
-  }, [activeTab, paciente, pacientes, setTipoEscala, setHoraInicioPadrao, setValorSugeridoPlantao, setAjudaCusto, setTaxaAdm, setTiposPlantao]);
+  }, [activeTab, paciente, pacientes]);
 
   // Is patient currently deactivated?
   const isCurrentlyDeactivated = pStatus === 'Desativado';
@@ -2356,16 +2352,16 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
   // Local handler to compile and save Plano de Atendimento reference values to Firestore as base rates
   const handleSavePlanoAtendimento = async () => {
     if (isCurrentlyDeactivated) return;
-    if (userRole?.toLowerCase() === 'colaborador') {
-      toast.error('Acesso Negado: Usuários com perfil Colaborador não possuem permissão para alterar o Plano de Atendimento.');
+    if (userRole?.toLowerCase() === "colaborador") {
+      toast.error("Acesso Negado: Usuários com perfil Colaborador não possuem permissão para alterar o Plano de Atendimento.");
       return;
     }
     if (!paciente?.id) {
-      toast.error('Erro: ID do paciente não fornecido. Por favor, salve primeiro o formulário geral do paciente.');
+      toast.error("Erro: ID do paciente não fornecido. Por favor, salve primeiro o formulário geral do paciente.");
       return;
     }
 
-    if (valorSugeridoPlantao === '' || valorTransporte === '' || valorAlimentacao === '' || taxaAdm === '') {
+    if (valorSugeridoPlantao === "" || valorTransporte === "" || valorAlimentacao === "" || taxaAdm === "") {
       toast.error('Erro de Validação: Ajuste os valores do Plano de Atendimento. Os campos "Valor do Plantão", "Transporte", "Alimentação" e "Taxa Adm" não podem ficar vazios / em branco.');
       return;
     }
@@ -2373,36 +2369,75 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     try {
       const current = pacientes.find(p => p.id === paciente.id) || paciente;
       if (!current) {
-        throw new Error('Paciente não encontrado no Firestore.');
+        throw new Error("Paciente não encontrado no Firestore.");
+      }
+
+      const numValorPlantao = converterMascaraParaNumero(valorSugeridoPlantao);
+      const numTransporte = converterMascaraParaNumero(valorTransporte);
+      const numAlimentacao = converterMascaraParaNumero(valorAlimentacao);
+      const numTaxaAdm = converterMascaraParaNumero(taxaAdm);
+      const numAjudaCusto = numTransporte + numAlimentacao;
+
+      // Sincroniza a lista tiposPlantao para que o item principal reflita exatamente o que foi salvo
+      let tiposAtualizados = Array.isArray(tiposPlantao) && tiposPlantao.length > 0 ? [...tiposPlantao] : [];
+      if (tiposAtualizados.length > 0) {
+        const principalIdx = tiposAtualizados.findIndex(t => t.isPrincipal);
+        const idxAlvo = principalIdx >= 0 ? principalIdx : 0;
+        tiposAtualizados[idxAlvo] = {
+          ...tiposAtualizados[idxAlvo],
+          tipoEscala: tipoEscala || tiposAtualizados[idxAlvo].tipoEscala || "Plantão 24h",
+          horaInicio: horaInicioPadrao || tiposAtualizados[idxAlvo].horaInicio || "07:00",
+          valorPlantao: numValorPlantao,
+          valorTransporte: numTransporte,
+          valorAlimentacao: numAlimentacao,
+          ajudaCusto: numAjudaCusto,
+          taxaAdm: numTaxaAdm,
+          isPrincipal: true,
+        };
+      } else {
+        tiposAtualizados = [{
+          id: "tp-" + Date.now(),
+          tipoEscala: tipoEscala || "Plantão 24h",
+          horaInicio: horaInicioPadrao || "07:00",
+          valorPlantao: numValorPlantao,
+          valorTransporte: numTransporte,
+          valorAlimentacao: numAlimentacao,
+          ajudaCusto: numAjudaCusto,
+          taxaAdm: numTaxaAdm,
+          isPrincipal: true,
+        }];
       }
 
       const updatedObj: Paciente = {
         ...current,
         planoAtendimento: {
-          tipoEscala,
-          horaInicioPadrao,
-          valorSugeridoPlantao: converterMascaraParaNumero(valorSugeridoPlantao),
-          ajudaCusto: converterMascaraParaNumero(valorTransporte) + converterMascaraParaNumero(valorAlimentacao),
-          valorTransporte: converterMascaraParaNumero(valorTransporte),
-          valorAlimentacao: converterMascaraParaNumero(valorAlimentacao),
-          taxaAdm: converterMascaraParaNumero(taxaAdm),
-          tiposPlantao,
+          ...(current.planoAtendimento || {}),
+          tipoEscala: tipoEscala || "Plantão 24h",
+          horaInicioPadrao: horaInicioPadrao || "07:00",
+          valorSugeridoPlantao: numValorPlantao,
+          ajudaCusto: numAjudaCusto,
+          valorTransporte: numTransporte,
+          valorAlimentacao: numAlimentacao,
+          taxaAdm: numTaxaAdm,
+          tiposPlantao: tiposAtualizados,
         },
       };
 
       await updatePaciente(updatedObj, true);
+      setTiposPlantao(tiposAtualizados);
+      hasInitializedPlanoTabRef.current = null; // Permite que re-sincronize sem travar
       if (onSelectPatient) {
         onSelectPatient(updatedObj);
       }
-      if (userRole === 'Administrador') {
-        await addAuditLog('UPDATE', 'pacientes', paciente.id, `Administrador atualizou o Plano de Atendimento do paciente ${paciente.nome}`);
+      if (userRole === "Administrador") {
+        await addAuditLog("UPDATE", "pacientes", paciente.id, `Administrador atualizou o Plano de Atendimento do paciente ${paciente.nome}`);
       }
-      toast.success('Plano de Atendimento e referências base salvas com sucesso!', {
-        icon: '✅',
+      toast.success("Plano de Atendimento e referências base salvas com sucesso!", {
+        icon: "✅",
       });
     } catch (error: any) {
-      console.error('Erro ao persistir plano de Atendimento:', error);
-      toast.error(getFriendlyErrorMessage(error, 'Erro ao salvar o plano de atendimento. Tente novamente.'));
+      console.error("Erro ao persistir plano de Atendimento:", error);
+      toast.error(getFriendlyErrorMessage(error, "Erro ao salvar o plano de atendimento. Tente novamente."));
     }
   };
 
@@ -3063,6 +3098,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         const val = (base * mult) + (baseTaxa * mult) + extra;
         return val > 0;
       });
+
+    if (!plantoesValidos || plantoesValidos.length === 0) {
+      toast.error("Não foi possível gerar a fatura: nenhum plantão trabalhado/válido encontrado para este paciente no período selecionado.");
+      return;
+    }
+
 
       const valorTotalPlantoes = plantoesValidos.reduce((acc: number, s: any) => {
         let base = parseNum(s.valorPlantao) || parseNum(paciente?.planoAtendimento?.valorSugeridoPlantao, 150);
@@ -7587,7 +7628,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
             </div>
 
             <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
-              Estrutura de dados NoSQL/Firestore homologada para faturamento corporativo no portal Vallidare - Gestão Médica e Auditoria.
+              Estrutura de dados NoSQL/Firestore homologada para faturamento corporativo no portal RH Gestão Domiciliar.
             </p>
 
             <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 overflow-x-auto max-h-80 text-[11px] text-violet-300 leading-relaxed scrollbar-thin">
