@@ -7341,7 +7341,12 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 text-gray-900 text-sm md:text-base">
-                          {((pacientes.find(p => p.id === paciente?.id) || paciente)?.ocorrencias || []).map((oc, index) => (
+                          {([...(pacientes.find(p => p.id === paciente?.id) || paciente)?.ocorrencias || []]
+  .sort((a, b) => {
+    const tA = new Date(a.data || 0).getTime() || 0;
+    const tB = new Date(b.data || 0).getTime() || 0;
+    return tB - tA;
+  })).map((oc, index) => (
                             <tr key={`oc-${oc.id || index}-${index}`} className={`transition-colors hover:bg-slate-50 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
                               <td className="py-3 px-4 whitespace-nowrap font-normal text-slate-500">
                                 {oc.data ? oc.data.split('-').reverse().join('/') : '-'}
