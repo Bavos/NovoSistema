@@ -10,7 +10,7 @@ export const Dashboard: React.FC<{
   setActiveTab: (tab: string, extraOptions?: { financeiroSubTab?: 'folhas' | 'debitos' }) => void;
   onSelectPatientRedirect?: (paciente: any) => void;
 }> = ({ setActiveTab, onSelectPatientRedirect }) => {
-  const { pacientes, profissionais, updatePaciente, debitosProfissionais, isQuotaExceeded, isTestMode } = useFirebase();
+  const { pacientes, profissionais, updatePaciente, debitosProfissionais, isQuotaExceeded, isTestMode, loading: contextLoading } = useFirebase();
   const [debitosDoDia, setDebitosDoDia] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -184,7 +184,10 @@ export const Dashboard: React.FC<{
     });
     setDebitosDoDia(list);
     setLoading(false);
-  }, [debitosProfissionais]);
+    if (!contextLoading) {
+      setLoading(false);
+    }
+  }, [debitosProfissionais, contextLoading]);
 
   const getTargetReadjustmentMonthYear = (): string => {
     const today = new Date();
@@ -337,7 +340,7 @@ export const Dashboard: React.FC<{
           </div>
 
           <div className="flex-1">
-            {loading ? (
+            {(loading || contextLoading) ? (
               <div className="py-12 text-center text-forest-green/50 font-medium animate-pulse" id="debitos-loading">
                 Carregando lançamentos...
               </div>
