@@ -1034,3 +1034,103 @@ exports.consultarStatusBoletoInter = onCall({ region: "southamerica-east1", secr
     throw new HttpsError("internal", err.message || "Erro ao consultar Banco Inter.");
   }
 });
+
+
+// =========================================================================
+// ENDPOINT HTTP EXCLUSIVO PARA AGENTE VALL CONSULTAR PAGAMENTO
+// =========================================================================
+const { onRequest } = require("firebase-functions/v2/https");
+
+exports.consultarBoletoVall = onRequest({
+  region: "southamerica-east1",
+  secrets: ["INTER_CERT", "INTER_KEY", "INTER_CLIENT_ID", "INTER_CLIENT_SECRET"]
+}, async (req, res) => {
+  if (req.method !== "POST" && req.method !== "GET") {
+    return res.status(405).json({ status: "erro", mensagem: "Metodo nao permitido. Use POST ou GET." });
+  }
+
+  // Valida o mesmo Bearer Token padrao da Vall
+  if (!auth(req, res)) return;
+
+  const params = req.method === "POST" ? req.body : req.query;
+  const { codigoSolicitacao, nossoNumero, faturaId } = params || {};
+
+  let codSol = (codigoSolicitacao || "").trim();
+  let fatDocRef = null;
+
+  try {
+    // 1. Se informou faturaId, recupera direto do Firestore
+    if (faturaId) {
+      const doc = await db.collection("faturas_pacientes").doc(faturaId).get();
+      if (doc.exists) {
+        fatDocRef = doc.ref;
+        codSol = (doc.data().codigoSolicitacao || doc.data().cobrancaInter?.codigoSolicitacao || "").trim();
+      }
+    }
+
+    // 2. Busca por nossoNumero se nao tiver codigoSolicitacao
+    if (!codSol && nossoNumero) {
+      const q = await db.collection("faturas_pacientes").where("nossoNumero", "==", String(nossoNumero).trim()).limit(1).get();
+      if (!q.empty) {
+        fatDocRef = q.docs[0].ref;
+        codSol = (q.docs[0].data().codigoSolicitacao || q.docs[0].data().cobrancaInter?.codigoSolicitacao || "").trim();
+      }
+    }
+
+    if (!codSol) {
+      return res.status(400).json({
+        status: "erro",
+        mensagem: "Nenhum codigoSolicitacao informado ou encontrado para os parametros fornecidos."
+      });
+    }
+
+    // 3. Consulta no Banco Inter via mTLS
+    const token = await obterBearerToken();
+    const dadosInter = await chamadaApiInter("GET", `/cobranca/v3/cobrancas/${codSol}`, null, token);
+
+    const payloadReal = dadosInter.data || dadosInter;
+    const cobranca = payloadReal.cobranca || payloadReal;
+
+    const situacao = (cobranca.situacao || payloadReal.situacao || "").toUpperCase();
+    const valorRecebido = Number(cobranca.valorTotalRecebido || payloadReal.valorTotalRecebido || 0);
+    const temPagamento = Array.isArray(cobranca.pagamentos || payloadReal.pagamentos) && (cobranca.pagamentos || payloadReal.pagamentos).length > 0;
+
+    const isPago = ["PAGO", "RECEBIDO", "LIQUIDADO", "COMPENSADO", "MARCADO_RECEBIDO"].includes(situacao) || valorRecebido > 0 || temPagamento;
+    const isVencido = ["EXPIRADO", "CANCELADO", "BAIXADO"].includes(situacao);
+
+    // 4. Se estiver pago e tiver fatura vinculada, ja reconcilia no Firestore
+    if (fatDocRef && isPago) {
+      await fatDocRef.update({
+        status: "pago",
+        statusPagamento: "pago",
+        dataLiquidacao: cobranca.dataSituacao || new Date().toISOString().split("T")[0],
+        valorRecebidoInter: valorRecebido || cobranca.valorNominal || null,
+        origemRecebimento: cobranca.origemRecebimento || "BOLETO",
+        atualizadoEm: new Date().toISOString()
+      });
+    }
+
+    return res.status(200).json({
+      status: "sucesso",
+      pago: isPago,
+      vencido: isVencido,
+      situacao: situacao,
+      valorNominal: cobranca.valorNominal || null,
+      valorRecebido: valorRecebido,
+      dataPagamento: cobranca.dataSituacao || null,
+      origem: cobranca.origemRecebimento || null,
+      mensagem: isPago 
+        ? "Pagamento liquidado com sucesso no Banco Inter." 
+        : isVencido 
+          ? "Boleto vencido/cancelado sem confirmacao de pagamento." 
+          : "Boleto emitido e aguardando liquidacao/compensacao."
+    });
+
+  } catch (error) {
+    console.error("[consultarBoletoVall] Erro:", error.message);
+    return res.status(500).json({
+      status: "erro",
+      mensagem: error.message
+    });
+  }
+});

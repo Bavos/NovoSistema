@@ -46,3 +46,27 @@ O backend (functions/index.js) normaliza o retorno em diferentes níveis de payl
 
 - **Sincronização Manual**: O botão "Sincronizar" invoca a função consultarStatusBoletoInter.
 - **Interface**: Atualização instantânea do estado local com exibição da badge ✅ PAGO assim que a liquidação é confirmada.
+
+---
+
+## 5. Endpoint de Consulta Externa da Agente Vall (`consultarBoletoVall`)
+
+- **URL**: `https://southamerica-east1-gen-lang-client-0242962167.cloudfunctions.net/consultarBoletoVall`
+- **Autenticação**: `Authorization: Bearer AGENT_API_TOKEN` (Chave estática compartilhada)
+- **Métodos**: POST / GET
+- **Entrada (JSON)**: Aceita `codigoSolicitacao` (UUID do Inter), `faturaId` (ID do Firestore) ou `nossoNumero`.
+- **Saída**:
+  ```json
+  {
+    "status": "sucesso",
+    "pago": true,
+    "vencido": false,
+    "situacao": "RECEBIDO",
+    "valorNominal": 4236,
+    "valorRecebido": 4236,
+    "dataPagamento": "2026-11-05",
+    "origem": "BOLETO",
+    "mensagem": "Pagamento liquidado com sucesso no Banco Inter."
+  }
+  ```
+- **Conciliação Automática**: Sempre que a Vall consulta uma fatura identificada que já foi quitada, o endpoint atualiza automaticamente os campos `status: "pago"` e `dataLiquidacao` no documento do Firestore.
