@@ -19,7 +19,7 @@ const path = require('path');
 // Utilize o Google Secret Manager no GCP e injete as variáveis abaixo.
 const INTER_ENV = {
   // URLs da API do Banco Inter
-  baseUrl: process.env.INTER_API_URL || 'https://cdws.bancointer.com.br',
+  baseUrl: process.env.INTER_API_URL || 'https://cdpj.partners.bancointer.com.br',
   
   // Credenciais OAuth obtidas no portal de desenvolvedor
   clientId: process.env.INTER_CLIENT_ID,
@@ -34,7 +34,7 @@ const INTER_ENV = {
   keyBase64: process.env.INTER_KEY_BASE64,
   
   // Escopos requeridos para transações de faturamento e pagamentos
-  scopes: process.env.INTER_SCOPES || 'payment-pix.write payment-pix.read transfers.write'
+  scopes: process.env.INTER_SCOPES || "boleto-cobranca.read boleto-cobranca.write"
 };
 
 // ==========================================
@@ -48,36 +48,44 @@ function obterMTLSAgent() {
   let certBuffer;
   let keyBuffer;
 
+  const rawCert = process.env.INTER_CERT || process.env.INTER_CERT_BASE64 || INTER_ENV.certBase64;
+  const rawKey = process.env.INTER_KEY || process.env.INTER_KEY_BASE64 || INTER_ENV.keyBase64;
+
   try {
-    if (INTER_ENV.certBase64 && INTER_ENV.keyBase64) {
-      // Carregamento de forma extremamente segura direto da memória (GCP Secret Manager)
-      certBuffer = Buffer.from(INTER_ENV.certBase64, 'base64');
-      keyBuffer = Buffer.from(INTER_ENV.keyBase64, 'base64');
-      console.log('[Inter API] Certificados mTLS carregados com sucesso a partir de variáveis Base64.');
+    if (rawCert && rawKey) {
+      if (rawCert.includes("BEGIN CERTIFICATE") || rawCert.includes("BEGIN PRIVATE KEY") || rawCert.includes("BEGIN RSA")) {
+        certBuffer = Buffer.from(rawCert, "utf8");
+      } else {
+        certBuffer = Buffer.from(rawCert, "base64");
+      }
+
+      if (rawKey.includes("BEGIN") && rawKey.includes("KEY")) {
+        keyBuffer = Buffer.from(rawKey, "utf8");
+      } else {
+        keyBuffer = Buffer.from(rawKey, "base64");
+      }
+      console.log("[Inter API] Certificados mTLS carregados com sucesso da memoria.");
     } else {
-      // Fallback para leitura de arquivos físicos protegidos
       if (!fs.existsSync(INTER_ENV.certPath) || !fs.existsSync(INTER_ENV.keyPath)) {
-        throw new Error(`Certificados não encontrados em: \nCert: ${INTER_ENV.certPath}\nKey: ${INTER_ENV.keyPath}`);
+        throw new Error(`Certificados nao encontrados em variaveis de ambiente nem em: \nCert: ${INTER_ENV.certPath}\nKey: ${INTER_ENV.keyPath}`);
       }
       certBuffer = fs.readFileSync(INTER_ENV.certPath);
       keyBuffer = fs.readFileSync(INTER_ENV.keyPath);
-      console.log('[Inter API] Certificados mTLS carregados com sucesso a partir do sistema de arquivos.');
+      console.log("[Inter API] Certificados mTLS carregados com sucesso do disco.");
     }
 
-    // Criando o agente com os certificados mTLS e garantindo TLS 1.2 ou superior (Segurança Bancária)
     return new https.Agent({
       cert: certBuffer,
       key: keyBuffer,
-      minVersion: 'TLSv1.2',
-      rejectUnauthorized: true // Garante a validação estrita da cadeia de confiança do Inter
+      minVersion: "TLSv1.2",
+      rejectUnauthorized: true
     });
   } catch (error) {
-    console.error('[Inter API Critical] Erro fatal ao configurar agente mTLS:', error.message);
+    console.error("[Inter API Critical] Erro fatal ao configurar agente mTLS:", error.message);
     throw error;
   }
 }
 
-// Instanciação única do agente (Singleton) para otimizar conexões TCP (HTTP Keep-Alive)
 let mtlsAgentInstance = null;
 function getMtlsAgent() {
   if (!mtlsAgentInstance) {
@@ -401,6 +409,7 @@ async function processarFolhaPagamento(req, res) {
 
 // Exportações dos módulos e Handlers seguros
 module.exports = {
+  chamadaApiInter,
   obterBearerToken,
   dispararPix,
   dispararTed,

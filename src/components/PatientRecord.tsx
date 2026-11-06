@@ -60,7 +60,8 @@ import {
   UserCheck,
   UserX
 } from 'lucide-react';
-import { jsPDF } from 'jspdf';
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import { toast } from 'react-hot-toast';
 import { getFriendlyErrorMessage } from '../utils/errorSanitizer';
 import { showSuccessToast } from './CustomToast';
@@ -213,6 +214,7 @@ interface PatientRecordProps {
 }
 
 export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, onSelectPatient }) => {
+  const [selectedOcorrenciasIds, setSelectedOcorrenciasIds] = useState<string[]>([]);
   const {
     pacientes,
     addPaciente,
@@ -1135,6 +1137,120 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     } else {
       toast.success('Profissional removido dos Preferenciais.');
     }
+  };
+
+    const handleBaixarOcorrenciasPDF = async () => {
+    if (!paciente) {
+      toast.error("Paciente não selecionado.");
+      return;
+    }
+    const targetPatient = pacientes.find(p => p.id === paciente.id) || paciente;
+    const allOcs = [...(targetPatient?.ocorrencias || [])].sort((a, b) => {
+      const tA = new Date(a.data || 0).getTime() || 0;
+      const tB = new Date(b.data || 0).getTime() || 0;
+      return tB - tA;
+    });
+
+    if (allOcs.length === 0) {
+      toast.error("Nenhuma ocorrência registrada para este paciente.");
+      return;
+    }
+
+    const ocsToExport = selectedOcorrenciasIds.length > 0
+      ? allOcs.filter((oc, idx) => selectedOcorrenciasIds.includes(oc.id || String(idx)))
+      : allOcs;
+
+    if (ocsToExport.length === 0) {
+      toast.error("Nenhuma ocorrência selecionada encontrada.");
+      return;
+    }
+
+    const datasValidas = ocsToExport
+      .map(o => o.data)
+      .filter(Boolean)
+      .sort();
+
+    let periodoStr = "Geral";
+    if (datasValidas.length > 0) {
+      const minData = datasValidas[0].split("-").reverse().join("/");
+      const maxData = datasValidas[datasValidas.length - 1].split("-").reverse().join("/");
+      periodoStr = minData === maxData ? minData : `${minData} a ${maxData}`;
+    }
+
+    const docPdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+
+    // Cabeçalho institucional Vallidare
+    docPdf.setFillColor(26, 66, 49);
+    docPdf.rect(14, 12, 182, 22, "F");
+
+    docPdf.setTextColor(255, 255, 255);
+    docPdf.setFontSize(14);
+    docPdf.setFont("helvetica", "bold");
+    docPdf.text("RELATÓRIO CLÍNICO DE OCORRÊNCIAS", 20, 21);
+
+    docPdf.setFontSize(9);
+    docPdf.setFont("helvetica", "normal");
+    docPdf.text("VALLIDARE", 20, 28);
+
+    // Bloco da Paciente e Período
+    docPdf.setFillColor(248, 250, 252);
+    docPdf.setDrawColor(226, 232, 240);
+    docPdf.roundedRect(14, 38, 182, 22, 2, 2, "FD");
+
+    docPdf.setTextColor(30, 41, 59);
+    docPdf.setFontSize(9.5);
+    docPdf.setFont("helvetica", "bold");
+    docPdf.text("PACIENTE:", 18, 46);
+    docPdf.setFont("helvetica", "normal");
+    docPdf.text(String(targetPatient.nome || "Não informado").toUpperCase(), 42, 46);
+
+    docPdf.setFont("helvetica", "bold");
+    docPdf.text("PERÍODO:", 18, 54);
+    docPdf.setFont("helvetica", "normal");
+    docPdf.text(periodoStr, 42, 54);
+
+    docPdf.setFont("helvetica", "bold");
+    docPdf.text("REGISTROS:", 135, 54);
+    docPdf.setFont("helvetica", "normal");
+    docPdf.text(`${ocsToExport.length} selecionado(s)`, 160, 54);
+
+    const tableData = ocsToExport.map(oc => [
+      oc.data ? oc.data.split("-").reverse().join("/") : "-",
+      oc.profissionalNome || "Não informado",
+      oc.descricao || ""
+    ]);
+
+    autoTable(docPdf, {
+      startY: 64,
+      head: [["Data", "Profissional", "Descrição / Relato Clínico"]],
+      body: tableData,
+      theme: "striped",
+      headStyles: {
+        fillColor: [26, 66, 49],
+        textColor: [255, 255, 255],
+        fontSize: 9,
+        fontStyle: "bold"
+      },
+      styles: {
+        fontSize: 8.5,
+        cellPadding: 4,
+        overflow: "linebreak",
+        valign: "top"
+      },
+      columnStyles: {
+        0: { cellWidth: 24, halign: "center" },
+        1: { cellWidth: 42, fontStyle: "bold" },
+        2: { cellWidth: 116 }
+      },
+      alternateRowStyles: {
+        fillColor: [248, 250, 252]
+      },
+      margin: { left: 14, right: 14, bottom: 16 }
+    });
+
+    const nomeSanitizado = (targetPatient.nome || "paciente").replace(/\s+/g, "_").toLowerCase();
+    docPdf.save(`relatorio_clinico_${nomeSanitizado}_${new Date().toISOString().slice(0, 10)}.pdf`);
+    toast.success("Relatório em PDF baixado com sucesso!");
   };
 
   const handleBaixarOcorrenciasExcel = async () => {
@@ -3894,6 +4010,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       const res: any = await consultar({ codigoSolicitacao: codigoOuNossoNumero, nossoNumero: codigoOuNossoNumero, faturaId: faturaId || "" });
       toast.dismiss(tId);
 
+      console.log("[DEBUG BANCO INTER] Payload:", res.data);
       const st = (res.data?.status || "").toLowerCase();
       const currentMonthKey = monthKey || `${calendarYear}-${String(calendarMonth + 1).padStart(2, "0")}`;
 
@@ -6038,7 +6155,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                                 {/* Botão Sincronizar lendo diretamente cobrancaInter.nossoNumero */}
                                 <button
                                   type="button"
-                                  onClick={() => handleVerificarStatusBoleto(nossoNumeroInter || codigoSolicitacaoInter, matchedFatura.id, monthPrefix)}
+                                  onClick={() => handleVerificarStatusBoleto(codigoSolicitacaoInter || nossoNumeroInter, matchedFatura.id, monthPrefix)}
                                   className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 text-[11px] font-bold rounded-lg border border-slate-300 shadow-2xs transition-all cursor-pointer flex items-center gap-1 active:scale-95"
                                   title={`Consultar baixa em tempo real no Banco Inter (Nosso Número: ${nossoNumeroInter})`}
                                 >
@@ -7307,19 +7424,11 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                     <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
-                        onClick={handleBaixarOcorrenciasExcel}
-                        className="flex items-center space-x-1 px-2.5 py-1.5 text-[10px] font-bold bg-[#1a3c2e] hover:bg-[#25523f] text-white rounded-lg transition active:scale-95"
+                        onClick={handleBaixarOcorrenciasPDF}
+                        className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold bg-[#1a4231] hover:bg-[#25523f] text-white rounded-lg shadow-sm transition active:scale-95 cursor-pointer"
                       >
-                        <Receipt size={12} />
-                        <span>Excel (.xlsx)</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleBaixarOcorrenciasWord}
-                        className="flex items-center space-x-1 px-2.5 py-1.5 text-[10px] font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition active:scale-95"
-                      >
-                        <Printer size={12} />
-                        <span>Word (.docx)</span>
+                        <Printer size={13} />
+                        <span>{selectedOcorrenciasIds.length > 0 ? `Baixar PDF Selecionados (${selectedOcorrenciasIds.length})` : "Baixar PDF (.pdf)"}</span>
                       </button>
                     </div>
                   </div>
@@ -7333,6 +7442,26 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       <table className="w-full min-w-[760px] text-left border-collapse text-sm">
                         <thead>
                           <tr className="bg-slate-50 border-b border-slate-300 text-gray-800 font-semibold text-xs uppercase tracking-wider">
+                            <th className="py-3 px-3 text-center w-10">
+                              <input
+                                type="checkbox"
+                                className="rounded border-slate-300 text-forest-green focus:ring-forest-green cursor-pointer"
+                                onChange={(e) => {
+                                  const currentOcs = (pacientes.find(p => p.id === paciente?.id) || paciente)?.ocorrencias || [];
+                                  if (e.target.checked) {
+                                    setSelectedOcorrenciasIds(currentOcs.map((oc, i) => oc.id || String(i)));
+                                  } else {
+                                    setSelectedOcorrenciasIds([]);
+                                  }
+                                }}
+                                checked={
+                                  (() => {
+                                    const currentOcs = (pacientes.find(p => p.id === paciente?.id) || paciente)?.ocorrencias || [];
+                                    return currentOcs.length > 0 && selectedOcorrenciasIds.length === currentOcs.length;
+                                  })()
+                                }
+                              />
+                            </th>
                             <th className="py-3 px-4 text-sm font-semibold text-slate-800">Data</th>
                             <th className="py-3 px-4 text-sm font-semibold text-slate-800">Profissional</th>
                             <th className="py-3 px-4 text-sm font-semibold text-slate-800 min-w-[360px]">Descrição / Relato</th>
@@ -7348,6 +7477,21 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
     return tB - tA;
   })).map((oc, index) => (
                             <tr key={`oc-${oc.id || index}-${index}`} className={`transition-colors hover:bg-slate-50 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
+                              <td className="py-3 px-3 text-center">
+                                <input
+                                  type="checkbox"
+                                  className="rounded border-slate-300 text-forest-green focus:ring-forest-green cursor-pointer"
+                                  checked={selectedOcorrenciasIds.includes(oc.id || String(index))}
+                                  onChange={(e) => {
+                                    const itemId = oc.id || String(index);
+                                    if (e.target.checked) {
+                                      setSelectedOcorrenciasIds(prev => [...prev, itemId]);
+                                    } else {
+                                      setSelectedOcorrenciasIds(prev => prev.filter(id => id !== itemId));
+                                    }
+                                  }}
+                                />
+                              </td>
                               <td className="py-3 px-4 whitespace-nowrap font-normal text-slate-500">
                                 {oc.data ? oc.data.split('-').reverse().join('/') : '-'}
                               </td>

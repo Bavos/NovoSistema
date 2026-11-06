@@ -778,3 +778,259 @@ exports.adicionarInformacaoClinica = functions.region("southamerica-east1").http
     return res.status(500).json({ status: "erro", mensagem: err.message });
   }
 });
+
+
+// =====================================================================
+// FUNÇÕES DE LEITURA ESTRITA DE BOLETOS (AGENTE)
+// =====================================================================
+
+// 8. buscarBoleto
+exports.buscarBoleto = functions.region("southamerica-east1").https.onRequest(async (req, res) => {
+  if (req.method !== "GET") return res.status(405).json({ erro: "Use GET" });
+  if (!auth(req, res)) return;
+
+  const termoPaciente = norm(req.query.paciente);
+  const faturaId = req.query.faturaId ? String(req.query.faturaId).trim() : "";
+
+  try {
+    let faturasDocs = [];
+
+    if (faturaId) {
+      const docDirect = await db.collection("faturas_pacientes").doc(faturaId).get();
+      if (docDirect.exists) {
+        faturasDocs.push(docDirect);
+      }
+    } else {
+      const snap = await db.collection("faturas_pacientes").get();
+      faturasDocs = snap.docs;
+    }
+
+    // Cache simples de pacientes para enriquecer com responsavelFinanceiro
+    const pacientesSnap = await db.collection("pacientes").get();
+    const pacientesMap = new Map();
+    pacientesSnap.forEach(pDoc => {
+      pacientesMap.set(pDoc.id, pDoc.data());
+    });
+
+    const resultados = [];
+
+    for (const doc of faturasDocs) {
+      const d = doc.data();
+      const pacNome = d.nomePaciente || d.pacienteNome || "";
+
+      // Filtro por paciente se fornecido
+      if (termoPaciente && !norm(pacNome).includes(termoPaciente)) {
+        continue;
+      }
+
+      const cobranca = d.cobrancaInter || {};
+      const nossoNum = d.nossoNumero || cobranca.nossoNumero || "";
+      const codSol = d.codigoSolicitacao || cobranca.codigoSolicitacao || "";
+      const linhaDig = d.linhaDigitavel || cobranca.linhaDigitavel || "";
+
+      // Considera boleto se tiver nossoNumero, codigoSolicitacao ou linha digitavel
+      if (!nossoNum && !codSol && !linhaDig) {
+        continue;
+      }
+
+      // Formatacao do vencimento (DD/MM/AAAA)
+      const rawVenc = d.dataVencimento || cobranca.dataVencimento || d.vencimento || "";
+      let vencimentoFormatado = formatarDataBR(rawVenc);
+
+      // Status
+      const statusBoleto = d.situacaoInter || cobranca.status || d.statusPagamento || d.status || "Pendente";
+
+      // Valor
+      const valorTotal = Number(d.valorTotalFatura ?? d.valorTotal ?? 0);
+
+      // Dados do Responsavel Financeiro do Paciente (se houver)
+      const pacId = d.idPaciente || d.pacienteId || "";
+      const pacData = pacientesMap.get(pacId) || Array.from(pacientesMap.values()).find(p => norm(p.nome) === norm(pacNome));
+
+      let responsavelFinanceiro = null;
+      if (pacData) {
+        const respNome = pacData.nomeResponsavel || pacData.responsavelFinanceiro?.nome;
+        const respTel = pacData.telefoneResponsavel || pacData.telefoneResponsavel2 || pacData.responsavelFinanceiro?.whatsapp || pacData.telefone;
+
+        if (respNome || respTel) {
+          const telLimpo = respTel ? String(respTel).replace(/\D/g, "") : "";
+          responsavelFinanceiro = {
+            nome: respNome || "Não informado",
+            tratamento: "Sr./Sra.",
+            whatsapp: telLimpo || ""
+          };
+        }
+      }
+
+      const itemBoleto = {
+        id: doc.id,
+        paciente: pacNome,
+        faturaId: doc.id,
+        numeroFatura: d.numeroFatura || doc.id,
+        mesReferencia: d.mesReferencia || (d.dataEmissao ? String(d.dataEmissao).slice(0, 7) : ""),
+        valor: valorTotal,
+        vencimento: vencimentoFormatado,
+        status: statusBoleto,
+        linhaDigitavel: linhaDig,
+        nossoNumero: nossoNum,
+        codigoSolicitacao: codSol
+      };
+
+      if (responsavelFinanceiro) {
+        itemBoleto.responsavelFinanceiro = responsavelFinanceiro;
+      }
+
+      resultados.push(itemBoleto);
+    }
+
+    // Ordenar do mais recente para o mais antigo pelo mesReferencia ou id
+    resultados.sort((a, b) => {
+      const mesA = String(a.mesReferencia || "");
+      const mesB = String(b.mesReferencia || "");
+      if (mesA !== mesB) return mesB.localeCompare(mesA);
+      return String(b.numeroFatura).localeCompare(String(a.numeroFatura));
+    });
+
+    return res.json({ status: "sucesso", resultados });
+  } catch (err) {
+    return res.status(500).json({ status: "erro", mensagem: err.message });
+  }
+});
+
+// 9. baixarBoleto
+exports.baixarBoleto = functions.region("southamerica-east1").https.onRequest(async (req, res) => {
+  if (req.method !== "GET") return res.status(405).json({ erro: "Use GET" });
+  if (!auth(req, res)) return;
+
+  const id = req.query.id ? String(req.query.id).trim() : "";
+  if (!id) return res.status(400).json({ status: "erro", mensagem: "id obrigatorio" });
+
+  try {
+    let faturaDoc = await db.collection("faturas_pacientes").doc(id).get();
+
+    // Se nao achou por ID direto, tenta por nossoNumero ou codigoSolicitacao
+    if (!faturaDoc.exists) {
+      const qNosso = await db.collection("faturas_pacientes").where("nossoNumero", "==", id).limit(1).get();
+      if (!qNosso.empty) {
+        faturaDoc = qNosso.docs[0];
+      } else {
+        const qCod = await db.collection("faturas_pacientes").where("codigoSolicitacao", "==", id).limit(1).get();
+        if (!qCod.empty) {
+          faturaDoc = qCod.docs[0];
+        }
+      }
+    }
+
+    if (!faturaDoc || !faturaDoc.exists) {
+      return res.status(404).json({ status: "erro", mensagem: "Boleto ainda não gerado" });
+    }
+
+    const d = faturaDoc.data();
+    const pdfBase64 = d.pdfBase64 || d.cobrancaInter?.pdf || d.pdfBoleto || "";
+
+    if (!pdfBase64) {
+      return res.status(404).json({ status: "erro", mensagem: "Boleto ainda não gerado" });
+    }
+
+    const pdfBuffer = Buffer.from(pdfBase64.replace(/^data:application\/pdf;base64,/, ""), "base64");
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="boleto_${d.nossoNumero || d.numeroFatura || id}.pdf"`);
+    return res.send(pdfBuffer);
+  } catch (err) {
+    return res.status(500).json({ status: "erro", mensagem: err.message });
+  }
+});
+
+
+// =========================================================================
+// SINCRONIZACAO ATIVA DE BOLETO (BANCO INTER V3)
+
+
+// =========================================================================
+// SINCRONIZACAO ATIVA DE BOLETO (BANCO INTER V3) - 2ND GEN
+// =========================================================================
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { obterBearerToken, chamadaApiInter } = require("./inter-api");
+
+exports.consultarStatusBoletoInter = onCall({ region: "southamerica-east1", secrets: ["INTER_CERT", "INTER_KEY", "INTER_CLIENT_ID", "INTER_CLIENT_SECRET"] }, async (request) => {
+  const { codigoSolicitacao, nossoNumero, faturaId } = request.data || {};
+  let codSol = (codigoSolicitacao || "").trim();
+  let fatDocRef = null;
+
+  try {
+    // 1. Localizar o documento da fatura se faturaId foi enviado
+    if (faturaId) {
+      const doc = await db.collection("faturas_pacientes").doc(faturaId).get();
+      if (doc.exists) {
+        fatDocRef = doc.ref;
+        const d = doc.data() || {};
+        if (!codSol) {
+          codSol = (d.codigoSolicitacao || d.cobrancaInter?.codigoSolicitacao || "").trim();
+        }
+      }
+    }
+
+    // 2. Se ainda nao temos o codigoSolicitacao mas temos o nossoNumero, buscar no Firestore
+    if (!codSol && nossoNumero) {
+      const q = await db.collection("faturas_pacientes").where("cobrancaInter.nossoNumero", "==", String(nossoNumero)).limit(1).get();
+      if (!q.empty) {
+        fatDocRef = q.docs[0].ref;
+        codSol = (q.docs[0].data().codigoSolicitacao || q.docs[0].data().cobrancaInter?.codigoSolicitacao || "").trim();
+      }
+    }
+
+    if (!codSol) {
+      throw new HttpsError("invalid-argument", "Codigo de solicitacao (UUID) nao localizado para esta cobranca.");
+    }
+
+    // 3. Autenticar no Inter via mTLS e consultar cobranca v3
+    const token = await obterBearerToken();
+    const dadosInter = await chamadaApiInter("GET", `/cobranca/v3/cobrancas/${codSol}`, null, token);
+
+    // 4. Mapear status retornado pelo Inter
+    // Normalização aprofundada da API v3 do Inter
+    const payloadReal = dadosInter.data || dadosInter;
+    const cobranca = payloadReal.cobranca || payloadReal;
+
+    const situacao = (cobranca.situacao || payloadReal.situacao || "").toUpperCase();
+    const valorRecebido = Number(cobranca.valorTotalRecebido || payloadReal.valorTotalRecebido || 0);
+    const temPagamento = Array.isArray(cobranca.pagamentos || payloadReal.pagamentos) && (cobranca.pagamentos || payloadReal.pagamentos).length > 0;
+
+    let statusNormalizado = "pendente";
+
+    if (["PAGO", "RECEBIDO", "LIQUIDADO", "COMPENSADO", "MARCADO_RECEBIDO"].includes(situacao) || valorRecebido > 0 || temPagamento) {
+      statusNormalizado = "pago";
+    } else if (["EXPIRADO", "CANCELADO", "BAIXADO"].includes(situacao)) {
+      statusNormalizado = "vencido";
+    }
+
+    // 5. Atualizar Firestore de forma atomica
+    if (fatDocRef && statusNormalizado === "pago") {
+      await fatDocRef.update({
+        status: "Pago",
+        situacaoBoleto: situacao,
+        dataPagamento: dadosInter.dataHoraSituacao || new Date().toISOString(),
+        valorPago: dadosInter.valorTotalRecebido || dadosInter.cobranca?.valorTotalRecebido || null,
+        atualizadoEm: new Date().toISOString()
+      });
+    } else if (fatDocRef) {
+      await fatDocRef.update({
+        situacaoBoleto: situacao,
+        atualizadoEm: new Date().toISOString()
+      });
+    }
+
+    return {
+      sucesso: true,
+      status: statusNormalizado,
+      situacaoInter: situacao,
+      codigoSolicitacao: codSol,
+      dados: dadosInter
+    };
+
+  } catch (err) {
+    console.error("[consultarStatusBoletoInter] Erro:", err);
+    if (err instanceof HttpsError) throw err;
+    throw new HttpsError("internal", err.message || "Erro ao consultar Banco Inter.");
+  }
+});
