@@ -46,6 +46,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
   const [uploading, setUploading] = useState(false);
   const [editingProf, setEditingProf] = useState<Profissional | null>(null);
   const [activeTab, setActiveTab] = useState<'dados' | 'agenda' | 'cracha' | 'ocorrencias'>('dados');
+  const [mesFiltroAgenda, setMesFiltroAgenda] = useState(() => new Date().toISOString().slice(0, 7));
   const [agendamentosProf, setAgendamentosProf] = useState<Agendamento[]>([]);
   const [loadingAgenda, setLoadingAgenda] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -2726,7 +2727,7 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                         </div>
                       ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {agendamentosProf.map((ag) => {
+                          {agendamentosProf.filter((ag: any) => !mesFiltroAgenda || (ag.data && ag.data.startsWith(mesFiltroAgenda))).map((ag) => {
                             const agAny = ag as any;
                             const pacIdAlvo = String(ag.idPaciente || agAny.pacienteId || agAny.idClient || agAny.clienteId || '').trim();
                             const patientObj = (pacientes || []).find(p => {
