@@ -19,3 +19,7 @@ coverage/
 
 functions/.env
 .env
+
+# Variaveis locais de ambiente
+.env
+**/.env

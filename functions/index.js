@@ -130,7 +130,7 @@ exports.baixarCracha = functions.region("southamerica-east1").https.onRequest(as
     const prof = docProf.data();
     if (!prof.foto || !prof.foto.trim()) return res.json({ status: "erro", mensagem: "Cracha ainda nao gerado" });
 
-    const PDFDocument = require("pdfkit");
+    const { createCanvas, loadImage } = require("@napi-rs/canvas");
     let bLogo = null;
     try {
       const cfg = await db.collection("configuracoes_empresa").doc("empresa").get();
@@ -144,41 +144,77 @@ exports.baixarCracha = functions.region("southamerica-east1").https.onRequest(as
       bFoto = Buffer.from(prof.foto.replace(/^data:image\/\w+;base64,/, ""), "base64");
     } catch (e) {}
 
-    const docPdf = new PDFDocument({ size: [240, 380], margin: 15 });
-    const chunks = [];
-    docPdf.on("data", c => chunks.push(c));
-    docPdf.on("end", () => {
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", "inline; filename=cracha.pdf");
-      res.status(200).send(Buffer.concat(chunks));
-    });
+    // Canvas 2x (480x760) para nitidez perfeita em telas
+    const canvas = createCanvas(480, 760);
+    const ctx = canvas.getContext("2d");
 
-    docPdf.rect(5, 5, 230, 370).lineWidth(2).strokeColor("#0d47a1").stroke();
+    // Fundo branco
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, 480, 760);
 
+    // Borda externa (#0d47a1)
+    ctx.strokeStyle = "#0d47a1";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(10, 10, 460, 740);
+
+    // Logo no topo
     if (bLogo) {
-      try { docPdf.image(bLogo, 20, 15, { fit: [200, 45], align: "center" }); }
-      catch (e) { docPdf.rect(5, 5, 230, 50).fillColor("#0d47a1").fill(); }
+      try {
+        const imgLogo = await loadImage(bLogo);
+        ctx.drawImage(imgLogo, 40, 30, 400, 90);
+      } catch (e) {
+        ctx.fillStyle = "#0d47a1";
+        ctx.fillRect(10, 10, 460, 100);
+      }
     } else {
-      docPdf.rect(5, 5, 230, 50).fillColor("#0d47a1").fill();
+      ctx.fillStyle = "#0d47a1";
+      ctx.fillRect(10, 10, 460, 100);
     }
 
+    // Foto do cuidador (centralizada)
     if (bFoto) {
-      try { docPdf.image(bFoto, 70, 75, { fit: [100, 125], align: "center" }); }
-      catch (e) { docPdf.rect(70, 75, 100, 125).strokeColor("#cccccc").stroke(); }
+      try {
+        const imgFoto = await loadImage(bFoto);
+        ctx.drawImage(imgFoto, 140, 150, 200, 250);
+        ctx.strokeStyle = "#cccccc";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(140, 150, 200, 250);
+      } catch (e) {
+        ctx.strokeStyle = "#cccccc";
+        ctx.strokeRect(140, 150, 200, 250);
+      }
     } else {
-      docPdf.rect(70, 75, 100, 125).strokeColor("#cccccc").stroke();
+      ctx.strokeStyle = "#cccccc";
+      ctx.strokeRect(140, 150, 200, 250);
     }
 
-    docPdf.fillColor("#1a1a1a").fontSize(13).font("Helvetica-Bold").text(prof.nome || "Colaborador", 10, 220, { align: "center", width: 220 });
-    const funcao = prof.profissao || prof.especialidade || "CUIDADORA DE IDOSOS";
-    docPdf.fillColor("#0d47a1").fontSize(10).font("Helvetica-Bold").text(funcao.toUpperCase(), 10, 245, { align: "center", width: 220 });
+    // Textos
+    ctx.textAlign = "center";
 
-    const docIdentificacao = formatarCPF(prof.cpf || prof.documento || "");
+    // Nome
+    ctx.fillStyle = "#1a1a1a";
+    ctx.font = "bold 26px sans-serif";
+    const nome = prof.nome || "Colaborador";
+    ctx.fillText(nome, 240, 450, 440);
+
+    // Função
+    const funcao = (prof.profissao || prof.especialidade || "CUIDADORA DE IDOSOS").toUpperCase();
+    ctx.fillStyle = "#0d47a1";
+    ctx.font = "bold 20px sans-serif";
+    ctx.fillText(funcao, 240, 495, 440);
+
+    // Documento / CPF
+    const docIdentificacao = (typeof formatarCPF === "function" ? formatarCPF(prof.cpf || prof.documento || "") : (prof.cpf || prof.documento || ""));
     if (docIdentificacao) {
-      docPdf.fillColor("#555555").fontSize(9).font("Helvetica").text("CPF: " + docIdentificacao, 10, 265, { align: "center", width: 220 });
+      ctx.fillStyle = "#555555";
+      ctx.font = "18px sans-serif";
+      ctx.fillText("CPF: " + docIdentificacao, 240, 540, 440);
     }
 
-    docPdf.end();
+    const jpegBuffer = canvas.toBuffer("image/jpeg", { quality: 0.9 });
+    res.setHeader("Content-Type", "image/jpeg");
+    res.setHeader("Content-Disposition", "inline; filename=cracha.jpg");
+    return res.status(200).send(jpegBuffer);
   } catch (err) {
     return res.status(500).json({ status: "erro", mensagem: err.message });
   }
@@ -281,7 +317,31 @@ exports.dadosPaciente = functions.region("southamerica-east1").https.onRequest(a
           cep: end.cep || ""
         },
         informacoesChegada,
-        informacoesClinicas
+        informacoesClinicas,
+        // Leitura dinamica do array tiposPlantao
+        ...(() => {
+          const rawTipos = Array.isArray(p.tiposPlantao) ? p.tiposPlantao : (Array.isArray(p.planoAtendimento && p.planoAtendimento.tiposPlantao) ? p.planoAtendimento.tiposPlantao : []);
+          const tiposPlantao = rawTipos.map(t => ({
+            id: t.id || "",
+            tipoEscala: t.tipoEscala || "Plantão",
+            horaInicio: t.horaInicio || "08:00",
+            isPrincipal: Boolean(t.isPrincipal),
+            valorPlantao: Number(t.valorPlantao != null ? t.valorPlantao : 0),
+            valorTransporte: Number(t.valorTransporte != null ? t.valorTransporte : (t.ajudaCusto != null ? t.ajudaCusto : 0)),
+            valorAlimentacao: Number(t.valorAlimentacao != null ? t.valorAlimentacao : 0),
+            taxaAdm: Number(t.taxaAdm != null ? t.taxaAdm : (t.txAdm != null ? t.txAdm : 0))
+          }));
+          const principal = tiposPlantao.find(t => t.isPrincipal) || tiposPlantao[0] || {};
+          return {
+            tipoEscalaPrincipal: principal.tipoEscala || p.tipoEscalaPrincipal || "Diurno 12h",
+            horarioInicio: principal.horaInicio || p.horarioInicio || "08:00",
+            valorPlantao: Number(principal.valorPlantao != null ? principal.valorPlantao : (p.valorPlantao || 0)),
+            valorTransporte: Number(principal.valorTransporte != null ? principal.valorTransporte : (p.valorTransporte || 0)),
+            valorAlimentacao: Number(principal.valorAlimentacao != null ? principal.valorAlimentacao : (p.valorAlimentacao || 0)),
+            txAdm: Number(principal.taxaAdm != null ? principal.taxaAdm : (p.txAdm || 0)),
+            tiposPlantao: tiposPlantao
+          };
+        })()
       }
     });
   } catch (err) {
