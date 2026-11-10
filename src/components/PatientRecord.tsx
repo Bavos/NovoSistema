@@ -4574,7 +4574,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
       taxaAdm: parseNum(taxaAdm, 0),
       label: `${defaultEscalaPrincipal} (Principal)`
     },
-    ...tiposPlantao.map(tp => ({
+    ...tiposPlantao.filter(tp => !tp.isPrincipal).map(tp => ({
       id: tp.id,
       tipoEscala: tp.tipoEscala,
       horaInicio: tp.horaInicio,
