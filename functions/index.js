@@ -318,27 +318,84 @@ exports.dadosPaciente = functions.region("southamerica-east1").https.onRequest(a
         },
         informacoesChegada,
         informacoesClinicas,
-        // Leitura dinamica do array tiposPlantao
+        // Leitura dinamica do array tiposPlantao (Padronizacao 4 Pilares)
         ...(() => {
-          const rawTipos = Array.isArray(p.tiposPlantao) ? p.tiposPlantao : (Array.isArray(p.planoAtendimento && p.planoAtendimento.tiposPlantao) ? p.planoAtendimento.tiposPlantao : []);
-          const tiposPlantao = rawTipos.map(t => ({
-            id: t.id || "",
-            tipoEscala: t.tipoEscala || "Plantão",
-            horaInicio: t.horaInicio || "08:00",
-            isPrincipal: Boolean(t.isPrincipal),
-            valorPlantao: Number(t.valorPlantao != null ? t.valorPlantao : 0),
-            valorTransporte: Number(t.valorTransporte != null ? t.valorTransporte : (t.ajudaCusto != null ? t.ajudaCusto : 0)),
-            valorAlimentacao: Number(t.valorAlimentacao != null ? t.valorAlimentacao : 0),
-            taxaAdm: Number(t.taxaAdm != null ? t.taxaAdm : (t.txAdm != null ? t.txAdm : 0))
-          }));
+          const rawTipos = Array.isArray(p.tiposPlantao) && p.tiposPlantao.length > 0
+            ? p.tiposPlantao 
+            : (Array.isArray(p.planoAtendimento && p.planoAtendimento.tiposPlantao) && p.planoAtendimento.tiposPlantao.length > 0
+                ? p.planoAtendimento.tiposPlantao 
+                : []);
+
+          let tiposPlantao = [];
+
+          if (rawTipos.length > 0) {
+            tiposPlantao = rawTipos.map(t => {
+              const valorProfissional = Number(t.valorProfissional != null ? t.valorProfissional : (t.valorPlantao != null ? t.valorPlantao : 0));
+              const transporte = Number(t.transporte != null ? t.transporte : (t.valorTransporte != null ? t.valorTransporte : (t.ajudaCusto != null ? t.ajudaCusto : 0)));
+              const alimentacao = Number(t.alimentacao != null ? t.alimentacao : (t.valorAlimentacao != null ? t.valorAlimentacao : 0));
+              const taxaAdministrativa = Number(t.taxaAdministrativa != null ? t.taxaAdministrativa : (t.taxaAdm != null ? t.taxaAdm : (t.txAdm != null ? t.txAdm : 0)));
+              const totalRepasse = valorProfissional + transporte + alimentacao;
+              const totalCobrado = totalRepasse + taxaAdministrativa;
+
+              return {
+                id: t.id || "",
+                tipo: t.tipo || t.tipoEscala || "Plantão",
+                tipoEscala: t.tipoEscala || t.tipo || "Plantão",
+                horaInicio: t.horaInicio || "08:00",
+                isPrincipal: Boolean(t.isPrincipal),
+                valorProfissional,
+                transporte,
+                alimentacao,
+                taxaAdministrativa,
+                totalRepasseProfissional: Number(t.totalRepasseProfissional != null ? t.totalRepasseProfissional : totalRepasse),
+                totalCobradoCliente: Number(t.totalCobradoCliente != null ? t.totalCobradoCliente : totalCobrado),
+                valorPlantao: valorProfissional,
+                valorTransporte: transporte,
+                valorAlimentacao: alimentacao,
+                taxaAdm: taxaAdministrativa
+              };
+            });
+          } else {
+            const vProf = Number(p.valorPlantao || 0);
+            const vTrans = Number(p.valorTransporte || 0);
+            const vAlim = Number(p.valorAlimentacao || 0);
+            const vAdm = Number(p.txAdm || p.taxaAdm || 0);
+            const totalRepasse = vProf + vTrans + vAlim;
+            const totalCobrado = totalRepasse + vAdm;
+
+            tiposPlantao = [{
+              id: "tp-padrao",
+              tipo: p.tipoEscalaPrincipal || "Plantão Principal",
+              tipoEscala: p.tipoEscalaPrincipal || "Plantão Principal",
+              horaInicio: p.horarioInicio || "08:00",
+              isPrincipal: true,
+              valorProfissional: vProf,
+              transporte: vTrans,
+              alimentacao: vAlim,
+              taxaAdministrativa: vAdm,
+              totalRepasseProfissional: totalRepasse,
+              totalCobradoCliente: totalCobrado,
+              valorPlantao: vProf,
+              valorTransporte: vTrans,
+              valorAlimentacao: vAlim,
+              taxaAdm: vAdm
+            }];
+          }
+
           const principal = tiposPlantao.find(t => t.isPrincipal) || tiposPlantao[0] || {};
           return {
-            tipoEscalaPrincipal: principal.tipoEscala || p.tipoEscalaPrincipal || "Diurno 12h",
+            tipoEscalaPrincipal: principal.tipo || p.tipoEscalaPrincipal || "Plantão Principal",
             horarioInicio: principal.horaInicio || p.horarioInicio || "08:00",
-            valorPlantao: Number(principal.valorPlantao != null ? principal.valorPlantao : (p.valorPlantao || 0)),
-            valorTransporte: Number(principal.valorTransporte != null ? principal.valorTransporte : (p.valorTransporte || 0)),
-            valorAlimentacao: Number(principal.valorAlimentacao != null ? principal.valorAlimentacao : (p.valorAlimentacao || 0)),
-            txAdm: Number(principal.taxaAdm != null ? principal.taxaAdm : (p.txAdm || 0)),
+            valorProfissional: principal.valorProfissional,
+            transporte: principal.transporte,
+            alimentacao: principal.alimentacao,
+            taxaAdministrativa: principal.taxaAdministrativa,
+            totalRepasseProfissional: principal.totalRepasseProfissional,
+            totalCobradoCliente: principal.totalCobradoCliente,
+            valorPlantao: principal.valorProfissional,
+            valorTransporte: principal.transporte,
+            valorAlimentacao: principal.alimentacao,
+            txAdm: principal.taxaAdministrativa,
             tiposPlantao: tiposPlantao
           };
         })()

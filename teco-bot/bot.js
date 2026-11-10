@@ -425,6 +425,26 @@ bot.on("text", async (ctx) => {
   }
 });
 
+
+bot.command("imagem", async (ctx) => {
+  const prompt = ctx.message.text.replace(/^\/imagem\s*/i, "").trim();
+  if (!prompt) return ctx.reply("💡 Envie uma descrição: /imagem idoso jogando xadrez");
+  const statusMsg = await ctx.reply("🎨 Gerando imagem, aguarde...");
+  await ctx.sendChatAction("upload_photo");
+  try {
+    const response = await ai.models.generateImages({
+      model: "imagen-3.0-generate-002",
+      prompt,
+      config: { numberOfImages: 1, aspectRatio: "1:1", outputMimeType: "image/jpeg" }
+    });
+    const buffer = Buffer.from(response.generatedImages[0].image.imageBytes, "base64");
+    await ctx.replyWithPhoto({ source: buffer }, { caption: "🖼 " + prompt });
+    await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(()=>{});
+  } catch (err) {
+    ctx.reply("❌ Erro: " + err.message);
+  }
+});
+
 bot.launch().then(() => {
   console.log("🤖 [Teco] Conectado e com suporte a Profissionais e Crachás!");
 });
