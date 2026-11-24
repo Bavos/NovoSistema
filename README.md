@@ -183,3 +183,7 @@ firebase deploy --only hosting
 ## 📄 Licença
 
 Este projeto é de uso restrito e confidencial da **VALLIDARE GESTAO MEDICA E AUDITORIA EIRELI**. Todos os direitos reservados.
+
+## Integração Teco Bot — Cadastro e Atualização de Profissionais
+- **`GET /consultarProfissionalPorCpf`**: Consulta prévia obrigatória na coleção `profissionais` (banco `ai-studio-ec969b01-95ac-467f-b5b7-48efe433d663`) por CPF (formatado ou apenas dígitos) antes de qualquer cadastro, prevenindo duplicidade. Autenticação via `Bearer AGENT_API_TOKEN`.
+- **`POST /salvarProfissionalComAnexos`**: Revalida o CPF no momento da gravação (trava dupla), cria (`prof-<timestamp>`) ou atualiza o cadastro no Firestore, realiza upload dos arquivos no Firebase Storage (`profissionais/{id}/{arquivo}`) e vincula no array `documentosAnexos`.

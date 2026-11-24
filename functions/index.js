@@ -1251,3 +1251,258 @@ exports.consultarBoletoVall = onRequest({
     });
   }
 });
+
+
+// ============================================================================
+// INTEGRAÇÃO TECO: CONSULTA DUPLA POR CPF E CADASTRO/ATUALIZAÇÃO COM ANEXOS
+// ============================================================================
+const STORAGE_BUCKET_SISTEMA = "gen-lang-client-0242962167.firebasestorage.app";
+
+function calcularIdadeAnos(dataNascBr) {
+  if (!dataNascBr || typeof dataNascBr !== "string") return "";
+  const p = dataNascBr.split("/");
+  if (p.length !== 3) return "";
+  const dia = parseInt(p[0], 10);
+  const mes = parseInt(p[1], 10) - 1;
+  const ano = parseInt(p[2], 10);
+  if (isNaN(dia) || isNaN(mes) || isNaN(ano)) return "";
+  const hoje = new Date();
+  let idade = hoje.getFullYear() - ano;
+  const m = hoje.getMonth() - mes;
+  if (m < 0 || (m === 0 && hoje.getDate() < dia)) idade--;
+  return idade >= 0 && idade < 120 ? idade : "";
+}
+
+function dataBrParaIso(dataNascBr) {
+  if (!dataNascBr || typeof dataNascBr !== "string") return "";
+  const p = dataNascBr.trim().split("/");
+  if (p.length === 3 && p[2].length === 4) {
+    return `${p[2]}-${p[1].padStart(2, "0")}-${p[0].padStart(2, "0")}`;
+  }
+  return dataNascBr;
+}
+
+function normalizarTipoContaSistema(tipo) {
+  const t = norm(tipo);
+  if (t.includes("poup")) return "poupanca";
+  if (t.includes("pag")) return "pagamento";
+  if (t.includes("corr")) return "corrente";
+  return "";
+}
+
+function normalizarTipoAnexoSistema(tipo) {
+  const t = norm(tipo);
+  if (t.includes("identidade") || t.includes("rg") || t.includes("cnh") || t.includes("coren")) return "Identidade";
+  if (t.includes("resid") || t.includes("comprovante") || t.includes("endereco")) return "Comprovante de residência";
+  if (t.includes("vacina")) return "Vacinas";
+  if (t.includes("certif") || t.includes("diploma") || t.includes("curso")) return "Certificado";
+  if (t.includes("form") || t.includes("ficha")) return "Formulário";
+  return "Outros";
+}
+
+async function buscarProfissionaisPorCpf(cpfInput) {
+  const digitos = String(cpfInput || "").replace(/\D/g, "");
+  if (digitos.length !== 11) return [];
+  const formatado = formatarCPF(digitos);
+  const encontradosMap = new Map();
+
+  const snapIn = await db.collection("profissionais").where("cpf", "in", [digitos, formatado]).get();
+  snapIn.forEach(doc => encontradosMap.set(doc.id, { id: doc.id, ref: doc.ref, data: doc.data() }));
+
+  // Varredura complementar para CPFs salvos com espaços ou máscara irregular
+  if (encontradosMap.size === 0) {
+    const allSnap = await db.collection("profissionais").get();
+    allSnap.forEach(doc => {
+      const d = doc.data();
+      const dCpf = String(d.cpf || "").replace(/\D/g, "");
+      if (dCpf === digitos) {
+        encontradosMap.set(doc.id, { id: doc.id, ref: doc.ref, data: d });
+      }
+    });
+  }
+
+  return Array.from(encontradosMap.values());
+}
+
+// Consulta obrigatória por CPF (Etapa 1 da Regra de Ouro)
+exports.consultarProfissionalPorCpf = functions.region("southamerica-east1").https.onRequest(async (req, res) => {
+  if (req.method !== "GET") return res.status(405).json({ status: "erro", mensagem: "Use GET" });
+  if (!auth(req, res)) return;
+
+  const cpfDigitos = String(req.query.cpf || "").replace(/\D/g, "");
+  if (cpfDigitos.length !== 11) {
+    return res.status(400).json({ status: "erro", mensagem: "CPF inválido. Informe 11 dígitos." });
+  }
+
+  try {
+    const matches = await buscarProfissionaisPorCpf(cpfDigitos);
+    return res.status(200).json({
+      status: "sucesso",
+      cpfConsultado: formatarCPF(cpfDigitos),
+      encontrado: matches.length > 0,
+      totalEncontrados: matches.length,
+      registros: matches.map(m => ({
+        id: m.id,
+        nome: m.data.nome || "",
+        cpf: m.data.cpf || "",
+        profissao: m.data.profissao || m.data.especialidade || "",
+        conselho: m.data.conselho || "",
+        telefone: m.data.telefone || "",
+        status: m.data.status || "Ativo",
+        totalAnexos: Array.isArray(m.data.documentosAnexos) ? m.data.documentosAnexos.length : 0
+      }))
+    });
+  } catch (err) {
+    return res.status(500).json({ status: "erro", mensagem: err.message });
+  }
+});
+
+// Gravação com revalidação dupla de CPF + Upload dos anexos no Storage (Etapa 2 da Regra de Ouro)
+exports.salvarProfissionalComAnexos = functions.region("southamerica-east1").runWith({ timeoutSeconds: 60, memory: "512MB" }).https.onRequest(async (req, res) => {
+  if (req.method !== "POST") return res.status(405).json({ status: "erro", mensagem: "Use POST" });
+  if (!auth(req, res)) return;
+
+  try {
+    const { dados, anexos } = req.body || {};
+    const dp = dados?.dadosPessoais || {};
+    const end = dados?.endereco || {};
+    const fin = dados?.financeiro || {};
+
+    const cpfDigitos = String(dp.cpfSomenteDigitos || dp.cpf || "").replace(/\D/g, "");
+    if (cpfDigitos.length !== 11) {
+      return res.status(400).json({ status: "erro", mensagem: "CPF obrigatório com 11 dígitos para gravação segura." });
+    }
+    const cpfFormatado = formatarCPF(cpfDigitos);
+
+    // TRAVA DUPLA: Reconsulta o CPF no Firestore no instante exato da gravação
+    const matches = await buscarProfissionaisPorCpf(cpfDigitos);
+    if (matches.length > 1) {
+      return res.status(409).json({
+        status: "erro_duplicidade",
+        mensagem: `Existem ${matches.length} cadastros com o CPF ${cpfFormatado}. Unifique no painel antes de atualizar.`,
+        ids: matches.map(m => m.id)
+      });
+    }
+
+    const existente = matches.length === 1 ? matches[0] : null;
+    const profId = existente ? existente.id : `prof-${Date.now()}`;
+    const profRef = existente ? existente.ref : db.collection("profissionais").doc(profId);
+    const oldData = existente ? (existente.data || {}) : {};
+
+    const limparVal = (v) => {
+      if (v === null || v === undefined) return "";
+      const s = String(v).trim();
+      return /^n[ãa]o informado$/i.test(s) ? "" : s;
+    };
+
+    const nomeFinal = limparVal(dp.nomeCompleto).toUpperCase() || oldData.nome || "";
+    const dataNascBr = limparVal(dp.dataNascimento);
+    const dataNascIso = dataNascBr ? dataBrParaIso(dataNascBr) : (oldData.dataNascimento || "");
+    const idadeCalc = dataNascBr ? calcularIdadeAnos(dataNascBr) : (oldData.idade || "");
+
+    const profRaw = limparVal(dp.profissao);
+    let profissaoEnum = oldData.profissao || "Cuidadora(o)";
+    let especialidadeTexto = oldData.especialidade || "Cuidadora";
+    if (/t[ée]c/i.test(profRaw)) {
+      profissaoEnum = "Téc. Enfermagem";
+      especialidadeTexto = "Técnica de Enfermagem";
+    } else if (/cuidad/i.test(profRaw)) {
+      profissaoEnum = "Cuidadora(o)";
+      especialidadeTexto = "Cuidadora";
+    }
+
+    const isTitular = fin.titularDaConta === "Não" ? "Não" : (fin.titularDaConta === "Sim" ? "Sim" : (oldData.isTitularConta || "Sim"));
+    const tipoContaNorm = normalizarTipoContaSistema(fin.tipoConta) || oldData.dadosBancarios?.tipoConta || "";
+
+    // Upload dos anexos para Firebase Storage (profissionais/{id}/{arquivo})
+    const novosAnexos = [];
+    if (Array.isArray(anexos) && anexos.length > 0) {
+      const bucket = admin.storage().bucket(STORAGE_BUCKET_SISTEMA);
+      for (let i = 0; i < anexos.length; i++) {
+        const item = anexos[i];
+        if (!item || !item.base64) continue;
+        const mimeType = item.mimeType || "image/jpeg";
+        const ext = mimeType.includes("pdf") ? "pdf" : (mimeType.includes("png") ? "png" : "jpg");
+        const baseName = String(item.nomeArquivo || `documento_${i + 1}.${ext}`).replace(/[^a-zA-Z0-9._-]/g, "_");
+        const nomeUnico = `${Date.now()}_${i + 1}_${baseName}`;
+        const filePath = `profissionais/${profId}/${nomeUnico}`;
+        const downloadToken = require("crypto").randomUUID();
+
+        const buffer = Buffer.from(item.base64, "base64");
+        const file = bucket.file(filePath);
+        await file.save(buffer, {
+          metadata: {
+            contentType: mimeType,
+            metadata: { firebaseStorageDownloadTokens: downloadToken }
+          }
+        });
+
+        const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(filePath)}?alt=media&token=${downloadToken}`;
+        const tipoOficial = normalizarTipoAnexoSistema(item.tipo);
+
+        novosAnexos.push({
+          id: `doc-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+          tipo: tipoOficial,
+          url: downloadUrl,
+          arquivo: downloadUrl,
+          nome: nomeUnico,
+          nomeArquivo: nomeUnico,
+          data: new Date().toISOString()
+        });
+      }
+    }
+
+    const anexosAtuais = Array.isArray(oldData.documentosAnexos) ? oldData.documentosAnexos : [];
+    const documentosAnexosFinais = [...anexosAtuais, ...novosAnexos];
+
+    const payloadFirestore = {
+      id: profId,
+      nome: nomeFinal,
+      cpf: cpfFormatado,
+      sexo: "Feminino",
+      dataNascimento: dataNascIso,
+      idade: idadeCalc,
+      profissao: profissaoEnum,
+      especialidade: especialidadeTexto,
+      conselho: limparVal(dp.coren) || oldData.conselho || "",
+      telefone: limparVal(dp.telefone) || oldData.telefone || "",
+      status: oldData.status || "Ativo",
+      ativo: oldData.ativo !== undefined ? oldData.ativo : true,
+      createdAt: oldData.createdAt || new Date().toISOString(),
+      atualizadoEm: new Date().toISOString(),
+      endereco: {
+        rua: limparVal(end.logradouro) || oldData.endereco?.rua || "",
+        numero: limparVal(end.complementoNumero) || oldData.endereco?.numero || "",
+        cep: limparVal(end.cep) || oldData.endereco?.cep || "",
+        bairro: limparVal(end.bairro) || oldData.endereco?.bairro || "",
+        cidade: limparVal(end.cidade) || oldData.endereco?.cidade || "",
+        estado: limparVal(end.estado) || oldData.endereco?.estado || ""
+      },
+      isTitularConta: isTitular,
+      nomeTitularConta: isTitular === "Não" ? (limparVal(fin.nomeTitularTerceiro) || oldData.nomeTitularConta || "") : "",
+      dadosBancarios: {
+        banco: limparVal(fin.banco) || oldData.dadosBancarios?.banco || "",
+        agencia: limparVal(fin.agencia) || oldData.dadosBancarios?.agencia || "",
+        conta: limparVal(fin.contaDigito) || oldData.dadosBancarios?.conta || "",
+        pix: limparVal(fin.chavePix) || oldData.dadosBancarios?.pix || "",
+        tipoConta: tipoContaNorm
+      },
+      documentosAnexos: documentosAnexosFinais
+    };
+
+    await profRef.set(payloadFirestore, { merge: true });
+
+    return res.status(200).json({
+      status: "sucesso",
+      operacao: existente ? "atualizado" : "criado",
+      id: profId,
+      nome: nomeFinal,
+      cpf: cpfFormatado,
+      anexosAdicionados: novosAnexos.length,
+      totalAnexos: documentosAnexosFinais.length
+    });
+  } catch (err) {
+    console.error("[salvarProfissionalComAnexos] Erro:", err);
+    return res.status(500).json({ status: "erro", mensagem: err.message });
+  }
+});
