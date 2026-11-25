@@ -1880,7 +1880,14 @@ export const Profissionais: React.FC<ProfissionaisProps> = ({
                     src={fotoBase64 || profData.foto} 
                     alt={profData?.nome || 'Foto do Profissional'} 
                     className="w-full h-full object-cover rounded-[13px]" 
-                    crossOrigin="anonymous" 
+                    crossOrigin={(fotoBase64 || profData.foto || '').startsWith('data:') ? undefined : 'anonymous'}
+                    onError={(e) => {
+                      const img = e.currentTarget;
+                      if (img.crossOrigin) {
+                        img.removeAttribute('crossorigin');
+                        img.src = profData?.foto || '';
+                      }
+                    }}
                   />
                 ) : (
                   <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 text-slate-400 p-2 text-center">

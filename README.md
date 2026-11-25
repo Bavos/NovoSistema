@@ -187,3 +187,10 @@ Este projeto é de uso restrito e confidencial da **VALLIDARE GESTAO MEDICA E AU
 ## Integração Teco Bot — Cadastro e Atualização de Profissionais
 - **`GET /consultarProfissionalPorCpf`**: Consulta prévia obrigatória na coleção `profissionais` (banco `ai-studio-ec969b01-95ac-467f-b5b7-48efe433d663`) por CPF (formatado ou apenas dígitos) antes de qualquer cadastro, prevenindo duplicidade. Autenticação via `Bearer AGENT_API_TOKEN`.
 - **`POST /salvarProfissionalComAnexos`**: Revalida o CPF no momento da gravação (trava dupla), cria (`prof-<timestamp>`) ou atualiza o cadastro no Firestore, realiza upload dos arquivos no Firebase Storage (`profissionais/{id}/{arquivo}`) e vincula no array `documentosAnexos`.
+
+## Atualizações Recentes (Novembro/2026)
+
+### Cadastro Automatizado de Profissionais & Crachá Digital
+- **Formatação de Nomes (*Title Case*):** A Cloud Function `salvarProfissionalComAnexos` aplica `formatarNomeProprioBR`, preservando preposições em minúsculo (*da, das, de, do, dos, e*).
+- **Foto de Perfil (Avatar):** Arquivos classificados como `Foto de Perfil` são armazenados em `profissional_fotos/{timestamp}_{nome}` no Firebase Storage e salvos no campo `foto` do documento no Firestore, sem poluir a lista de documentos anexos.
+- **Renderização e Exportação do Crachá:** Configurado CORS no bucket do Firebase Storage e tratamento de `crossOrigin` com fallback em `src/pages/Profissionais.tsx` para exibição da foto na aba **Crachá** e exportação via **Baixar Crachá (PNG)**.

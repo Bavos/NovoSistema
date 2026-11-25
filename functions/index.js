@@ -1292,6 +1292,7 @@ function normalizarTipoContaSistema(tipo) {
 
 function normalizarTipoAnexoSistema(tipo) {
   const t = norm(tipo);
+  if (t.includes("perfil") || t.includes("retrato") || t.includes("rosto") || t.includes("selfie")) return "Foto de Perfil";
   if (t.includes("identidade") || t.includes("rg") || t.includes("cnh") || t.includes("coren")) return "Identidade";
   if (t.includes("resid") || t.includes("comprovante") || t.includes("endereco")) return "Comprovante de residência";
   if (t.includes("vacina")) return "Vacinas";
@@ -1395,7 +1396,21 @@ exports.salvarProfissionalComAnexos = functions.region("southamerica-east1").run
       return /^n[ãa]o informado$/i.test(s) ? "" : s;
     };
 
-    const nomeFinal = limparVal(dp.nomeCompleto).toUpperCase() || oldData.nome || "";
+    function formatarNomeProprioBR(str) {
+  if (!str) return "";
+  const minusculas = new Set(["da", "das", "de", "do", "dos", "e"]);
+  return String(str)
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .map((palavra, idx) => {
+      if (idx > 0 && minusculas.has(palavra)) return palavra;
+      return palavra.charAt(0).toUpperCase() + palavra.slice(1);
+    })
+    .join(" ");
+}
+
+const nomeFinal = formatarNomeProprioBR(limparVal(dp.nomeCompleto)) || oldData.nome || "";
     const dataNascBr = limparVal(dp.dataNascimento);
     const dataNascIso = dataNascBr ? dataBrParaIso(dataNascBr) : (oldData.dataNascimento || "");
     const idadeCalc = dataNascBr ? calcularIdadeAnos(dataNascBr) : (oldData.idade || "");
@@ -1414,7 +1429,8 @@ exports.salvarProfissionalComAnexos = functions.region("southamerica-east1").run
     const isTitular = fin.titularDaConta === "Não" ? "Não" : (fin.titularDaConta === "Sim" ? "Sim" : (oldData.isTitularConta || "Sim"));
     const tipoContaNorm = normalizarTipoContaSistema(fin.tipoConta) || oldData.dadosBancarios?.tipoConta || "";
 
-    // Upload dos anexos para Firebase Storage (profissionais/{id}/{arquivo})
+    // Upload da Foto de Perfil (profissional_fotos/) e dos Documentos Anexos (profissionais/{id}/)
+    let fotoUrlFinal = "";
     const novosAnexos = [];
     if (Array.isArray(anexos) && anexos.length > 0) {
       const bucket = admin.storage().bucket(STORAGE_BUCKET_SISTEMA);
@@ -1424,8 +1440,10 @@ exports.salvarProfissionalComAnexos = functions.region("southamerica-east1").run
         const mimeType = item.mimeType || "image/jpeg";
         const ext = mimeType.includes("pdf") ? "pdf" : (mimeType.includes("png") ? "png" : "jpg");
         const baseName = String(item.nomeArquivo || `documento_${i + 1}.${ext}`).replace(/[^a-zA-Z0-9._-]/g, "_");
+        const tipoOficial = normalizarTipoAnexoSistema(item.tipo);
+        const ehFotoPerfil = tipoOficial === "Foto de Perfil" && !mimeType.includes("pdf");
         const nomeUnico = `${Date.now()}_${i + 1}_${baseName}`;
-        const filePath = `profissionais/${profId}/${nomeUnico}`;
+        const filePath = ehFotoPerfil ? `profissional_fotos/${nomeUnico}` : `profissionais/${profId}/${nomeUnico}`;
         const downloadToken = require("crypto").randomUUID();
 
         const buffer = Buffer.from(item.base64, "base64");
@@ -1438,7 +1456,11 @@ exports.salvarProfissionalComAnexos = functions.region("southamerica-east1").run
         });
 
         const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(filePath)}?alt=media&token=${downloadToken}`;
-        const tipoOficial = normalizarTipoAnexoSistema(item.tipo);
+
+        if (ehFotoPerfil) {
+          fotoUrlFinal = downloadUrl;
+          continue;
+        }
 
         novosAnexos.push({
           id: `doc-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
@@ -1459,6 +1481,7 @@ exports.salvarProfissionalComAnexos = functions.region("southamerica-east1").run
       id: profId,
       nome: nomeFinal,
       cpf: cpfFormatado,
+      foto: fotoUrlFinal || oldData.foto || "",
       sexo: "Feminino",
       dataNascimento: dataNascIso,
       idade: idadeCalc,
