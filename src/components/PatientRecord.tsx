@@ -4,7 +4,8 @@
  */
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { db, storage, handleFirestoreError, OperationType } from '../lib/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { updateDoc, doc, getDoc, addDoc, collection, serverTimestamp, getDocs, query, where, deleteDoc, limit, writeBatch } from 'firebase/firestore';
 import { fetchCep, fetchBanks, getHolidays } from '../lib/brasilApi';
 import { Paciente, Plantao, CancelingReason, EscalacaoPlano, Agendamento, ProfissionalRestricao } from '../types';
@@ -58,7 +59,10 @@ import {
   HeartHandshake,
   ShieldAlert,
   UserCheck,
-  UserX
+  UserX,
+  Paperclip,
+  AlertCircle,
+  FileImage
 } from 'lucide-react';
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -215,6 +219,122 @@ interface PatientRecordProps {
 
 export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, onSelectPatient }) => {
   const [selectedOcorrenciasIds, setSelectedOcorrenciasIds] = useState<string[]>([]);
+
+  // Estados e Handlers para Documentos Anexos (Storage + Firestore)
+  const [documentosAnexos, setDocumentosAnexos] = useState<any[]>(paciente?.documentosAnexos || []);
+  const [tipoDocumentoAnexo, setTipoDocumentoAnexo] = useState<string>('');
+  const [arquivoAnexo, setArquivoAnexo] = useState<File | null>(null);
+  const [salvandoAnexo, setSalvandoAnexo] = useState<boolean>(false);
+  const documentoInputRef = useRef<HTMLInputElement>(null);
+  const [previewDoc, setPreviewDoc] = useState<{ url: string; tipo: string; nome?: string } | null>(null);
+
+  useEffect(() => {
+    setDocumentosAnexos(paciente?.documentosAnexos || []);
+  }, [paciente?.id, paciente?.documentosAnexos]);
+
+  const isImageFile = (url: string, name?: string) => {
+    const urlLower = (url || '').toLowerCase();
+    const nameLower = (name || '').toLowerCase();
+    return (
+      urlLower.includes('.png') || urlLower.includes('.jpg') || urlLower.includes('.jpeg') || urlLower.includes('.gif') || urlLower.includes('.webp') || urlLower.includes('.svg') ||
+      nameLower.endsWith('.png') || nameLower.endsWith('.jpg') || nameLower.endsWith('.jpeg') || nameLower.endsWith('.gif') || nameLower.endsWith('.webp') || nameLower.endsWith('.svg') ||
+      urlLower.includes('image') || nameLower.startsWith('img-') || nameLower.includes('whatsapp')
+    );
+  };
+
+  const handleUploadAnexoPaciente = async () => {
+    if (!paciente?.id) {
+      toast.error("Salve o cadastro básico do paciente antes de anexar documentos.");
+      return;
+    }
+    if (!arquivoAnexo) {
+      toast.error("Por favor, selecione um arquivo para anexar.");
+      return;
+    }
+    if (!tipoDocumentoAnexo) {
+      toast.error("Por favor, selecione o Tipo de Documento.");
+      return;
+    }
+
+    setSalvandoAnexo(true);
+    try {
+      const id = paciente.id;
+      let downloadUrl = '';
+
+      try {
+        const pathRef = `pacientes/${id}/${arquivoAnexo.name}`;
+        const storageRef = ref(storage, pathRef);
+        const uploadPromise = uploadBytes(storageRef, arquivoAnexo).then(res => getDownloadURL(res.ref));
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('TIMEOUT_STORAGE')), 4000)
+        );
+        downloadUrl = await Promise.race([uploadPromise, timeoutPromise]);
+      } catch (storageError) {
+        console.warn("Upload via Firebase Storage falhou ou expirou, usando fallback Base64:", storageError);
+        downloadUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(arquivoAnexo);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (e) => reject(e);
+        });
+      }
+
+      const novoAnexo = {
+        id: `doc-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        tipo: tipoDocumentoAnexo,
+        url: downloadUrl,
+        arquivo: downloadUrl,
+        nome: arquivoAnexo.name,
+        nomeArquivo: arquivoAnexo.name,
+        data: new Date().toISOString()
+      };
+
+      const updatedAnexos = [...(documentosAnexos || []), novoAnexo];
+      const pacRef = doc(db, 'pacientes', id);
+      await updateDoc(pacRef, {
+        documentosAnexos: updatedAnexos
+      });
+
+      setDocumentosAnexos(updatedAnexos);
+      if (onSelectPatient) {
+        onSelectPatient({ ...paciente, documentosAnexos: updatedAnexos });
+      }
+
+      setArquivoAnexo(null);
+      setTipoDocumentoAnexo('');
+      if (documentoInputRef.current) {
+        documentoInputRef.current.value = '';
+      }
+
+      showSuccessToast("Documento anexo salvo com sucesso!", "Documento Anexado");
+    } catch (error: any) {
+      console.error("Erro no upload de anexo do paciente:", error);
+      toast.error(getFriendlyErrorMessage(error, "Erro ao enviar o arquivo. Verifique sua conexão ou permissões."));
+    } finally {
+      setSalvandoAnexo(false);
+    }
+  };
+
+  const removeDocumentoAnexoPaciente = async (docId: string | number) => {
+    const updated = (documentosAnexos || []).filter(d => d.id !== docId);
+    setDocumentosAnexos(updated);
+
+    if (paciente?.id) {
+      try {
+        const pacRef = doc(db, 'pacientes', paciente.id);
+        await updateDoc(pacRef, {
+          documentosAnexos: updated
+        });
+        if (onSelectPatient) {
+          onSelectPatient({ ...paciente, documentosAnexos: updated });
+        }
+        showSuccessToast("Anexo removido com sucesso!", "Anexo Removido");
+      } catch (err) {
+        console.error("Erro ao remover anexo do paciente:", err);
+        toast.error("Erro ao remover o documento anexo.");
+      }
+    }
+  };
   const {
     pacientes,
     addPaciente,
@@ -2444,6 +2564,7 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
         const updatedObj: Paciente = {
           ...paciente,
           ...patientPayload,
+          documentosAnexos,
           status: pStatus,
           desativadoEm: pDeactDate,
           desativadoMotivo: pDeactReason,
@@ -5282,6 +5403,149 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                       />
                     </div>
                   </div>
+                </div>
+
+                {/* Cartão de Documentos Anexos */}
+                <div className="w-full bg-white rounded-2xl border border-[#113224]/10 p-6 shadow-sm space-y-4">
+                  <h4 className="text-[#113224] text-sm font-bold border-b border-[#113224]/10 pb-2 uppercase tracking-wider flex items-center gap-1.5">
+                    <Paperclip className="w-4 h-4" /> DOCUMENTOS ANEXOS
+                  </h4>
+
+                  {isNew || !paciente?.id ? (
+                    <div className="p-4 bg-amber-50 text-amber-800 border border-amber-200/50 rounded-xl text-xs flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                      <span>Para anexar documentos, primeiro salve o cadastro básico deste novo paciente no botão "Salvar" abaixo.</span>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {!(isCurrentlyDeactivated || isColaborador) && (
+                        <div className="p-4 border border-slate-200/80 rounded-xl bg-slate-50/40 space-y-3">
+                          <span className="block font-semibold text-xs text-slate-700">Adicionar Novo Documento</span>
+                          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                            <div className="space-y-1 md:col-span-5">
+                              <label className="text-[10px] font-bold text-slate-500 uppercase">Tipo de Documento</label>
+                              <select
+                                value={tipoDocumentoAnexo}
+                                onChange={e => setTipoDocumentoAnexo(e.target.value)}
+                                className="p-2 border border-slate-300 rounded-lg text-sm w-full bg-white focus:ring-1 focus:ring-[#113224] focus:outline-none"
+                              >
+                                <option value="">Selecione o tipo de documento...</option>
+                                <option value="Identidade">Identidade</option>
+                                <option value="Comprovante de residência">Comprovante de residência</option>
+                                <option value="Proposta">Proposta</option>
+                                <option value="Receita Médica">Receita Médica</option>
+                                <option value="Outros">Outros</option>
+                              </select>
+                            </div>
+
+                            <div className="space-y-1 md:col-span-4">
+                              <label className="text-[10px] font-bold text-slate-500 uppercase">Arquivo</label>
+                              <input
+                                type="file"
+                                ref={documentoInputRef}
+                                accept="image/jpeg, image/png, application/pdf, application/msword, application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                onChange={e => {
+                                  const file = e.target.files?.[0] || null;
+                                  if (file) {
+                                    const allowedTypes = [
+                                      'image/jpeg',
+                                      'image/png',
+                                      'application/pdf',
+                                      'application/msword',
+                                      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                                    ];
+                                    if (!allowedTypes.includes(file.type)) {
+                                      toast.error('Formato inválido. Envie apenas JPG, PNG, PDF ou Word (Doc/Docx).');
+                                      e.target.value = '';
+                                      setArquivoAnexo(null);
+                                      return;
+                                    }
+                                  }
+                                  setArquivoAnexo(file);
+                                }}
+                                className="p-1.5 border border-slate-300 rounded-lg text-xs w-full bg-white cursor-pointer"
+                              />
+                            </div>
+
+                            <div className="md:col-span-3">
+                              <GlossyButton
+                                type="button"
+                                onClick={handleUploadAnexoPaciente}
+                                disabled={salvandoAnexo}
+                                variant="green"
+                                className="w-full"
+                              >
+                                {salvandoAnexo ? (
+                                  <>
+                                    <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                    <span>Carregando...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Plus className="w-3.5 h-3.5" />
+                                    <span>Salvar Anexo</span>
+                                  </>
+                                )}
+                              </GlossyButton>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        <span className="block font-semibold text-xs text-slate-700">
+                          Arquivos Salvos ({(documentosAnexos || []).length})
+                        </span>
+                        {(!documentosAnexos || documentosAnexos.length === 0) ? (
+                          <p className="text-xs text-slate-400 italic p-2">Nenhum documento anexado ainda.</p>
+                        ) : (
+                          <div className="grid grid-cols-1 gap-2">
+                            {(documentosAnexos || []).map((docItem, idx) => (
+                              <div
+                                key={`pac-doc-${docItem.id || idx}-${idx}`}
+                                className="flex justify-between items-center bg-white p-2.5 rounded-lg border border-slate-200/80 shadow-sm text-xs"
+                              >
+                                <div className="flex items-center gap-2 min-w-0 mr-4">
+                                  <div className="p-1.5 bg-slate-100 rounded text-[#113224]">
+                                    <Paperclip className="w-3.5 h-3.5" strokeWidth={2.5} />
+                                  </div>
+                                  <div className="truncate">
+                                    <p className="font-bold text-[#113224]">{docItem.tipo}</p>
+                                    <p className="text-[10px] text-slate-500 truncate">{docItem.nome || docItem.nomeArquivo || 'Anexo'}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                  {(docItem.url || docItem.arquivo) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setPreviewDoc({
+                                        url: docItem.url || docItem.arquivo || '',
+                                        tipo: docItem.tipo || 'Documento',
+                                        nome: docItem.nome || docItem.nomeArquivo || 'Anexo'
+                                      })}
+                                      className="px-2.5 py-1 text-[10px] font-bold text-[#b8860b] bg-[#b8860b]/10 rounded hover:bg-[#b8860b]/20 transition-colors cursor-pointer"
+                                    >
+                                      Visualizar
+                                    </button>
+                                  )}
+                                  {!(isCurrentlyDeactivated || isColaborador) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => removeDocumentoAnexoPaciente(docItem.id)}
+                                      className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors cursor-pointer"
+                                      title="Deletar anexo definitivamente"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -11499,6 +11763,95 @@ export const PatientRecord: React.FC<PatientRecordProps> = ({ paciente, onBack, 
                 <ShieldAlert size={14} />
                 <span>Prosseguir com Alocação</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Visualização de Documentos Anexos */}
+      {previewDoc && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full flex flex-col max-h-[90vh] overflow-hidden border border-slate-100 animate-in zoom-in-95 duration-200">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="p-2 bg-[#113224]/10 text-[#113224] rounded-lg flex-shrink-0">
+                  <Paperclip className="w-4 h-4" strokeWidth={2.5} />
+                </div>
+                <div className="truncate">
+                  <h3 className="font-bold text-sm text-[#113224]">{previewDoc.tipo}</h3>
+                  <p className="text-xs text-slate-500 truncate max-w-[200px] sm:max-w-md">{previewDoc.nome || 'Anexo'}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewDoc(null)}
+                className="p-1.5 px-3 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-lg text-xs transition-all font-bold cursor-pointer"
+              >
+                ✕ Fechar
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-6 overflow-y-auto flex-grow flex items-center justify-center bg-slate-100/50 min-h-[300px]">
+              {isImageFile(previewDoc.url, previewDoc.nome) ? (
+                <div className="relative group max-w-full">
+                  <img
+                    src={previewDoc.url}
+                    alt={previewDoc.nome}
+                    referrerPolicy="no-referrer"
+                    className="max-h-[55vh] max-w-full object-contain mx-auto rounded-lg shadow-md border border-slate-200 bg-white"
+                    onError={(e) => {
+                      e.currentTarget.referrerPolicy = "";
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="text-center p-6 sm:p-8 bg-white rounded-2xl border border-slate-200/50 shadow-sm max-w-md w-full space-y-4">
+                  <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                    <FileImage className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-slate-700 text-sm">Visualização de Documento</h4>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Este arquivo ({previewDoc.nome || 'Anexo'}) não é uma imagem comum ou requer um visualizador externo (ex: PDF).
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2 pt-2">
+                    <a
+                      href={previewDoc.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full bg-[#113224] hover:bg-[#0b2218] text-[#C09A6D] py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow transition-all cursor-pointer"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Abrir em Nova Aba</span>
+                    </a>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-slate-100 flex flex-col sm:flex-row gap-3 sm:gap-0 justify-between items-center bg-slate-50">
+              <span className="text-[10px] font-semibold text-slate-400 font-mono truncate max-w-xs">
+                Arquivo em Nuvem de Armazenamento Seguro
+              </span>
+              <div className="flex gap-2 w-full sm:w-auto justify-end">
+                <a
+                  href={previewDoc.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 text-xs font-semibold text-[#113224] hover:bg-slate-200/60 rounded-lg border border-slate-200 transition-all cursor-pointer inline-flex items-center gap-1 w-full sm:w-auto justify-center"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPreviewDoc(null)}
+                  className="px-4 py-2 text-xs font-bold bg-[#113224] text-white rounded-lg hover:bg-[#0b2218] transition-all cursor-pointer w-full sm:w-auto"
+                >
+                  Concluir
+                </button>
+              </div>
             </div>
           </div>
         </div>

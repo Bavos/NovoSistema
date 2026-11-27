@@ -129,3 +129,11 @@ firebase secrets:set INTER_KEY < caminho/para/chave.key
 firebase deploy --only functions
 ```
 
+---
+
+## Módulo de Pacientes — Documentos Anexos (2026-11-27)
+- **Componente:** `src/components/PatientRecord.tsx` (final da aba **Geral & Contato**).
+- **Regra de Negócio:** Exige que o cadastro básico do paciente já esteja salvo no Firestore antes de liberar o envio de arquivos.
+- **Categorias de Documentos:** `Identidade`, `Comprovante de residência`, `Proposta`, `Receita Médica`, `Outros`.
+- **Formatos Aceitos:** JPG, PNG, PDF e Word (`.doc` / `.docx`).
+- **Persistência:** Armazenamento no Firebase Storage sob o caminho `pacientes/{pacienteId}/{nomeArquivo}` (com fallback Base64 em caso de timeout) e metadados salvos no campo `documentosAnexos` do documento do paciente no Firestore.

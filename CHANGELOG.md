@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026-11-27] - Documentos Anexos em Pacientes
+- **Módulo de Pacientes (`Geral & Contato`):** Adicionado bloco de upload, listagem, visualização em modal e exclusão de documentos anexos em `src/components/PatientRecord.tsx`, espelhando o padrão do cadastro de Profissionais.
+- **Categorias suportadas:** `Identidade`, `Comprovante de residência`, `Proposta`, `Receita Médica` e `Outros`.
+- **Armazenamento:** Upload direto para o Firebase Storage (`pacientes/{id}/{arquivo}`) com fallback automático em Base64 e persistência no array `documentosAnexos` no Firestore.
+
 Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
